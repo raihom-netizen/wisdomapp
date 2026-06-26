@@ -1,0 +1,270 @@
+# Codemagic CI/CD — WISDOMAPP (somente iOS iPhone)
+# Versão marketing: lib/constants/app_version.dart → AppVersion.current
+# Disparo: Start new build na UI (branch codemagic-ios-ready ou codemagic-{versao}-ready).
+# O deploy.ps1 envia ao remoto via scripts/push-codemagic-ready.ps1
+#
+# OBRIGATÓRIO na UI: Application settings → Workflow Editor → "Switch to YAML configuration"
+# Toggle "Make builds public" ON (uma vez).
+#
+# Assinatura AUTOMÁTICA — mesma integração Apple do Controle Total App:
+#   Team integrations → Developer Portal → ControleTotalAPI1
+#   Grupo Team "appstore_credentials" → CERTIFICATE_PRIVATE_KEY (secret, já configurado no CT)
+# Opcional: grupo "firebase_ipa_upload" (FIREBASE_SERVICE_ACCOUNT_JSON) para IPA no site.
+
+workflows:
+  ios-workflow:
+    name: iOS Build — WISDOMAPP
+    max_build_duration: 60
+    integrations:
+      app_store_connect: ControleTotalAPI1
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      vars:
+        BUNDLE_ID: "com.wisdomapp"
+        APP_STORE_CONNECT_KEY_IDENTIFIER: "5HSNNJU377"
+        APP_STORE_CONNECT_ISSUER_ID: "77a1debb-f68b-418d-9fe3-af0f37b40585"
+        FIREBASE_STORAGE_BUCKET: "wisdomapp-b9e98.firebasestorage.app"
+      groups:
+        - appstore_credentials
+        - firebase_ipa_upload
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Keychain para code signing
+        script: keychain initialize
+      - name: Ativar Sign In with Apple no App ID (API Apple)
+        script: |
+          set -e
+          python3 << 'PY'
+          import json, os, re, subprocess, sys, time
+          bundle = os.environ.get("BUNDLE_ID", "com.wisdomapp")
+          r = subprocess.run(
+              [
+                  "app-store-connect", "bundle-ids", "list",
+                  "--bundle-id-identifier", bundle,
+                  "--strict-match-identifier",
+                  "--platform", "IOS",
+                  "--json", "-s",
+              ],
+              capture_output=True,
+              text=True,
+          )
+          if r.returncode != 0:
+              print("ERRO bundle-ids list:", (r.stderr or r.stdout)[:900])
+              sys.exit(1)
+          try:
+              j = json.loads((r.stdout or "").strip() or "null")
+          except json.JSONDecodeError as e:
+              print("ERRO JSON bundle-ids list:", e)
+              sys.exit(1)
+          if isinstance(j, dict):
+              data = j.get("data") or []
+          elif isinstance(j, list):
+              data = j
+          else:
+              data = []
+          if not data or not isinstance(data[0], dict):
+              print("ERRO: nenhum Bundle ID iOS para", bundle)
+              sys.exit(1)
+          rid = data[0].get("id")
+          if not rid:
+              sys.exit(1)
+          print("Bundle ID resource id:", rid)
+          candidates = [
+              "Sign In with Apple",
+              "APPLE_ID_AUTH",
+              "SIGN_IN_WITH_APPLE",
+          ]
+          last_out = ""
+          enabled = False
+          for cap in candidates:
+              ec = subprocess.run(
+                  [
+                      "app-store-connect", "bundle-ids", "enable-capabilities", rid,
+                      "--capability", cap,
+                  ],
+                  capture_output=True,
+                  text=True,
+              )
+              out = ((ec.stderr or "") + (ec.stdout or "")).strip()
+              last_out = out
+              low = out.lower()
+              if ec.returncode == 0:
+                  print(f"Sign In with Apple: capability ativada com '{cap}'.")
+                  enabled = True
+                  break
+              if any(b in low for b in ("already", "duplicate", "exist", "409", "conflict", "not modified", "unchanged")):
+                  print(f"Sign In with Apple: capability ja ativa (resposta ao tentar '{cap}').")
+                  enabled = True
+                  break
+              print(f"Tentativa capability '{cap}' falhou: {out[:300]}")
+          if not enabled:
+              print("ERRO enable-capabilities — nao foi possivel ativar Sign In with Apple no App ID.")
+              print("Detalhe:", (last_out or "")[:900])
+              sys.exit(1)
+
+          def caps_has_sign_in(txt):
+              try:
+                  jc = json.loads((txt or "").strip() or "{}")
+              except json.JSONDecodeError:
+                  return False
+              blob = json.dumps(jc)
+              return bool(
+                  re.search(
+                      r"SIGN_IN_WITH_APPLE|APPLE_ID_AUTH|Sign[\s_]?In[\s_]?with[\s_]?Apple|SignInWithApple|com\.apple\.developer\.applesignin",
+                      blob,
+                      re.I | re.DOTALL,
+                  )
+              )
+
+          for attempt in (1, 2):
+              caps = subprocess.run(
+                  ["app-store-connect", "bundle-ids", "capabilities", rid, "--json", "-s"],
+                  capture_output=True,
+                  text=True,
+              )
+              caps_out = caps.stdout or ""
+              if caps.returncode != 0:
+                  print("ERRO bundle-ids capabilities:", (caps.stderr or "")[:900])
+                  sys.exit(1)
+              if caps_has_sign_in(caps_out):
+                  print("OK: Sign In with Apple confirmado na API.")
+                  break
+              if attempt == 1:
+                  print("AVISO: Sign In ainda nao aparece; aguardando 60s...")
+                  time.sleep(60)
+              else:
+                  print("ERRO: Sign In with Apple nao consta em bundle-ids capabilities.")
+                  sys.exit(1)
+          PY
+          echo "Aguardando propagacao (90s)..."
+          sleep 90
+      - name: Ativar Push Notifications no App ID (API Apple)
+        script: |
+          set -e
+          python3 << 'PY'
+          import json, os, subprocess, sys
+          bundle = os.environ.get("BUNDLE_ID", "com.wisdomapp")
+          r = subprocess.run(
+              [
+                  "app-store-connect", "bundle-ids", "list",
+                  "--bundle-id-identifier", bundle,
+                  "--strict-match-identifier",
+                  "--platform", "IOS",
+                  "--json", "-s",
+              ],
+              capture_output=True,
+              text=True,
+          )
+          if r.returncode != 0:
+              print("ERRO bundle-ids list:", (r.stderr or r.stdout)[:900])
+              sys.exit(1)
+          j = json.loads((r.stdout or "").strip() or "null")
+          data = j.get("data") if isinstance(j, dict) else (j if isinstance(j, list) else [])
+          if not data or not isinstance(data[0], dict):
+              print("ERRO: nenhum Bundle ID iOS para", bundle)
+              sys.exit(1)
+          rid = data[0].get("id")
+          if not rid:
+              sys.exit(1)
+          candidates = ["Push Notifications", "PUSH_NOTIFICATIONS"]
+          enabled = False
+          last_out = ""
+          for cap in candidates:
+              ec = subprocess.run(
+                  [
+                      "app-store-connect", "bundle-ids", "enable-capabilities", rid,
+                      "--capability", cap,
+                  ],
+                  capture_output=True,
+                  text=True,
+              )
+              out = ((ec.stderr or "") + (ec.stdout or "")).strip()
+              last_out = out
+              low = out.lower()
+              if ec.returncode == 0 or any(
+                  b in low for b in ("already", "duplicate", "exist", "409", "conflict", "not modified", "unchanged")
+              ):
+                  print(f"Push Notifications: OK com '{cap}'.")
+                  enabled = True
+                  break
+              print(f"Tentativa '{cap}' falhou: {out[:300]}")
+          if not enabled:
+              print("ERRO enable Push Notifications:", (last_out or "")[:900])
+              sys.exit(1)
+          PY
+          echo "Aguardando propagacao Push (60s)..."
+          sleep 60
+      - name: Remover perfis App Store antigos (força perfil com capabilities atuais)
+        script: |
+          set -e
+          export BUNDLE_ID
+          python3 scripts/codemagic_ios_delete_appstore_profiles.py
+      - name: Buscar ou criar certificado e perfil (Apple)
+        script: |
+          set -e
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create \
+            --strict-match-identifier \
+            --delete-stale-profiles
+      - name: Instalar certificado no keychain
+        script: keychain add-certificates
+      - name: Aplicar perfis ao projeto Xcode
+        script: xcode-project use-profiles
+      - name: Forçar iOS deployment target 15.5 (ML Kit)
+        script: |
+          set -e
+          if [ -f ios/Runner.xcodeproj/project.pbxproj ]; then
+            sed -i.bak "s/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*;/IPHONEOS_DEPLOYMENT_TARGET = 15.5;/g" ios/Runner.xcodeproj/project.pbxproj && rm -f ios/Runner.xcodeproj/project.pbxproj.bak
+          fi
+          if [ -f ios/Flutter/AppFrameworkInfo.plist ]; then
+            sed -i.bak -e "s/<string>13.0<\/string>/<string>15.5<\/string>/g" -e "s/<string>14.0<\/string>/<string>15.5<\/string>/g" ios/Flutter/AppFrameworkInfo.plist && rm -f ios/Flutter/AppFrameworkInfo.plist.bak
+          fi
+      - name: Versão iOS (app_version.dart + build único)
+        script: |
+          set -e
+          UNIQUE=$(date +%s)
+          VER=$(grep "static const String current" lib/constants/app_version.dart | head -1 | sed "s/.*= '\([^']*\)'.*/\1/" | tr -d ' ')
+          if [ -z "$VER" ]; then echo "ERROR: AppVersion.current nao encontrado"; exit 1; fi
+          case "$VER" in
+            *.*.*) ;;
+            *.*) VER="${VER}.0" ;;
+            *) VER="${VER}.0.0" ;;
+          esac
+          sed -i.bak "s/^version: .*/version: ${VER}+${UNIQUE}/" pubspec.yaml && rm -f pubspec.yaml.bak
+          echo "Versão marketing: $VER | Build: $UNIQUE"
+          grep "^version:" pubspec.yaml
+      - name: Build iOS IPA (instalável)
+        script: flutter build ipa --release --no-tree-shake-icons
+      - name: Subir IPA para o site (Firebase Storage)
+        script: |
+          IPA_PATH="build/ios/ipa"
+          if [ ! -d "$IPA_PATH" ]; then echo "IPA não encontrado"; exit 1; fi
+          IPA_FILE=$(find "$IPA_PATH" -name "*.ipa" | head -1)
+          if [ -z "$IPA_FILE" ]; then echo "Nenhum .ipa em $IPA_PATH"; exit 1; fi
+          IOS_URL="https://firebasestorage.googleapis.com/v0/b/wisdomapp-b9e98.firebasestorage.app/o/app%2Fipa%2FWISDOMAPP_app.ipa?alt=media"
+          if [ -n "$FIREBASE_SERVICE_ACCOUNT_JSON" ]; then
+            if node scripts/upload_ipa_to_storage.js "$IPA_FILE"; then
+              echo "IPA no site: $IOS_URL"
+              echo "Para forçar atualização: Admin > Subir versão e forçar atualização."
+            else
+              echo "AVISO: Upload IPA falhou. TestFlight segue na fase Publishing."
+            fi
+          else
+            echo "Defina firebase_ipa_upload (FIREBASE_SERVICE_ACCOUNT_JSON) para subir IPA ao site."
+          fi
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+      email:
+        recipients:
+          - raihom@gmail.com
+        notify:
+          success: true
+          failure: true

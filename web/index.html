@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+  <!-- Safari iOS / WebKit: firebase_core_web usa document.head!.appendChild — head deve existir antes do Flutter rodar. -->
+  <script>
+    (function () {
+      try {
+        var d = document;
+        if (!d.head) {
+          var h = d.createElement('head');
+          var r = d.documentElement;
+          if (r) {
+            if (r.firstChild) r.insertBefore(h, r.firstChild);
+            else r.appendChild(h);
+          }
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="WISDOMAPP — Sabedoria financeira baseada nos princípios bíblicos. Teste grátis 30 dias. Financeiro, agenda e cursos.">
+  <link rel="canonical" href="https://wisdomapp-b9e98.web.app/">
+  <meta property="og:title" content="WISDOMAPP — Sabedoria financeira">
+  <meta property="og:description" content="Teste grátis 30 dias. Finanças, agenda e cursos com princípios bíblicos. Acesso por celular ou computador.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://wisdomapp-b9e98.web.app/">
+  <meta property="og:image" content="https://wisdomapp-b9e98.web.app/icons/Icon-512.png">
+  <meta property="og:image:width" content="512">
+  <meta property="og:image:height" content="512">
+  <meta property="og:locale" content="pt_BR">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="WISDOMAPP">
+  <meta name="twitter:description" content="Sabedoria financeira com princípios bíblicos. Teste grátis 30 dias. Web e app.">
+  <!-- Primeira tela sempre azul marinho (PWA): evita flash branco antes do splash -->
+  <style>html,body{background:linear-gradient(135deg,#061428 0%,#0A1F56 50%,#132D6B 100%)!important;min-height:100vh}</style>
+
+  <!-- Responsivo e iOS 13/14/15: viewport-fit=cover + viewport que evita travamento em retrato -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#0A1F56">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="WISDOMAPP">
+  <meta name="google-signin-client_id" content="766524666378-ce9albkkvn01si77s6ofcqvoaatn29s0.apps.googleusercontent.com">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/Icon-192.png">
+  <style>
+    /* --- BLINDAGEM DE VISUALIZAÇÃO (Responsivo + Seleção de texto) --- */
+    :root {
+      --primary-color: #2563eb;
+      --bg-color: #1A237E;
+    }
+
+    html {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      -webkit-text-size-adjust: 100%;
+      /* iOS 13/14: evita travamento em retrato; 100dvh/svh corrige viewport quebrado */
+      min-height: 100vh;
+      min-height: 100dvh;
+      min-height: -webkit-fill-available;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      min-height: 100%;
+      min-height: 100vh;
+      min-height: 100dvh;
+      min-height: -webkit-fill-available;
+      height: auto;
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: linear-gradient(135deg, #1A237E 0%, #2D5BFF 50%, #0D9488 100%);
+      color: #1e293b;
+      line-height: 1.5;
+      -webkit-touch-callout: default;
+      /* iPhone 14/15/16: NÃO aplicar safe-area no body — o Flutter trata via SafeArea; padding aqui desalinha toque (tap acima). */
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: rgba(0,0,0,0.05);
+      overscroll-behavior-y: contain;
+      box-sizing: border-box;
+      -webkit-user-select: text !important;
+      -moz-user-select: text !important;
+      -ms-user-select: text !important;
+      user-select: text !important;
+    }
+
+    /* Container responsivo: centraliza no PC, ocupa tudo no celular */
+    .container {
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+
+    /* Grid adaptativo: 1 coluna no celular, múltiplas no computador */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+    }
+
+    /* Card com visual moderno */
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      transition: transform 0.2s;
+    }
+
+    /* iPhone: input/textarea selecionáveis; font-size 16px impede zoom automático */
+    input, select, textarea {
+      -webkit-user-select: text !important;
+      font-size: 16px !important;
+      -webkit-appearance: none;
+      border-radius: 8px;
+    }
+
+    /* ============================================================
+       TECLADO RÁPIDO NO ANDROID/iOS (PWA)
+       Flutter Web cria um <input> invisível (proxy) por baixo do
+       canvas para abrir o teclado nativo (Gboard/iOS). Sem essas
+       regras, o Chrome Android dá zoom no foco (font<16) e atrasa
+       a abertura do teclado. Aqui forçamos 16px, sem zoom,
+       sem highlight e em camada GPU para abrir mais rápido.
+       ============================================================ */
+    flt-text-editing-host,
+    flt-text-editing-host > *,
+    flt-text-editing,
+    input.flt-text-editing,
+    textarea.flt-text-editing,
+    [contenteditable="true"],
+    [contenteditable="plaintext-only"],
+    flt-glass-pane input,
+    flt-glass-pane textarea,
+    flutter-view input,
+    flutter-view textarea {
+      font-size: 16px !important;          /* impede zoom auto do Chrome Android */
+      -webkit-text-size-adjust: 100% !important;
+      text-size-adjust: 100% !important;
+      outline: none !important;
+      border: 0 !important;
+      background: transparent !important;
+      -webkit-tap-highlight-color: transparent !important;
+      -webkit-user-select: text !important;
+      user-select: text !important;
+      caret-color: auto;
+      transform: translateZ(0);            /* GPU layer = abre mais rápido */
+      will-change: transform;
+      touch-action: manipulation;          /* remove delay de 300ms do mobile */
+    }
+
+    /* Pré-aquecimento de teclado: input invisível mantido sempre vivo
+       para o Chrome/Gboard inicializar o subsistema de IME no primeiro
+       carregamento, em vez de só no primeiro toque do usuário. */
+    #ct-keyboard-warmup {
+      position: fixed;
+      top: -9999px;
+      left: -9999px;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      font-size: 16px;
+      pointer-events: none;
+      border: 0;
+      padding: 0;
+      margin: 0;
+      background: transparent;
+      caret-color: transparent;
+    }
+
+    /* Opcional: botão que não deve ser selecionado */
+    .btn-no-select {
+      -webkit-user-select: none !important;
+      user-select: none !important;
+    }
+
+    /* Área de toque mínima 44px (padrão Apple) */
+    button, .switch, input[type="checkbox"] {
+      min-height: 44px;
+      min-width: 44px;
+    }
+
+    /* Melhora o scroll no celular */
+    .scroll-area {
+      -webkit-overflow-scrolling: touch;
+    }
+
+    /* Flutter host: sempre 0,0 e 100% (iOS: não reposicionar com visualViewport para evitar toque “acima”). Altura com dvh/fill-available evita barra de endereço no cálculo. */
+    #flutter-host, .flutter-view, [id^="flutter"], body > div[style*="position"] {
+      display: block;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      height: 100dvh;
+      height: -webkit-fill-available;
+      min-height: 100vh;
+      min-height: 100dvh;
+      min-height: -webkit-fill-available;
+      touch-action: manipulation;
+      -webkit-overflow-scrolling: touch;
+      -webkit-user-select: text !important;
+      user-select: text !important;
+      -webkit-tap-highlight-color: rgba(0,0,0,0.05);
+      transform: translateZ(0);
+      -webkit-transform: translateZ(0);
+      box-sizing: border-box;
+    }
+    body canvas {
+      display: block;
+      position: absolute;
+      top: 0;
+      left: 0;
+      touch-action: manipulation;
+      transform: translateZ(0);
+    }
+
+    /* Splash WISDOMAPP — escudo + tipografia (PNG oficial tem wordmark cortado) */
+    #app-splash {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      padding: max(16px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom));
+      background: radial-gradient(ellipse 120% 80% at 50% 0%, #1a3a7a 0%, transparent 55%),
+        linear-gradient(160deg, #061428 0%, #0A1F56 48%, #132D6B 100%);
+      transition: opacity 0.35s ease, visibility 0.35s ease;
+      overflow: hidden;
+    }
+    #splash-brand {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      max-width: min(360px, 92vw);
+      flex-shrink: 1;
+      min-height: 0;
+    }
+    #splash-icon-wrap {
+      width: min(120px, 30vw);
+      height: min(120px, 30vw);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      filter: drop-shadow(0 10px 28px rgba(0, 0, 0, 0.45));
+      animation: splash-float 2.4s ease-in-out infinite;
+    }
+    @keyframes splash-float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-4px); }
+    }
+    #splash-app-icon {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      object-position: center;
+      -webkit-user-drag: none;
+      user-select: none;
+      pointer-events: none;
+    }
+    #app-splash .splash-tagline {
+      color: rgba(212, 175, 55, 0.92);
+      font-size: 0.62rem;
+      font-weight: 800;
+      margin: 0 0 8px;
+      letter-spacing: 0.32em;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    #app-splash .splash-title {
+      color: #fff;
+      font-size: clamp(1.35rem, 5vw, 1.75rem);
+      font-weight: 900;
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      letter-spacing: 0.14em;
+      background: linear-gradient(135deg, #fff 0%, #F0D878 55%, #D4AF37 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    #app-splash .splash-credit {
+      color: rgba(255, 255, 255, 0.82);
+      font-size: 0.65rem;
+      font-weight: 800;
+      margin: 8px 0 0;
+      letter-spacing: 0.24em;
+      font-family: system-ui, -apple-system, sans-serif;
+      text-transform: uppercase;
+    }
+    #app-splash .splash-status {
+      color: rgba(255, 255, 255, 0.72);
+      font-size: 0.82rem;
+      margin: 14px 0 16px;
+      min-height: 1.2em;
+    }
+    #splash-progress-track {
+      width: min(160px, 44vw);
+      height: 3px;
+      background: rgba(255, 255, 255, 0.18);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    #splash-progress {
+      height: 100%;
+      width: 0;
+      background: linear-gradient(90deg, #D4AF37, #F0D878);
+      border-radius: 999px;
+      transition: width 0.25s ease;
+    }
+  </style>
+
+  <!-- Preconnect: abre handshakes TLS antes das primeiras chamadas — corta
+       200–600 ms da primeira leitura do Firestore/Auth/Storage e evita as
+       travadinhas iniciais do site na web. dns-prefetch é fallback. -->
+  <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://firebaseinstallations.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://securetoken.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://firebasestorage.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://us-central1-wisdomapp-b9e98.cloudfunctions.net" crossorigin>
+  <link rel="preconnect" href="https://wisdomapp-b9e98.firebaseapp.com" crossorigin>
+  <link rel="preconnect" href="https://wisdomapp-b9e98.firebasestorage.app" crossorigin>
+  <link rel="dns-prefetch" href="https://firestore.googleapis.com">
+  <link rel="dns-prefetch" href="https://firebasestorage.googleapis.com">
+  <link rel="dns-prefetch" href="https://us-central1-wisdomapp-b9e98.cloudfunctions.net">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>WISDOMAPP — Sabedoria financeira | Financeiro, agenda e cursos</title>
+  <link rel="manifest" href="manifest.json">
+  <!-- Preload: carrega mais rápido ao abrir o PWA -->
+  <link rel="preload" href="main.dart.js" as="script">
+  <link rel="preload" href="flutter_bootstrap.js" as="script">
+  <link rel="preload" href="icons/wisdomapp_emblem.png" as="image">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <!--
+    Firebase: a inicialização é feita no Flutter (main.dart + lib/firebase_options.dart).
+    As chaves devem estar exatamente como no Console do Firebase.
+    Para evitar erro de popup (popup-closed-by-user ou domínio não autorizado):
+    - Firebase Console > Authentication > Settings > Authorized domains:
+      adicione o domínio do site (ex.: controletotalapp.com.br, controletotal-4c867.web.app).
+    - authDomain no SDK deve ser "controletotal-4c867.firebaseapp.com" (não o domínio do site).
+    Config atual (espelho de firebase_options.dart): apiKey, projectId: controletotal-4c867,
+    authDomain: controletotal-4c867.firebaseapp.com, storageBucket: controletotal-4c867.firebasestorage.app.
+  -->
+  <!-- PDF.js para impressão/visualização de PDFs na web -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+<body>
+  <!-- Pré-aquecimento do teclado nativo (Android/iOS):
+       input invisível adicionado ao DOM imediatamente. Quando o
+       Flutter Web abrir o input proxy real, o Chrome/Gboard já
+       inicializou o subsistema de teclado, evitando o atraso
+       observado no primeiro toque (geralmente 200–400 ms). -->
+  <input id="ct-keyboard-warmup" type="text" autocomplete="off"
+         autocorrect="off" autocapitalize="off" spellcheck="false"
+         inputmode="text" tabindex="-1" aria-hidden="true" />
+  <!-- Splash WISDOMAPP — ícone oficial 1024px (Android/iOS/PWA) -->
+  <div id="app-splash">
+    <div id="splash-brand">
+      <div id="splash-icon-wrap">
+        <img
+          id="splash-app-icon"
+          src="icons/wisdomapp_emblem.png"
+          width="512"
+          height="512"
+          alt=""
+          decoding="async"
+          fetchpriority="high"
+        />
+      </div>
+      <p class="splash-tagline">SABEDORIA FINANCEIRA</p>
+      <h1 class="splash-title">WISDOM APP</h1>
+      <p class="splash-credit">Johnathan Tarley</p>
+    </div>
+    <p class="splash-status" id="splash-status">Abrindo…</p>
+    <div id="splash-progress-track"><div id="splash-progress"></div></div>
+  </div>
+  <script>
+    (function(){
+      try {
+        var splash = document.getElementById("app-splash");
+        var progress = document.getElementById("splash-progress");
+        var status = document.getElementById("splash-status");
+        var msgs = ["Abrindo…", "Preparando módulos…", "Quase pronto…"];
+        var msgIdx = 0;
+        var msgTimer = setInterval(function(){
+          if (!status || !splash || splash.style.display === "none") return;
+          msgIdx = Math.min(msgIdx + 1, msgs.length - 1);
+          status.textContent = msgs[msgIdx];
+        }, 900);
+        function hideSplash() {
+          try {
+            clearInterval(msgTimer);
+            if (splash) {
+              splash.style.opacity = "0";
+              splash.style.visibility = "hidden";
+              setTimeout(function() { if (splash) splash.style.display = "none"; }, 350);
+            }
+          } catch (e) {}
+        }
+        window.addEventListener("flutter-first-frame", function() {
+          try {
+            if (progress) progress.style.width = "100%";
+            if (status) status.textContent = "Pronto!";
+            setTimeout(hideSplash, 180);
+          } catch (e) {}
+        });
+        setTimeout(function() { try { if (progress) progress.style.width = "35%"; } catch (e) {} }, 120);
+        setTimeout(function() { try { if (progress) progress.style.width = "62%"; } catch (e) {} }, 700);
+        setTimeout(function() { try { if (progress) progress.style.width = "85%"; } catch (e) {} }, 1400);
+        setTimeout(hideSplash, 8000);
+      } catch (e) {}
+    })();
+  </script>
+  <!-- PWA install helper: Android/Chrome = prompt nativo; iOS = instruções no app -->
+  <script>
+    let deferredPrompt = null;
+
+    window.pwaInstall = {
+      isIos: function () {
+        return /iphone|ipad|ipod/i.test(navigator.userAgent);
+      },
+      isInStandaloneMode: function () {
+        return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+          || (window.navigator.standalone === true);
+      },
+      canPromptInstall: function () {
+        return deferredPrompt !== null;
+      },
+      promptInstall: async function () {
+        if (!deferredPrompt) return { outcome: "unavailable" };
+        deferredPrompt.prompt();
+        const choiceResult = await deferredPrompt.userChoice;
+        deferredPrompt = null;
+        return { outcome: choiceResult && choiceResult.outcome ? choiceResult.outcome : "unknown" };
+      }
+    };
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      window.dispatchEvent(new Event('pwa-install-available'));
+    });
+
+    window.addEventListener('appinstalled', () => {
+      deferredPrompt = null;
+      window.dispatchEvent(new Event('pwa-installed'));
+    });
+
+    window.instalarApp = function() {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then(function(choiceResult) {
+          if (choiceResult.outcome === 'accepted') console.log('Usuário aceitou a instalação');
+          deferredPrompt = null;
+        });
+      } else {
+        if (window.pwaInstall.isIos()) alert("Toque no ícone 'Compartilhar' e depois em 'Adicionar à Tela de Início'.");
+      }
+    };
+  </script>
+  <!-- Service Worker FCM (Web Push): obrigatório para notificações com app fechado. O arquivo web/firebase-messaging-sw.js é copiado no build. -->
+  <script>
+    if ("serviceWorker" in navigator && "PushManager" in window) {
+      navigator.serviceWorker.register("/firebase-messaging-sw.js")
+        .then(function(swReg) { console.log("FCM Service Worker registrado.", swReg.scope); })
+        .catch(function(err) { console.warn("Registro FCM Service Worker falhou:", err); });
+    }
+    document.addEventListener("touchstart", function(){}, { passive: true });
+  </script>
+  <!-- Warm-up do teclado nativo: pisca foco no input invisível assim que o
+       Flutter Web sobe, para o Chrome/Gboard (Android) e Safari (iOS)
+       inicializarem o subsistema de IME. No primeiro toque real do usuário
+       o teclado abre instantaneamente. Roda 1x e nunca mais. -->
+  <script>
+    (function() {
+      var ran = false;
+      function warmupKeyboard() {
+        if (ran) return; ran = true;
+        try {
+          var el = document.getElementById('ct-keyboard-warmup');
+          if (!el) return;
+          // Foco silencioso (preventScroll evita pulo de scroll na PWA)
+          el.focus({ preventScroll: true });
+          // Blur imediato para não roubar o cursor real do app
+          setTimeout(function () { try { el.blur(); } catch (e) {} }, 0);
+        } catch (e) {}
+      }
+      // Dispara após Flutter desenhar a primeira frame (app pronto)
+      window.addEventListener('flutter-first-frame', function () {
+        setTimeout(warmupKeyboard, 200);
+      });
+      // Fallback: dispara também no primeiro toque/click (caso o evento
+      // flutter-first-frame não tenha rodado por algum motivo)
+      var firstInteract = function () {
+        warmupKeyboard();
+        window.removeEventListener('touchstart', firstInteract, true);
+        window.removeEventListener('mousedown', firstInteract, true);
+      };
+      window.addEventListener('touchstart', firstInteract, { capture: true, passive: true });
+      window.addEventListener('mousedown', firstInteract, { capture: true });
+    })();
+  </script>
+  <!-- iPhone: NÃO reposicionar o host com visualViewport — no iOS isso dessincroniza toque (registra “um pouco acima”). Manter host em 0,0 com 100% faz coordenadas baterem (como em apps que não têm o problema). Em não‑iOS o sync opcional pode ser reativado. -->
+  <script>
+    (function() {
+      var vv = window.visualViewport;
+      if (!vv) return;
+      var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      function getFlutterHost() {
+        var el = document.getElementById("flutter-host") || document.querySelector("flutter-view") || document.querySelector("flt-glass-pane") || document.querySelector("[id^=\'flutter\']");
+        if (el) return el;
+        var c = document.querySelector("canvas");
+        return c ? c.parentElement : null;
+      }
+      function syncVisualViewport() {
+        if (isIOS) return;
+        var host = getFlutterHost();
+        if (!host) return;
+        host.style.top = vv.offsetTop + "px";
+        host.style.left = vv.offsetLeft + "px";
+        host.style.width = vv.width + "px";
+        host.style.height = vv.height + "px";
+      }
+      function ensureHostFullViewport() {
+        var host = getFlutterHost();
+        if (!host || !isIOS) return;
+        host.style.top = "0";
+        host.style.left = "0";
+        host.style.width = "100%";
+        host.style.height = "100%";
+      }
+      vv.addEventListener("resize", function() { if (isIOS) ensureHostFullViewport(); else syncVisualViewport(); });
+      vv.addEventListener("scroll", syncVisualViewport);
+      window.addEventListener("orientationchange", function() {
+        if (isIOS) {
+          ensureHostFullViewport();
+          [50, 150, 300].forEach(function(ms) { setTimeout(ensureHostFullViewport, ms); });
+        } else {
+          syncVisualViewport();
+          [50, 150, 300].forEach(function(ms) { setTimeout(syncVisualViewport, ms); });
+        }
+      });
+      function onPageVisible() {
+        if (isIOS) {
+          ensureHostFullViewport();
+          [50, 150, 400].forEach(function(ms) { setTimeout(ensureHostFullViewport, ms); });
+        } else {
+          syncVisualViewport();
+          [50, 150, 400].forEach(function(ms) { setTimeout(syncVisualViewport, ms); });
+        }
+        try { window.dispatchEvent(new Event("flutter-app-visible")); } catch (e) {}
+      }
+      document.addEventListener("visibilitychange", function() {
+        if (document.visibilityState === "visible") onPageVisible();
+      });
+      window.addEventListener("pageshow", function(ev) {
+        if (!ev.persisted) return;
+        onPageVisible();
+      });
+      window.addEventListener("flutter-first-frame", function() {
+        if (isIOS) {
+          ensureHostFullViewport();
+          [100, 200, 400].forEach(function(ms) { setTimeout(ensureHostFullViewport, ms); });
+        } else {
+          syncVisualViewport();
+        }
+      });
+      if (document.readyState !== "loading") {
+        if (isIOS) { setTimeout(ensureHostFullViewport, 100); setTimeout(ensureHostFullViewport, 500); }
+        else { setTimeout(syncVisualViewport, 100); setTimeout(syncVisualViewport, 500); }
+      } else {
+        document.addEventListener("DOMContentLoaded", function() {
+          if (isIOS) { setTimeout(ensureHostFullViewport, 100); setTimeout(ensureHostFullViewport, 500); }
+          else { setTimeout(syncVisualViewport, 100); setTimeout(syncVisualViewport, 500); }
+        });
+      }
+    })();
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

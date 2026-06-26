@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Painel Controle Total - Raihom</title>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        :root { --primary: #ff4d00; --dark: #0f172a; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #f1f5f9;
+            margin: 0;
+            user-select: text !important;
+            -webkit-user-select: text !important;
+            -webkit-text-size-adjust: 100%;
+            min-height: 100vh;
+        }
+
+        .container { max-width: 1100px; margin: auto; padding: 20px; }
+
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+
+        .card {
+            background: white;
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+
+        h2, h3 { color: var(--dark); margin-top: 0; }
+
+        /* Inputs blindados para iPhone */
+        input {
+            width: 100%;
+            padding: 15px;
+            margin: 10px 0;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 16px !important;
+            box-sizing: border-box;
+            -webkit-appearance: none;
+        }
+
+        button {
+            width: 100%;
+            padding: 15px;
+            background: var(--dark);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            min-height: 50px;
+            min-width: 44px;
+            transition: 0.3s;
+        }
+
+        button:hover { background: var(--primary); }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        .user-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .user-item:hover { background: #f8fafc; }
+
+        .login-box {
+            max-width: 400px;
+            margin: 80px auto;
+            padding: 40px;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        .login-box h2 { text-align: center; margin-bottom: 24px; }
+        .hidden { display: none !important; }
+        .err { color: #e11d48; font-size: 13px; margin-top: 8px; }
+    </style>
+</head>
+<body>
+
+<div id="login-view" class="login-box hidden">
+    <h2>Login Admin</h2>
+    <input type="email" id="login-email" placeholder="Email" autocomplete="email">
+    <input type="password" id="login-password" placeholder="Senha" autocomplete="current-password">
+    <button onclick="fazerLogin()" id="btn-login">ENTRAR</button>
+    <p id="login-err" class="err hidden"></p>
+</div>
+
+<div id="panel-view" class="container hidden">
+    <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+        <h1>Controle Total App</h1>
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <span id="user-email" style="font-size: 14px; color: #64748b;"></span>
+            <button onclick="sair()" style="width: auto; padding: 8px 16px; font-size: 13px;">Sair</button>
+        </div>
+    </header>
+
+    <div class="grid">
+        <div class="card">
+            <h3><i class="ph ph-key"></i> Chave Mestra PIX</h3>
+            <p style="font-size: 12px; color: #64748b;">Liberação forçada por ID do Mercado Pago</p>
+            <input type="text" id="mpId" placeholder="Cole o ID da Transação" inputmode="numeric">
+            <button onclick="executarSyncManual()">LIBERAR ACESSO AGORA</button>
+        </div>
+
+        <div class="card">
+            <h3><i class="ph ph-broadcast"></i> Status Global</h3>
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <button onclick="setManutencao(true)" style="background: #e11d48;">MODO MANUTENÇÃO</button>
+                <button onclick="setManutencao(false)" style="background: #10b981;">ONLINE</button>
+            </div>
+            <p id="info-status" style="text-align:center; font-weight:bold; margin-top: 10px;">Carregando...</p>
+        </div>
+    </div>
+
+    <div class="card" style="margin-top: 20px;">
+        <h3><i class="ph ph-users"></i> Últimos Usuários (clique para copiar)</h3>
+        <div id="lista-users">Carregando usuários...</div>
+    </div>
+</div>
+
+<script type="module">
+    import { db, auth, functions, httpsCallable } from "./firebase-config.js";
+    import { collection, query, limit, onSnapshot, doc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
+    import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
+
+    onAuthStateChanged(auth, (user) => {
+        document.getElementById("login-view").classList.toggle("hidden", !!user);
+        document.getElementById("panel-view").classList.toggle("hidden", !user);
+        if (user) {
+            document.getElementById("user-email").textContent = user.email || "Admin";
+            iniciarPainel();
+        }
+    });
+
+    window.fazerLogin = async () => {
+        const email = document.getElementById("login-email").value.trim();
+        const pass = document.getElementById("login-password").value;
+        const btn = document.getElementById("btn-login");
+        const err = document.getElementById("login-err");
+        err.classList.add("hidden");
+        if (!email || !pass) {
+            err.textContent = "Preencha email e senha.";
+            err.classList.remove("hidden");
+            return;
+        }
+        btn.disabled = true;
+        try {
+            await signInWithEmailAndPassword(auth, email, pass);
+        } catch (e) {
+            err.textContent = e.message || "Erro ao entrar.";
+            err.classList.remove("hidden");
+        } finally {
+            btn.disabled = false;
+        }
+    };
+
+    window.sair = () => signOut(auth);
+
+    function iniciarPainel() {
+        escutarStatus();
+        escutarUsuarios();
+    }
+
+    function escutarStatus() {
+        const ref = doc(db, "system", "config");
+        onSnapshot(ref, (snap) => {
+            const d = snap.data() || {};
+            const m = d.manutencao === true;
+            document.getElementById("info-status").innerText = m ? "Modo Manutenção Ativo ⚠️" : "Sistema Online ✅";
+        });
+    }
+
+    function escutarUsuarios() {
+        const q = query(collection(db, "users"), limit(20));
+        onSnapshot(q, (snap) => {
+            const list = document.getElementById("lista-users");
+            if (snap.empty) {
+                list.innerHTML = "<p style='color:#64748b;'>Nenhum usuário.</p>";
+                return;
+            }
+            list.innerHTML = "";
+            snap.forEach((u) => {
+                const data = u.data();
+                const email = data.email || data.nome || "Sem email";
+                const status = data.planStatus || data.status_pagamento || "pendente";
+                const ativo = status === "active" || status === "approved";
+                const div = document.createElement("div");
+                div.className = "user-item";
+                div.innerHTML = `<span>${email}</span><strong style="color:${ativo ? "#10b981" : "#64748b"}">${status}</strong>`;
+                div.onclick = () => {
+                    navigator.clipboard.writeText(email).then(() => alert("Copiado: " + email));
+                };
+                list.appendChild(div);
+            });
+        });
+    }
+
+    window.executarSyncManual = async () => {
+        const id = document.getElementById("mpId").value.trim().replace(/\D/g, "");
+        if (!id) {
+            alert("Digite o ID da transação!");
+            return;
+        }
+        try {
+            const syncManual = httpsCallable(functions, "sincronizarManual");
+            const res = await syncManual({ paymentId: id });
+            alert(res.data.message || "Ok.");
+            if (res.data.success) document.getElementById("mpId").value = "";
+        } catch (e) {
+            alert("Erro: " + (e.message || "Sem permissão ou conexão."));
+        }
+    };
+
+    window.setManutencao = async (status) => {
+        try {
+            const ref = doc(db, "system", "config");
+            await updateDoc(ref, { manutencao: status, updatedAt: serverTimestamp() });
+            document.getElementById("info-status").innerText = status ? "Modo Manutenção Ativo ⚠️" : "Sistema Online ✅";
+        } catch (e) {
+            alert("Erro ao alterar: " + (e.message || "Sem permissão."));
+        }
+    };
+</script>
+
+</body>
+</html>

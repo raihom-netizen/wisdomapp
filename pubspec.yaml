@@ -1,0 +1,102 @@
+name: controle_total_premium
+description: "Controle Total App â€” Premium"
+publish_to: 'none'
+version: 10.03.0+4
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # Firebase
+  firebase_core: ^3.6.0
+  firebase_auth: ^5.3.1
+  cloud_firestore: ^5.6.12
+  cloud_functions: ^5.2.0
+  firebase_messaging: ^15.0.0
+  firebase_remote_config: ^5.4.3
+  firebase_storage: ^12.4.10
+  google_sign_in: ^6.3.0
+  sign_in_with_apple: ^6.1.4
+  crypto: ^3.0.6
+  google_fonts: ^6.2.1
+  font_awesome_flutter: ^11.0.0
+  flutter_svg: ^2.0.17
+
+  # Utilidades
+  intl: ^0.20.2
+  connectivity_plus: ^6.0.5
+  file_picker: ^8.1.2
+  pdf: ^3.10.8
+  image: ^4.5.4
+  printing: ^5.11.1
+  path_provider: ^2.1.2
+  url_launcher: ^6.3.1
+  fl_chart: ^0.69.2
+  flutter_local_notifications: ^21.0.0
+  http: ^1.6.0
+  image_picker: ^1.2.1
+  package_info_plus: ^8.3.1
+  path: ^1.9.0
+  share_plus: ^10.1.4
+  cross_file: ^0.3.3+9
+  shared_preferences: ^2.5.4
+  flutter_secure_storage: ^9.2.4
+  webview_flutter: ^4.10.0
+  table_calendar: ^3.2.0
+  timezone: ^0.11.0
+  local_auth: ^2.3.0
+  get: ^4.7.3
+  google_generative_ai: ^0.4.7
+  home_widget: ^0.9.0
+  in_app_purchase: ^3.2.3
+  in_app_purchase_storekit: ^0.4.8+1
+  google_mlkit_text_recognition: ^0.15.1
+  pdfrx: ^2.2.24
+  uuid: ^4.5.3
+  textify: ^0.5.2
+  webview_flutter_web: ^0.2.3+4
+  # Premium: áudios configuráveis em notificações (sons próprios por categoria
+  # Escala/Compromisso/Audiência/Financeiro). Veja `notification_sound_preferences.dart`.
+  audioplayers: ^6.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.13.1
+
+# Ícone do app e PWA — origem: assets/images/logo_divulgacao.png
+# Regenerar: python tool/generate_brand_assets.py && flutter pub run flutter_launcher_icons
+flutter_launcher_icons:
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  image_path: "assets/images/icon_no_bg.png"
+  adaptive_icon_background: "#0A1F56"
+  adaptive_icon_foreground: "assets/images/icon_adaptive_foreground.png"
+  web:
+    generate: true
+    image_path: "assets/images/icon_no_bg.png"
+    background_color: "#0A1F56"
+    theme_color: "#0A1F56"
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/images/bank_brands/
+    - assets/images/push_banners/
+    # Banco offline de áudios de notificação (Preferências e por evento).
+    # Veja `lib/services/notification_sound_catalog.dart` e o README da pasta.
+    - assets/sounds/notifications/
+    # Noto Sans para PDF (Relatório/Financeiro): o printing carrega de `google_fonts/*.ttf` sem rede — evita falha Web/Android.
+    - google_fonts/
+
+

@@ -1,0 +1,63 @@
+{
+  "project_info": {
+    "project_number": "766524666378",
+    "project_id": "wisdomapp-b9e98",
+    "storage_bucket": "wisdomapp-b9e98.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:766524666378:android:7d110291e6777aa37f25f3",
+        "android_client_info": {
+          "package_name": "com.wisdomapp.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "766524666378-cnpovicqniuin1f8b865ufcr3t0v2fem.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.wisdomapp.app",
+            "certificate_hash": "a031a3abf7a9e9ab19b6806fc471fc1119965f25"
+          }
+        },
+        {
+          "client_id": "766524666378-i4bpijc06bcu32ej2pdj536ek8fasbpa.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.wisdomapp.app",
+            "certificate_hash": "9f08b5182a33892b7a25d60ef455ea081427cbd8"
+          }
+        },
+        {
+          "client_id": "766524666378-ce9albkkvn01si77s6ofcqvoaatn29s0.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyArYbw1yW2qd1A85cWZxAVUh9jeusvt3Gc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "766524666378-ce9albkkvn01si77s6ofcqvoaatn29s0.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "766524666378-glgtv4te1i3s4fr67v1t89q57d2hcm9l.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.wisdomapp",
+                "app_store_id": "6783481316"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

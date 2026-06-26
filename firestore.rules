@@ -1,0 +1,137 @@
+// Sincronizado com firestore.rules na raiz. Deploy: firebase deploy --only firestore:rules
+// Tudo controlado por aqui: apenas admin altera planos e configurações. Usuário não altera role/plan/license.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    function isMaster() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'master';
+    }
+    function isPartner() {
+      return isSignedIn() && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'partner'
+        || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'socio'
+      );
+    }
+    function isAdminPanelReader() {
+      return isAdmin() || isMaster() || isPartner() || isGestor();
+    }
+    function isGestor() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'gestor';
+    }
+    function isSystemManager() {
+      return isSignedIn() && request.auth.token.email == 'raihom@gmail.com';
+    }
+    function canEditPublicContent() {
+      return isAdmin() || isGestor() || isSystemManager()
+        || (isSignedIn() &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'master');
+    }
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    match /cpf_index/{cpf} {
+      allow read: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create, update: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+    }
+    match /public_downloads/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /landing_content/{docId} {
+      allow read: if true;
+      allow write: if canEditPublicContent();
+    }
+    match /app_config/{docId} {
+      allow read: if true;
+      allow write: if isAdmin() || isSystemManager()
+        || (isGestor() && docId == 'wisdom_courses_module')
+        || (canEditPublicContent() && docId == 'financial_tips_home');
+    }
+    // Configuração pública do projeto MP (não sensível): pode ser lida pelo app/site.
+    match /mp_project_config/{docId} {
+      allow read: if true;
+      allow write: if isAdmin() || isSystemManager();
+    }
+    // Segredos do MP (access token, client secret, assinatura webhook, receiver IDs):
+    // somente backend (Admin SDK) deve ler/escrever.
+    match /secure_config/{docId} {
+      allow read, write: if false;
+    }
+    match /settings/{docId} {
+      allow read, write: if isAdmin();
+    }
+    match /partnerships/{partnershipId} {
+      allow read, write: if isAdmin();
+      match /members/{memberId} {
+        allow read, write: if isAdmin();
+      }
+      match /submissions/{submissionId} {
+        allow read, write: if isAdmin();
+      }
+    }
+    match /config/{docId} {
+      allow read, write: if isAdmin();
+    }
+    match /activity_logs/{docId} {
+      allow read, create: if isAdmin();
+    }
+    match /course_videos/{videoId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if canEditPublicContent();
+    }
+    // Dicas financeiras (Início + insights): leitura para usuários autenticados; CRUD gestor/admin.
+    match /financial_tips/{tipId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if canEditPublicContent();
+    }
+    match /admin_audit_log/{docId} {
+      allow read, create: if isAdmin();
+    }
+    match /mp_payments/{docId} {
+      allow read: if isAdminPanelReader();
+    }
+    match /user_feedback/{docId} {
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow read: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow update: if isAdmin();
+    }
+    match /users/{userId} {
+      allow read: if isSignedIn() && (isOwner(userId) || isAdminPanelReader());
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isAdmin()
+        || (isOwner(userId)
+            && request.resource.data.get('role', null) == resource.data.get('role', null)
+            && request.resource.data.get('plan', null) == resource.data.get('plan', null)
+            && request.resource.data.get('licenseExpiresAt', null) == resource.data.get('licenseExpiresAt', null)
+            && request.resource.data.get('planStatus', null) == resource.data.get('planStatus', null));
+      allow delete: if isAdmin();
+    }
+    // Escalas e configurações (Horas extras, etc.): dono pode ler/escrever. Bloqueio de licença é no app.
+    match /users/{userId}/scales/{scaleId} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
+    match /users/{userId}/settings/{docId} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
+    // Add-on Open Finance: leitura de entitlements; escrita só Cloud Functions.
+    match /users/{userId}/bank_connection_entitlements/{docId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow create, update, delete: if false;
+    }
+    match /users/{userId}/entitlement_payments/{docId} {
+      allow read, write: if false;
+    }
+    match /users/{userId}/{allPaths=**} {
+      allow read, write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+    }
+  }
+}

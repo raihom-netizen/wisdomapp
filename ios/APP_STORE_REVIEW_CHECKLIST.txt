@@ -1,0 +1,56 @@
+Controle Total — checklist revisão App Store (2.1 + 2.3.10)
+============================================================
+
+A) Login com a Apple + e-mail iCloud (Firebase)
+-----------------------------------------------
+O app já envia idToken + rawNonce + authorizationCode (accessToken) ao Firebase.
+
+Return URL (OAuth) — colar na Apple Developer no Services ID > Sign In with Apple > Return URLs:
+  https://controletotal-4c867.firebaseapp.com/__/auth/handler
+
+No Firebase (campo "Services ID"): vai o IDENTIFICADOR do Services ID (ex.: com.suaempresa.controletotal.signin),
+NÃO a URL acima. A URL acima só entra na Apple.
+
+Domínios autorizados no Firebase (Authentication > Settings): devem incluir pelo menos
+controletotal-4c867.firebaseapp.com e controletotalapp.com.br (web) — conforme seu projeto.
+
+1. Firebase Console > Authentication > Sign-in method > Apple > ATIVAR.
+2. Preencher: Services ID, Team ID, Key ID e colar a chave privada (.p8) da Apple.
+3. Apple Developer (developer.apple.com):
+   - Identifiers > App IDs: seu bundle (ex.: com....controletotal) com capability "Sign In with Apple".
+   - Identifiers > Services IDs: criar um Service ID (ex.: com....controletotal.signin) usado no Firebase;
+     em "Sign In with Apple" configurar Primary App ID e Return URL = linha acima (handler Firebase).
+   - Keys: criar chave com "Sign In with Apple", baixar .p8 uma vez, usar Key ID no Firebase.
+4. Web (controletotalapp.com.br): no mesmo provedor Apple do Firebase, incluir domínio de hospedagem e
+   redirect se o Firebase pedir — assim quem renova licença no site pode usar "Entrar com Apple" / iCloud.
+
+B) Conta de revisão (e-mail + senha) — invalid-credential
+-----------------------------------------------------------
+O erro "invalid-credential / malformed or expired" no login por e-mail indica que o Firebase Auth não aceitou
+usuário+senha. No Firebase Console > Authentication > Users:
+- Criar o usuário review@... com o método "E-mail/senha" OU
+- Redefinir a senha para a que será enviada à Apple.
+
+Quem criou conta só com Google ou só com Apple NÃO tem senha para este formulário — a revisão deve testar
+Google/Apple ou uma conta criada com e-mail+senha.
+
+C) Diretriz 2.3.10 — capturas de tela na App Store Connect
+-----------------------------------------------------------
+- Tirar screenshots no Simulador iOS (Device > Appearance) ou iPhone com barra de status "limpa", sem SOS
+  simulado, sem AssistiveTouch visível, sem menus de terceiros na imagem.
+- Xcode: para Simulador, pode usar um dispositivo recente e fundo neutro; evitar mostrar Android, Chrome desktop
+  ou barras que não sejam do iOS.
+- Substituir imagens em "Pré-visualizações e capturas" (Ver todos os tamanhos no Gerenciador de mídia, se necessário).
+
+D) Licença / renovação fora do app (sem compra na App Store)
+------------------------------------------------------------
+- No app iOS não há compra de licença pela Apple: o utilizador usa o botão "Gerencie sua licença" /
+  gerenciamento de licença, que abre o site https://controletotalapp.com.br no Safari (fora do app).
+- No site: login normal (Google, Apple ou e-mail/senha no Firebase) e aquisição/renovação da licença
+  (PIX/cartão, conforme o site).
+
+E) Diretriz 2.1(a) — Entrar com a Apple (erro após credenciais válidas)
+-----------------------------------------------------------------------
+O app faz reload do utilizador Firebase e lê o e-mail também em providerData (Apple relay), porque
+só depois o Firebase preenche o e-mail em alguns casos. Se ainda falhar: na primeira vez, concluir o
+fluxo na janela da Apple (partilhar e-mail ou relay); alternativa na app: Google ou e-mail+senha.

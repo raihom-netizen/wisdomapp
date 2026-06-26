@@ -1,0 +1,18 @@
+// Força compileSdk 37 em todos os módulos Android (plugins Flutter com compileSdk antigo, ex. file_picker 34).
+subprojects { sub ->
+    sub.afterEvaluate {
+        if (sub.plugins.hasPlugin("com.android.library") || sub.plugins.hasPlugin("com.android.application")) {
+            def androidExt = sub.extensions.findByName("android")
+            if (androidExt != null) {
+                try {
+                    androidExt.compileSdk = 37
+                } catch (Exception ignored) {
+                    try {
+                        androidExt.compileSdkVersion 37
+                    } catch (Exception ignored2) {
+                    }
+                }
+            }
+        }
+    }
+}

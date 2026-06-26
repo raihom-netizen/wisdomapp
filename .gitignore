@@ -1,0 +1,75 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Secrets e tokens locais
+.deploy-token
+.firebase-ci-token
+firebase-adminsdk*/
+**/firebase-adminsdk*/
+
+# Referencia Controle Total (nao enviar ao Git/CodeMagic)
+/dados para copiar do controle total app/
+
+# Pastas de configuracao local (credenciais)
+/CONFIGURAÇÕES ANDROID/
+/CONFIGURAÇÕES IOS/
+/CONFIGURAÇÕES WEB/
+/CONFIGURACOES ANDROID/
+/CONFIGURACOES IOS/
+/CONFIGURACOES WEB/
+
+# Node / Firebase functions
+functions/node_modules/
+**/node_modules/
+
+# Logs e exports locais
+*_log.txt
+aab_export_log.txt
+deploy_log.txt
+
+# Firebase cache local
+.firebase/
+
