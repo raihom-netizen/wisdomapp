@@ -6,7 +6,8 @@ import 'package:firebase_storage/firebase_storage.dart';
 class CourseVideoImageService {
   CourseVideoImageService._();
 
-  static const maxBytes = 5 * 1024 * 1024;
+  /// Até ~12 MB — capas Full HD (1080p) para dicas e cursos.
+  static const maxBytes = 12 * 1024 * 1024;
 
   static Future<String> uploadCover({
     required Uint8List bytes,
@@ -14,12 +15,18 @@ class CourseVideoImageService {
     String? docId,
   }) async {
     if (bytes.isEmpty) throw StateError('Imagem vazia.');
-    if (bytes.lengthInBytes > maxBytes) throw StateError('Imagem acima de 5 MB.');
+    if (bytes.lengthInBytes > maxBytes) throw StateError('Imagem acima de 12 MB.');
     final ext = mimeType.contains('png') ? 'png' : 'jpg';
     final id = docId ?? DateTime.now().millisecondsSinceEpoch.toString();
     final path = 'wisdomapp/course_videos/$id/cover_${DateTime.now().millisecondsSinceEpoch}.$ext';
     final ref = FirebaseStorage.instance.ref(path);
-    await ref.putData(bytes, SettableMetadata(contentType: mimeType));
+    await ref.putData(
+      bytes,
+      SettableMetadata(
+        contentType: mimeType,
+        cacheControl: 'public, max-age=31536000',
+      ),
+    );
     return ref.getDownloadURL();
   }
 }

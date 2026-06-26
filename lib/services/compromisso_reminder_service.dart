@@ -87,6 +87,108 @@ class CompromissoReminderService {
     return docRef.id;
   }
 
+  /// Salva edição de evento que existe só no Google (ou já vinculado por [googleEventId]).
+  static Future<void> upsertFromGoogleEvent({
+    required String userDocId,
+    required String googleEventId,
+    required CompromissoFormResult result,
+  }) async {
+    final timeStr =
+        '${result.time.hour.toString().padLeft(2, '0')}:${result.time.minute.toString().padLeft(2, '0')}';
+    final endTimeStr =
+        '${result.endTime.hour.toString().padLeft(2, '0')}:${result.endTime.minute.toString().padLeft(2, '0')}';
+
+    final linked = await _reminders(userDocId)
+        .where('googleEventId', isEqualTo: googleEventId)
+        .limit(1)
+        .get();
+
+    if (linked.docs.isNotEmpty) {
+      await update(
+        userDocId: userDocId,
+        doc: linked.docs.first,
+        result: result,
+      );
+      return;
+    }
+
+    final updated = await GoogleCalendarSyncService.updateGoogleEventById(
+      userDocId: userDocId,
+      eventId: googleEventId,
+      title: result.title,
+      notes: result.notes,
+      date: result.date,
+      timeHHmm: timeStr,
+      endTimeHHmm: endTimeStr,
+    );
+    if (!updated) {
+      throw Exception('Não foi possível atualizar no Google Calendar.');
+    }
+
+    final docRef = await _reminders(userDocId).add({
+      'type': 'compromisso',
+      'title': result.title,
+      'notes': result.notes,
+      'date': Timestamp.fromDate(result.date),
+      'time': timeStr,
+      'endTime': endTimeStr,
+      'colorHex': result.colorHex,
+      'status': 'EM_ABERTO',
+      'done': false,
+      'googleEventId': googleEventId,
+      'googleSyncedAt': FieldValue.serverTimestamp(),
+      'createdAt': FieldValue.serverTimestamp(),
+      'agendaLoginDaySyncAt': FieldValue.serverTimestamp(),
+    });
+
+    await AgendaScaleMirrorService.upsert(
+      userDocId: userDocId,
+      agendaId: docRef.id,
+      type: AgendaMirrorType.compromisso,
+      label: result.title,
+      date: result.date,
+      startHHmm: timeStr,
+      endHHmm: endTimeStr,
+      colorHex: result.colorHex,
+      notes: result.notes,
+    );
+
+    unawaited(AgendaNotificationRescheduleHelper.afterReminderSave(
+      userDocId: userDocId,
+      reminderRef: docRef,
+      newDate: result.date,
+      newTimeHHmm: timeStr,
+    ));
+  }
+
+  /// Exclui evento Google (e reminder local vinculado, se existir).
+  static Future<void> deleteGoogleOnlyEvent({
+    required String userDocId,
+    required String googleEventId,
+  }) async {
+    final linked = await _reminders(userDocId)
+        .where('googleEventId', isEqualTo: googleEventId)
+        .limit(1)
+        .get();
+
+    if (linked.docs.isNotEmpty) {
+      await deleteOne(
+        userDocId: userDocId,
+        reminderDocId: linked.docs.first.id,
+        googleEventId: googleEventId,
+      );
+      return;
+    }
+
+    final ok = await GoogleCalendarSyncService.deleteGoogleEventById(
+      userDocId: userDocId,
+      eventId: googleEventId,
+    );
+    if (!ok) {
+      throw Exception('Não foi possível excluir no Google Calendar.');
+    }
+  }
+
   static Future<String> update({
     required String userDocId,
     required QueryDocumentSnapshot<Map<String, dynamic>> doc,

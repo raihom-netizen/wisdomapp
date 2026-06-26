@@ -66,6 +66,7 @@ import '../utils/home_shell_layout.dart';
 import '../utils/agenda_reminder_end_of_day.dart';
 import '../utils/agenda_reminder_module_scope.dart';
 import '../utils/finance_category_grouping.dart';
+import '../widgets/finance_category_pie_panel.dart';
 import '../widgets/registrar_aporte_dialog.dart';
 import 'novo_lancamento_page.dart';
 import '../models/smart_input_pop_result.dart';
@@ -6189,11 +6190,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                     SizedBox(height: _kDashBlockGap),
-                    _buildSectionTitle('Despesas por Categoria'),
+                    _buildSectionTitle('Receitas e despesas por categoria'),
                     SizedBox(height: _kDashChartTitleGap),
                     RepaintBoundary(
-                      child: _despesasDonutFromTransactionDocs(
-                          context, docs, rangeStart, rangeEnd),
+                      child: _financeCategoryChartsFromTransactionDocs(
+                          docs, rangeStart, rangeEnd),
                     ),
                   ],
                 );
@@ -6588,164 +6589,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _despesasDonutFromTransactionDocs(
-    BuildContext context,
+  Widget _financeCategoryChartsFromTransactionDocs(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
     DateTime rangeStart,
     DateTime rangeEnd,
   ) {
-    final byCategory = <String, double>{};
+    final incomeByCategory = <String, double>{};
+    final expenseByCategory = <String, double>{};
     final catMerger = FinanceCategoryMerger();
     for (final doc in docs) {
       final d = doc.data();
-      if ((d['type'] ?? '').toString() != 'expense') continue;
       final ts = d['date'];
       if (ts is Timestamp) {
         final date = ts.toDate();
         if (date.isBefore(rangeStart) || date.isAfter(rangeEnd)) continue;
       }
       final raw = (d['category'] ?? '').toString().trim();
-      final amount = (d['amount'] ?? 0).toDouble();
-      catMerger.addAmount(byCategory, raw.isEmpty ? 'Outros' : raw, amount,
-          emptyLabel: 'Outros');
+      final cat = raw.isEmpty ? 'Outros' : raw;
+      final amount = (d['amount'] ?? 0).toDouble().abs();
+      final type = (d['type'] ?? 'expense').toString();
+      if (type == 'income') {
+        catMerger.addAmount(incomeByCategory, cat, amount, emptyLabel: 'Outros');
+      } else {
+        catMerger.addAmount(expenseByCategory, cat, amount, emptyLabel: 'Outros');
+      }
     }
-    final sorted = byCategory.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    final total = sorted.fold<double>(0, (s, e) => s + e.value);
-    final colors = [
-      const Color(0xFF2962FF),
-      const Color(0xFFEF4444),
-      const Color(0xFF22C55E),
-      const Color(0xFFFFB648),
-      const Color(0xFF8B5CF6),
-      const Color(0xFF14B8A6),
-      Colors.orange.shade400,
-      Colors.pink.shade400
-    ];
-    const double minPctToShowTitle = 0.06;
-    final size = MediaQuery.sizeOf(context);
-    final width = size.width;
-    final isMobile = size.shortestSide < 600;
-    final isNarrowCard = width < 420;
-    final chartSize = isNarrowCard ? 160.0 : 180.0;
-    final padding = isNarrowCard ? 16.0 : 20.0;
-    final sectionRadius = chartSize * 0.305;
-
-    final sections = sorted.asMap().entries.map((e) {
-      final pct = total > 0 ? (e.value.value / total) : 0.0;
-      final color = colors[e.key % colors.length];
-      final showTitle = pct >= minPctToShowTitle;
-      return PieChartSectionData(
-        value: e.value.value,
-        color: color,
-        title: showTitle ? '${(pct * 100).toStringAsFixed(0)}%' : '',
-        showTitle: showTitle,
-        radius: sectionRadius,
-        titleStyle: TextStyle(
-            fontSize: isNarrowCard ? 10 : 11,
-            fontWeight: FontWeight.w700,
-            color: Colors.white),
-      );
-    }).toList();
-
-    final legendWidget = Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: sorted.asMap().entries.map((e) {
-        final val = e.value.value;
-        final pct = total > 0 ? (val / total) * 100 : 0.0;
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 12,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: colors[e.key % colors.length],
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(e.value.key,
-                        style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF374151)),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis),
-                    Text(
-                        '${CurrencyFormats.formatBRL(val)} · ${pct.toStringAsFixed(1)}%',
-                        style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.grey.shade600)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
-    );
-
-    final chartWidget = SizedBox(
-      width: chartSize,
-      height: chartSize,
-      child: PieChart(
-        PieChartData(
-          sectionsSpace: 2,
-          centerSpaceRadius: chartSize * 0.28,
-          sections: sections,
-        ),
-        duration: Duration.zero,
-      ),
-    );
-
-    return Container(
-      padding: EdgeInsets.all(padding),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(_kDashSurfaceRadius),
-        border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: sections.isEmpty
-          ? Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text('Nenhuma despesa no período.',
-                  style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade600)))
-          : isNarrowCard || isMobile
-              ? Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Center(child: chartWidget),
-                    SizedBox(height: padding),
-                    legendWidget,
-                  ],
-                )
-              : Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(child: legendWidget),
-                    const SizedBox(width: 16),
-                    chartWidget,
-                  ],
-                ),
+    return FinanceCategoryChartsSuite(
+      mode: 'both',
+      incomeByCategory: incomeByCategory,
+      expenseByCategory: expenseByCategory,
     );
   }
 

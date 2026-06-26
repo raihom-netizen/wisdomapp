@@ -63,7 +63,7 @@ import '../constants/date_time_formats.dart';
 import '../services/relatorio_service.dart';
 import 'report_preview_screen.dart';
 import '../utils/date_picker_a11y.dart';
-import '../widgets/app_pie_chart.dart';
+import '../widgets/finance_category_pie_panel.dart';
 import '../widgets/finance_account_category_sheet.dart';
 import '../widgets/finance_smart_tips_insight.dart';
 import '../widgets/finance_bank_brand_thumb.dart';
@@ -7381,6 +7381,8 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet> {
               }
               final baseRows = snap.data!;
               final allCategoryTotals = <String, double>{};
+              final incomeCategoryTotals = <String, double>{};
+              final expenseCategoryTotals = <String, double>{};
               final insightMerger = FinanceCategoryMerger();
               for (final item in baseRows) {
                 final d = Map<String, dynamic>.from(item['raw'] as Map<String, dynamic>);
@@ -7394,6 +7396,11 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet> {
                 final catRaw = (d['category'] ?? '').toString();
                 final val = ((d['amount'] ?? 0) as num).toDouble().abs();
                 insightMerger.addAmount(allCategoryTotals, catRaw, val);
+                if (type == 'income') {
+                  insightMerger.addAmount(incomeCategoryTotals, catRaw, val);
+                } else {
+                  insightMerger.addAmount(expenseCategoryTotals, catRaw, val);
+                }
               }
               final allCategoryOptions = <String>{
                 ..._userCategoryNames,
@@ -7433,23 +7440,6 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet> {
                   ? 1.0
                   : clickableCatEntries.first.value;
               final sortedCats = categoryTotals.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-              final catPieSegments = sortedCats.asMap().entries.map((entry) {
-                final i = entry.key;
-                final e = entry.value;
-                final palette = [
-                  AppColors.financeReceita,
-                  AppColors.financeDespesa,
-                  AppColors.financePendente,
-                  AppColors.primary,
-                  AppColors.accent,
-                  AppColors.secondary,
-                ];
-                return (
-                  label: e.key.length > 18 ? '${e.key.substring(0, 18)}…' : e.key,
-                  value: e.value,
-                  color: palette[i % palette.length],
-                );
-              }).toList();
 
               return FutureBuilder<({double income, double expense})>(
                 future: _periodSummaryFuture,
@@ -7468,12 +7458,7 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet> {
                           FinanceInsightScope.balance =>
                               effectiveOpening + summary.income - summary.expense,
                         };
-                  final saldoPieSegments = [
-                    (label: 'Receitas', value: authoritativeIncome, color: AppColors.financeReceita),
-                    (label: 'Despesas', value: authoritativeExpense, color: AppColors.financeDespesa),
-                  ];
-
-              return FutureBuilder<double>(
+                  return FutureBuilder<double>(
                 future: _loadComparisonTotal(_from, _to, _scope),
                 builder: (context, cmpSnap) {
                   final previousTotal = cmpSnap.data ?? 0.0;
@@ -7947,13 +7932,22 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet> {
                 ),
               ),
               const SizedBox(height: 8),
-              AppPieChart(
-                title: _scope == FinanceInsightScope.balance
-                    ? 'Receitas x Despesas'
-                    : 'Distribuição por categoria',
-                segments: _scope == FinanceInsightScope.balance
-                    ? saldoPieSegments
-                    : catPieSegments,
+              FinanceCategoryChartsSuite(
+                mode: switch (_scope) {
+                  FinanceInsightScope.income => 'income',
+                  FinanceInsightScope.expense => 'expense',
+                  FinanceInsightScope.balance => 'both',
+                },
+                incomeByCategory: _scope == FinanceInsightScope.expense
+                    ? const {}
+                    : (_scope == FinanceInsightScope.income
+                        ? allCategoryTotals
+                        : incomeCategoryTotals),
+                expenseByCategory: _scope == FinanceInsightScope.income
+                    ? const {}
+                    : (_scope == FinanceInsightScope.expense
+                        ? allCategoryTotals
+                        : expenseCategoryTotals),
               ),
               const SizedBox(height: 10),
               const Text(

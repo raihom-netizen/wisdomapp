@@ -9,9 +9,10 @@ import '../utils/fifty_two_weeks_plan.dart';
 import '../utils/firestore_user_doc_id.dart';
 import '../utils/goal_objective_visuals.dart';
 import '../utils/premium_upgrade.dart';
+import '../widgets/goal_contributions_sheet.dart';
 import '../widgets/create_financial_goal_dialog.dart';
 import '../widgets/fifty_two_weeks_schedule_sheet.dart';
-import '../widgets/registrar_aporte_dialog.dart';
+import '../widgets/registrar_deposito_dialog.dart';
 
 /// Card «Objetivo Financeiro» no Início — Projeto 52 semanas + progresso.
 class HomeObjectiveFinancePanel extends StatelessWidget {
@@ -66,6 +67,7 @@ class HomeObjectiveFinancePanel extends StatelessWidget {
           children: [
             _ActiveObjectiveCard(
               goalDoc: primary,
+              uid: uid,
               profile: profile,
               onOpenModule: onOpenObjetivoModule,
             ),
@@ -190,11 +192,13 @@ class _EmptyObjectiveCard extends StatelessWidget {
 class _ActiveObjectiveCard extends StatelessWidget {
   const _ActiveObjectiveCard({
     required this.goalDoc,
+    required this.uid,
     required this.profile,
     required this.onOpenModule,
   });
 
   final QueryDocumentSnapshot<Map<String, dynamic>> goalDoc;
+  final String uid;
   final UserProfile profile;
   final VoidCallback onOpenModule;
 
@@ -221,10 +225,8 @@ class _ActiveObjectiveCard extends StatelessWidget {
         }
         final progress = target > 0 ? (current / target).clamp(0.0, 1.0) : 0.0;
         final faltam = (target - current).clamp(0.0, double.infinity);
-        final schedule = is52
-            ? FiftyTwoWeeksPlan.buildSchedule(target: target, planStart: planStart)
-            : const <FiftyTwoWeeksWeekEntry>[];
-        final chartBars = _monthlyBars(schedule, paidWeeks, currentWeek);
+        final paidCount = paidWeeks.length;
+        final remainingWeeks = (52 - paidCount).clamp(0, 52);
 
         return Container(
           decoration: BoxDecoration(
@@ -382,55 +384,101 @@ class _ActiveObjectiveCard extends StatelessWidget {
                   ),
                 ),
               ],
-              if (chartBars.isNotEmpty) ...[
+              if (target > 0) ...[
                 const SizedBox(height: 14),
-                SizedBox(
-                  height: 88,
-                  child: BarChart(
-                    BarChartData(
-                      maxY: chartBars.map((e) => e.y).fold<double>(0, (a, b) => a > b ? a : b) * 1.2 + 1,
-                      gridData: const FlGridData(show: false),
-                      borderData: FlBorderData(show: false),
-                      titlesData: FlTitlesData(
-                        leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            getTitlesWidget: (v, _) {
-                              final i = v.toInt();
-                              if (i < 0 || i >= chartBars.length) return const SizedBox.shrink();
-                              return Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: Text(
-                                  chartBars[i].label,
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.85),
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w700,
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.white30),
+                  ),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 96,
+                        height: 96,
+                        child: PieChart(
+                          PieChartData(
+                            sectionsSpace: 2,
+                            centerSpaceRadius: 26,
+                            sections: [
+                              if (current > 0)
+                                PieChartSectionData(
+                                  value: current,
+                                  color: Colors.white,
+                                  radius: 22,
+                                  title: '${(progress * 100).round()}%',
+                                  titleStyle: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w900,
+                                    color: visual.color,
                                   ),
                                 ),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                      barGroups: [
-                        for (var i = 0; i < chartBars.length; i++)
-                          BarChartGroupData(
-                            x: i,
-                            barRods: [
-                              BarChartRodData(
-                                toY: chartBars[i].y,
-                                width: 12,
-                                color: Colors.white.withValues(alpha: 0.92),
-                                borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                              ),
+                              if (faltam > 0)
+                                PieChartSectionData(
+                                  value: faltam,
+                                  color: Colors.white.withValues(alpha: 0.28),
+                                  radius: 22,
+                                  title: '',
+                                ),
+                              if (current <= 0 && faltam <= 0)
+                                PieChartSectionData(
+                                  value: 1,
+                                  color: Colors.white.withValues(alpha: 0.25),
+                                  radius: 22,
+                                  title: '0%',
+                                  titleStyle: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w900,
+                                    color: Colors.white,
+                                  ),
+                                ),
                             ],
                           ),
-                      ],
-                    ),
+                          duration: const Duration(milliseconds: 350),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Evolução dos depósitos',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.95),
+                                fontWeight: FontWeight.w900,
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            _legendDot(
+                              color: Colors.white,
+                              label: 'Depositado',
+                              value: CurrencyFormats.formatBRLTight(current),
+                            ),
+                            const SizedBox(height: 4),
+                            _legendDot(
+                              color: Colors.white.withValues(alpha: 0.45),
+                              label: 'Faltam',
+                              value: CurrencyFormats.formatBRLTight(faltam),
+                            ),
+                            if (is52) ...[
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 4,
+                                children: [
+                                  _miniChip('$paidCount sem. ok'),
+                                  _miniChip('$remainingWeeks faltam'),
+                                ],
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -447,35 +495,27 @@ class _ActiveObjectiveCard extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: profile.hasActiveLicense
-                          ? () => showFiftyTwoWeeksScheduleSheet(
-                                context: context,
-                                goalDoc: goalDoc,
-                                profile: profile,
-                              )
-                          : () => mostrarAvisoSeLicencaInativa(context, profile),
-                      icon: const Icon(Icons.calendar_view_week_rounded, size: 18, color: Colors.white),
-                      label: const Text(
-                        'Ver 52 semanas',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Colors.white70),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
                     child: FilledButton.icon(
                       onPressed: profile.hasActiveLicense
                           ? () async {
-                              await showRegistrarAporteDialog(
-                                context: context,
-                                goalRef: goalDoc.reference,
-                                profile: profile,
-                              );
+                              if (is52) {
+                                await showFiftyTwoWeeksScheduleSheet(
+                                  context: context,
+                                  goalDoc: goalDoc,
+                                  profile: profile,
+                                  uid: uid,
+                                  depositMode: true,
+                                );
+                              } else {
+                                await showRegistrarDepositoDialog(
+                                  context: context,
+                                  goalRef: goalDoc.reference,
+                                  goalId: goalDoc.id,
+                                  goalTitle: title,
+                                  uid: uid,
+                                  profile: profile,
+                                );
+                              }
                             }
                           : () => mostrarAvisoSeLicencaInativa(context, profile),
                       style: FilledButton.styleFrom(
@@ -486,13 +526,66 @@ class _ActiveObjectiveCard extends StatelessWidget {
                       ),
                       icon: const Icon(Icons.savings_rounded, size: 18),
                       label: const Text(
-                        'Aporte',
+                        'Depositar',
                         style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: profile.hasActiveLicense
+                          ? () => showGoalContributionsSheet(
+                                context: context,
+                                goalDoc: goalDoc,
+                                goalTitle: title,
+                                uid: uid,
+                                profile: profile,
+                              )
+                          : () => mostrarAvisoSeLicencaInativa(context, profile),
+                      icon: const Icon(Icons.list_alt_rounded, size: 18, color: Colors.white),
+                      label: const Text(
+                        'Lançamentos',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.white70),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
                   ),
                 ],
               ),
+              if (is52) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: profile.hasActiveLicense
+                        ? () => showFiftyTwoWeeksScheduleSheet(
+                              context: context,
+                              goalDoc: goalDoc,
+                              profile: profile,
+                              uid: uid,
+                            )
+                        : () => mostrarAvisoSeLicencaInativa(context, profile),
+                    icon: const Icon(Icons.calendar_view_week_rounded, size: 18, color: Colors.white),
+                    label: const Text(
+                      'Ver 52 semanas',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: Colors.white.withValues(alpha: 0.45)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 8),
               Align(
                 alignment: Alignment.centerRight,
@@ -516,24 +609,56 @@ class _ActiveObjectiveCard extends StatelessWidget {
     );
   }
 
-  List<({double y, String label})> _monthlyBars(
-    List<FiftyTwoWeeksWeekEntry> schedule,
-    List<int> paidWeeks,
-    int currentWeek,
-  ) {
-    if (schedule.isEmpty) return const [];
-    final byMonth = <String, double>{};
-    for (final e in schedule) {
-      if (e.week > currentWeek) continue;
-      byMonth[e.monthKey] = (byMonth[e.monthKey] ?? 0) + e.amount;
-    }
-    final keys = byMonth.keys.toList()..sort();
-    final recent = keys.length > 6 ? keys.sublist(keys.length - 6) : keys;
-    return recent.map((k) {
-      final parts = k.split('-');
-      final month = int.tryParse(parts.length > 1 ? parts[1] : '1') ?? 1;
-      const names = ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-      return (y: byMonth[k] ?? 0, label: names[month.clamp(1, 12)]);
-    }).toList();
+  Widget _legendDot({
+    required Color color,
+    required String label,
+    required String value,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.88),
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 11.5,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _miniChip(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
   }
 }

@@ -15,14 +15,14 @@
 class AppVersion {
   AppVersion._();
 
-  /// Versão atual do app — 10.03 (marketing; usuário vê no rodapé como principal).
-  static const String current = '10.03';
+  /// Versão atual do app — 10.04 (marketing; usuário vê no rodapé como principal).
+  static const String current = '10.04';
 
-  /// Build do pubspec (`10.03.0+3` → **3**). Atualizar junto com pubspec em cada release.
-  static const int buildNumber = 4;
+  /// Build do pubspec (`10.04.0+5` → **5**). Atualizar junto com pubspec em cada release.
+  static const int buildNumber = 5;
 
   /// Mesmo inteiro que `versionCode` no Android (Play). Atualizar junto com build.gradle em cada release.
-  static const int versionCode = 4;
+  static const int versionCode = 5;
 
   /// Identificador único do release: marketing + build (mesmo deploy em todas as plataformas).
   static String get releaseTag => '$current+$buildNumber';

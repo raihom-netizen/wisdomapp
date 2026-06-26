@@ -12,7 +12,7 @@ import '../constants/google_oauth_config.dart';
 import '../utils/firestore_web_guard.dart';
 import 'google_calendar_auth_helper.dart';
 
-/// Evento externo do Google Calendar (somente leitura na Agenda).
+/// Evento do Google Calendar exibido na Agenda (editável quando integração ativa).
 class GoogleCalendarEventItem {
   const GoogleCalendarEventItem({
     required this.id,
@@ -405,19 +405,13 @@ class GoogleCalendarSyncService {
     final token = await _accessToken(userDocId);
     if (token == null) return;
 
-    final payload = {
-      'summary': title,
-      'description': notes.isEmpty ? 'Compromisso WISDOMAPP' : notes,
-      'start': {
-        'dateTime': _isoLocal(date, timeHHmm),
-        'timeZone': 'America/Sao_Paulo',
-      },
-      'end': {
-        'dateTime': _isoLocal(date, endTimeHHmm),
-        'timeZone': 'America/Sao_Paulo',
-      },
-      'colorId': '7',
-    };
+    final payload = _eventPayload(
+      title: title,
+      notes: notes,
+      date: date,
+      timeHHmm: timeHHmm,
+      endTimeHHmm: endTimeHHmm,
+    );
 
     final ref = FirebaseFirestore.instance
         .collection('users')
@@ -468,6 +462,111 @@ class GoogleCalendarSyncService {
     }, SetOptions(merge: true));
   }
 
+  static Map<String, dynamic> _eventPayload({
+    required String title,
+    required String notes,
+    required DateTime date,
+    required String timeHHmm,
+    required String endTimeHHmm,
+  }) {
+    final allDay = timeHHmm.trim().isEmpty;
+    if (allDay) {
+      final dayStr = DateFormat('yyyy-MM-dd').format(date);
+      final nextDay = date.add(const Duration(days: 1));
+      return {
+        'summary': title,
+        'description': notes.isEmpty ? 'Compromisso WISDOMAPP' : notes,
+        'start': {'date': dayStr},
+        'end': {'date': DateFormat('yyyy-MM-dd').format(nextDay)},
+        'colorId': '7',
+      };
+    }
+    return {
+      'summary': title,
+      'description': notes.isEmpty ? 'Compromisso WISDOMAPP' : notes,
+      'start': {
+        'dateTime': _isoLocal(date, timeHHmm),
+        'timeZone': 'America/Sao_Paulo',
+      },
+      'end': {
+        'dateTime': _isoLocal(date, endTimeHHmm),
+        'timeZone': 'America/Sao_Paulo',
+      },
+      'colorId': '7',
+    };
+  }
+
+  /// Atualiza evento existente no Google Calendar pelo id do evento.
+  static Future<bool> updateGoogleEventById({
+    required String userDocId,
+    required String eventId,
+    required String title,
+    required String notes,
+    required DateTime date,
+    required String timeHHmm,
+    required String endTimeHHmm,
+  }) async {
+    if (userDocId.isEmpty || eventId.trim().isEmpty) return false;
+    if (!await isEnabled(userDocId)) return false;
+    if (!isOnOrAfterSyncMin(date)) return false;
+
+    final token = await _accessToken(userDocId);
+    if (token == null) return false;
+
+    final uri = Uri.parse(
+      'https://www.googleapis.com/calendar/v3/calendars/primary/events/${Uri.encodeComponent(eventId)}',
+    );
+    final payload = _eventPayload(
+      title: title,
+      notes: notes,
+      date: date,
+      timeHHmm: timeHHmm,
+      endTimeHHmm: endTimeHHmm,
+    );
+
+    try {
+      final res = await http.put(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(payload),
+      );
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        debugPrint('updateGoogleEventById HTTP ${res.statusCode}: ${res.body}');
+        return false;
+      }
+      return true;
+    } catch (e) {
+      debugPrint('updateGoogleEventById: $e');
+      return false;
+    }
+  }
+
+  /// Remove evento do Google Calendar pelo id (sem reminder local).
+  static Future<bool> deleteGoogleEventById({
+    required String userDocId,
+    required String eventId,
+  }) async {
+    if (userDocId.isEmpty || eventId.trim().isEmpty) return false;
+    if (!await isEnabled(userDocId)) return false;
+
+    final token = await _accessToken(userDocId);
+    if (token == null) return false;
+
+    final uri = Uri.parse(
+      'https://www.googleapis.com/calendar/v3/calendars/primary/events/${Uri.encodeComponent(eventId)}',
+    );
+    try {
+      final res = await http.delete(uri, headers: {'Authorization': 'Bearer $token'});
+      return res.statusCode == 204 || res.statusCode == 200 || res.statusCode == 410;
+    } catch (e) {
+      debugPrint('deleteGoogleEventById: $e');
+      return false;
+    }
+  }
+
   static Future<void> deleteGoogleEventForReminder({
     required String userDocId,
     required String reminderDocId,
@@ -485,14 +584,6 @@ class GoogleCalendarSyncService {
       eventId = (snap.data()?['googleEventId'] ?? '').toString().trim();
     }
     if (eventId.isEmpty) return;
-    if (!await isEnabled(userDocId)) return;
-
-    final token = await _accessToken(userDocId);
-    if (token == null) return;
-
-    final uri = Uri.parse(
-      'https://www.googleapis.com/calendar/v3/calendars/primary/events/${Uri.encodeComponent(eventId)}',
-    );
-    await http.delete(uri, headers: {'Authorization': 'Bearer $token'});
+    await deleteGoogleEventById(userDocId: userDocId, eventId: eventId);
   }
 }

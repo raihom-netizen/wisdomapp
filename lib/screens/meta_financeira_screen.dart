@@ -13,7 +13,9 @@ import '../constants/finance_tips.dart';
 import '../constants/currency_formats.dart';
 import '../utils/premium_upgrade.dart';
 import '../widgets/create_financial_goal_dialog.dart';
-import '../widgets/registrar_aporte_dialog.dart';
+import '../widgets/app_pie_chart.dart';
+import '../widgets/registrar_deposito_dialog.dart';
+import '../widgets/goal_contributions_sheet.dart';
 import '../utils/date_picker_a11y.dart';
 import '../constants/app_business_rules.dart';
 import '../utils/firestore_user_doc_id.dart';
@@ -99,14 +101,39 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
     );
   }
 
-  Future<void> _registrarAporte(BuildContext context, DocumentReference<Map<String, dynamic>> goalRef) async {
-    final ok = await showRegistrarAporteDialog(
+  Future<void> _registrarDeposito(
+    BuildContext context,
+    QueryDocumentSnapshot<Map<String, dynamic>> goalDoc,
+  ) async {
+    if (!widget.profile.hasActiveLicense) {
+      mostrarAvisoSeLicencaInativa(context, widget.profile);
+      return;
+    }
+    final data = goalDoc.data();
+    final is52 = FiftyTwoWeeksPlan.is52WeeksGoal(data);
+    if (is52) {
+      await showFiftyTwoWeeksScheduleSheet(
+        context: context,
+        goalDoc: goalDoc,
+        profile: widget.profile,
+        uid: widget.uid,
+        depositMode: true,
+      );
+      return;
+    }
+    final title = (data['title'] ?? 'Objetivo').toString();
+    final ok = await showRegistrarDepositoDialog(
       context: context,
-      goalRef: goalRef,
+      goalRef: goalDoc.reference,
+      goalId: goalDoc.id,
+      goalTitle: title,
+      uid: widget.uid,
       profile: widget.profile,
     );
     if (ok && mounted && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Aporte registrado!')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Depósito registrado!')),
+      );
     }
   }
 
@@ -178,271 +205,18 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
     );
   }
 
-  /// Abre tela de Ver/Editar LanÃ§amentos (aportes) da meta â€” estilo mÃ³dulo Controle Financeiro.
   Future<void> _verEditarLancamentos(
     BuildContext context,
     QueryDocumentSnapshot<Map<String, dynamic>> goalDoc,
     String goalTitle,
   ) async {
-    if (!widget.profile.hasActiveLicense) {
-      mostrarAvisoSeLicencaInativa(context, widget.profile);
-      return;
-    }
-    final contribRef = goalDoc.reference.collection('contributions');
-    if (!context.mounted) return;
-    await showModalBottomSheet<void>(
+    await showGoalContributionsSheet(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        minChildSize: 0.3,
-        maxChildSize: 0.95,
-        expand: false,
-        builder: (ctx, scrollController) => Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: Column(
-            children: [
-              const SizedBox(height: 8),
-              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
-              // Topo do preview: Â«VoltarÂ» (esquerda) + X (direita).
-              _metaPreviewTopBar(ctx),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-                child: Row(
-                  children: [
-                    Icon(Icons.list_alt_rounded, color: AppColors.primary, size: 28),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'LanÃ§amentos Â· $goalTitle',
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF1A237E)),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              Expanded(
-                child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                  stream: contribRef.orderBy('date', descending: true).snapshots(),
-                  builder: (context, snap) {
-                    if (snap.hasError) {
-                      return Center(child: Text('Erro: ${snap.error}', style: TextStyle(color: Colors.grey.shade700)));
-                    }
-                    if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    final docs = snap.data?.docs ?? [];
-                    if (docs.isEmpty) {
-                      return Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.inbox_rounded, size: 64, color: Colors.grey.shade400),
-                            const SizedBox(height: 16),
-                            Text('Nenhum aporte ainda', style: TextStyle(fontSize: 16, color: Colors.grey.shade600)),
-                            const SizedBox(height: 8),
-                            Text('Use "Registrar aporte" no card da meta.', style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
-                          ],
-                        ),
-                      );
-                    }
-                    return ListView.builder(
-                      controller: scrollController,
-                      cacheExtent: 400,
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                      itemCount: docs.length,
-                      itemBuilder: (context, i) {
-                        final doc = docs[i];
-                        final d = doc.data();
-                        final amount = (d['amount'] ?? 0).toDouble();
-                        final dateTs = d['date'] as Timestamp?;
-                        final date = dateTs?.toDate() ?? DateTime.now();
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          color: AppColors.primary.withOpacity(0.04),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            leading: CircleAvatar(
-                              backgroundColor: AppColors.primary.withOpacity(0.15),
-                              child: Icon(Icons.savings_rounded, color: AppColors.primary, size: 22),
-                            ),
-                            title: Text(
-                              CurrencyFormats.formatBRL(amount),
-                              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-                            ),
-                            subtitle: Text(DateFormat('dd/MM/yyyy').format(date), style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: Icon(Icons.edit_rounded, size: 22, color: Colors.grey.shade700),
-                                  onPressed: () => _editarAporte(ctx, doc, goalTitle),
-                                ),
-                                IconButton(
-                                  icon: Icon(Icons.delete_outline_rounded, size: 22, color: AppColors.error),
-                                  onPressed: () => _excluirAporte(ctx, doc, goalTitle),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+      goalDoc: goalDoc,
+      goalTitle: goalTitle,
+      uid: widget.uid,
+      profile: widget.profile,
     );
-  }
-
-  Future<void> _editarAporte(
-    BuildContext context,
-    QueryDocumentSnapshot<Map<String, dynamic>> contribDoc,
-    String goalTitle,
-  ) async {
-    final d = contribDoc.data();
-    final amountCtrl = TextEditingController(text: CurrencyFormats.formatBRLInput((d['amount'] ?? 0) as num));
-    DateTime date = (d['date'] as Timestamp?)?.toDate() ?? DateTime.now();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
-          titlePadding: const EdgeInsets.fromLTRB(22, 20, 22, 4),
-          contentPadding: const EdgeInsets.fromLTRB(22, 8, 22, 8),
-          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          title: _metaDialogTitleRow(icon: Icons.savings_rounded, title: 'Editar aporte'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                BrlAmountTextField(
-                  controller: amountCtrl,
-                  decoration: _metaInputDecoration(
-                    labelText: 'Valor (R\$)',
-                    prefixText: 'R\$ ',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  tileColor: const Color(0xFFF8FAFC),
-                  title: const Text('Data do aporte', style: TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: Text(DateFormat('dd/MM/yyyy').format(date), style: TextStyle(color: Colors.grey.shade700)),
-                  trailing: FilledButton.tonal(
-                    onPressed: () async {
-                      final picked = await showDatePicker(
-                        context: ctx,
-                        initialDate: date,
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime.now(),
-                      );
-                      if (picked != null) setState(() => date = picked);
-                    },
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.primary.withOpacity(0.12),
-                      foregroundColor: AppColors.primary,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: const Text('Alterar'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            Wrap(
-              alignment: WrapAlignment.end,
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                _metaDialogCancel(onPressed: () => Navigator.pop(ctx, false)),
-                _metaDialogGradientButton(
-                  label: 'Salvar',
-                  onPressed: () => Navigator.pop(ctx, true),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-    try {
-      if (ok != true) return;
-      final amount = CurrencyFormats.parseBRLInput(amountCtrl.text) ?? 0;
-      if (amount <= 0) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Informe um valor maior que zero.')));
-        return;
-      }
-      try {
-        await contribDoc.reference.update({
-          'amount': amount,
-          'date': Timestamp.fromDate(date),
-        });
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Aporte atualizado!')));
-      } catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro: ${e.toString().split('\n').first}')));
-      }
-    } finally {
-      amountCtrl.dispose();
-    }
-  }
-
-  Future<void> _excluirAporte(
-    BuildContext context,
-    QueryDocumentSnapshot<Map<String, dynamic>> contribDoc,
-    String goalTitle,
-  ) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: _metaDialogTitleRow(icon: Icons.delete_outline_rounded, title: 'Excluir aporte'),
-        content: const Text('Deseja realmente excluir este lanÃ§amento? O valor serÃ¡ descontado do progresso da meta.'),
-        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        actions: [
-          Wrap(
-            alignment: WrapAlignment.end,
-            spacing: 10,
-            children: [
-              _metaDialogCancel(onPressed: () => Navigator.pop(ctx, false)),
-              FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.error,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                ),
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Excluir', style: TextStyle(fontWeight: FontWeight.w800)),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-    if (confirm != true) return;
-    try {
-      await contribDoc.reference.delete();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('LanÃ§amento excluÃ­do.')));
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao excluir: ${e.toString().split('\n').first}')));
-    }
   }
 
   Future<void> _editarMeta(BuildContext context, QueryDocumentSnapshot<Map<String, dynamic>> goalDoc) async {
@@ -1294,119 +1068,32 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
     return AppColors.success;
   }
 
-  Future<void> _simularCenario(BuildContext context, String goalId, String title, double target, double current, DateTime? dueDate) async {
-    final valorCtrl = TextEditingController(text: CurrencyFormats.formatBRLInput(target - current > 0 ? (target - current) / 12 : 500));
-    final taxaCtrl = TextEditingController(text: '0.5');
-    Timer? simDeb;
-
-    await showDialog<bool>(
-      context: context,
-      builder: (_) => StatefulBuilder(
-        builder: (ctx, setState) {
-          void onSimFieldChanged() {
-            simDeb?.cancel();
-            simDeb = Timer(
-              Duration(milliseconds: AppBusinessRules.searchDebounceMs),
-              () {
-                if (ctx.mounted) setState(() {});
-              },
-            );
-          }
-
-          final aporte = CurrencyFormats.parseBRLInput(valorCtrl.text) ?? 0;
-          final taxaMensal = double.tryParse(taxaCtrl.text.replaceAll(',', '.')) ?? 0.5;
-          int meses = 12;
-          if (dueDate != null) {
-            final now = DateTime.now();
-            meses = (dueDate.year - now.year) * 12 + (dueDate.month - now.month);
-            if (meses < 1) meses = 1;
-          }
-          double fv = current;
-          for (int m = 0; m < meses; m++) {
-            fv = futureValueCompound(fv, taxaMensal, 1) + aporte;
-          }
-          final atingiu = fv >= target;
-          return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
-            titlePadding: const EdgeInsets.fromLTRB(22, 20, 22, 4),
-            contentPadding: const EdgeInsets.fromLTRB(22, 8, 22, 8),
-            actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            title: _metaDialogTitleRow(icon: Icons.bar_chart_rounded, title: 'Simular cenÃ¡rio'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Meta: $title', style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF1A237E))),
-                  const SizedBox(height: 8),
-                  Text('Se vocÃª guardar por mÃªs:', style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
-                  const SizedBox(height: 6),
-                  BrlAmountTextField(
-                    controller: valorCtrl,
-                    decoration: _metaInputDecoration(
-                      labelText: 'Valor (R\$)',
-                      prefixText: 'R\$ ',
-                    ),
-                    onChanged: (_) => onSimFieldChanged(),
-                  ),
-                  const SizedBox(height: 8),
-                  FastTextField(
-                    controller: taxaCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: _metaInputDecoration(
-                      labelText: 'Taxa mensal (%)',
-                      hintText: '0.5 = CDI',
-                      suffixText: '%',
-                    ),
-                    onChanged: (_) => onSimFieldChanged(),
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: (atingiu ? AppColors.success : Colors.orange).withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: (atingiu ? AppColors.success : Colors.orange).withOpacity(0.4),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          atingiu
-                              ? 'âœ“ Em $meses meses vocÃª atingiria a meta (FV â‰ˆ ${CurrencyFormats.formatBRL(fv)})'
-                              : 'Em $meses meses: ${CurrencyFormats.formatBRL(fv)} (faltariam ${CurrencyFormats.formatBRL(target - fv)})',
-                          style: TextStyle(fontWeight: FontWeight.w600, color: atingiu ? AppColors.success : Colors.orange.shade800),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'FÃ³rmula: FV = PV(1+i)^n + aportes',
-                          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              Align(
-                alignment: Alignment.centerRight,
-                child: _metaDialogGradientButton(
-                  label: 'Fechar',
-                  onPressed: () => Navigator.pop(ctx, false),
-                ),
-              ),
-            ],
-          );
-        },
+  Widget _goalStatPill({
+    required IconData icon,
+    required String label,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
-    ).whenComplete(() => simDeb?.cancel());
-    valorCtrl.dispose();
-    taxaCtrl.dispose();
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: color),
+          ),
+        ],
+      ),
+    );
   }
+
 
   Widget _buildGoalCard(BuildContext context, QueryDocumentSnapshot<Map<String, dynamic>> goalDoc) {
     final isCompact = MediaQuery.sizeOf(context).width < 400;
@@ -1714,15 +1401,57 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                       ),
                     ),
                   ],
+                  if (is52Weeks) ...[
+                    const SizedBox(height: 14),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _goalStatPill(
+                          icon: Icons.check_circle_outline_rounded,
+                          label: '${FiftyTwoWeeksPlan.paidWeeksFromData(data).length} sem. guardadas',
+                          color: AppColors.success,
+                        ),
+                        _goalStatPill(
+                          icon: Icons.timelapse_rounded,
+                          label: '${(52 - FiftyTwoWeeksPlan.paidWeeksFromData(data).length).clamp(0, 52)} sem. faltam',
+                          color: Colors.orange,
+                        ),
+                        _goalStatPill(
+                          icon: Icons.savings_rounded,
+                          label: 'Total ${CurrencyFormats.formatBRLTight(current)}',
+                          color: AppColors.primary,
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (target > 0) ...[
+                    const SizedBox(height: 14),
+                    AppPieChart(
+                      title: 'Evolução dos depósitos',
+                      segments: [
+                        (
+                          label: 'Depositado',
+                          value: current.clamp(0, double.infinity),
+                          color: progressColor,
+                        ),
+                        (
+                          label: 'Faltam',
+                          value: faltam,
+                          color: Colors.grey.shade300,
+                        ),
+                      ],
+                    ),
+                  ],
                   SizedBox(height: isCompact ? 12 : 16),
                   if (isCompact)
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         FilledButton.icon(
-                          onPressed: () => _registrarAporte(context, goalDoc.reference),
-                          icon: const Icon(Icons.add_rounded, size: 20),
-                          label: const Text('Registrar aporte'),
+                          onPressed: () => _registrarDeposito(context, goalDoc),
+                          icon: const Icon(Icons.savings_rounded, size: 20),
+                          label: const Text('Registrar depósito'),
                           style: FilledButton.styleFrom(
                             backgroundColor: AppColors.primary,
                             foregroundColor: Colors.white,
@@ -1732,45 +1461,13 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                           ),
                         ),
-                        if (is52Weeks) ...[
-                          const SizedBox(height: 10),
-                          OutlinedButton.icon(
-                            onPressed: () => showFiftyTwoWeeksScheduleSheet(
-                              context: context,
-                              goalDoc: goalDoc,
-                              profile: widget.profile,
-                            ),
-                            icon: const Icon(Icons.calendar_view_week_rounded, size: 20),
-                            label: const Text('Projeto 52 semanas'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: const Color(0xFF6366F1),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              minimumSize: const Size(0, 50),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            ),
-                          ),
-                        ],
                         const SizedBox(height: 10),
                         FilledButton.icon(
                           onPressed: () => _verEditarLancamentos(context, goalDoc, title),
                           icon: const Icon(Icons.list_alt_rounded, size: 20),
-                          label: const Text('Ver / Editar lanÃ§amentos'),
+                          label: const Text('Ver / Editar lançamentos'),
                           style: FilledButton.styleFrom(
                             backgroundColor: AppColors.accent,
-                            foregroundColor: Colors.white,
-                            elevation: 1,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            minimumSize: const Size(0, 50),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        FilledButton.icon(
-                          onPressed: () => _simularCenario(context, goalDoc.id, title, target, current, due),
-                          icon: const Icon(Icons.bar_chart_rounded, size: 20),
-                          label: const Text('Simular'),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: AppColors.logoOrange,
                             foregroundColor: Colors.white,
                             elevation: 1,
                             padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1785,9 +1482,9 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                       children: [
                         Expanded(
                           child: FilledButton.icon(
-                            onPressed: () => _registrarAporte(context, goalDoc.reference),
-                            icon: const Icon(Icons.add_rounded, size: 20),
-                            label: const Text('Aporte'),
+                            onPressed: () => _registrarDeposito(context, goalDoc),
+                            icon: const Icon(Icons.savings_rounded, size: 20),
+                            label: const Text('Depósito'),
                             style: FilledButton.styleFrom(
                               backgroundColor: AppColors.primary,
                               foregroundColor: Colors.white,
@@ -1803,7 +1500,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                           child: FilledButton.icon(
                             onPressed: () => _verEditarLancamentos(context, goalDoc, title),
                             icon: const Icon(Icons.list_alt_rounded, size: 18),
-                            label: const Text('LanÃ§amentos'),
+                            label: const Text('Lançamentos'),
                             style: FilledButton.styleFrom(
                               backgroundColor: AppColors.accent,
                               foregroundColor: Colors.white,
@@ -1812,20 +1509,6 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                               minimumSize: const Size(0, 50),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                             ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        FilledButton.icon(
-                          onPressed: () => _simularCenario(context, goalDoc.id, title, target, current, due),
-                          icon: const Icon(Icons.bar_chart_rounded, size: 20),
-                          label: const Text('Simular'),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: AppColors.logoOrange,
-                            foregroundColor: Colors.white,
-                            elevation: 1,
-                            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-                            minimumSize: const Size(0, 50),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                           ),
                         ),
                       ],

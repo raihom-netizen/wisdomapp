@@ -27,8 +27,15 @@ class YoutubeUrlHelper {
   static String embedUrl(String videoId) =>
       'https://www.youtube.com/embed/$videoId?rel=0&modestbranding=1';
 
-  static String thumbnailUrl(String videoId) =>
-      'https://img.youtube.com/vi/$videoId/hqdefault.jpg';
+  /// Thumbnails em cascata (Full HD quando disponível no YouTube).
+  static List<String> thumbnailUrls(String videoId) => [
+        'https://img.youtube.com/vi/$videoId/maxresdefault.jpg',
+        'https://img.youtube.com/vi/$videoId/sddefault.jpg',
+        'https://img.youtube.com/vi/$videoId/hqdefault.jpg',
+        'https://img.youtube.com/vi/$videoId/mqdefault.jpg',
+      ];
+
+  static String thumbnailUrl(String videoId) => thumbnailUrls(videoId).first;
 
   static bool isValidYoutubeUrl(String raw) => extractVideoId(raw) != null;
 

@@ -15,6 +15,7 @@ import '../theme/app_colors.dart';
 import '../utils/course_content_link_helper.dart';
 import '../utils/firestore_retry.dart';
 import '../utils/firestore_web_guard.dart';
+import '../utils/course_thumb_resolver.dart';
 import '../utils/youtube_url_helper.dart';
 import '../widgets/course_media_preview.dart';
 import '../widgets/course_mp4_player_dialog.dart';
@@ -231,7 +232,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
         return;
       }
       if (bytes.lengthInBytes > CourseVideoImageService.maxBytes) {
-        _snack('Imagem grande demais. Máx. 5 MB.');
+        _snack('Imagem grande demais. Máx. 12 MB (Full HD).');
         return;
       }
       var ext = (f.extension ?? 'jpg').toLowerCase();
@@ -425,7 +426,10 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
             'youtubeVideoId': videoId,
           },
           'thumbnailUrl': thumbUrl ?? '',
-          if (thumbUrl != null && thumbUrl.isNotEmpty) 'imageUrl': thumbUrl,
+          if (thumbUrl != null && thumbUrl.isNotEmpty) ...{
+            'imageUrl': thumbUrl,
+            'coverUrl': thumbUrl,
+          },
           'published': _published,
           'authorUid': uid,
           'authorEmail': email,
@@ -472,7 +476,10 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
             'youtubeUrl': linkUrl,
             'youtubeVideoId': videoId,
           },
-          if (imageUrl != null) 'imageUrl': imageUrl,
+          if (imageUrl != null) ...{
+            'imageUrl': imageUrl,
+            'coverUrl': imageUrl,
+          },
           'thumbnailUrl': imageUrl ?? ytThumb ?? '',
           'published': _published,
           'authorUid': uid,
@@ -582,6 +589,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
           docId: docId,
         );
         patch['imageUrl'] = thumbUrl;
+        patch['coverUrl'] = thumbUrl;
       }
 
       final hasMp4 = mp4Url.isNotEmpty;
@@ -643,6 +651,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
           docId: docId,
         );
         patch['imageUrl'] = imageUrl;
+        patch['coverUrl'] = imageUrl;
       }
 
       final imageUrl = (patch['imageUrl'] is String) ? patch['imageUrl'] as String : null;
@@ -653,6 +662,9 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
               : (imageUrl != null ? 'image' : (linkUrl != null ? 'link' : 'text'));
       patch['source'] = source;
       patch['thumbnailUrl'] = imageUrl ?? ytThumb ?? '';
+      if (imageUrl != null && imageUrl.isNotEmpty) {
+        patch['coverUrl'] = imageUrl;
+      }
     }
 
     await _courseFirestoreOp(() => FirebaseFirestore.instance
@@ -1042,15 +1054,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
     return YoutubeUrlHelper.extractVideoId(link);
   }
 
-  String? _thumbUrl(Map<String, dynamic> data) {
-    final img = (data['imageUrl'] ?? '').toString().trim();
-    if (img.isNotEmpty) return img;
-    final thumb = (data['thumbnailUrl'] ?? '').toString().trim();
-    if (thumb.isNotEmpty) return thumb;
-    final id = _videoId(data);
-    if (id != null) return YoutubeUrlHelper.thumbnailUrl(id);
-    return null;
-  }
+  String? _thumbUrl(Map<String, dynamic> data) => CourseThumbResolver.resolveBest(data);
 
   String? _mp4Url(Map<String, dynamic> data) {
     final u = (data['mp4Url'] ?? '').toString().trim();
@@ -1854,8 +1858,9 @@ class _VideoGridCard extends StatelessWidget {
       dateLabel = DateFormat('dd/MM/yyyy').format(created.toDate());
     }
 
-    final dicaPhoto = type == 'dica' && (data['imageUrl'] ?? '').toString().trim().isNotEmpty;
-    final thumbFit = dicaPhoto ? BoxFit.contain : BoxFit.cover;
+    final hasThumb = CourseThumbResolver.hasVisualThumb(data);
+    final isVideo = CourseThumbResolver.isVideoContent(data);
+    final thumbFit = CourseThumbResolver.isDicaPhoto(data) ? BoxFit.contain : BoxFit.cover;
 
     final sourceLabel = hasMp4
         ? (videoId != null ? 'MP4+YT' : 'MP4')
@@ -1885,37 +1890,23 @@ class _VideoGridCard extends StatelessWidget {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                if (thumbUrl != null && thumbUrl!.isNotEmpty)
-                  CourseCoverImage(
-                    url: thumbUrl!,
+                if (hasThumb)
+                  CourseMediaThumbnail.fromData(
+                    data,
                     fit: thumbFit,
                     fallback: _thumbFallback(accent, accent2),
-                  )
-                else if (videoId != null)
-                  CourseCoverImage(
-                    url: YoutubeUrlHelper.thumbnailUrl(videoId!),
-                    fit: BoxFit.cover,
-                    fallback: _thumbFallback(accent, accent2),
+                    showPlayButton: isVideo || videoId != null || hasMp4,
+                    playIconSize: 52,
                   )
                 else
                   _thumbFallback(accent, accent2),
-                Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.transparent,
-                        Colors.black.withValues(alpha: 0.5),
-                      ],
-                    ),
-                  ),
-                ),
                 Material(
                   color: Colors.transparent,
                     child: InkWell(
                     onTap: onPreview,
-                    child: Center(
+                    child: hasThumb
+                        ? const SizedBox.expand()
+                        : Center(
                       child: Icon(
                         hasMp4
                             ? Icons.movie_rounded

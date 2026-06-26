@@ -347,6 +347,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     required BuildContext context,
     DateTime? initialDate,
     QueryDocumentSnapshot<Map<String, dynamic>>? existing,
+    GoogleCalendarEventItem? googleEvent,
   }) async {
     if (!widget.profile.hasActiveLicense) {
       mostrarAvisoSeLicencaInativa(context, widget.profile);
@@ -360,13 +361,27 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
           hasActiveLicense: widget.profile.hasActiveLicense,
           existingDoc: existing,
           initialDate: initialDate,
+          googleEventSeed: googleEvent,
         ),
       ),
     );
     if (result == null || !context.mounted) return;
 
     try {
-      if (existing != null) {
+      if (googleEvent != null && existing == null) {
+        await CompromissoReminderService.upsertFromGoogleEvent(
+          userDocId: _userDocId,
+          googleEventId: googleEvent.id,
+          result: result,
+        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Compromisso atualizado no Google Calendar.'),
+            ),
+          );
+        }
+      } else if (existing != null) {
         final msg = await CompromissoReminderService.update(
           userDocId: _userDocId,
           doc: existing,
@@ -547,21 +562,104 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     );
   }
 
+  Future<GoogleCalendarEventItem?> _selecionarGoogleEvent(
+    BuildContext context,
+    List<GoogleCalendarEventItem> items,
+  ) async {
+    if (items.isEmpty) return null;
+    if (items.length == 1) return items.first;
+    return showModalBottomSheet<GoogleCalendarEventItem>(
+      context: context,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Qual evento Google?',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 17,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ...items.map((event) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      side: BorderSide(
+                        color: GoogleCalendarSyncService.googleEventColor
+                            .withValues(alpha: 0.35),
+                      ),
+                    ),
+                    leading: const Icon(
+                      Icons.event_rounded,
+                      color: GoogleCalendarSyncService.googleEventColor,
+                    ),
+                    title: Text(
+                      event.title,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    subtitle: Text(event.horarioLabel),
+                    onTap: () => Navigator.pop(ctx, event),
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<GoogleCalendarEventItem> _externalGoogleEventsForDay(
+    DateTime day,
+    Iterable<QueryDocumentSnapshot<Map<String, dynamic>>> allDocs,
+  ) {
+    if (!_googleEnabled) return const [];
+    return GoogleCalendarSyncService.externalEventsForDay(
+      day: day,
+      googleEvents: _googleEventsByDay.values.expand((e) => e).toList(),
+      linkedGoogleEventIds: _linkedGoogleEventIds(allDocs.toList()),
+    );
+  }
+
   Future<void> _editarItemDoDia({
     required List<QueryDocumentSnapshot<Map<String, dynamic>>> items,
     required List<AgendaFinancePendingItem> financePending,
+    List<GoogleCalendarEventItem> googleEvents = const [],
   }) async {
-    if (items.isEmpty && financePending.isEmpty) return;
-    if (items.isNotEmpty && financePending.isEmpty) {
+    if (items.isEmpty && financePending.isEmpty && googleEvents.isEmpty) return;
+
+    final onlyLocal = items.isNotEmpty && financePending.isEmpty && googleEvents.isEmpty;
+    final onlyFinance = financePending.isNotEmpty && items.isEmpty && googleEvents.isEmpty;
+    final onlyGoogle = googleEvents.isNotEmpty && items.isEmpty && financePending.isEmpty;
+
+    if (onlyLocal) {
       final doc = await _selecionarCompromisso(context, items);
       if (doc == null || !mounted) return;
       await _openCompromissoForm(context: context, existing: doc);
       return;
     }
-    if (financePending.isNotEmpty && items.isEmpty) {
+    if (onlyFinance) {
       final item = await _selecionarFinancePending(context, financePending);
       if (item == null || !mounted) return;
       await _editFinancePending(item);
+      return;
+    }
+    if (onlyGoogle) {
+      final event = await _selecionarGoogleEvent(context, googleEvents);
+      if (event == null || !mounted) return;
+      await _openCompromissoForm(context: context, googleEvent: event);
       return;
     }
     if (!mounted) return;
@@ -591,6 +689,13 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                 title: const Text('Compromisso particular'),
                 onTap: () => Navigator.pop(ctx, 'compromisso'),
               ),
+              if (googleEvents.isNotEmpty)
+                ListTile(
+                  leading: const Icon(Icons.event_rounded,
+                      color: GoogleCalendarSyncService.googleEventColor),
+                  title: const Text('Evento Google Calendar'),
+                  onTap: () => Navigator.pop(ctx, 'google'),
+                ),
               ListTile(
                 leading: const Icon(Icons.account_balance_wallet_rounded,
                     color: Color(0xFFF97316)),
@@ -607,6 +712,10 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
       final doc = await _selecionarCompromisso(context, items);
       if (doc == null || !mounted) return;
       await _openCompromissoForm(context: context, existing: doc);
+    } else if (choice == 'google') {
+      final event = await _selecionarGoogleEvent(context, googleEvents);
+      if (event == null || !mounted) return;
+      await _openCompromissoForm(context: context, googleEvent: event);
     } else {
       final item = await _selecionarFinancePending(context, financePending);
       if (item == null || !mounted) return;
@@ -618,19 +727,28 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     DateTime day,
     List<QueryDocumentSnapshot<Map<String, dynamic>>> items, {
     List<AgendaFinancePendingItem> financePending = const [],
+    List<GoogleCalendarEventItem> googleEvents = const [],
+    bool selective = false,
   }) async {
-    if (items.isEmpty && financePending.isEmpty) return;
+    if (items.isEmpty && financePending.isEmpty && googleEvents.isEmpty) return;
+
+    if (selective) {
+      await _limparCompromissosSeletivo(day, items, googleEvents);
+      return;
+    }
 
     var removedCompromissos = 0;
-    if (items.isNotEmpty) {
+    var removedGoogle = 0;
+    if (items.isNotEmpty || googleEvents.isNotEmpty) {
+      final total = items.length + googleEvents.length;
       final ok = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Limpar compromissos do dia?'),
           content: Text(
-            items.length == 1
-                ? 'Remove 1 compromisso da Agenda neste dia. Lançamentos do Financeiro não são alterados nesta etapa.'
-                : 'Remove ${items.length} compromissos da Agenda neste dia. Lançamentos do Financeiro não são alterados nesta etapa.',
+            total == 1
+                ? 'Remove 1 compromisso da Agenda neste dia (inclui Google Calendar se aplicável). Lançamentos do Financeiro não são alterados nesta etapa.'
+                : 'Remove $total compromissos da Agenda neste dia (inclui Google Calendar se aplicável). Lançamentos do Financeiro não são alterados nesta etapa.',
           ),
           actions: [
             TextButton(
@@ -646,13 +764,34 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
         ),
       );
       if (ok != true || !mounted) return;
-      removedCompromissos = await CompromissoReminderService.clearDay(
-        context: context,
-        userDocId: _userDocId,
-        day: day,
-        docs: items,
-        skipConfirm: true,
-      );
+      if (items.isNotEmpty) {
+        removedCompromissos = await CompromissoReminderService.clearDay(
+          context: context,
+          userDocId: _userDocId,
+          day: day,
+          docs: items,
+          skipConfirm: true,
+        );
+      }
+      for (final event in googleEvents) {
+        try {
+          await CompromissoReminderService.deleteGoogleOnlyEvent(
+            userDocId: _userDocId,
+            googleEventId: event.id,
+          );
+          removedGoogle++;
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Erro ao remover «${event.title}»: ${e.toString().split('\n').first}',
+                ),
+              ),
+            );
+          }
+        }
+      }
     }
 
     var removedFinance = 0;
@@ -691,11 +830,16 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     }
 
     if (!mounted) return;
-    if (removedCompromissos > 0 || removedFinance > 0) {
+    if (removedCompromissos > 0 || removedGoogle > 0 || removedFinance > 0) {
       final parts = <String>[];
       if (removedCompromissos > 0) {
         parts.add(
           '$removedCompromissos compromisso${removedCompromissos == 1 ? '' : 's'} removido${removedCompromissos == 1 ? '' : 's'}',
+        );
+      }
+      if (removedGoogle > 0) {
+        parts.add(
+          '$removedGoogle evento${removedGoogle == 1 ? '' : 's'} Google removido${removedGoogle == 1 ? '' : 's'}',
         );
       }
       if (removedFinance > 0) {
@@ -707,7 +851,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
         SnackBar(content: Text('Dia atualizado (${parts.join(' · ')}).')),
       );
       if (_googleEnabled) unawaited(_refreshGoogleDays());
-    } else if (items.isEmpty && financePending.isNotEmpty) {
+    } else if (items.isEmpty && googleEvents.isEmpty && financePending.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Lançamentos mantidos no Financeiro.'),
@@ -908,12 +1052,18 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
 
   String _resumoDiaSubtitle(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> items,
-    List<AgendaFinancePendingItem> financePending,
-  ) {
+    List<AgendaFinancePendingItem> financePending, {
+    List<GoogleCalendarEventItem> googleEvents = const [],
+  }) {
     final parts = <String>[];
     if (items.isNotEmpty) {
       parts.add(
         '${items.length} compromisso${items.length == 1 ? '' : 's'}',
+      );
+    }
+    if (googleEvents.isNotEmpty) {
+      parts.add(
+        '${googleEvents.length} Google',
       );
     }
     if (financePending.isNotEmpty) {
@@ -929,6 +1079,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     DateTime day,
     List<QueryDocumentSnapshot<Map<String, dynamic>>> items, {
     List<AgendaFinancePendingItem> financePending = const [],
+    List<GoogleCalendarEventItem> googleEvents = const [],
   }) {
     final dayStart = _dayKey(day);
     showModalBottomSheet<void>(
@@ -1011,11 +1162,13 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                       const SizedBox(width: 8),
                       _menuActionButton(
                         icon: Icons.edit_rounded,
-                        label: items.isNotEmpty && financePending.isEmpty
+                        label: items.isNotEmpty && financePending.isEmpty && googleEvents.isEmpty
                             ? 'Editar compromisso'
-                            : financePending.isNotEmpty && items.isEmpty
+                            : financePending.isNotEmpty && items.isEmpty && googleEvents.isEmpty
                                 ? 'Editar lançamento'
-                                : 'Editar',
+                                : googleEvents.isNotEmpty && items.isEmpty && financePending.isEmpty
+                                    ? 'Editar Google'
+                                    : 'Editar',
                         color: const Color(0xFF0EA5E9),
                         iconGradient: const [
                           Color(0xFF0EA5E9),
@@ -1027,6 +1180,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                           await _editarItemDoDia(
                             items: items,
                             financePending: financePending,
+                            googleEvents: googleEvents,
                           );
                         },
                       ),
@@ -1044,20 +1198,25 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                     fullWidth: true,
                     onTap: () {
                       Navigator.pop(ctx);
-                      unawaited(_limparDiaAgenda(
+                      unawaited(_mostrarOpcoesLimparDia(
                         dayStart,
                         items,
                         financePending: financePending,
+                        googleEvents: googleEvents,
                       ));
                     },
                   ),
-                  if (items.isNotEmpty || financePending.isNotEmpty) ...[
+                  if (items.isNotEmpty || googleEvents.isNotEmpty || financePending.isNotEmpty) ...[
                     const SizedBox(height: 20),
                     const Divider(height: 1),
                     const SizedBox(height: 14),
                     AgendaModernUI.sectionHeader(
                       title: 'Resumo do dia',
-                      subtitle: _resumoDiaSubtitle(items, financePending),
+                      subtitle: _resumoDiaSubtitle(
+                        items,
+                        financePending,
+                        googleEvents: googleEvents,
+                      ),
                       icon: Icons.summarize_rounded,
                       color: AppColors.primary,
                     ),
@@ -1131,6 +1290,74 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                         ),
                       );
                     }),
+                    if (googleEvents.isNotEmpty)
+                      ...googleEvents.map((event) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Material(
+                            color: Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: () async {
+                                Navigator.pop(ctx);
+                                await _openCompromissoForm(
+                                  context: context,
+                                  googleEvent: event,
+                                );
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                  horizontal: 4,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 5,
+                                      height: 44,
+                                      decoration: BoxDecoration(
+                                        color: GoogleCalendarSyncService
+                                            .googleEventColor,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            event.title,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: 15,
+                                            ),
+                                          ),
+                                          Text(
+                                            '${event.horarioLabel} · Google',
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w700,
+                                              color: GoogleCalendarSyncService
+                                                  .googleEventColor,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Icon(
+                                      Icons.chevron_right_rounded,
+                                      color: Colors.grey.shade500,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
                     if (financePending.isNotEmpty)
                       ...financePending.map((item) {
                         final data = item.data;
@@ -1258,6 +1485,292 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
           SnackBar(content: Text('Erro: ${e.toString().split('\n').first}')),
         );
       }
+    }
+  }
+
+  Future<void> _confirmDeleteGoogleEvent(GoogleCalendarEventItem event) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Excluir evento Google?'),
+        content: Text(
+          'Remover «${event.title}» do Google Calendar?\n\n'
+          'Esta ação também remove da Agenda WISDOMAPP.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await CompromissoReminderService.deleteGoogleOnlyEvent(
+        userDocId: _userDocId,
+        googleEventId: event.id,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Evento excluído do Google Calendar.')),
+        );
+      }
+      if (_googleEnabled) unawaited(_refreshGoogleDays());
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro: ${e.toString().split('\n').first}')),
+        );
+      }
+    }
+  }
+
+  Future<void> _limparCompromissosSeletivo(
+    DateTime day,
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> items,
+    List<GoogleCalendarEventItem> googleEvents,
+  ) async {
+    if (items.isEmpty && googleEvents.isEmpty) return;
+
+    final selectedLocal = <String>{};
+    final selectedGoogle = <String>{};
+
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            final safeBottom = MediaQuery.viewPaddingOf(ctx).bottom;
+            final anySelected =
+                selectedLocal.isNotEmpty || selectedGoogle.isNotEmpty;
+            return SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(20, 16, 20, 16 + safeBottom),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Selecionar para remover',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 17,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      DateFormat("d 'de' MMMM", 'pt_BR').format(day),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.sizeOf(ctx).height * 0.45,
+                      ),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          children: [
+                            ...items.map((doc) {
+                              final data = doc.data();
+                              final title =
+                                  (data['title'] ?? 'Compromisso').toString();
+                              final time = (data['time'] ?? '').toString();
+                              return CheckboxListTile(
+                                value: selectedLocal.contains(doc.id),
+                                onChanged: (v) {
+                                  setSheetState(() {
+                                    if (v == true) {
+                                      selectedLocal.add(doc.id);
+                                    } else {
+                                      selectedLocal.remove(doc.id);
+                                    }
+                                  });
+                                },
+                                title: Text(title),
+                                subtitle: time.isNotEmpty ? Text(time) : null,
+                                secondary: const Icon(Icons.event_rounded),
+                              );
+                            }),
+                            ...googleEvents.map((event) {
+                              return CheckboxListTile(
+                                value: selectedGoogle.contains(event.id),
+                                onChanged: (v) {
+                                  setSheetState(() {
+                                    if (v == true) {
+                                      selectedGoogle.add(event.id);
+                                    } else {
+                                      selectedGoogle.remove(event.id);
+                                    }
+                                  });
+                                },
+                                title: Text(event.title),
+                                subtitle: Text('${event.horarioLabel} · Google'),
+                                secondary: const Icon(
+                                  Icons.event_rounded,
+                                  color: GoogleCalendarSyncService.googleEventColor,
+                                ),
+                              );
+                            }),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    FilledButton(
+                      onPressed: anySelected
+                          ? () => Navigator.pop(ctx, true)
+                          : null,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        minimumSize: const Size(double.infinity, 48),
+                      ),
+                      child: const Text('Remover selecionados'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    var removedLocal = 0;
+    var removedGoogle = 0;
+
+    for (final doc in items.where((d) => selectedLocal.contains(d.id))) {
+      try {
+        final data = doc.data();
+        await CompromissoReminderService.deleteOne(
+          userDocId: _userDocId,
+          reminderDocId: doc.id,
+          googleEventId: (data['googleEventId'] ?? '').toString(),
+        );
+        removedLocal++;
+      } catch (_) {}
+    }
+
+    for (final event in googleEvents.where((e) => selectedGoogle.contains(e.id))) {
+      try {
+        await CompromissoReminderService.deleteGoogleOnlyEvent(
+          userDocId: _userDocId,
+          googleEventId: event.id,
+        );
+        removedGoogle++;
+      } catch (_) {}
+    }
+
+    if (!mounted) return;
+    if (removedLocal > 0 || removedGoogle > 0) {
+      final parts = <String>[];
+      if (removedLocal > 0) {
+        parts.add('$removedLocal compromisso${removedLocal == 1 ? '' : 's'}');
+      }
+      if (removedGoogle > 0) {
+        parts.add('$removedGoogle Google');
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Removido${parts.length == 1 && removedLocal + removedGoogle == 1 ? '' : 's'}: ${parts.join(' · ')}.')),
+      );
+      if (_googleEnabled) unawaited(_refreshGoogleDays());
+    }
+  }
+
+  Future<void> _mostrarOpcoesLimparDia(
+    DateTime day,
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> items, {
+    List<AgendaFinancePendingItem> financePending = const [],
+    List<GoogleCalendarEventItem> googleEvents = const [],
+  }) async {
+    if (items.isEmpty && googleEvents.isEmpty && financePending.isEmpty) return;
+
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Limpar compromissos',
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
+              ),
+              const SizedBox(height: 12),
+              if (items.isNotEmpty || googleEvents.isNotEmpty) ...[
+                ListTile(
+                  leading: const Icon(Icons.delete_sweep_rounded, color: Colors.red),
+                  title: const Text('Remover todos do dia'),
+                  subtitle: const Text('Compromissos locais e Google Calendar'),
+                  onTap: () => Navigator.pop(ctx, 'all'),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.checklist_rounded, color: AppColors.primary),
+                  title: const Text('Selecionar quais remover'),
+                  onTap: () => Navigator.pop(ctx, 'select'),
+                ),
+              ],
+              if (financePending.isNotEmpty)
+                ListTile(
+                  leading: const Icon(Icons.account_balance_wallet_rounded,
+                      color: Color(0xFFF97316)),
+                  title: const Text('Limpar lançamentos financeiros'),
+                  onTap: () => Navigator.pop(ctx, 'finance'),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (!mounted || choice == null) return;
+    switch (choice) {
+      case 'all':
+        await _limparDiaAgenda(
+          day,
+          items,
+          financePending: financePending,
+          googleEvents: googleEvents,
+        );
+      case 'select':
+        await _limparCompromissosSeletivo(day, items, googleEvents);
+        if (financePending.isNotEmpty && mounted) {
+          await _limparDiaAgenda(
+            day,
+            const [],
+            financePending: financePending,
+            googleEvents: const [],
+          );
+        }
+      case 'finance':
+        await _limparDiaAgenda(
+          day,
+          const [],
+          financePending: financePending,
+          googleEvents: const [],
+        );
     }
   }
 
@@ -1558,7 +2071,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
         final key = _dayKey(selected);
         final items = byDay[key] ?? [];
         final financeForDay = financeByDay[key] ?? const <AgendaFinancePendingItem>[];
-        if (items.isEmpty && financeForDay.isEmpty) {
+        final allDocs = byDay.values.expand((e) => e);
+        final googleForDay = _externalGoogleEventsForDay(selected, allDocs);
+        if (items.isEmpty && financeForDay.isEmpty && googleForDay.isEmpty) {
           unawaited(_adicionarNaData(selected));
         } else {
           _mostrarMenuDiaAgenda(
@@ -1566,6 +2081,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
             selected,
             items,
             financePending: financeForDay,
+            googleEvents: googleForDay,
           );
         }
       },
@@ -2040,99 +2556,124 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     const color = GoogleCalendarSyncService.googleEventColor;
     return AgendaModernFadeIn(
       index: index,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        decoration: AgendaModernUI.modernCardDecoration(
-          accent: color,
-          elevated: true,
-        ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 5,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(4),
-                  boxShadow: [
-                    BoxShadow(
-                      color: color.withValues(alpha: 0.35),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            event.title,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 16,
-                              color: Color(0xFF1A237E),
-                            ),
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: color.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: color.withValues(alpha: 0.35),
-                            ),
-                          ),
-                          child: const Text(
-                            'GOOGLE',
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w900,
-                              color: color,
-                            ),
-                          ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () => _openCompromissoForm(
+            context: context,
+            googleEvent: event,
+          ),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            decoration: AgendaModernUI.modernCardDecoration(
+              accent: color,
+              elevated: true,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 5,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(4),
+                      boxShadow: [
+                        BoxShadow(
+                          color: color.withValues(alpha: 0.35),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      event.horarioLabel,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                    if (event.notes.trim().isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        event.notes.trim(),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade700,
-                          height: 1.35,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                event.title,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 16,
+                                  color: Color(0xFF1A237E),
+                                ),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: color.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: color.withValues(alpha: 0.35),
+                                ),
+                              ),
+                              child: const Text(
+                                'GOOGLE',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w900,
+                                  color: color,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
-                  ],
-                ),
+                        const SizedBox(height: 4),
+                        Text(
+                          event.horarioLabel,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        if (event.notes.trim().isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            event.notes.trim(),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade700,
+                              height: 1.35,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Editar',
+                    icon: const Icon(Icons.edit_rounded, size: 20),
+                    color: color,
+                    onPressed: () => _openCompromissoForm(
+                      context: context,
+                      googleEvent: event,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Excluir',
+                    icon: const Icon(Icons.delete_outline_rounded, size: 20),
+                    color: Colors.red.shade700,
+                    onPressed: () => _confirmDeleteGoogleEvent(event),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),

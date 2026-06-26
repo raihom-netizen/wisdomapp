@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../constants/currency_formats.dart';
+import 'finance_category_pie_panel.dart';
 import 'report_layout_responsive.dart';
 
 /// Raios e sombras no estilo “Clean Premium” (referência: Gestão Yahweh — Relatório Financeiro).
@@ -67,17 +68,34 @@ class ReportFinanceStatCard extends StatelessWidget {
   }
 }
 
-/// Agrega despesas por categoria (ordenado desc. por valor).
-List<Map<String, dynamic>> computeReportGastosPorCategoria(List<Map<String, dynamic>> expenseList) {
+/// Agrega lançamentos por categoria (ordenado desc. por valor).
+List<Map<String, dynamic>> computeReportPorCategoria(List<Map<String, dynamic>> list) {
   final m = <String, double>{};
-  for (final e in expenseList) {
+  for (final e in list) {
     final cat = (e['category'] ?? '').toString().trim();
     final key = cat.isEmpty ? 'Sem categoria' : cat;
-    m[key] = (m[key] ?? 0) + ((e['amount'] ?? 0) as num).toDouble();
+    m[key] = (m[key] ?? 0) + ((e['amount'] ?? 0) as num).toDouble().abs();
   }
-  final list = m.entries.map((e) => {'categoria': e.key, 'valor': e.value}).toList();
-  list.sort((a, b) => ((b['valor'] ?? 0) as num).compareTo((a['valor'] ?? 0) as num));
-  return list;
+  final out = m.entries.map((e) => {'categoria': e.key, 'valor': e.value}).toList();
+  out.sort((a, b) => ((b['valor'] ?? 0) as num).compareTo((a['valor'] ?? 0) as num));
+  return out;
+}
+
+/// Agrega despesas por categoria (ordenado desc. por valor).
+List<Map<String, dynamic>> computeReportGastosPorCategoria(List<Map<String, dynamic>> expenseList) =>
+    computeReportPorCategoria(expenseList);
+
+/// Agrega receitas por categoria (ordenado desc. por valor).
+List<Map<String, dynamic>> computeReportReceitasPorCategoria(List<Map<String, dynamic>> incomeList) =>
+    computeReportPorCategoria(incomeList);
+
+Map<String, double> _categoryListToMap(List<Map<String, dynamic>> rows) {
+  final m = <String, double>{};
+  for (final e in rows) {
+    final cat = (e['categoria'] ?? '').toString();
+    m[cat] = ((e['valor'] ?? 0) as num).toDouble();
+  }
+  return m;
 }
 
 /// Entradas e saídas por conta no período (IDs vazios agrupam em “Sem conta”).
@@ -679,46 +697,22 @@ class ReportFinancePorContaPanel extends StatelessWidget {
   }
 }
 
-/// Barras totais Receitas × Despesas + pizza de despesas por categoria.
+/// Barras totais Receitas × Despesas + pizza por categoria (receitas e despesas).
 class ReportFinanceBiCharts extends StatelessWidget {
   final double totalReceitas;
   final double totalDespesas;
   final List<Map<String, dynamic>> gastosPorCategoria;
+  final List<Map<String, dynamic>> receitasPorCategoria;
 
   const ReportFinanceBiCharts({
     super.key,
     required this.totalReceitas,
     required this.totalDespesas,
     required this.gastosPorCategoria,
+    this.receitasPorCategoria = const [],
   });
 
   static const _anim = Duration(milliseconds: 750);
-
-  List<PieChartSectionData> _pieSections() {
-    const palette = <Color>[
-      Color(0xFFDC2626),
-      Color(0xFFEA580C),
-      Color(0xFFCA8A04),
-      Color(0xFF16A34A),
-      Color(0xFF2563EB),
-      Color(0xFF7C3AED),
-      Color(0xFFDB2777),
-      Color(0xFF0891B2),
-    ];
-    final top = gastosPorCategoria.take(8).toList();
-    final total = top.fold<double>(0, (a, e) => a + ((e['valor'] ?? 0) as num).toDouble());
-    if (total <= 0) return [];
-    return List.generate(top.length, (i) {
-      final val = ((top[i]['valor'] ?? 0) as num).toDouble();
-      return PieChartSectionData(
-        value: val,
-        title: '${(100 * val / total).toStringAsFixed(0)}%',
-        color: palette[i % palette.length],
-        radius: 52,
-        titleStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white),
-      );
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -826,82 +820,10 @@ class ReportFinanceBiCharts extends StatelessWidget {
           },
         ),
         const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(_kRadiusMd),
-            boxShadow: _kSoftShadow,
-            border: Border.all(color: const Color(0xFFF1F5F9)),
-          ),
-          child: gastosPorCategoria.isEmpty
-              ? Text(
-                  'Sem despesas no período para o gráfico por categoria.',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                )
-              : LayoutBuilder(
-                  builder: (context, c) {
-                    final narrow = c.maxWidth < 520;
-                    final sections = _pieSections();
-                    if (sections.isEmpty) {
-                      return Text(
-                        'Sem despesas no período para o gráfico por categoria.',
-                        style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                      );
-                    }
-                    final pie = SizedBox(
-                      height: 200,
-                      width: narrow ? c.maxWidth : 200,
-                      child: PieChart(
-                        PieChartData(
-                          sectionsSpace: 2,
-                          centerSpaceRadius: 36,
-                          sections: sections,
-                        ),
-                        duration: _anim,
-                      ),
-                    );
-                    final legend = Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Despesas por categoria',
-                          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
-                        ),
-                        const SizedBox(height: 8),
-                        ...gastosPorCategoria.take(8).map((e) {
-                          final cat = (e['categoria'] ?? '').toString();
-                          final val = ((e['valor'] ?? 0) as num).toDouble();
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: Text(
-                              '$cat — ${CurrencyFormats.formatBRL(val)}',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          );
-                        }),
-                      ],
-                    );
-                    if (narrow) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          pie,
-                          const SizedBox(height: 12),
-                          legend,
-                        ],
-                      );
-                    }
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        pie,
-                        const SizedBox(width: 16),
-                        Expanded(child: legend),
-                      ],
-                    );
-                  },
-                ),
+        FinanceCategoryChartsSuite(
+          mode: 'both',
+          incomeByCategory: _categoryListToMap(receitasPorCategoria),
+          expenseByCategory: _categoryListToMap(gastosPorCategoria),
         ),
       ],
     );

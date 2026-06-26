@@ -9,6 +9,7 @@ import '../models/user_profile.dart';
 import '../services/agenda_scale_mirror_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/gemini_theme.dart';
+import '../services/google_calendar_sync_service.dart';
 import '../services/yearly_commitment_repeat_service.dart';
 import '../widgets/agenda_form_footer_actions.dart';
 import '../widgets/fast_text_field.dart';
@@ -72,6 +73,7 @@ class CompromissoFormPage extends StatefulWidget {
     required this.hasActiveLicense,
     this.existingDoc,
     this.initialDate,
+    this.googleEventSeed,
   });
 
   final UserProfile profile;
@@ -79,8 +81,10 @@ class CompromissoFormPage extends StatefulWidget {
   final QueryDocumentSnapshot<Map<String, dynamic>>? existingDoc;
   /// Dia pré-selecionado ao abrir pelo calendário da Agenda.
   final DateTime? initialDate;
+  /// Pré-preenche formulário ao editar evento que veio só do Google Calendar.
+  final GoogleCalendarEventItem? googleEventSeed;
 
-  bool get isEdit => existingDoc != null;
+  bool get isEdit => existingDoc != null || googleEventSeed != null;
 
   @override
   State<CompromissoFormPage> createState() => _CompromissoFormPageState();
@@ -128,6 +132,18 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
       _repeatYearly = data['repeatYearly'] == true ||
           data['isYearlyRepeatTemplate'] == true ||
           (data['yearlyRepeatTemplateId'] ?? '').toString().trim().isNotEmpty;
+    } else if (widget.googleEventSeed != null) {
+      final g = widget.googleEventSeed!;
+      _titleCtrl = TextEditingController(text: g.title);
+      _notesCtrl = TextEditingController(text: g.notes);
+      _date = g.day;
+      _time = g.timeStart.isEmpty
+          ? const TimeOfDay(hour: 9, minute: 0)
+          : _parseHHmm(g.timeStart, const TimeOfDay(hour: 9, minute: 0));
+      _endTime = g.timeEnd.isEmpty
+          ? _addOneHour(_time)
+          : _parseHHmm(g.timeEnd, _addOneHour(_time));
+      _colorHex = '#4285F4';
     } else {
       _titleCtrl = TextEditingController();
       _notesCtrl = TextEditingController();

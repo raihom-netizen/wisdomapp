@@ -22,7 +22,7 @@ import '../utils/finance_transactions_realtime.dart';
 import '../utils/firestore_user_doc_id.dart';
 import '../utils/premium_upgrade.dart';
 import '../widgets/app_bar_chart.dart';
-import '../widgets/app_pie_chart.dart';
+import 'finance_category_pie_panel.dart';
 import '../widgets/finance_bank_brand_thumb.dart';
 import '../widgets/finance_confirm_payment_sheet.dart';
 import '../widgets/finance_premium_ui.dart';
@@ -611,18 +611,8 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
     final entries = _aggregateFaturaByCategory(docs);
     if (entries.isEmpty) return const SizedBox.shrink();
 
-    final pieSegments = entries
-        .map(
-          (e) => (
-            label: e.category,
-            value: e.total,
-            color: financeCategoryVisualFor(e.category, isIncome: false).color,
-          ),
-        )
-        .toList();
-
     final topBar = entries.take(6).toList();
-    final maxCat = entries.first.total;
+    final maxCat = entries.isEmpty ? 0.0 : entries.first.total;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -671,9 +661,13 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
           ),
         ),
         const SizedBox(height: 12),
-        AppPieChart(
+        FinanceCategoryPiePanel(
           title: 'Distribuição da fatura',
-          segments: pieSegments,
+          subtitle: '${entries.length} categoria(s) · ${CurrencyFormats.formatBRL(totalFatura)}',
+          isIncome: false,
+          entries: collapseFinanceCategoryEntries(
+            {for (final e in entries) e.category: e.total},
+          ),
         ),
         const SizedBox(height: 12),
         if (topBar.length >= 2)

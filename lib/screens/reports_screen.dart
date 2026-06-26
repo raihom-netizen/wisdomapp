@@ -1743,6 +1743,7 @@ Usadas para folga: ${usadasFolga.fold<int>(0, (s, g) => s + (((g['ocorrencias'] 
         final horasData = data['horasData'] as Map<String, dynamic>?;
         final porConta = (data['porConta'] as List<Map<String, dynamic>>?) ?? [];
         final gastosPorCategoria = (data['gastosPorCategoria'] as List<Map<String, dynamic>>?) ?? [];
+        final receitasPorCategoria = (data['receitasPorCategoria'] as List<Map<String, dynamic>>?) ?? [];
         final saldoPeriodo = totalReceitas - totalDespesas;
         final saldoAcumulado = saldoAbertura + saldoPeriodo;
         final evolucao = computeReportFinanceEvolucao(
@@ -1851,6 +1852,7 @@ Usadas para folga: ${usadasFolga.fold<int>(0, (s, g) => s + (((g['ocorrencias'] 
               totalReceitas: totalReceitas,
               totalDespesas: totalDespesas,
               gastosPorCategoria: gastosPorCategoria,
+              receitasPorCategoria: receitasPorCategoria,
             ),
             const SizedBox(height: 28),
             _sectionTitle('Despesas'),
@@ -1929,6 +1931,7 @@ Usadas para folga: ${usadasFolga.fold<int>(0, (s, g) => s + (((g['ocorrencias'] 
     final totalDespesas = expenseList.fold<double>(0, (s, e) => s + ((e['amount'] ?? 0) as num).toDouble());
     final porConta = computeReportPorConta(incomeList, expenseList, accountLabels);
     final gastosPorCategoria = computeReportGastosPorCategoria(expenseList);
+    final receitasPorCategoria = computeReportReceitasPorCategoria(incomeList);
     // Pré-preenche o cache de exportação/PDF (evita 2.ª leitura Firestore + saldo + contas ao gerar PDF).
     _exportFinanceKey = _financeExportCacheKey();
     _exportFinanceFuture = Future.value({
@@ -1947,6 +1950,7 @@ Usadas para folga: ${usadasFolga.fold<int>(0, (s, g) => s + (((g['ocorrencias'] 
       'previsaoData': null,
       'porConta': porConta,
       'gastosPorCategoria': gastosPorCategoria,
+      'receitasPorCategoria': receitasPorCategoria,
     };
   }
 

@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/wisdom_courses_module_config.dart';
 import '../theme/app_colors.dart';
 import '../utils/course_content_link_helper.dart';
+import '../utils/course_thumb_resolver.dart';
 import '../utils/youtube_url_helper.dart';
 import '../widgets/course_media_preview.dart';
 import '../widgets/course_mp4_player_dialog.dart';
@@ -79,15 +80,7 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
     return link.isEmpty ? null : link;
   }
 
-  String? _thumbUrl(Map<String, dynamic> data) {
-    final img = (data['imageUrl'] ?? '').toString().trim();
-    if (img.isNotEmpty) return img;
-    final thumb = (data['thumbnailUrl'] ?? '').toString().trim();
-    if (thumb.isNotEmpty) return thumb;
-    final id = _videoId(data);
-    if (id != null) return YoutubeUrlHelper.thumbnailUrl(id);
-    return null;
-  }
+  String? _thumbUrl(Map<String, dynamic> data) => CourseThumbResolver.resolveBest(data);
 
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _filterAndSort(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
@@ -748,11 +741,9 @@ class _FeaturedVideoHighlight extends StatelessWidget {
     final description = (data['description'] ?? '').toString();
     final body = (data['bodyText'] ?? '').toString();
     final preview = body.isNotEmpty ? body : description;
-    final thumb = thumbUrl ?? '';
     final thumbFit = _courseThumbFit(data);
-    final overlayIcon = videoId != null
-        ? Icons.play_circle_fill_rounded
-        : Icons.article_rounded;
+    final isVideo = CourseThumbResolver.isVideoContent(data);
+    final hasThumb = CourseThumbResolver.hasVisualThumb(data);
 
     return Material(
       color: Colors.transparent,
@@ -785,33 +776,32 @@ class _FeaturedVideoHighlight extends StatelessWidget {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      if (thumb.isNotEmpty)
-                        CourseCoverImage(
-                          url: thumb,
+                      if (hasThumb)
+                        CourseMediaThumbnail.fromData(
+                          data,
                           fit: thumbFit,
                           fallback: _coverPlaceholder(accent),
+                          showPlayButton: isVideo,
+                          playIconSize: 64,
                         )
                       else
                         _coverPlaceholder(accent),
-                      Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.transparent,
-                              Colors.black.withValues(alpha: 0.55),
-                            ],
+                      if (!hasThumb && isVideo)
+                        Center(
+                          child: Icon(
+                            Icons.play_circle_fill_rounded,
+                            color: Colors.white.withValues(alpha: 0.95),
+                            size: 64,
                           ),
                         ),
-                      ),
-                      Center(
-                        child: Icon(
-                          overlayIcon,
-                          color: Colors.white.withValues(alpha: 0.95),
-                          size: 64,
+                      if (!hasThumb && !isVideo)
+                        Center(
+                          child: Icon(
+                            Icons.article_rounded,
+                            color: Colors.white.withValues(alpha: 0.85),
+                            size: 52,
+                          ),
                         ),
-                      ),
                       Positioned(
                         left: 12,
                         top: 12,
@@ -931,7 +921,8 @@ class _ModernVideoCard extends StatelessWidget {
     final body = (data['bodyText'] ?? '').toString();
     final preview = body.isNotEmpty ? body : description;
     final type = (data['type'] ?? 'curso').toString();
-    final thumb = thumbUrl ?? '';
+    final hasThumb = CourseThumbResolver.hasVisualThumb(data);
+    final isVideo = CourseThumbResolver.isVideoContent(data);
     final thumbFit = _courseThumbFit(data);
 
     return Container(
@@ -965,28 +956,30 @@ class _ModernVideoCard extends StatelessWidget {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      if (thumb.isNotEmpty)
-                        CourseCoverImage(
-                          url: thumb,
+                      if (hasThumb)
+                        CourseMediaThumbnail.fromData(
+                          data,
                           fit: thumbFit,
                           fallback: _coverFallback(type, accent, accent2),
+                          showPlayButton: isVideo,
                         )
                       else
                         _coverFallback(type, accent, accent2),
-                      Center(
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.25),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            _overlayIcon(),
-                            color: Colors.white.withValues(alpha: 0.95),
-                            size: 52,
+                      if (!hasThumb)
+                        Center(
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.25),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              _overlayIcon(),
+                              color: Colors.white.withValues(alpha: 0.95),
+                              size: 52,
+                            ),
                           ),
                         ),
-                      ),
                     ],
                   ),
                 ),
@@ -1093,8 +1086,9 @@ class _DicaGridCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final title = (data['title'] ?? 'Dica').toString();
     final body = (data['bodyText'] ?? data['description'] ?? '').toString();
-    final thumb = thumbUrl ?? '';
     final thumbFit = _courseThumbFit(data);
+    final hasThumb = CourseThumbResolver.hasVisualThumb(data);
+    final isVideo = CourseThumbResolver.isVideoContent(data);
     final overlayIcon = videoId != null
         ? Icons.play_circle_fill_rounded
         : ((data['linkUrl'] ?? data['externalUrl'] ?? '').toString().isNotEmpty
@@ -1128,33 +1122,24 @@ class _DicaGridCard extends StatelessWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    if (thumb.isNotEmpty)
-                      CourseCoverImage(
-                        url: thumb,
+                    if (hasThumb)
+                      CourseMediaThumbnail.fromData(
+                        data,
                         fit: thumbFit,
                         fallback: _fallback(accent, accent2),
+                        showPlayButton: isVideo,
+                        playIconSize: 44,
                       )
                     else
                       _fallback(accent, accent2),
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            Colors.black.withValues(alpha: 0.45),
-                          ],
+                    if (!hasThumb)
+                      Center(
+                        child: Icon(
+                          overlayIcon,
+                          color: Colors.white.withValues(alpha: 0.92),
+                          size: 44,
                         ),
                       ),
-                    ),
-                    Center(
-                      child: Icon(
-                        overlayIcon,
-                        color: Colors.white.withValues(alpha: 0.92),
-                        size: 44,
-                      ),
-                    ),
                   ],
                 ),
               ),
