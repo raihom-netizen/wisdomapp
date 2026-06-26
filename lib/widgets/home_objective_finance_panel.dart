@@ -9,6 +9,7 @@ import '../utils/fifty_two_weeks_plan.dart';
 import '../utils/firestore_user_doc_id.dart';
 import '../utils/goal_objective_visuals.dart';
 import '../utils/premium_upgrade.dart';
+import '../widgets/create_financial_goal_dialog.dart';
 import '../widgets/fifty_two_weeks_schedule_sheet.dart';
 import '../widgets/registrar_aporte_dialog.dart';
 
@@ -49,7 +50,7 @@ class HomeObjectiveFinancePanel extends StatelessWidget {
             .where((d) => !_excludeGoal(d))
             .toList();
         if (goals.isEmpty) {
-          return _EmptyObjectiveCard(onOpen: onOpenObjetivoModule);
+          return _EmptyObjectiveCard(uid: uid, profile: profile);
         }
         goals.sort((a, b) {
           final ta = (a.data()['createdAt'] as Timestamp?)?.toDate();
@@ -87,9 +88,13 @@ class HomeObjectiveFinancePanel extends StatelessWidget {
 }
 
 class _EmptyObjectiveCard extends StatelessWidget {
-  const _EmptyObjectiveCard({required this.onOpen});
+  const _EmptyObjectiveCard({
+    required this.uid,
+    required this.profile,
+  });
 
-  final VoidCallback onOpen;
+  final String uid;
+  final UserProfile profile;
 
   @override
   Widget build(BuildContext context) {
@@ -158,7 +163,11 @@ class _EmptyObjectiveCard extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: onOpen,
+              onPressed: () => showCreateFinancialGoalDialog(
+                context,
+                profile: profile,
+                uid: uid,
+              ),
               style: FilledButton.styleFrom(
                 backgroundColor: Colors.white,
                 foregroundColor: const Color(0xFF4F46E5),

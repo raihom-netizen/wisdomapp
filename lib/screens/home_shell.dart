@@ -631,11 +631,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     final isNarrow = width < 420;
     final isWide = width >= 720;
     final double pillSize =
-        isUltraNarrow ? 38 : (isNarrow ? 44 : (isWide ? 52 : 48));
+        isUltraNarrow ? 32 : (isNarrow ? 36 : (isWide ? 42 : 38));
     final double iconBase =
-        isUltraNarrow ? 22 : (isNarrow ? 25 : (isWide ? 30 : 28));
+        isUltraNarrow ? 18 : (isNarrow ? 20 : (isWide ? 24 : 22));
     final double labelSize =
-        isUltraNarrow ? 10.5 : (isNarrow ? 11.5 : (isWide ? 13 : 12));
+        isUltraNarrow ? 9.5 : (isNarrow ? 10.5 : (isWide ? 11.5 : 11));
     final pressScale = kIsWeb ? 0.97 : 0.94;
     final selectedScale = kIsWeb ? 1.06 : 1.08;
     final scaleDuration = Duration(milliseconds: kIsWeb ? 105 : 125);
@@ -677,10 +677,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
               duration: containerDuration,
               curve: Curves.easeOutCubic,
               padding: EdgeInsets.fromLTRB(
-                3,
-                isUltraNarrow ? 4 : 6,
-                3,
-                isUltraNarrow ? 3 : 4,
+                2,
+                isUltraNarrow ? 2 : 3,
+                2,
+                isUltraNarrow ? 1 : 2,
               ),
               child: Stack(
                 alignment: Alignment.topCenter,
@@ -767,7 +767,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                           ),
                         ),
                       ),
-                      SizedBox(height: isUltraNarrow ? 3 : 4),
+                      SizedBox(height: isUltraNarrow ? 2 : 3),
                       Text(
                         label,
                         maxLines: 1,
@@ -807,12 +807,12 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         children: [
           Container(
             padding: EdgeInsets.symmetric(
-              horizontal: isUltraNarrow ? 4 : 8,
-              vertical: isUltraNarrow ? 6 : 8,
+              horizontal: isUltraNarrow ? 3 : 6,
+              vertical: isUltraNarrow ? 4 : 5,
             ),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(22),
+              borderRadius: BorderRadius.circular(18),
               border: Border.all(color: const Color(0xFFE2E8F0)),
               boxShadow: [
                 BoxShadow(
