@@ -18,7 +18,6 @@ import '../services/version_check_service.dart';
 import '../utils/url_launcher_helper.dart';
 import '../widgets/divulgacao_public_promo_card.dart';
 import '../widgets/oauth_login_buttons.dart';
-import '../widgets/official_channels_card.dart';
 import '../widgets/wisdomapp_hero_brand.dart';
 
 /// Página de divulgação (rota `/divulgacao`) — visual alinhado à landing super premium.
@@ -442,17 +441,7 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
                                   padding: EdgeInsets.only(bottom: 8),
                                   child: DivulgacaoPublicPromoCard(),
                                 ),
-                              OfficialChannelsCard(
-                                title: _landing.divChannelsTitle,
-                                subtitle: _landing.divChannelsSubtitle,
-                                youtubeUrl: _landing.divYoutubeUrl,
-                                instagramUrl: _landing.divInstagramUrl,
-                                whatsappUrl: _landing.divWhatsappUrl,
-                                youtubeLabel: _landing.divYoutubeLabel,
-                                instagramLabel: _landing.divInstagramLabel,
-                                whatsappLabel: _landing.divWhatsappLabel,
-                              ),
-                              const SizedBox(height: 14),
+                              const SizedBox(height: 8),
                               _buildLivroMentorSection(),
                               const SizedBox(height: 22),
                               _buildSectionLabel(_landing.divLabelComoFunciona),
@@ -630,10 +619,8 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
     final mentorName = _divField('divMentorName');
     final mentorRole = _divField('divMentorRole');
     final instaUrl = _divField('divMentorInstagramUrl').trim();
-    final whatsUrl = _divField('divMentorWhatsappUrl').trim();
     final ytUrl = _divField('divMentorYoutubeUrl').trim();
     final instaLabel = _divField('divMentorInstagramLabel');
-    final whatsLabel = _divField('divMentorWhatsappLabel');
     final ytLabel = _divField('divMentorYoutubeLabel');
 
     Widget linkButton({
@@ -797,26 +784,22 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    linkButton(
-                      icon: const FaIcon(FontAwesomeIcons.instagram, size: 18),
-                      label: instaLabel,
-                      url: instaUrl,
-                      color: const Color(0xFFBE185D),
-                    ),
-                    const SizedBox(width: 8),
-                    linkButton(
-                      icon: const FaIcon(FontAwesomeIcons.whatsapp, size: 18),
-                      label: whatsLabel,
-                      url: whatsUrl,
-                      color: const Color(0xFF16A34A),
-                    ),
-                    const SizedBox(width: 8),
-                    linkButton(
-                      icon: const FaIcon(FontAwesomeIcons.youtube, size: 18),
-                      label: ytLabel,
-                      url: ytUrl,
-                      color: const Color(0xFFDC2626),
-                    ),
+                    if (instaUrl.isNotEmpty)
+                      linkButton(
+                        icon: const FaIcon(FontAwesomeIcons.instagram, size: 18),
+                        label: instaLabel,
+                        url: instaUrl,
+                        color: const Color(0xFFBE185D),
+                      ),
+                    if (instaUrl.isNotEmpty && ytUrl.isNotEmpty)
+                      const SizedBox(width: 8),
+                    if (ytUrl.isNotEmpty)
+                      linkButton(
+                        icon: const FaIcon(FontAwesomeIcons.youtube, size: 18),
+                        label: ytLabel,
+                        url: ytUrl,
+                        color: const Color(0xFFDC2626),
+                      ),
                   ],
                 ),
               ],

@@ -22,7 +22,6 @@ import '../services/login_preferences.dart';
 import '../services/push_notification_service.dart';
 import '../widgets/divulgacao_public_promo_card.dart';
 import '../widgets/oauth_login_buttons.dart';
-import '../widgets/official_channels_card.dart';
 import '../widgets/wisdomapp_hero_brand.dart';
 import '../utils/keyboard_form_scaffold.dart';
 
@@ -663,20 +662,6 @@ class _LandingScreenState extends State<LandingScreen>
                         padding: EdgeInsets.fromLTRB(16, 0, 16, 0),
                         child: DivulgacaoPublicPromoCard(),
                       ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                      child: OfficialChannelsCard(
-                        title: _landing.divChannelsTitle,
-                        subtitle: _landing.divChannelsSubtitle,
-                        youtubeUrl: _landing.divYoutubeUrl,
-                        instagramUrl: _landing.divInstagramUrl,
-                        whatsappUrl: _landing.divWhatsappUrl,
-                        youtubeLabel: _landing.divYoutubeLabel,
-                        instagramLabel: _landing.divInstagramLabel,
-                        whatsappLabel: _landing.divWhatsappLabel,
-                        forDarkBackground: true,
-                      ),
-                    ),
                     _buildHeroSection(context),
                     _buildFeaturesSection(),
                     _buildInspirationalQuote(),
@@ -720,7 +705,7 @@ class _LandingScreenState extends State<LandingScreen>
       ),
       padding: EdgeInsets.fromLTRB(
         20 + MediaQuery.of(context).padding.left,
-        28 + MediaQuery.of(context).padding.top,
+        12 + MediaQuery.of(context).padding.top,
         20 + MediaQuery.of(context).padding.right,
         44,
       ),
@@ -1211,7 +1196,6 @@ class _LandingScreenState extends State<LandingScreen>
 
   Widget _buildFooter(BuildContext context) {
     const email = 'raihom@gmail.com';
-    const whatsapp = '5562991705247'; // 62 9 9170-5247
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
@@ -1258,7 +1242,6 @@ class _LandingScreenState extends State<LandingScreen>
             runSpacing: 8,
             children: [
               _FooterLink(label: email, onTap: () => _launch(Uri.parse('mailto:$email'))),
-              _FooterLink(label: 'WhatsApp 62 9 9170-5247', onTap: () => _launch(Uri.parse('https://wa.me/$whatsapp'))),
             ],
           ),
           const SizedBox(height: 20),

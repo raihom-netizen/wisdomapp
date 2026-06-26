@@ -72,19 +72,19 @@ dev_dependencies:
   flutter_lints: ^5.0.0
   flutter_launcher_icons: ^0.13.1
 
-# Ícone do app e PWA — origem: assets/images/logo_divulgacao.png
-# Regenerar: python tool/generate_brand_assets.py && flutter pub run flutter_launcher_icons
+# Ícone do app e PWA — origem: assets/images/logo_icon_atualizada_4k.png
+# Regenerar: .\tool\regenerate_brand_assets.ps1
 flutter_launcher_icons:
   android: true
   ios: true
   remove_alpha_ios: true
   image_path: "assets/images/icon_no_bg.png"
-  adaptive_icon_background: "#0A1F56"
+  adaptive_icon_background: "#000000"
   adaptive_icon_foreground: "assets/images/icon_adaptive_foreground.png"
   web:
     generate: true
     image_path: "assets/images/icon_no_bg.png"
-    background_color: "#0A1F56"
+    background_color: "#000000"
     theme_color: "#0A1F56"
 
 flutter:
