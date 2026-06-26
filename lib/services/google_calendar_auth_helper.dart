@@ -40,6 +40,7 @@ class GoogleCalendarAuthHelper {
   static Map<String, String> _webOAuthParams({
     String? email,
     bool silent = false,
+    bool forceConsent = false,
   }) {
     final params = <String, String>{
       'include_granted_scopes': 'true',
@@ -51,6 +52,8 @@ class GoogleCalendarAuthHelper {
     }
     if (silent) {
       params['prompt'] = 'none';
+    } else if (forceConsent) {
+      params['prompt'] = 'consent';
     }
     return params;
   }
@@ -322,7 +325,9 @@ class GoogleCalendarAuthHelper {
       final provider = GoogleAuthProvider();
       provider.addScope(_calendarScope);
       provider.addScope('email');
-      provider.setCustomParameters(_webOAuthParams(email: email));
+      provider.setCustomParameters(
+        _webOAuthParams(email: email, forceConsent: true),
+      );
 
       try {
         final hasGoogle =
@@ -368,12 +373,29 @@ class GoogleCalendarAuthHelper {
     }
 
     Future<GoogleCalendarAuthResult> run() async {
-      if (user.providerData.any((p) => p.providerId == 'google.com')) {
+      final hasGoogle =
+          user.providerData.any((p) => p.providerId == 'google.com');
+
+      // Conta Google via Firebase Auth: popup Firebase é o caminho mais confiável na Web.
+      if (hasGoogle) {
+        final fb = await runFirebase();
+        if (fb.ok) return fb;
+        if (fb.cancelled) return fb;
         final gis = await _requestGoogleSignInInteractive(
           preferredEmail: email,
         );
-        if (gis.ok || gis.cancelled) return gis;
+        if (gis.ok) return gis;
+        return fb.errorMessage != null && fb.errorMessage!.isNotEmpty
+            ? fb
+            : gis;
       }
+
+      // Login Apple: escolher Gmail via GIS ou vincular conta Google.
+      final gis = await _requestGoogleSignInInteractive(
+        preferredEmail: email,
+      );
+      if (gis.ok) return gis;
+      if (gis.cancelled) return gis;
       return runFirebase();
     }
 

@@ -39,6 +39,7 @@ import '../widgets/floating_shell_banners.dart';
 import '../utils/admin_panel_launch.dart';
 import 'dashboard_screen.dart';
 import 'finance_screen.dart';
+import 'meta_financeira_screen.dart';
 import 'calculator_screen.dart';
 import 'reports_screen.dart';
 import 'wisdom_agenda_screen.dart';
@@ -75,7 +76,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   static const int _kShellModuleCount = 10;
 
   /// Mesmos módulos do rodapé de acesso rápido (menu abre fullscreen com os mesmos dados).
-  static const Set<int> _footerQuickAccessModuleIndices = {0, 1, 3, 7, 9};
+  static const Set<int> _footerQuickAccessModuleIndices = {0, 1, 2, 3, 7};
 
   /// Scroll principal por índice do módulo — ao trocar de aba, [jumpTo(0)] no módulo que sai e no que entra.
   late final List<ScrollController> _shellModuleScrollControllers =
@@ -102,7 +103,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   double _peakShortestSide = 0;
   Orientation? _orientationForPeak;
 
-  /// Rodapé com 6 atalhos: em telas mais estreitas que isto, rótulos abreviados (ícones iguais).
+  /// Rodapé com 5 atalhos: em telas mais estreitas que isto, rótulos abreviados (ícones iguais).
   static const double _footerUltraNarrowWidth = 392;
   static const Duration _pendingPaymentThrottle = Duration(seconds: 15);
 
@@ -214,7 +215,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   static const List<String> _moduleTitles = [
     'Início',
     'Financeiro',
-    'Financeiro', // índice 2 legado (Meta removida) — redireciona para Financeiro
+    'Objetivo Financeiro',
     'Agenda',
     'Calculadora',
     'Dicas Financeiras',
@@ -532,7 +533,6 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   }
 
   void _setModuleIndex(int i, {VoidCallback? alsoInSetState}) {
-    if (i == 2) i = 1; // Meta financeira removida — abre Financeiro
     if (!mounted || i < 0 || i >= _kShellModuleCount) return;
     final prev = _idx;
     final needsMaterialize = !_materializedModuleIndices.contains(i);
@@ -631,13 +631,13 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     final isNarrow = width < 420;
     final isWide = width >= 720;
     final double pillSize =
-        isUltraNarrow ? 30 : (isNarrow ? 34 : (isWide ? 42 : 38));
+        isUltraNarrow ? 38 : (isNarrow ? 44 : (isWide ? 52 : 48));
     final double iconBase =
-        isUltraNarrow ? 18 : (isNarrow ? 21 : (isWide ? 26 : 24));
+        isUltraNarrow ? 22 : (isNarrow ? 25 : (isWide ? 30 : 28));
     final double labelSize =
-        isUltraNarrow ? 9.5 : (isNarrow ? 10 : (isWide ? 11.5 : 11));
-    final pressScale = kIsWeb ? 0.985 : 0.96;
-    final selectedScale = kIsWeb ? 1.025 : 1.04;
+        isUltraNarrow ? 10.5 : (isNarrow ? 11.5 : (isWide ? 13 : 12));
+    final pressScale = kIsWeb ? 0.97 : 0.94;
+    final selectedScale = kIsWeb ? 1.06 : 1.08;
     final scaleDuration = Duration(milliseconds: kIsWeb ? 105 : 125);
     final containerDuration = Duration(milliseconds: kIsWeb ? 160 : 175);
     final glowDuration = Duration(milliseconds: kIsWeb ? 150 : 170);
@@ -656,7 +656,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           : [accent.withValues(alpha: 0.16), accent.withValues(alpha: 0.08)];
       return Expanded(
         child: InkWell(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(16),
           onTapDown: (_) => setState(() => _footerPressedIndex = index),
           onTapCancel: () {
             if (_footerPressedIndex == index) {
@@ -677,10 +677,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
               duration: containerDuration,
               curve: Curves.easeOutCubic,
               padding: EdgeInsets.fromLTRB(
-                2,
-                isUltraNarrow ? 2 : 3,
-                2,
-                isUltraNarrow ? 1 : 2,
+                3,
+                isUltraNarrow ? 4 : 6,
+                3,
+                isUltraNarrow ? 3 : 4,
               ),
               child: Stack(
                 alignment: Alignment.topCenter,
@@ -693,7 +693,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                         curve: Curves.easeOut,
                         child: DecoratedBox(
                           decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(14),
+                            borderRadius: BorderRadius.circular(16),
                             gradient: RadialGradient(
                               center: const Alignment(0, -0.2),
                               radius: 1.0,
@@ -721,32 +721,32 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
-                          borderRadius: BorderRadius.circular(pillSize / 3.2),
+                          borderRadius: BorderRadius.circular(pillSize / 2.8),
                           border: Border.all(
                             color: selected
-                                ? Colors.white.withValues(alpha: 0.45)
-                                : accent.withValues(alpha: 0.22),
-                            width: selected ? 1.4 : 1,
+                                ? Colors.white.withValues(alpha: 0.55)
+                                : accent.withValues(alpha: 0.28),
+                            width: selected ? 1.6 : 1.1,
                           ),
                           boxShadow: selected
                               ? [
                                   BoxShadow(
-                                    color: accent.withValues(alpha: 0.55),
-                                    blurRadius: 14,
-                                    offset: const Offset(0, 5),
-                                    spreadRadius: -1,
+                                    color: accent.withValues(alpha: 0.62),
+                                    blurRadius: 18,
+                                    offset: const Offset(0, 6),
+                                    spreadRadius: -2,
                                   ),
                                   BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.12),
-                                    blurRadius: 5,
-                                    offset: const Offset(0, 2),
+                                    color: Colors.black.withValues(alpha: 0.14),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 3),
                                   ),
                                 ]
                               : [
                                   BoxShadow(
-                                    color: accent.withValues(alpha: 0.16),
-                                    blurRadius: 6,
-                                    offset: const Offset(0, 2),
+                                    color: accent.withValues(alpha: 0.22),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 3),
                                   ),
                                 ],
                         ),
@@ -767,19 +767,20 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                           ),
                         ),
                       ),
-                      SizedBox(height: isUltraNarrow ? 1 : 2),
+                      SizedBox(height: isUltraNarrow ? 3 : 4),
                       Text(
                         label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: labelSize,
-                          letterSpacing: selected ? 0.2 : 0.05,
+                          letterSpacing: selected ? 0.25 : 0.08,
                           fontWeight:
-                              selected ? FontWeight.w900 : FontWeight.w700,
+                              selected ? FontWeight.w900 : FontWeight.w800,
                           color: selected
                               ? accent
-                              : accent.withValues(alpha: 0.85),
+                              : const Color(0xFF334155),
                         ),
                       ),
                     ],
@@ -795,48 +796,66 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     return Padding(
       padding: EdgeInsets.fromLTRB(
-        isUltraNarrow ? 4 : 8,
+        isUltraNarrow ? 6 : 10,
         0,
-        isUltraNarrow ? 4 : 8,
+        isUltraNarrow ? 6 : 10,
         bottomInset,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              quickButton(
-                icon: Icons.home_rounded,
-                label: 'Início',
-                index: 0,
-                accent: const Color(0xFF3B82F6),
-              ),
-              quickButton(
-                icon: Icons.account_balance_wallet_rounded,
-                label: footerNarrow ? 'Financ.' : 'Financeiro',
-                index: 1,
-                accent: const Color(0xFF14B8A6),
-              ),
-              quickButton(
-                icon: Icons.calendar_month_rounded,
-                label: 'Agenda',
-                index: 3,
-                accent: const Color(0xFF6366F1),
-              ),
-              quickButton(
-                icon: Icons.ondemand_video_rounded,
-                label: footerNarrow ? 'Cursos' : 'Cursos',
-                index: 7,
-                accent: const Color(0xFF06B6D4),
-              ),
-              quickButton(
-                icon: Icons.settings_rounded,
-                label: footerNarrow ? 'Config.' : 'Configurações',
-                index: 9,
-                accent: const Color(0xFF94A3B8),
-              ),
-            ],
+          Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: isUltraNarrow ? 4 : 8,
+              vertical: isUltraNarrow ? 6 : 8,
+            ),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 20,
+                  offset: const Offset(0, -4),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                quickButton(
+                  icon: Icons.home_rounded,
+                  label: 'Início',
+                  index: 0,
+                  accent: const Color(0xFF3B82F6),
+                ),
+                quickButton(
+                  icon: Icons.account_balance_wallet_rounded,
+                  label: footerNarrow ? 'Financ.' : 'Financeiro',
+                  index: 1,
+                  accent: const Color(0xFF14B8A6),
+                ),
+                quickButton(
+                  icon: Icons.flag_rounded,
+                  label: 'Objetivo',
+                  index: 2,
+                  accent: const Color(0xFFEC4899),
+                ),
+                quickButton(
+                  icon: Icons.calendar_month_rounded,
+                  label: 'Agenda',
+                  index: 3,
+                  accent: const Color(0xFF6366F1),
+                ),
+                quickButton(
+                  icon: Icons.ondemand_video_rounded,
+                  label: 'Cursos',
+                  index: 7,
+                  accent: const Color(0xFF06B6D4),
+                ),
+              ],
+            ),
           ),
           const AppVersionFooter(
             light: false,
@@ -917,11 +936,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           onNavigateTo: onNav,
         );
       case 2:
-        return FinanceScreen(
+        return MetaFinanceiraScreen(
           uid: _userDocId,
           profile: profile,
-          isShellVisible: moduleActive,
-          shellScrollController: _shellModuleScrollControllers[1],
           onNavigateTo: onNav,
         );
       case 3:
@@ -1953,7 +1970,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       case 1:
         return const Color(0xFF5EEAD4);
       case 2:
-        return const Color(0xFFFBBF24);
+        return const Color(0xFFEC4899);
       case 3:
         return const Color(0xFFA5B4FC);
       case 4:
@@ -1977,10 +1994,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     const items = [
       (0, Icons.home_rounded, 'Início'),
       (1, Icons.account_balance_wallet_rounded, 'Financeiro'),
+      (2, Icons.flag_rounded, 'Objetivo Financeiro'),
       (3, Icons.event_note_rounded, 'Agenda'),
       (5, Icons.lightbulb_outline_rounded, 'Dicas Financeiras'),
       (7, Icons.ondemand_video_rounded, 'Cursos em Vídeo'),
-      (9, Icons.settings_rounded, 'Configurações'),
     ];
     return Drawer(
       backgroundColor: AppColors.deepBlueDark,
@@ -2174,37 +2191,36 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                           IosPaymentsGate.pushEscolhaPlano(context);
                         },
                       ),
-                    if (profile.canAccessAdminPanel)
-                      ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 4,
-                        ),
-                        minVerticalPadding: 12,
-                        leading: Icon(
-                          Icons.settings_rounded,
-                          size: 24,
-                          color: _idx == 9 ? AppColors.amber : Colors.white70,
-                        ),
-                        title: Text(
-                          'Configurações do Sistema',
-                          style: TextStyle(
-                            color: _idx == 9 ? AppColors.amber : Colors.white,
-                            fontWeight:
-                                _idx == 9 ? FontWeight.w700 : FontWeight.w500,
-                          ),
-                        ),
-                        subtitle: const Text(
-                          'Backup, notificações e preferências',
-                          style: TextStyle(color: Colors.white70, fontSize: 12),
-                        ),
-                        selected: _idx == 9,
-                        selectedTileColor: Colors.white.withValues(alpha: 0.08),
-                        onTap: () {
-                          _setModuleIndex(9);
-                          Navigator.of(context).pop();
-                        },
+                    ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 4,
                       ),
+                      minVerticalPadding: 12,
+                      leading: Icon(
+                        Icons.settings_rounded,
+                        size: 24,
+                        color: _idx == 9 ? AppColors.amber : Colors.white70,
+                      ),
+                      title: Text(
+                        'Configurações',
+                        style: TextStyle(
+                          color: _idx == 9 ? AppColors.amber : Colors.white,
+                          fontWeight:
+                              _idx == 9 ? FontWeight.w700 : FontWeight.w600,
+                        ),
+                      ),
+                      subtitle: const Text(
+                        'Backup, notificações e preferências',
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                      selected: _idx == 9,
+                      selectedTileColor: Colors.white.withValues(alpha: 0.08),
+                      onTap: () {
+                        _setModuleIndex(9);
+                        Navigator.of(context).pop();
+                      },
+                    ),
                     Divider(
                       height: 1,
                       color: Colors.white.withValues(alpha: 0.2),

@@ -21,6 +21,7 @@ class OfficialChannelsCard extends StatelessWidget {
     this.whatsappLabel = 'WhatsApp',
     this.compact = false,
     this.includeYoutubeInstagram = true,
+    this.includeInstagram = false,
     this.forDarkBackground = false,
   });
 
@@ -34,11 +35,16 @@ class OfficialChannelsCard extends StatelessWidget {
   final String whatsappLabel;
   final bool compact;
   final bool includeYoutubeInstagram;
+  /// Instagram separado do YouTube (ex.: rodapé do app — só IG + WhatsApp).
+  final bool includeInstagram;
   final bool forDarkBackground;
 
   bool get _hasAny {
     final w = whatsappUrl.trim().isNotEmpty;
-    if (!includeYoutubeInstagram) return w;
+    final ig = includeInstagram && instagramUrl.trim().isNotEmpty;
+    if (!includeYoutubeInstagram && !includeInstagram) return w;
+    if (includeInstagram && ig) return true;
+    if (!includeYoutubeInstagram) return w || ig;
     return youtubeUrl.trim().isNotEmpty ||
         instagramUrl.trim().isNotEmpty ||
         w;
@@ -182,7 +188,8 @@ class OfficialChannelsCard extends StatelessWidget {
                             compact: compact,
                             expanded: !narrow,
                           ),
-                        if (includeYoutubeInstagram && instagramUrl.trim().isNotEmpty)
+                        if ((includeYoutubeInstagram || includeInstagram) &&
+                            instagramUrl.trim().isNotEmpty)
                           _channelTile(
                             icon: FontAwesomeIcons.instagram,
                             label: instagramLabel,

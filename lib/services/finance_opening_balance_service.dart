@@ -3,6 +3,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 
 import '../utils/finance_transactions_realtime.dart';
 import '../utils/finance_line_opening.dart';
+import '../utils/finance_server_totals.dart';
 import '../utils/firestore_query_batched_collect.dart';
 import '../utils/firestore_user_doc_id.dart';
 
@@ -25,6 +26,7 @@ class FinanceOpeningBalanceService {
   static void invalidateForUser(String uid) {
     final id = firestoreUserDocIdForAppShell(uid);
     _cache.removeWhere((k, _) => k.startsWith('$id|'));
+    FinanceServerTotals.invalidateForUser(id);
   }
 
   /// Leitura síncrona do cache em memória — evita FutureBuilder piscar no painel/Financeiro.
@@ -106,6 +108,29 @@ class FinanceOpeningBalanceService {
     }
 
     final fsId = firestoreUserDocIdForAppShell(uid);
+
+    try {
+      final server = await FinanceServerTotals.load(
+        uid: fsId,
+        from: start,
+        to: start,
+        statusFilter: 'paid',
+        cacheTtl: cacheTtl,
+      );
+      final byAcc = loadAccounts
+          ? Map<String, double>.from(server.openingByAccount)
+          : const <String, double>{};
+      final total = server.openingTotal;
+      _cache[key] = (
+        total: total,
+        byAccount: Map.unmodifiable(Map<String, double>.from(byAcc)),
+        at: DateTime.now(),
+      );
+      return (total: total, byAccount: byAcc);
+    } catch (_) {
+      // Fallback local abaixo.
+    }
+
     final partialKey = FinanceLineOpening.monthKeySaoPaulo(start);
     final monthStart = FinanceLineOpening.startOfMonthWallLocal(start);
 

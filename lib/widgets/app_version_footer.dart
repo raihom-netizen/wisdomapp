@@ -95,8 +95,9 @@ class AppVersionFooter extends StatelessWidget {
           final youtube = (data['divYoutubeUrl'] ?? '').toString().trim();
           final instagram = (data['divInstagramUrl'] ?? '').toString().trim();
           final whatsapp = (data['divWhatsappUrl'] ?? '').toString().trim();
-          // No app: só WhatsApp; YouTube/Instagram permanecem na landing/web.
-          if (whatsapp.isEmpty) return const SizedBox.shrink();
+          if (whatsapp.isEmpty && instagram.isEmpty) {
+            return const SizedBox.shrink();
+          }
           return Padding(
             padding: EdgeInsets.only(top: compact ? 3 : 10),
             child: OfficialChannelsCard(
@@ -110,6 +111,7 @@ class AppVersionFooter extends StatelessWidget {
               whatsappLabel: (data['divWhatsappLabel'] ?? 'WhatsApp').toString(),
               compact: true,
               includeYoutubeInstagram: false,
+              includeInstagram: true,
             ),
           );
         },

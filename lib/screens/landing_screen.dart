@@ -22,6 +22,7 @@ import '../services/login_preferences.dart';
 import '../services/push_notification_service.dart';
 import '../widgets/divulgacao_public_promo_card.dart';
 import '../widgets/oauth_login_buttons.dart';
+import '../widgets/official_social_top_buttons.dart';
 import '../widgets/wisdomapp_hero_brand.dart';
 import '../utils/keyboard_form_scaffold.dart';
 
@@ -404,15 +405,22 @@ class _LandingScreenState extends State<LandingScreen>
   static const Color _lpRose = Color(0xFFF43F5E);
 
   static const String _versionJsonUrl = 'https://wisdomapp-b9e98.web.app/version.json';
-  static const String _androidStoreUrlFallback =
-      'https://play.google.com/store/apps/details?id=com.wisdomapp.app';
   /// Link público TestFlight (beta no iPhone sem publicar na App Store). Sobrescrito por version.json / Firestore.
   static const String _defaultTestFlightPublicLink = 'https://testflight.apple.com/join/pugVHQ6C';
+
+  String? _resolvePlayStoreUrl(String? fallback) {
+    final fromLanding = _landing.divPlayStoreUrl.trim();
+    if (fromLanding.isNotEmpty &&
+        (fromLanding.startsWith('http://') || fromLanding.startsWith('https://'))) {
+      return fromLanding;
+    }
+    return fallback;
+  }
 
   /// Fallback imediato na landing — rede atualiza depois sem spinner.
   static ({String? apkUrl, String? iosUrl, String? testFlightUrl, String? version})
       get _downloadUrlsFallback => (
-            apkUrl: _androidStoreUrlFallback,
+            apkUrl: kDefaultPlayStoreUrl,
             iosUrl: null,
             testFlightUrl: _defaultTestFlightPublicLink,
             version: null,
@@ -420,7 +428,7 @@ class _LandingScreenState extends State<LandingScreen>
 
   /// Busca link Android (loja) / testFlight do version.json e do Firestore.
   static Future<({String? apkUrl, String? iosUrl, String? testFlightUrl, String? version})> _fetchDownloadUrls() async {
-    String? apkUrl = _androidStoreUrlFallback;
+    String? apkUrl = kDefaultPlayStoreUrl;
     String? iosUrl;
     String? testFlightUrl = _defaultTestFlightPublicLink;
     String? version;
@@ -436,7 +444,7 @@ class _LandingScreenState extends State<LandingScreen>
           if (apk != null && apk.isNotEmpty && (apk.startsWith('http://') || apk.startsWith('https://'))) {
             final lower = apk.toLowerCase();
             apkUrl = (lower.endsWith('.apk') || lower.contains('/apk/'))
-                ? _androidStoreUrlFallback
+                ? kDefaultPlayStoreUrl
                 : apk;
           }
           if (tf != null && tf.isNotEmpty && (tf.startsWith('http://') || tf.startsWith('https://'))) testFlightUrl = tf;
@@ -448,6 +456,15 @@ class _LandingScreenState extends State<LandingScreen>
       final snap = await FirebaseFirestore.instance.collection('app_config').doc('version').get().timeout(const Duration(seconds: 3));
       final data = snap.data();
       if (data != null) {
+        final apk = data['apkDownloadUrl']?.toString().trim();
+        if (apk != null &&
+            apk.isNotEmpty &&
+            (apk.startsWith('http://') || apk.startsWith('https://'))) {
+          final lower = apk.toLowerCase();
+          apkUrl = (lower.endsWith('.apk') || lower.contains('/apk/'))
+              ? kDefaultPlayStoreUrl
+              : apk;
+        }
         final tf = data['testFlightUrl']?.toString().trim();
         if (tf != null && tf.isNotEmpty && (tf.startsWith('http://') || tf.startsWith('https://'))) testFlightUrl = tf;
         if (version == null && data['version'] != null) version = data['version']?.toString().trim();
@@ -500,7 +517,10 @@ class _LandingScreenState extends State<LandingScreen>
       future: _fetchDownloadUrls(),
       builder: (context, snapshot) {
         final data = snapshot.data ?? _downloadUrlsFallback;
-        final apkUrl = data.apkUrl;
+        final apkUrl = _resolvePlayStoreUrl(data.apkUrl);
+        final playLabel = _landing.divPlayStoreLabel.trim().isNotEmpty
+            ? _landing.divPlayStoreLabel.trim()
+            : 'Google Play';
         final testFlightUrl = data.testFlightUrl;
         final version = data.version;
         return Container(
@@ -551,7 +571,7 @@ class _LandingScreenState extends State<LandingScreen>
                           },
                           icon: Icon(Icons.shop_rounded, size: 16, color: Colors.white.withValues(alpha: 0.85)),
                           label: Text(
-                            'Google Play',
+                            playLabel,
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
                               fontSize: 13,
@@ -623,6 +643,8 @@ class _LandingScreenState extends State<LandingScreen>
                       ),
                 ],
               ),
+              const SizedBox(height: 14),
+              OfficialSocialTopButtons.fromLanding(_landing),
             ],
           ),
         );

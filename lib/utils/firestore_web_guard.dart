@@ -16,6 +16,22 @@ class FirestoreWebGuard {
         msg.contains('__PRIVATE__TargetState');
   }
 
+  /// Erros do SDK Web que exigem `terminate()` + nova tentativa (não chamar recovery antes da operação).
+  static bool isRecoverableFirestoreWebError(Object e) {
+    if (isInternalAssertionError(e)) return true;
+    final msg = e.toString().toLowerCase();
+    if (msg.contains('client has already been terminated') ||
+        msg.contains('already been terminated')) {
+      return true;
+    }
+    if (e is FirebaseException &&
+        e.code == 'failed-precondition' &&
+        msg.contains('terminated')) {
+      return true;
+    }
+    return false;
+  }
+
   static void applyWebFirestoreSettings() {
     if (!kIsWeb) return;
     try {
@@ -75,15 +91,15 @@ class FirestoreWebGuard {
     await stabilizeAfterWebSignIn();
   }
 
-  /// Executa [fn]; em erro interno do Firestore Web, recupera e tenta de novo (1x).
+  /// Executa [fn]; em erro recuperável do Firestore Web, recupera e tenta de novo (1x).
   static Future<T> runWithWebRecovery<T>(Future<T> Function() fn) async {
     try {
       return await fn();
     } catch (e, st) {
-      if (!kIsWeb || !isInternalAssertionError(e)) {
+      if (!kIsWeb || !isRecoverableFirestoreWebError(e)) {
         Error.throwWithStackTrace(e, st);
       }
-      debugPrint('FirestoreWebGuard: recuperando sessão Web após assert…');
+      debugPrint('FirestoreWebGuard: recuperando sessão Web após erro…');
       await recoverFirestoreWebSession();
       return await fn();
     }

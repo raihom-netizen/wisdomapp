@@ -1,5 +1,5 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'finance_line_opening.dart';
+import 'finance_server_totals.dart';
 import 'finance_transactions_realtime.dart';
 
 /// Totais do período (mesmas regras de filtro de status que o painel Financeiro).
@@ -35,6 +35,24 @@ class FinancePeriodSummary {
       final x = f;
       f = DateTime(t.year, t.month, t.day);
       t = DateTime(x.year, x.month, x.day, 23, 59, 59);
+    }
+
+    final canUseServer = categoryExact == null || categoryExact.isEmpty;
+    if (canUseServer) {
+      try {
+        final server = await FinanceServerTotals.load(
+          uid: uid,
+          from: f,
+          to: t,
+          statusFilter: statusFilter == 'all' ? 'paid' : statusFilter,
+          typeFilter: typeFilter == 'income' || typeFilter == 'expense' || typeFilter == 'all'
+              ? typeFilter
+              : 'all',
+        );
+        return (income: server.income, expense: server.expense, docCount: 0);
+      } catch (_) {
+        // Fallback: agregação local abaixo.
+      }
     }
 
     // Mescla date + effectiveDate — agregado só em [date] perde lançamentos migrados.

@@ -176,6 +176,7 @@ class FunctionsService {
     required DateTime from,
     required DateTime to,
     String statusFilter = 'paid',
+    String typeFilter = 'all',
   }) async {
     final res = await _fn
         .httpsCallable(
@@ -186,8 +187,32 @@ class FunctionsService {
       'fromISO': DateTime(from.year, from.month, from.day).toIso8601String(),
       'toISO': DateTime(to.year, to.month, to.day, 23, 59, 59).toIso8601String(),
       'statusFilter': statusFilter,
+      'typeFilter': typeFilter,
     });
     return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  /// Compromissos/lembretes num intervalo (servidor — evita stream sem filtro).
+  Future<List<Map<String, dynamic>>> agendaRemindersForRange({
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    final res = await _fn
+        .httpsCallable(
+      'ctAgendaRemindersForRange',
+      options: HttpsCallableOptions(timeout: const Duration(seconds: 60)),
+    )
+        .call<Map<String, dynamic>>({
+      'fromISO': DateTime(from.year, from.month, from.day).toIso8601String(),
+      'toISO': DateTime(to.year, to.month, to.day, 23, 59, 59).toIso8601String(),
+    });
+    final data = Map<String, dynamic>.from(res.data as Map);
+    final raw = data['items'];
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
   }
 
   /// Cria par de lançamentos de transferência (saída + entrada) no servidor.

@@ -78,6 +78,9 @@ import '../widgets/admin/admin_mercado_pago_tab.dart';
 import '../widgets/admin/admin_partner_resumo_tab.dart';
 import '../widgets/admin/admin_partner_receipts_tab.dart';
 import '../widgets/admin/admin_page_shell.dart';
+import '../utils/firestore_reliable_read.dart';
+import '../utils/firestore_retry.dart';
+import '../utils/firestore_web_guard.dart';
 
 /// Quando [useUnifiedPanel] é true, exibe seletor Gestão Yahweh | CASER | Gestão Frotas e filtra usuários por [app].
 class AdminScreen extends StatefulWidget {
@@ -108,6 +111,8 @@ class _AdminScreenState extends State<AdminScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final GlobalKey<AdminMercadoPagoTabState> _mpAdminTabKey =
       GlobalKey<AdminMercadoPagoTabState>();
+  final GlobalKey<_RecebimentosPixSectionState> _mpPixSectionKey =
+      GlobalKey<_RecebimentosPixSectionState>();
 
   bool _isAdminMobile(BuildContext context) =>
       AdminResponsive.useMobileLayout(context);
@@ -1072,6 +1077,20 @@ class _AdminScreenState extends State<AdminScreen> {
       payload[f.key] = _divulgacaoCtrls[f.key]!.text.trim();
     }
     await _landingDoc.set(payload, SetOptions(merge: true));
+    final playUrl = _divulgacaoCtrls['divPlayStoreUrl']?.text.trim() ?? '';
+    if (playUrl.isNotEmpty &&
+        (playUrl.startsWith('http://') || playUrl.startsWith('https://'))) {
+      await FirebaseFirestore.instance
+          .collection('app_config')
+          .doc('version')
+          .set(
+        {
+          'apkDownloadUrl': playUrl,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+    }
   }
 
   static const int _usersListLimit = 2000;
@@ -1079,7 +1098,37 @@ class _AdminScreenState extends State<AdminScreen> {
   /// Soma, gráfico e estimativa de MB: no máx. N docs (mais recentes no período) para o painel não fazer leitura ilimitada.
   static const int _kAdminTxMaxDetailDocs = 15000;
 
-  Future<_AdminStats> _loadStats({int periodDays = 30}) async {
+  String _formatAdminResumoError(Object error) {
+    if (FirestoreWebGuard.isInternalAssertionError(error)) {
+      return 'Instabilidade temporária do Firestore na Web. '
+          'Toque em «Tentar novamente» (ou atualize a página).';
+    }
+    final msg = error.toString().split('\n').first.trim();
+    if (msg.length > 220) return '${msg.substring(0, 220)}…';
+    return msg;
+  }
+
+  Future<void> _reloadResumoStats() async {
+    if (kIsWeb) {
+      await FirestoreWebGuard.recoverFirestoreWebSession().catchError((_) {});
+    }
+    if (!mounted) return;
+    setState(() {
+      _statsFuture = _loadStats(periodDays: _resumoPeriodDays);
+    });
+  }
+
+  Future<_AdminStats> _loadStats({int periodDays = 30}) {
+    Future<_AdminStats> core() => _loadStatsCore(periodDays: periodDays);
+    if (kIsWeb) {
+      return runFirestoreWithRetry(
+        () => FirestoreWebGuard.runWithWebRecovery(core),
+      );
+    }
+    return runFirestoreWithRetry(core);
+  }
+
+  Future<_AdminStats> _loadStatsCore({int periodDays = 30}) async {
     final now = DateTime.now();
     Query<Map<String, dynamic>> usersQuery =
         FirebaseFirestore.instance.collection('users');
@@ -1121,11 +1170,11 @@ class _AdminScreenState extends State<AdminScreen> {
             .get();
         usersWithPartnership = pw.count ?? 0;
       } catch (_) {}
-      final sampleSnap = await usersQuery.limit(6).get();
+      final sampleSnap = await firestoreQueryGetReliable(usersQuery.limit(6));
       usersSample = sampleSnap.docs.map((d) => d.data()).toList();
       docsForLicenses = [];
     } catch (_) {
-      final usersSnap = await usersQuery.limit(5000).get();
+      final usersSnap = await firestoreQueryGetReliable(usersQuery.limit(5000));
       totalUsers = usersSnap.size;
       usersSample = usersSnap.docs.take(6).map((d) => d.data()).toList();
       docsForLicenses = usersSnap.docs;
@@ -1148,8 +1197,9 @@ class _AdminScreenState extends State<AdminScreen> {
     }
 
     try {
-      final pSnap =
-          await FirebaseFirestore.instance.collection('partnerships').get();
+      final pSnap = await firestoreQueryGetReliable(
+        FirebaseFirestore.instance.collection('partnerships'),
+      );
       final catalog = parsePartnershipPlansSnapshot(pSnap);
       if (catalog.isNotEmpty) {
         final metrics = await Future.wait(
@@ -1201,20 +1251,22 @@ class _AdminScreenState extends State<AdminScreen> {
     try {
       QuerySnapshot<Map<String, dynamic>> mpSnap;
       try {
-        mpSnap = await FirebaseFirestore.instance
-            .collection('mp_payments')
-            .where('status', isEqualTo: 'approved')
-            .where('dateApprovedAt',
-                isGreaterThanOrEqualTo: Timestamp.fromDate(periodStart))
-            .orderBy('dateApprovedAt', descending: true)
-            .limit(800)
-            .get();
+        mpSnap = await firestoreQueryGetReliable(
+          FirebaseFirestore.instance
+              .collection('mp_payments')
+              .where('status', isEqualTo: 'approved')
+              .where('dateApprovedAt',
+                  isGreaterThanOrEqualTo: Timestamp.fromDate(periodStart))
+              .orderBy('dateApprovedAt', descending: true)
+              .limit(800),
+        );
       } catch (_) {
-        mpSnap = await FirebaseFirestore.instance
-            .collection('mp_payments')
-            .where('status', isEqualTo: 'approved')
-            .limit(2000)
-            .get();
+        mpSnap = await firestoreQueryGetReliable(
+          FirebaseFirestore.instance
+              .collection('mp_payments')
+              .where('status', isEqualTo: 'approved')
+              .limit(2000),
+        );
       }
       final allForLast = <Map<String, dynamic>>[];
       for (final d in mpSnap.docs) {
@@ -1327,8 +1379,10 @@ class _AdminScreenState extends State<AdminScreen> {
 
     try {
       final uSamp = await Future.wait<QuerySnapshot<Map<String, dynamic>>>([
-        usersQuery.limit(300).get(),
-        usersQuery.orderBy('createdAt', descending: true).limit(1).get(),
+        firestoreQueryGetReliable(usersQuery.limit(300)),
+        firestoreQueryGetReliable(
+          usersQuery.orderBy('createdAt', descending: true).limit(1),
+        ),
       ]);
       final usersSampleForSize = uSamp[0];
       final latestUser = uSamp[1];
@@ -1356,16 +1410,14 @@ class _AdminScreenState extends State<AdminScreen> {
       final cSnap = await baseTx.count().get();
       txCount30d = cSnap.count ?? 0;
       if (txCount30d != 0) {
-        final latestAndDetail =
-            await Future.wait<QuerySnapshot<Map<String, dynamic>>>([
-          baseTx.orderBy('date', descending: true).limit(1).get(),
+        final latestTxSnap = await firestoreQueryGetReliable(
+          baseTx.orderBy('date', descending: true).limit(1),
+        );
+        final txDetailSnap = await firestoreQueryGetReliable(
           baseTx
               .orderBy('date', descending: true)
-              .limit(_kAdminTxMaxDetailDocs)
-              .get(),
-        ]);
-        final latestTxSnap = latestAndDetail[0];
-        final txDetailSnap = latestAndDetail[1];
+              .limit(_kAdminTxMaxDetailDocs),
+        );
         if (latestTxSnap.docs.isNotEmpty) {
           final ts0 = latestTxSnap.docs.first.data()['date'];
           if (ts0 is Timestamp) latestTransactionAt = ts0.toDate();
@@ -1471,13 +1523,14 @@ class _AdminScreenState extends State<AdminScreen> {
       licensesExpiring7d = licAggs[1].count ?? 0;
       licenseExpiryHorizonCounts = List<int>.filled(nLicBuckets, 0);
       try {
-        final horizonSnap = await licQ
-            .where('licenseExpiresAt',
-                isGreaterThanOrEqualTo: Timestamp.fromDate(startOfToday))
-            .where('licenseExpiresAt',
-                isLessThanOrEqualTo: Timestamp.fromDate(horizonEndEod))
-            .limit(1500)
-            .get();
+        final horizonSnap = await firestoreQueryGetReliable(
+          licQ
+              .where('licenseExpiresAt',
+                  isGreaterThanOrEqualTo: Timestamp.fromDate(startOfToday))
+              .where('licenseExpiresAt',
+                  isLessThanOrEqualTo: Timestamp.fromDate(horizonEndEod))
+              .limit(1500),
+        );
         for (final doc in horizonSnap.docs) {
           final expRaw = doc.data()['licenseExpiresAt'];
           if (expRaw is! Timestamp) continue;
@@ -4846,14 +4899,13 @@ class _AdminScreenState extends State<AdminScreen> {
                         Icon(Icons.error_outline_rounded,
                             size: 48, color: Colors.orange.shade700),
                         const SizedBox(height: 12),
-                        Text('Erro ao carregar: ${snap.error}',
+                        Text('Erro ao carregar: ${_formatAdminResumoError(snap.error!)}',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                                 color: Colors.grey.shade700, fontSize: 13)),
                         const SizedBox(height: 16),
                         FilledButton.icon(
-                          onPressed: () => setState(() => _statsFuture =
-                              _loadStats(periodDays: _resumoPeriodDays)),
+                          onPressed: _reloadResumoStats,
                           icon: const Icon(Icons.refresh_rounded),
                           label: const Text('Tentar novamente'),
                         ),
@@ -5949,11 +6001,111 @@ class _AdminScreenState extends State<AdminScreen> {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            'YouTube, Instagram e WhatsApp exibidos na faixa do site. Salve com o botão abaixo.',
+                            'YouTube, Instagram e WhatsApp na barra superior do site e apps (landing). Salve com o botão abaixo.',
                             style: TextStyle(fontSize: 12, color: Colors.grey.shade700, height: 1.35),
                           ),
                           const SizedBox(height: 14),
                           ...kLandingOfficialChannelsFields.map(
+                            (f) => _LandingField(
+                              controller: _divulgacaoCtrls[f.key]!,
+                              label: f.label,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            const Color(0xFF34A853).withValues(alpha: 0.08),
+                            const Color(0xFF0A1F56).withValues(alpha: 0.06),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                            color: const Color(0xFF34A853).withValues(alpha: 0.35)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.shop_rounded,
+                                  color: Colors.green.shade700),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Baixar o app (Google Play)',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleSmall
+                                    ?.copyWith(fontWeight: FontWeight.w800),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Link do botão «Google Play» na barra «Baixar o app» do site. '
+                            'Também sincroniza com app_config/version (avisos de atualização).',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade700,
+                                height: 1.35),
+                          ),
+                          const SizedBox(height: 14),
+                          ...kLandingAppDownloadFields.map(
+                            (f) => _LandingField(
+                              controller: _divulgacaoCtrls[f.key]!,
+                              label: f.label,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            const Color(0xFFBE185D).withValues(alpha: 0.08),
+                            const Color(0xFFD4AF37).withValues(alpha: 0.06),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                            color: const Color(0xFFBE185D).withValues(alpha: 0.35)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.person_rounded,
+                                  color: Colors.pink.shade700),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Livro e mentor (Tarley)',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleSmall
+                                    ?.copyWith(fontWeight: FontWeight.w800),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Seção «Um Degrau Abaixo» e botões do mentor na página /divulgacao. '
+                            'Instagram padrão: @wisdomappgo.',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade700,
+                                height: 1.35),
+                          ),
+                          const SizedBox(height: 14),
+                          ...kLandingMentorTarleyFields.map(
                             (f) => _LandingField(
                               controller: _divulgacaoCtrls[f.key]!,
                               label: f.label,
@@ -6031,13 +6183,18 @@ class _AdminScreenState extends State<AdminScreen> {
             subtitle: 'Gráficos e transações Mercado Pago — somente leitura.',
           ),
           const SizedBox(height: 16),
-          _RecebimentosPixSection(),
+          _RecebimentosPixSection(key: _mpPixSectionKey),
         ],
       );
     }
     return RefreshIndicator(
       onRefresh: () async {
-        await _mpAdminTabKey.currentState?.reload();
+        await Future.wait([
+          if (_mpAdminTabKey.currentState != null)
+            _mpAdminTabKey.currentState!.reload(),
+          if (_mpPixSectionKey.currentState != null)
+            _mpPixSectionKey.currentState!.reloadPayments(),
+        ]);
       },
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -6051,7 +6208,7 @@ class _AdminScreenState extends State<AdminScreen> {
           const SizedBox(height: 24),
           _ZonaEmergenciaMpCard(),
           const SizedBox(height: 20),
-          _RecebimentosPixSection(),
+          _RecebimentosPixSection(key: _mpPixSectionKey),
         ],
       ),
     );
@@ -7145,7 +7302,7 @@ class _MercadoPagoTabContentState extends State<_MercadoPagoTabContent> {
           const SizedBox(height: 24),
           _ZonaEmergenciaMpCard(),
           const SizedBox(height: 20),
-          _RecebimentosPixSection(),
+          const _RecebimentosPixSection(),
         ],
       ),
     );
@@ -7638,6 +7795,8 @@ Widget _RecebCard(String label, double value, Color color) {
 
 /// Seção de recebimentos PIX no admin: lista pagamentos da coleção mp_payments.
 class _RecebimentosPixSection extends StatefulWidget {
+  const _RecebimentosPixSection({super.key});
+
   @override
   State<_RecebimentosPixSection> createState() =>
       _RecebimentosPixSectionState();
@@ -7670,6 +7829,49 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
   Map<String, String> _uidDisplayCache = {};
   String _uidDisplayCacheKey = '';
   Future<Map<String, String>>? _uidDisplayFuture;
+
+  bool _loadingPayments = true;
+  String? _loadPaymentsError;
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _allPaymentDocs = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPayments();
+  }
+
+  /// Recarrega a lista (pull-to-refresh ou após sync manual).
+  Future<void> reloadPayments() => _loadPayments();
+
+  Future<void> _loadPayments() async {
+    if (!mounted) return;
+    setState(() {
+      _loadingPayments = true;
+      _loadPaymentsError = null;
+    });
+    try {
+      if (kIsWeb) {
+        await FirestoreWebGuard.recoverFirestoreWebSession().catchError((_) {});
+      }
+      final snap = await firestoreQueryGetReliable(
+        FirebaseFirestore.instance.collection('mp_payments').limit(500),
+      );
+      if (!mounted) return;
+      setState(() {
+        _allPaymentDocs = snap.docs;
+        _loadingPayments = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _allPaymentDocs = [];
+        _loadingPayments = false;
+        _loadPaymentsError = FirestoreWebGuard.isInternalAssertionError(e)
+            ? 'Instabilidade do Firestore na Web. Toque em Atualizar ou recarregue a página (F5).'
+            : 'Não foi possível carregar os pagamentos.';
+      });
+    }
+  }
 
   void _ensureUserDisplayFuture(List<String> uids) {
     final key = uids.join('|');
@@ -7790,6 +7992,7 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
           _syncError = null;
           if ((res['activated'] ?? res['ok']) == true) _emailSyncCtrl.clear();
         });
+        await _loadPayments();
       }
     } catch (e) {
       if (mounted) {
@@ -7837,6 +8040,7 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
           _syncError = null;
           _paymentIdCtrl.clear();
         });
+        await _loadPayments();
       }
     } catch (e) {
       if (mounted) {
@@ -8229,310 +8433,367 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
                 onSelected: (_) => setState(() => _orderByUser = true),
                 selectedColor: AppColors.primary.withValues(alpha: 0.3),
               ),
+              const Spacer(),
+              IconButton(
+                tooltip: 'Atualizar lista',
+                onPressed: _loadingPayments ? null : _loadPayments,
+                icon: _loadingPayments
+                    ? SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.primary,
+                        ),
+                      )
+                    : Icon(Icons.refresh_rounded, color: AppColors.primary),
+              ),
             ],
           ),
           const SizedBox(height: 16),
-          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
-                .collection('mp_payments')
-                .limit(500)
-                .snapshots(),
-            builder: (context, snap) {
-              if (snap.hasError) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.error_outline_rounded,
-                            size: 40, color: Colors.orange.shade700),
-                        const SizedBox(height: 12),
-                        Text('Erro ao carregar pagamentos.',
-                            style: TextStyle(color: Colors.grey.shade700)),
-                      ],
-                    ),
+          _buildPaymentsList(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaymentsList() {
+    if (_loadingPayments) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+    if (_loadPaymentsError != null) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.orange.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.orange.shade200),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.cloud_off_rounded, size: 40, color: Colors.orange.shade800),
+            const SizedBox(height: 10),
+            Text(
+              _loadPaymentsError!,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.orange.shade900, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: _loadPayments,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text('Tentar novamente'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final allDocs = _allPaymentDocs;
+    if (allDocs.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.inbox_rounded, size: 40, color: Colors.grey.shade400),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                'Nenhum pagamento registrado ainda. Quando houver vendas via '
+                'Mercado Pago, elas aparecerão aqui.',
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 14, height: 1.35),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final startDay =
+        DateTime(_filterStart.year, _filterStart.month, _filterStart.day);
+    final endDay = DateTime(
+        _filterEnd.year, _filterEnd.month, _filterEnd.day, 23, 59, 59);
+    var docs = allDocs.where((d) {
+      final data = d.data();
+      if (data['isOutgoing'] == true) return false;
+      final dt = _parseApprovedDate(data);
+      if (dt == null) return true;
+      final day = DateTime(dt.year, dt.month, dt.day);
+      if (day.isBefore(startDay) || day.isAfter(endDay)) return false;
+      if (_filterStatus == 'approved' && (data['status'] ?? '') != 'approved') {
+        return false;
+      }
+      if (_filterStatus == 'cancelled' &&
+          (data['status'] ?? '') != 'cancelled') {
+        return false;
+      }
+      return true;
+    }).toList();
+    final uniqueUids = docs
+        .map((d) => (d.data()['uid'] ?? '').toString())
+        .where((s) => s.isNotEmpty)
+        .toSet()
+        .toList();
+    _ensureUserDisplayFuture(uniqueUids);
+    return FutureBuilder<Map<String, String>>(
+      future: _uidDisplayFuture,
+      builder: (context, userSnap) {
+        if (userSnap.connectionState == ConnectionState.waiting &&
+            uniqueUids.isNotEmpty &&
+            userSnap.data == null &&
+            _uidDisplayCache.isEmpty) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+        final uidToDisplay = userSnap.data ?? _uidDisplayCache;
+        var filteredDocs = docs;
+        if (_recipientFilter != 'all') {
+          filteredDocs = filteredDocs
+              .where((d) => _matchesRecipientFilter(d.data(), _recipientFilter))
+              .toList();
+        }
+        if (_searchQuery.isNotEmpty) {
+          final q = _searchQuery.toLowerCase();
+          filteredDocs = docs.where((d) {
+            final data = d.data();
+            final uid = (data['uid'] ?? '').toString();
+            final fromPayer = _parseUserDisplay(data) ?? '';
+            final fromUser = uidToDisplay[uid] ?? '';
+            final combined = '$fromPayer $fromUser $uid'.toLowerCase();
+            return combined.contains(q);
+          }).toList();
+        }
+        filteredDocs = filteredDocs.toList()
+          ..sort((a, b) {
+            final ta = a.data()['updatedAt'] is Timestamp
+                ? (a.data()['updatedAt'] as Timestamp).millisecondsSinceEpoch
+                : 0;
+            final tb = b.data()['updatedAt'] is Timestamp
+                ? (b.data()['updatedAt'] as Timestamp).millisecondsSinceEpoch
+                : 0;
+            if (_orderByUser) {
+              final uidA = (a.data()['uid'] ?? '').toString();
+              final uidB = (b.data()['uid'] ?? '').toString();
+              final displayA =
+                  _parseUserDisplay(a.data()) ?? uidToDisplay[uidA] ?? uidA;
+              final displayB =
+                  _parseUserDisplay(b.data()) ?? uidToDisplay[uidB] ?? uidB;
+              final cmp =
+                  displayA.toLowerCase().compareTo(displayB.toLowerCase());
+              if (cmp != 0) return cmp;
+            }
+            return tb.compareTo(ta);
+          });
+        if (filteredDocs.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.inbox_rounded, size: 40, color: Colors.grey.shade400),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    _searchQuery.isNotEmpty || _filterStatus != 'all'
+                        ? 'Nenhum pagamento com os filtros aplicados.'
+                        : 'Nenhum pagamento no período. Ajuste o filtro ou aguarde novos pagamentos.',
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
                   ),
-                );
-              }
-              if (!snap.hasData) {
-                return const Center(
-                    child: Padding(
-                        padding: EdgeInsets.all(24),
-                        child: CircularProgressIndicator()));
-              }
-              final allDocs = snap.data!.docs.toList();
-              final startDay = DateTime(
-                  _filterStart.year, _filterStart.month, _filterStart.day);
-              final endDay = DateTime(_filterEnd.year, _filterEnd.month,
-                  _filterEnd.day, 23, 59, 59);
-              var docs = allDocs.where((d) {
-                final data = d.data();
-                if (data['isOutgoing'] == true)
-                  return false; // Saída (admin pagou) — não listar como recebimento
-                final dt = _parseApprovedDate(data);
-                if (dt == null) return true;
-                final day = DateTime(dt.year, dt.month, dt.day);
-                if (day.isBefore(startDay) || day.isAfter(endDay)) return false;
-                if (_filterStatus == 'approved' &&
-                    (data['status'] ?? '') != 'approved') return false;
-                if (_filterStatus == 'cancelled' &&
-                    (data['status'] ?? '') != 'cancelled') return false;
-                return true;
-              }).toList();
-              final uniqueUids = docs
-                  .map((d) => (d.data()['uid'] ?? '').toString())
-                  .where((s) => s.isNotEmpty)
-                  .toSet()
-                  .toList();
-              _ensureUserDisplayFuture(uniqueUids);
-              return FutureBuilder<Map<String, String>>(
-                future: _uidDisplayFuture,
-                builder: (context, userSnap) {
-                  final uidToDisplay = userSnap.data ?? _uidDisplayCache;
-                  var filteredDocs = docs;
-                  if (_recipientFilter != 'all') {
-                    filteredDocs = filteredDocs
-                        .where((d) => _matchesRecipientFilter(d.data(), _recipientFilter))
-                        .toList();
+                ),
+              ],
+            ),
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () async {
+                  final sb = StringBuffer();
+                  sb.writeln('Data;Horário;Usuário;UID;Plano;Valor;Status');
+                  for (final d in filteredDocs) {
+                    final data = d.data();
+                    final uid = (data['uid'] ?? '').toString();
+                    final plan = (data['plan'] ?? '').toString();
+                    final status = (data['status'] ?? '').toString();
+                    final userDisplay =
+                        _parseUserDisplay(data) ?? uidToDisplay[uid] ?? '';
+                    final raw = data['raw'] as Map?;
+                    final amt = raw?['transaction_amount'] ?? 0;
+                    final val =
+                        amt is num ? amt : double.tryParse(amt.toString()) ?? 0;
+                    final dt = _parseApprovedDate(data);
+                    final dtStr =
+                        dt != null ? DateFormat('dd/MM/yyyy').format(dt) : '';
+                    final horaStr =
+                        dt != null ? DateFormat('HH:mm').format(dt) : '';
+                    sb.writeln(
+                        '$dtStr;$horaStr;$userDisplay;$uid;$plan;${val.toStringAsFixed(2)};$status');
                   }
-                  if (_searchQuery.isNotEmpty) {
-                    final q = _searchQuery.toLowerCase();
-                    filteredDocs = docs.where((d) {
-                      final data = d.data();
-                      final uid = (data['uid'] ?? '').toString();
-                      final fromPayer = _parseUserDisplay(data) ?? '';
-                      final fromUser = uidToDisplay[uid] ?? '';
-                      final combined =
-                          '$fromPayer $fromUser $uid'.toLowerCase();
-                      return combined.contains(q);
-                    }).toList();
-                  }
-                  filteredDocs = filteredDocs.toList()
-                    ..sort((a, b) {
-                      final ta = a.data()['updatedAt'] is Timestamp
-                          ? (a.data()['updatedAt'] as Timestamp)
-                              .millisecondsSinceEpoch
-                          : 0;
-                      final tb = b.data()['updatedAt'] is Timestamp
-                          ? (b.data()['updatedAt'] as Timestamp)
-                              .millisecondsSinceEpoch
-                          : 0;
-                      if (_orderByUser) {
-                        final uidA = (a.data()['uid'] ?? '').toString();
-                        final uidB = (b.data()['uid'] ?? '').toString();
-                        final displayA = _parseUserDisplay(a.data()) ??
-                            uidToDisplay[uidA] ??
-                            uidA;
-                        final displayB = _parseUserDisplay(b.data()) ??
-                            uidToDisplay[uidB] ??
-                            uidB;
-                        final cmp = displayA
-                            .toLowerCase()
-                            .compareTo(displayB.toLowerCase());
-                        if (cmp != 0) return cmp;
-                      }
-                      return tb.compareTo(ta);
-                    });
-                  if (filteredDocs.isEmpty) {
-                    return Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.inbox_rounded,
-                              size: 40, color: Colors.grey.shade400),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Text(
-                              _searchQuery.isNotEmpty || _filterStatus != 'all'
-                                  ? 'Nenhum pagamento com os filtros aplicados.'
-                                  : 'Nenhum pagamento no período. Ajuste o filtro ou aguarde novos pagamentos.',
-                              style: TextStyle(
-                                  color: Colors.grey.shade600, fontSize: 14),
-                            ),
-                          ),
-                        ],
+                  await Clipboard.setData(ClipboardData(text: sb.toString()));
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'CSV copiado (${filteredDocs.length} itens). Cole em um arquivo .csv para salvar.',
+                        ),
                       ),
                     );
                   }
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton.icon(
-                          onPressed: () async {
-                            final sb = StringBuffer();
-                            sb.writeln(
-                                'Data;Horário;Usuário;UID;Plano;Valor;Status');
-                            for (final d in filteredDocs) {
-                              final data = d.data();
-                              final uid = (data['uid'] ?? '').toString();
-                              final plan = (data['plan'] ?? '').toString();
-                              final status = (data['status'] ?? '').toString();
-                              final userDisplay = _parseUserDisplay(data) ??
-                                  uidToDisplay[uid] ??
-                                  '';
-                              final raw = data['raw'] as Map?;
-                              final amt = raw?['transaction_amount'] ?? 0;
-                              final val = amt is num
-                                  ? amt
-                                  : double.tryParse(amt.toString()) ?? 0;
-                              final dt = _parseApprovedDate(data);
-                              final dtStr = dt != null
-                                  ? DateFormat('dd/MM/yyyy').format(dt)
-                                  : '';
-                              final horaStr = dt != null
-                                  ? DateFormat('HH:mm').format(dt)
-                                  : '';
-                              sb.writeln(
-                                  '$dtStr;$horaStr;$userDisplay;$uid;$plan;${val.toStringAsFixed(2)};$status');
-                            }
-                            await Clipboard.setData(
-                                ClipboardData(text: sb.toString()));
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                    content: Text(
-                                        'CSV copiado (${filteredDocs.length} itens). Cole em um arquivo .csv para salvar.')),
-                              );
-                            }
-                          },
-                          icon: const Icon(Icons.download_rounded, size: 18),
-                          label: const Text('Exportar CSV'),
-                        ),
+                },
+                icon: const Icon(Icons.download_rounded, size: 18),
+                label: const Text('Exportar CSV'),
+              ),
+            ),
+            ...filteredDocs.map((d) {
+              final data = d.data();
+              final uid = (data['uid'] ?? '').toString();
+              final plan = (data['plan'] ?? '').toString();
+              final planCode = (data['planCode'] ?? '').toString();
+              final status = (data['status'] ?? '').toString();
+              final raw = data['raw'] as Map<String, dynamic>?;
+              final amount = raw?['transaction_amount'] ?? 0;
+              final isApproved = status == 'approved';
+              final userDisplay = _parseUserDisplay(data) ??
+                  uidToDisplay[uid] ??
+                  (uid.isNotEmpty
+                      ? 'UID ${uid.substring(0, uid.length.clamp(0, 12))}${uid.length > 12 ? '…' : ''}'
+                      : '—');
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isApproved
+                      ? AppColors.success.withValues(alpha: 0.08)
+                      : Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isApproved
+                        ? AppColors.success.withValues(alpha: 0.3)
+                        : Colors.grey.shade200,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      isApproved
+                          ? Icons.check_circle_rounded
+                          : Icons.schedule_rounded,
+                      color: isApproved ? AppColors.success : Colors.orange,
+                      size: 28,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Usuário: $userDisplay',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (uid.isNotEmpty)
+                            Text(
+                              'UID: ${uid.substring(0, uid.length.clamp(0, 14))}${uid.length > 14 ? '…' : ''}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          Text(
+                            'Plano: $plan • ${planCode.isNotEmpty ? planCode : ''}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                          if (data['splitEnabled'] == true ||
+                              data['splitOwnerShareGross'] != null) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              'Split: ${AppBrand.developerName} '
+                              '${CurrencyFormats.formatBRL((data['splitOwnerShareGross'] as num?)?.toDouble() ?? 0)} · '
+                              '${AppBrand.idealizerName} '
+                              '${CurrencyFormats.formatBRL((data['splitPartnerShareGross'] as num?)?.toDouble() ?? 0)}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ],
+                          _buildDateAndTime(data),
+                        ],
                       ),
-                      ...filteredDocs.map((d) {
-                        final data = d.data();
-                        final uid = (data['uid'] ?? '').toString();
-                        final plan = (data['plan'] ?? '').toString();
-                        final planCode = (data['planCode'] ?? '').toString();
-                        final status = (data['status'] ?? '').toString();
-                        final raw = data['raw'] as Map<String, dynamic>?;
-                        final amount = raw?['transaction_amount'] ?? 0;
-                        final isApproved = status == 'approved';
-                        final userDisplay = _parseUserDisplay(data) ??
-                            uidToDisplay[uid] ??
-                            (uid.isNotEmpty
-                                ? 'UID ${uid.substring(0, uid.length.clamp(0, 12))}${uid.length > 12 ? '…' : ''}'
-                                : '—');
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.all(12),
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          CurrencyFormats.formatBRL(amount is num
+                              ? amount
+                              : double.tryParse(amount.toString()) ?? 0),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                            color: isApproved
+                                ? AppColors.success
+                                : Colors.grey.shade700,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
                             color: isApproved
-                                ? AppColors.success.withValues(alpha: 0.08)
-                                : Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                                color: isApproved
-                                    ? AppColors.success.withValues(alpha: 0.3)
-                                    : Colors.grey.shade200),
+                                ? AppColors.success.withValues(alpha: 0.2)
+                                : Colors.orange.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                isApproved
-                                    ? Icons.check_circle_rounded
-                                    : Icons.schedule_rounded,
-                                color: isApproved
-                                    ? AppColors.success
-                                    : Colors.orange,
-                                size: 28,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text('Usuário: $userDisplay',
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 13),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis),
-                                    if (uid.isNotEmpty)
-                                      Text(
-                                          'UID: ${uid.substring(0, uid.length.clamp(0, 14))}${uid.length > 14 ? '…' : ''}',
-                                          style: TextStyle(
-                                              fontSize: 11,
-                                              color: Colors.grey.shade600)),
-                                    Text(
-                                        'Plano: $plan • ${planCode.isNotEmpty ? planCode : ''}',
-                                        style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey.shade700)),
-                                    if (data['splitEnabled'] == true ||
-                                        data['splitOwnerShareGross'] != null) ...[
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Split: ${AppBrand.developerName} '
-                                        '${CurrencyFormats.formatBRL((data['splitOwnerShareGross'] as num?)?.toDouble() ?? 0)} · '
-                                        '${AppBrand.idealizerName} '
-                                        '${CurrencyFormats.formatBRL((data['splitPartnerShareGross'] as num?)?.toDouble() ?? 0)}',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w700,
-                                          color: AppColors.primary,
-                                        ),
-                                      ),
-                                    ],
-                                    _buildDateAndTime(data),
-                                  ],
-                                ),
-                              ),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Text(
-                                      CurrencyFormats.formatBRL(amount is num
-                                          ? amount
-                                          : double.tryParse(
-                                                  amount.toString()) ??
-                                              0),
-                                      style: TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 16,
-                                          color: isApproved
-                                              ? AppColors.success
-                                              : Colors.grey.shade700)),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: isApproved
-                                          ? AppColors.success
-                                              .withValues(alpha: 0.2)
-                                          : Colors.orange
-                                              .withValues(alpha: 0.2),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(status,
-                                        style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w600,
-                                            color: isApproved
-                                                ? AppColors.success
-                                                : Colors.orange.shade800)),
-                                  ),
-                                ],
-                              ),
-                            ],
+                          child: Text(
+                            status,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: isApproved
+                                  ? AppColors.success
+                                  : Colors.orange.shade800,
+                            ),
                           ),
-                        );
-                      }),
-                    ],
-                  );
-                },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               );
-            },
-          ),
-        ],
-      ),
+            }),
+          ],
+        );
+      },
     );
   }
 }

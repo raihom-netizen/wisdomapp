@@ -17,6 +17,7 @@ const String kAgendaModuleFooterLabelNarrow = 'Agenda';
 /// Rótulos e índices permitidos (deve coincidir com as abas do shell).
 const Map<int, String> kHomeDefaultStartModuleLabels = {
   1: 'Financeiro',
+  2: 'Objetivo Financeiro',
   3: 'Agenda',
   7: 'Cursos',
 };
@@ -24,7 +25,7 @@ const Map<int, String> kHomeDefaultStartModuleLabels = {
 /// Índices legados (Início, Calculadora) passam a abrir em Financeiro.
 int normalizeHomeStartModuleIndex(int idx) {
   if (kHomeDefaultStartModuleLabels.containsKey(idx)) return idx;
-  if (idx == 0 || idx == 2 || idx == 4) return 1;
+  if (idx == 0 || idx == 4) return 1;
   return 1;
 }
 
@@ -49,6 +50,12 @@ const List<_PickerEntry> _kPickerEntries = [
     icon: Icons.account_balance_wallet_rounded,
     iconGradient: [AppColors.deepBlue, AppColors.primary],
     subtitle: 'Contas a pagar, receber e lançamentos',
+  ),
+  _PickerEntry(
+    index: 2,
+    icon: Icons.flag_rounded,
+    iconGradient: [Color(0xFF6366F1), Color(0xFFEC4899)],
+    subtitle: 'Metas com Projeto 52 semanas — viagem, carro, casa…',
   ),
   _PickerEntry(
     index: 3,

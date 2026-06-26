@@ -22,6 +22,7 @@ const agendaMsg = require("./agenda_message_templates");
 const notifTpl = require("./notification_templates_config");
 const agendaDigest = require("./agenda_daily_digest");
 const agendaDelivery = require("./agenda_delivery_prefs");
+const agendaPeriodSnapshot = require("./agendaPeriodSnapshot");
 
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_MIME = new Set([
@@ -2481,6 +2482,7 @@ exports.ctFinancePeriodTotals = onCall(
     const fromISO = (req.data?.fromISO || "").toString();
     const toISO = (req.data?.toISO || "").toString();
     const statusFilter = (req.data?.statusFilter || "paid").toString();
+    const typeFilter = (req.data?.typeFilter || "all").toString();
     const from = _asJsDate(fromISO);
     const to = _asJsDate(toISO);
     if (!from || !to) {
@@ -2568,6 +2570,11 @@ exports.ctFinancePeriodTotals = onCall(
       .where("date", ">=", admin.firestore.Timestamp.fromDate(start))
       .where("date", "<=", admin.firestore.Timestamp.fromDate(end))
       .orderBy("date", "asc");
+    if (typeFilter === "income") {
+      qPeriod = qPeriod.where("type", "==", "income");
+    } else if (typeFilter === "expense") {
+      qPeriod = qPeriod.where("type", "==", "expense");
+    }
     if (statusFilter === "pending") {
       qPeriod = qPeriod.where("status", "==", "pending");
     } else if (statusFilter === "paid") {
@@ -2587,6 +2594,8 @@ exports.ctFinancePeriodTotals = onCall(
       const amount = Math.abs(Number(x.amount || 0));
       if (!Number.isFinite(amount)) return;
       const type = (x.type || "expense").toString();
+      if (typeFilter === "income" && type !== "income") return;
+      if (typeFilter === "expense" && type !== "expense") return;
       if (type === "income") income += amount;
       else expense += amount;
       const acc = ((x.financeAccountId || "") + "").toString().trim();
@@ -2595,6 +2604,25 @@ exports.ctFinancePeriodTotals = onCall(
       periodByAccount[acc] = (periodByAccount[acc] || 0) + delta;
     });
 
+    let pendingExpenseCount = 0;
+    try {
+      await _iterateQueryPaged(
+        txCol
+          .where("date", ">=", admin.firestore.Timestamp.fromDate(start))
+          .where("date", "<=", admin.firestore.Timestamp.fromDate(end))
+          .where("status", "==", "pending")
+          .where("type", "==", "expense")
+          .orderBy("date", "asc"),
+        async () => {
+          pendingExpenseCount += 1;
+        },
+        400,
+        8000,
+      );
+    } catch (e) {
+      console.warn("ctFinancePeriodTotals pendingExpenseCount", e?.message || e);
+    }
+
     return {
       ok: true,
       openingTotal,
@@ -2602,10 +2630,13 @@ exports.ctFinancePeriodTotals = onCall(
       income,
       expense,
       periodByAccount,
+      pendingExpenseCount,
       balance: openingTotal + income - expense,
     };
   },
 );
+
+exports.ctAgendaRemindersForRange = agendaPeriodSnapshot.ctAgendaRemindersForRange;
 
 /** Login rápido: confirma sub-login (compartilhamento) em 1 leitura no servidor. */
 exports.ctProbeDelegateAccess = onCall(async (req) => {

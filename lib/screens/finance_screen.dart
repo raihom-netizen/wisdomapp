@@ -43,6 +43,7 @@ import '../services/fixed_income_service.dart';
 import '../utils/finance_line_opening.dart';
 import '../utils/finance_transaction_datetime.dart';
 import '../utils/finance_period_summary.dart';
+import '../utils/finance_server_totals.dart';
 import '../utils/home_shell_layout.dart';
 import '../utils/finance_main_period_server.dart';
 import '../utils/finance_insight_query.dart';
@@ -1579,30 +1580,60 @@ class _FinanceScreenState extends State<FinanceScreen> {
   /// Completa a lista paginada por [date] com lançamentos cuja [effectiveDate] cai no período.
   Future<void> _mergeMainPeriodDocsFromEffectiveDate(String sessionUid, int generation) async {
     if (!mounted || generation != _mainPeriodLoadGeneration) return;
+    if (!financeMainPeriodCanServerPage(
+      searchLowerTrim: _search,
+      statusFilter: _statusFilter,
+      categoryFilter: _categoryFilter,
+      financeAccountFilterId: _financeAccountFilterId,
+    )) {
+      return;
+    }
     try {
-      final merged = await financePeriodMergedDocumentsCollect(
-        uid: sessionUid,
-        from: _from,
-        to: _to,
-        statusFilter: _statusFilter,
-        typeFilter: _typeFilter,
-        financeAccountId: _financeAccountFilterId,
+      final f = DateTime(_from.year, _from.month, _from.day);
+      final t = DateTime(_to.year, _to.month, _to.day, 23, 59, 59);
+      final col = FirebaseFirestore.instance
+          .collection('users')
+          .doc(sessionUid)
+          .collection('transactions');
+      Query<Map<String, dynamic>> q = col
+          .where('effectiveDate', isGreaterThanOrEqualTo: Timestamp.fromDate(f))
+          .where('effectiveDate', isLessThanOrEqualTo: Timestamp.fromDate(t))
+          .orderBy('effectiveDate', descending: false);
+      if (_statusFilter == 'pending') {
+        q = q.where('status', isEqualTo: 'pending');
+      } else if (_statusFilter == 'paid') {
+        q = q.where('status', isEqualTo: 'paid');
+      }
+      if (_typeFilter == 'income') {
+        q = q.where('type', isEqualTo: 'income');
+      } else if (_typeFilter == 'expense') {
+        q = q.where('type', isEqualTo: 'expense');
+      }
+      final effDocs = await firestoreQueryCollectDocumentsBatched(
+        q,
+        pageSize: 400,
+        maxDocuments: 4000,
       );
       if (!mounted || generation != _mainPeriodLoadGeneration) return;
+      final existingIds = _mainPeriodDocs.map((d) => d.id).toSet();
+      final additions =
+          effDocs.where((d) => !existingIds.contains(d.id)).toList();
+      if (additions.isEmpty) return;
+      final merged = [..._mainPeriodDocs, ...additions]
+        ..sort((a, b) {
+          final da = FinanceLineOpening.effectiveDateTimeFromMap(a.data()) ??
+              (a.data()['date'] as Timestamp?)?.toDate();
+          final db = FinanceLineOpening.effectiveDateTimeFromMap(b.data()) ??
+              (b.data()['date'] as Timestamp?)?.toDate();
+          if (da == null && db == null) return 0;
+          if (da == null) return 1;
+          if (db == null) return -1;
+          return da.compareTo(db);
+        });
       setState(() {
         _mainPeriodDocs = merged;
         _mainPeriodLoadedCount = merged.length;
-        _mainPeriodHasMoreServer = false;
-        _mainPeriodFirestoreCursor = null;
-        _mainPeriodServerPagingActive = false;
         _pruneOptimisticEditedTxAgainstDocs(_mainPeriodDocs);
-      });
-      unawaited(_refreshMainPeriodServerKpis());
-      final m = _netByFinanceAccountIdPaidEffective(merged, _from, _to);
-      if (!mounted || generation != _mainPeriodLoadGeneration) return;
-      setState(() {
-        _serverPagingStripPaidNetByAccount = m;
-        _serverPagingStripNetForGen = generation;
       });
     } catch (e, st) {
       debugPrint('_mergeMainPeriodDocsFromEffectiveDate: $e\n$st');
@@ -1614,6 +1645,28 @@ class _FinanceScreenState extends State<FinanceScreen> {
     if (!mounted) return;
     if (generation != _mainPeriodLoadGeneration) return;
     try {
+      if (_mainPeriodServerPagingActive &&
+          _financeAccountFilterId == null &&
+          (_categoryFilter == null || _categoryFilter!.trim().isEmpty)) {
+        try {
+          final totals = await FinanceServerTotals.load(
+            uid: sessionUid,
+            from: _from,
+            to: _to,
+            statusFilter: _statusFilter,
+            typeFilter: _typeFilter,
+          );
+          if (!mounted || generation != _mainPeriodLoadGeneration) return;
+          setState(() {
+            _serverPagingStripPaidNetByAccount =
+                Map<String, double>.from(totals.periodByAccount);
+            _serverPagingStripNetForGen = generation;
+          });
+          return;
+        } catch (_) {
+          // Fallback local abaixo.
+        }
+      }
       if (_mainPeriodServerPagingActive) {
         final all = await financePeriodMergedDocumentsCollect(
           uid: sessionUid,

@@ -53,8 +53,9 @@ if ((Test-Path $assetBin) -and (-not (Test-Path $assetJson))) {
 $bootstrapPath = Join-Path $publicDir "flutter_bootstrap.js"
 if (Test-Path $bootstrapPath) {
   $bc = Get-Content $bootstrapPath -Raw -Encoding UTF8
-  if ($bc -match '_flutter\.loader\.load\s*\(\s*\)') {
-    $bc = $bc -replace '_flutter\.loader\.load\s*\(\s*\)', '_flutter.loader.load({serviceWorkerSettings:null})'
+  # Evita double-load: index.html chama load() com CanvasKit local (/canvaskit/) — Safari iOS.
+  if ($bc -match '_flutter\.loader\.load\s*\(') {
+    $bc = $bc -replace '_flutter\.loader\.load\s*\([^)]*\)\s*;', '// load() in index.html (Safari iOS + local CanvasKit)'
     Set-Content -Path $bootstrapPath -Value $bc -NoNewline -Encoding UTF8
   }
 }

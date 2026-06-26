@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../services/google_calendar_auth_helper.dart';
 import '../services/google_calendar_sync_service.dart';
-
+import '../utils/firestore_web_guard.dart';
 /// Liga/desliga **Calendário Google** (Configurações e módulo Agenda).
 class GoogleCalendarIntegrationToggle extends StatefulWidget {
   const GoogleCalendarIntegrationToggle({
@@ -43,14 +43,19 @@ class _GoogleCalendarIntegrationToggleState
     setState(() => _busy = true);
     try {
       if (v) {
-        final res = await GoogleCalendarSyncService.enable(widget.userDocId);
+        final res = await FirestoreWebGuard.runWebGoogleSignInFlow(
+          () => GoogleCalendarSyncService.enable(widget.userDocId),
+        );
         if (!mounted) return;
         if (!res.ok) {
-          if (!res.cancelled && (res.message ?? '').isNotEmpty) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(res.message!)),
-            );
-          }
+          final msg = res.cancelled
+              ? 'Ativação cancelada. Toque de novo e autorize o Calendário Google.'
+              : (res.message?.trim().isNotEmpty == true
+                  ? res.message!.trim()
+                  : 'Não foi possível ativar o Calendário Google. Tente novamente.');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(msg)),
+          );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -70,11 +75,16 @@ class _GoogleCalendarIntegrationToggleState
         }
       }
       widget.onChanged?.call();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro: ${e.toString().split('\n').first}')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
-
   @override
   Widget build(BuildContext context) {
     if (widget.userDocId.isEmpty) return const SizedBox.shrink();

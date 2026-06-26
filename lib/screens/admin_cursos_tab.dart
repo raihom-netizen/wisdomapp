@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -12,7 +13,10 @@ import '../services/course_video_file_service.dart';
 import '../services/course_video_image_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/course_content_link_helper.dart';
+import '../utils/firestore_retry.dart';
+import '../utils/firestore_web_guard.dart';
 import '../utils/youtube_url_helper.dart';
+import '../widgets/course_media_preview.dart';
 import '../widgets/course_mp4_player_dialog.dart';
 import '../widgets/fast_text_field.dart';
 import '../widgets/module_header_premium.dart';
@@ -272,11 +276,14 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       ),
     );
     if (ok != true) return;
-    final batch = FirebaseFirestore.instance.batch();
-    for (final id in _selectedIds) {
-      batch.delete(FirebaseFirestore.instance.collection('course_videos').doc(id));
-    }
-    await batch.commit();
+    await _courseFirestoreOp(() async {
+      final batch = FirebaseFirestore.instance.batch();
+      for (final id in _selectedIds) {
+        batch.delete(
+            FirebaseFirestore.instance.collection('course_videos').doc(id));
+      }
+      await batch.commit();
+    });
     setState(() {
       _selectedIds.clear();
       _selectionMode = false;
@@ -296,11 +303,14 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
         emptyMessage: _emptyMessageCtrl.text.trim(),
         showTipsSection: _showTipsSection,
       );
-      await FirebaseFirestore.instance.collection('app_config').doc(_configDoc).set({
+      await _courseFirestoreOp(() => FirebaseFirestore.instance
+          .collection('app_config')
+          .doc(_configDoc)
+          .set({
         ...cfg.toFirestore(),
         'updatedAt': FieldValue.serverTimestamp(),
         'updatedByEmail': email,
-      }, SetOptions(merge: true));
+      }, SetOptions(merge: true)));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Configuração do módulo Cursos salva.')),
@@ -325,6 +335,37 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       return;
     }
 
+    if (_type == 'curso') {
+      final youtubeRaw = _youtubeCtrl.text.trim();
+      final hasYoutube = youtubeRaw.isNotEmpty;
+      final hasMp4 = _pickedVideoBytes != null && _pickedVideoMime != null;
+      if (!hasMp4 && !hasYoutube) {
+        _snack('Anexe um vídeo MP4 ou informe link YouTube (opcional).');
+        return;
+      }
+      if (hasYoutube && !YoutubeUrlHelper.isValidYoutubeUrl(youtubeRaw)) {
+        _snack('URL do YouTube inválida.');
+        return;
+      }
+    } else {
+      final linkRaw = _youtubeCtrl.text.trim();
+      if (linkRaw.isNotEmpty &&
+          CourseContentLinkHelper.normalizeLink(linkRaw) == null) {
+        _snack('Link inválido. Use YouTube ou site (https://…).');
+        return;
+      }
+      final body = _bodyTextCtrl.text.trim();
+      final desc = _descriptionCtrl.text.trim();
+      final linkOk = linkRaw.isNotEmpty;
+      if (body.isEmpty &&
+          desc.isEmpty &&
+          _pickedImageBytes == null &&
+          !linkOk) {
+        _snack('Informe texto, imagem ou link para a dica.');
+        return;
+      }
+    }
+
     setState(() => _savingVideo = true);
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
@@ -336,21 +377,12 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
         final hasYoutube = youtubeRaw.isNotEmpty;
         final hasMp4 = _pickedVideoBytes != null && _pickedVideoMime != null;
 
-        if (!hasMp4 && !hasYoutube) {
-          _snack('Anexe um vídeo MP4 ou informe link YouTube (opcional).');
-          return;
-        }
-
         String? videoId;
         String? youtubeUrl;
         String? mp4Url;
         String? thumbUrl;
 
         if (hasYoutube) {
-          if (!YoutubeUrlHelper.isValidYoutubeUrl(youtubeRaw)) {
-            _snack('URL do YouTube inválida.');
-            return;
-          }
           videoId = YoutubeUrlHelper.extractVideoId(youtubeRaw)!;
           youtubeUrl = YoutubeUrlHelper.watchUrl(videoId);
           thumbUrl = YoutubeUrlHelper.thumbnailUrl(videoId);
@@ -380,7 +412,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
             ? 'upload_youtube'
             : (hasMp4 ? 'upload' : 'youtube');
 
-        await docRef.set({
+        await _courseFirestoreOp(() => docRef.set({
           'title': title,
           'description': _descriptionCtrl.text.trim(),
           'bodyText': '',
@@ -399,7 +431,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
           'authorEmail': email,
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
-        });
+        }));
       } else {
         final linkRaw = _youtubeCtrl.text.trim();
         String? linkUrl;
@@ -407,19 +439,11 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
         String? ytThumb;
         if (linkRaw.isNotEmpty) {
           linkUrl = CourseContentLinkHelper.normalizeLink(linkRaw);
-          if (linkUrl == null) {
-            _snack('Link inválido. Use YouTube ou site (https://…).');
-            return;
-          }
-          videoId = YoutubeUrlHelper.extractVideoId(linkUrl);
+          videoId = YoutubeUrlHelper.extractVideoId(linkUrl!);
           if (videoId != null) ytThumb = YoutubeUrlHelper.thumbnailUrl(videoId);
         }
         final body = _bodyTextCtrl.text.trim();
         final desc = _descriptionCtrl.text.trim();
-        if (body.isEmpty && desc.isEmpty && _pickedImageBytes == null && linkUrl == null) {
-          _snack('Informe texto, imagem ou link para a dica.');
-          return;
-        }
         String? imageUrl;
         if (_pickedImageBytes != null && _pickedImageMime != null) {
           imageUrl = await CourseVideoImageService.uploadCover(
@@ -433,7 +457,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
             : (imageUrl != null && linkUrl != null)
                 ? 'image_link'
                 : (imageUrl != null ? 'image' : 'link');
-        await docRef.set({
+        await _courseFirestoreOp(() => docRef.set({
           'title': title,
           'description': desc,
           'bodyText': body,
@@ -455,7 +479,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
           'authorEmail': email,
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
-        });
+        }));
       }
 
       _titleCtrl.clear();
@@ -466,7 +490,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       _clearPickedVideo();
       _snack('Conteúdo publicado — já aparece no módulo Cursos.');
     } catch (e) {
-      _snack('Erro ao publicar: $e');
+      _snack('Erro ao publicar: ${_formatPublishError(e)}');
     } finally {
       if (mounted) {
         setState(() {
@@ -477,7 +501,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
     }
   }
 
-  Future<void> _saveEditedVideo(
+  Future<bool> _saveEditedVideo(
     String docId, {
     required String title,
     required String description,
@@ -494,9 +518,10 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
   }) async {
     if (title.isEmpty) {
       _snack('Informe o título.');
-      return;
+      return false;
     }
 
+    try {
     final patch = <String, dynamic>{
       'title': title,
       'description': description,
@@ -507,10 +532,10 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
     };
 
     if (type == 'curso') {
-      final existing = await FirebaseFirestore.instance
+      final existing = await _courseFirestoreOp(() => FirebaseFirestore.instance
           .collection('course_videos')
           .doc(docId)
-          .get();
+          .get());
       final existingData = existing.data() ?? {};
       var mp4Url = (existingData['mp4Url'] ?? '').toString().trim();
       String? videoId;
@@ -529,7 +554,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       if (linkRaw.isNotEmpty) {
         if (!YoutubeUrlHelper.isValidYoutubeUrl(linkRaw)) {
           _snack('URL do YouTube inválida.');
-          return;
+          return false;
         }
         videoId = YoutubeUrlHelper.extractVideoId(linkRaw)!;
         youtubeUrl = YoutubeUrlHelper.watchUrl(videoId);
@@ -544,7 +569,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
 
       if (mp4Url.isEmpty && videoId == null) {
         _snack('Informe vídeo MP4 ou link YouTube.');
-        return;
+        return false;
       }
 
       if (removeImage) {
@@ -585,7 +610,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
         linkUrl = CourseContentLinkHelper.normalizeLink(linkRaw);
         if (linkUrl == null) {
           _snack('Link inválido.');
-          return;
+          return false;
         }
         videoId = YoutubeUrlHelper.extractVideoId(linkUrl);
         if (videoId != null) ytThumb = YoutubeUrlHelper.thumbnailUrl(videoId);
@@ -630,18 +655,26 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       patch['thumbnailUrl'] = imageUrl ?? ytThumb ?? '';
     }
 
-    await FirebaseFirestore.instance.collection('course_videos').doc(docId).set(
-          patch,
-          SetOptions(merge: true),
-        );
+    await _courseFirestoreOp(() => FirebaseFirestore.instance
+        .collection('course_videos')
+        .doc(docId)
+        .set(patch, SetOptions(merge: true)));
     _snack('Alterações salvas.');
+    return true;
+    } catch (e) {
+      _snack('Erro ao salvar: ${_formatPublishError(e)}');
+      return false;
+    }
   }
 
   Future<void> _togglePublished(String docId, bool value) async {
-    await FirebaseFirestore.instance.collection('course_videos').doc(docId).set({
+    await _courseFirestoreOp(() => FirebaseFirestore.instance
+        .collection('course_videos')
+        .doc(docId)
+        .set({
       'published': value,
       'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    }, SetOptions(merge: true)));
   }
 
   Future<void> _deleteVideo(String docId) async {
@@ -661,7 +694,10 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       ),
     );
     if (ok != true) return;
-    await FirebaseFirestore.instance.collection('course_videos').doc(docId).delete();
+    await _courseFirestoreOp(() => FirebaseFirestore.instance
+        .collection('course_videos')
+        .doc(docId)
+        .delete());
   }
 
   Future<void> _openEditSheet(QueryDocumentSnapshot<Map<String, dynamic>> doc) async {
@@ -681,6 +717,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
     String? editImageMime;
     Uint8List? editVideoBytes;
     String? editVideoMime;
+    String? editVideoName;
     var removeImage = false;
     var removeMp4 = false;
 
@@ -754,14 +791,15 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                         Text('Imagem da dica', style: TextStyle(fontWeight: FontWeight.w800, color: accent)),
                         const SizedBox(height: 8),
                         if (editImageBytes != null)
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.memory(editImageBytes!, height: 120, width: double.infinity, fit: BoxFit.cover),
+                          CourseImagePreview(
+                            bytes: editImageBytes,
+                            maxHeight: 180,
+                            subtitle: 'Nova imagem',
                           )
                         else if (existingImageUrl.isNotEmpty && !removeImage)
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.network(existingImageUrl, height: 120, width: double.infinity, fit: BoxFit.cover),
+                          CourseImagePreview(
+                            networkUrl: existingImageUrl,
+                            maxHeight: 180,
                           ),
                         const SizedBox(height: 8),
                         Wrap(
@@ -809,39 +847,25 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                         Text('Vídeo MP4 (anexo)', style: TextStyle(fontWeight: FontWeight.w800, color: accent)),
                         const SizedBox(height: 6),
                         if (editVideoBytes != null)
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: accent.withValues(alpha: 0.08),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(Icons.movie_rounded, color: accent),
-                                const SizedBox(width: 8),
-                                const Expanded(child: Text('Novo vídeo selecionado')),
-                              ],
-                            ),
+                          CourseVideoFilePreview(
+                            fileName: editVideoName ?? 'video.mp4',
+                            sizeBytes: editVideoBytes!.lengthInBytes,
+                            accent: accent,
+                            onRemove: () => setLocal(() {
+                              editVideoBytes = null;
+                              editVideoMime = null;
+                              editVideoName = null;
+                            }),
                           )
                         else if (existingMp4Url.isNotEmpty && !removeMp4)
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF212121),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 20),
-                                const SizedBox(width: 8),
-                                const Expanded(
-                                  child: Text(
-                                    'Vídeo MP4 anexado',
-                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-                                  ),
-                                ),
-                              ],
-                            ),
+                          CourseVideoFilePreview(
+                            fileName: 'Vídeo MP4 publicado',
+                            sizeBytes: 0,
+                            accent: accent,
+                            onRemove: () => setLocal(() {
+                              removeMp4 = true;
+                              existingMp4Url = '';
+                            }),
                           ),
                         const SizedBox(height: 8),
                         Wrap(
@@ -864,6 +888,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                                   editVideoMime = ext == 'webm'
                                       ? 'video/webm'
                                       : (ext == 'mov' ? 'video/quicktime' : 'video/mp4');
+                                  editVideoName = f.name;
                                   removeMp4 = false;
                                 });
                               },
@@ -889,14 +914,16 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                         Text('Capa personalizada (opcional)', style: TextStyle(fontWeight: FontWeight.w800, color: accent)),
                         const SizedBox(height: 8),
                         if (editImageBytes != null)
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.memory(editImageBytes!, height: 100, width: double.infinity, fit: BoxFit.cover),
+                          CourseImagePreview(
+                            bytes: editImageBytes,
+                            maxHeight: 160,
+                            subtitle: 'Capa do curso',
                           )
                         else if (existingImageUrl.isNotEmpty && !removeImage)
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.network(existingImageUrl, height: 100, width: double.infinity, fit: BoxFit.cover),
+                          CourseImagePreview(
+                            networkUrl: existingImageUrl,
+                            maxHeight: 160,
+                            subtitle: 'Capa atual',
                           ),
                         const SizedBox(height: 8),
                         OutlinedButton.icon(
@@ -944,7 +971,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                       const SizedBox(height: 8),
                       FilledButton.icon(
                         onPressed: () async {
-                          await _saveEditedVideo(
+                          final ok = await _saveEditedVideo(
                             doc.id,
                             title: titleCtrl.text.trim(),
                             description: descCtrl.text.trim(),
@@ -959,7 +986,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                             newVideoMime: editVideoMime,
                             removeMp4: removeMp4,
                           );
-                          if (ctx.mounted) Navigator.pop(ctx);
+                          if (ok && ctx.mounted) Navigator.pop(ctx);
                         },
                         icon: const Icon(Icons.save_rounded),
                         label: const Text('Salvar alterações'),
@@ -987,6 +1014,24 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
   void _snack(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  String _formatPublishError(Object e) {
+    if (FirestoreWebGuard.isRecoverableFirestoreWebError(e)) {
+      return 'Instabilidade do Firestore na Web. Toque em Publicar de novo '
+          'ou atualize a página (F5).';
+    }
+    final msg = e.toString().split('\n').first.trim();
+    return msg.length > 180 ? '${msg.substring(0, 180)}…' : msg;
+  }
+
+  Future<T> _courseFirestoreOp<T>(Future<T> Function() fn) async {
+    if (kIsWeb) {
+      return runFirestoreWithRetry(
+        () => FirestoreWebGuard.runWithWebRecovery(fn),
+      );
+    }
+    return runFirestoreWithRetry(fn);
   }
 
   String? _videoId(Map<String, dynamic> data) {
@@ -1066,10 +1111,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                     style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
                 if (img.isNotEmpty) ...[
                   const SizedBox(height: 12),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: Image.network(img, fit: BoxFit.cover),
-                  ),
+                  CourseImagePreview(networkUrl: img, maxHeight: 220),
                 ],
                 if (body.isNotEmpty) ...[
                   const SizedBox(height: 14),
@@ -1550,9 +1592,10 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
             Text('Imagem da dica (opcional)', style: TextStyle(fontWeight: FontWeight.w800, color: accent)),
             const SizedBox(height: 8),
             if (_pickedImageBytes != null)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.memory(_pickedImageBytes!, height: 120, width: double.infinity, fit: BoxFit.cover),
+              CourseImagePreview(
+                bytes: _pickedImageBytes,
+                maxHeight: 180,
+                subtitle: _pickedImageName,
               ),
             Wrap(
               spacing: 8,
@@ -1583,43 +1626,12 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
             ),
             const SizedBox(height: 8),
             if (_pickedVideoBytes != null)
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF212121),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: accent.withValues(alpha: 0.4)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.movie_creation_rounded, color: accent, size: 28),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _pickedVideoName ?? 'video.mp4',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          Text(
-                            '${(_pickedVideoBytes!.lengthInBytes / (1024 * 1024)).toStringAsFixed(1)} MB',
-                            style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: _savingVideo ? null : _clearPickedVideo,
-                      icon: const Icon(Icons.close_rounded, color: Colors.white70),
-                    ),
-                  ],
-                ),
+              CourseVideoFilePreview(
+                fileName: _pickedVideoName ?? 'video.mp4',
+                sizeBytes: _pickedVideoBytes!.lengthInBytes,
+                accent: accent,
+                busy: _savingVideo,
+                onRemove: _savingVideo ? null : _clearPickedVideo,
               ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
@@ -1650,9 +1662,10 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
             Text('Capa / thumbnail (opcional)', style: TextStyle(fontWeight: FontWeight.w800, color: accent)),
             const SizedBox(height: 8),
             if (_pickedImageBytes != null)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.memory(_pickedImageBytes!, height: 90, width: double.infinity, fit: BoxFit.cover),
+              CourseImagePreview(
+                bytes: _pickedImageBytes,
+                maxHeight: 160,
+                subtitle: 'Capa do curso',
               ),
             OutlinedButton.icon(
               onPressed: _savingVideo ? null : _pickCoverImage,
@@ -1841,6 +1854,9 @@ class _VideoGridCard extends StatelessWidget {
       dateLabel = DateFormat('dd/MM/yyyy').format(created.toDate());
     }
 
+    final dicaPhoto = type == 'dica' && (data['imageUrl'] ?? '').toString().trim().isNotEmpty;
+    final thumbFit = dicaPhoto ? BoxFit.contain : BoxFit.cover;
+
     final sourceLabel = hasMp4
         ? (videoId != null ? 'MP4+YT' : 'MP4')
         : (videoId != null ? 'YOUTUBE' : (type == 'dica' ? 'DICA' : 'VÍDEO'));
@@ -1870,16 +1886,16 @@ class _VideoGridCard extends StatelessWidget {
               fit: StackFit.expand,
               children: [
                 if (thumbUrl != null && thumbUrl!.isNotEmpty)
-                  Image.network(
-                    thumbUrl!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => _thumbFallback(accent, accent2),
+                  CourseCoverImage(
+                    url: thumbUrl!,
+                    fit: thumbFit,
+                    fallback: _thumbFallback(accent, accent2),
                   )
                 else if (videoId != null)
-                  Image.network(
-                    YoutubeUrlHelper.thumbnailUrl(videoId!),
+                  CourseCoverImage(
+                    url: YoutubeUrlHelper.thumbnailUrl(videoId!),
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => _thumbFallback(accent, accent2),
+                    fallback: _thumbFallback(accent, accent2),
                   )
                 else
                   _thumbFallback(accent, accent2),

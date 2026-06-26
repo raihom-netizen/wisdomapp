@@ -152,6 +152,27 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
 
   DateTime _dayKey(DateTime d) => DateTime(d.year, d.month, d.day);
 
+  /// Janela de lembretes: ano focado ± repetições anuais (evita stream sem filtro).
+  (DateTime, DateTime) _remindersQueryBounds() {
+    final y = _focusedDay.year;
+    final start = DateTime(y - 1, 1, 1);
+    final end = DateTime(y + 6, 12, 31, 23, 59, 59);
+    return (start, end);
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> _remindersPeriodStream() {
+    final (start, end) = _remindersQueryBounds();
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(_userDocId)
+        .collection('reminders')
+        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+        .where('date', isLessThanOrEqualTo: Timestamp.fromDate(end))
+        .orderBy('date')
+        .limit(2500)
+        .snapshots();
+  }
+
   String _focusedMonthTitle() {
     final raw = DateFormat("MMMM 'de' y", 'pt_BR').format(_focusedDay);
     return raw[0].toUpperCase() + raw.substring(1);
@@ -2284,11 +2305,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                               );
 
                         return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                          stream: FirebaseFirestore.instance
-                              .collection('users')
-                              .doc(_userDocId)
-                              .collection('reminders')
-                              .snapshots(),
+                          key: ValueKey(
+                              'agenda-rem-${_focusedDay.year}-$_streamGeneration'),
+                          stream: _remindersPeriodStream(),
                           builder: (context, snap) {
                             return _buildAgendaBody(
                               context,

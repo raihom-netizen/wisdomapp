@@ -19,6 +19,9 @@ import '../utils/firestore_user_doc_id.dart';
 import '../widgets/brl_amount_text_field.dart';
 import '../utils/keyboard_form_scaffold.dart';
 import '../utils/home_shell_layout.dart';
+import '../utils/fifty_two_weeks_plan.dart';
+import '../utils/goal_objective_visuals.dart';
+import '../widgets/fifty_two_weeks_schedule_sheet.dart';
 
 /// Categorias de metas (estrutura base Premium).
 final List<GoalCategory> kGoalCategories = GoalCategory.values.toList();
@@ -108,6 +111,8 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
     GoalPriority priority = GoalPriority.media;
     final interestCtrl = TextEditingController(text: '0.5');
     bool hasInterest = false;
+    bool use52WeeksPlan = true;
+    String selectedEmoji = '🎯';
     Timer? metaSuggestDebounce;
 
     final ok = await showDialog<bool>(
@@ -149,7 +154,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
             titlePadding: const EdgeInsets.fromLTRB(22, 20, 22, 4),
             contentPadding: const EdgeInsets.fromLTRB(22, 8, 22, 8),
             actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            title: _metaDialogTitleRow(icon: Icons.flag_rounded, title: 'Nova meta financeira'),
+            title: _metaDialogTitleRow(icon: Icons.flag_rounded, title: 'Novo objetivo financeiro'),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -168,6 +173,8 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                             onTap: () {
                               titleCtrl.text = at.$3;
                               category = GoalCategory.fromId(at.$4);
+                              final preset = presetForCategory(at.$4);
+                              selectedEmoji = preset?.visual.emoji ?? '🎯';
                               setState(() {});
                             },
                             borderRadius: BorderRadius.circular(16),
@@ -218,7 +225,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                       );
                     },
                   ),
-                  if (suggestedMonthly != null) ...[
+                  if (suggestedMonthly != null && !use52WeeksPlan) ...[
                     const SizedBox(height: 8),
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -241,6 +248,55 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                       ),
                     ),
                   ],
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          const Color(0xFF6366F1).withOpacity(0.12),
+                          const Color(0xFFEC4899).withOpacity(0.10),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFF6366F1).withOpacity(0.35)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          value: use52WeeksPlan,
+                          onChanged: (v) => setState(() => use52WeeksPlan = v),
+                          title: const Text(
+                            'Projeto 52 semanas',
+                            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                          ),
+                          subtitle: const Text(
+                            'Programação semanal automática (incremento progressivo até a meta).',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                          activeColor: const Color(0xFF6366F1),
+                        ),
+                        if (use52WeeksPlan && target > 0) ...[
+                          const Divider(height: 16),
+                          Text(
+                            'Semana 1: ${CurrencyFormats.formatBRL(FiftyTwoWeeksPlan.amountForWeek(target, 1))}',
+                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                          ),
+                          Text(
+                            'Semana 52: ${CurrencyFormats.formatBRL(FiftyTwoWeeksPlan.amountForWeek(target, 52))}',
+                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                          ),
+                          Text(
+                            'Total programado: ${CurrencyFormats.formatBRL(target)} em 52 semanas',
+                            style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (!use52WeeksPlan) ...[
                   const SizedBox(height: 12),
                   Row(
                     children: [
@@ -274,6 +330,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                       ),
                     ],
                   ),
+                  ],
                   const SizedBox(height: 12),
                   const Text('Prioridade', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                   const SizedBox(height: 6),
@@ -368,19 +425,35 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
       }
 
       try {
+        final planStart = FiftyTwoWeeksPlan.normalizePlanStart(DateTime.now());
         await _goals.add({
           'title': title,
           'targetAmount': target,
-          'dueDate': dueDate != null ? Timestamp.fromDate(dueDate!) : null,
+          'dueDate': use52WeeksPlan
+              ? Timestamp.fromDate(planStart.add(const Duration(days: 52 * 7)))
+              : (dueDate != null ? Timestamp.fromDate(dueDate!) : null),
           'reminderAporte': reminderAporte,
           'createdAt': FieldValue.serverTimestamp(),
           'status': 'active',
           'category': category.id,
           'priority': priority.name,
           'interestRateMonthly': hasInterest ? (double.tryParse(interestCtrl.text.replaceAll(',', '.')) ?? 0) : 0,
+          'planType': use52WeeksPlan ? '52weeks' : 'classic',
+          if (use52WeeksPlan) ...{
+            'planStartDate': Timestamp.fromDate(planStart),
+            'weeklyIncrement': FiftyTwoWeeksPlan.weeklyIncrementForTarget(target),
+            'weeksPaid': <int>[],
+          },
+          'emoji': selectedEmoji,
         });
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Meta "$title" criada! Acompanhe o progresso abaixo.')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+              use52WeeksPlan
+                  ? 'Objetivo "$title" criado com Projeto 52 semanas!'
+                  : 'Objetivo "$title" criado! Acompanhe o progresso abaixo.',
+            ),
+          ));
         }
       } catch (e) {
         if (mounted) {
@@ -997,18 +1070,27 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              const Text('Minhas metas', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFF1A237E))),
+                              _buildModuleHeroHeader(isCompact: true),
+                              const SizedBox(height: 16),
+                              const Text('Meus objetivos', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFF1A237E))),
                               const SizedBox(height: 12),
-                              _buildNovaMetaButton(expand: true),
+                              _buildNovaMetaButton(expand: true, label: 'Novo objetivo'),
                             ],
                           )
                         else
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            crossAxisAlignment: CrossAxisAlignment.center,
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              const Text('Minhas metas', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFF1A237E))),
-                              _buildNovaMetaButton(expand: false),
+                              _buildModuleHeroHeader(isCompact: false),
+                              const SizedBox(height: 16),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  const Text('Meus objetivos', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFF1A237E))),
+                                  _buildNovaMetaButton(expand: false, label: 'Novo objetivo'),
+                                ],
+                              ),
                             ],
                           ),
                         const SizedBox(height: 12),
@@ -1059,6 +1141,67 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// Cabeçalho colorido do módulo Objetivo Financeiro.
+  Widget _buildModuleHeroHeader({required bool isCompact}) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(isCompact ? 16 : 20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF4F46E5), Color(0xFF7C3AED), Color(0xFFEC4899)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF7C3AED).withOpacity(0.32),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(Icons.flag_rounded, color: Colors.white, size: 26),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Objetivo Financeiro',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 22,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Projeto 52 semanas · viagem, carro, casa, reforma, quitar dívidas',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.92),
+              fontWeight: FontWeight.w600,
+              fontSize: isCompact ? 12 : 13,
+              height: 1.35,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1494,17 +1637,17 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
           Icon(Icons.flag_rounded, size: 64, color: Colors.grey.shade300),
           const SizedBox(height: 16),
           const Text(
-            'Nenhuma meta ainda',
+            'Nenhum objetivo ainda',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF1A237E)),
           ),
           const SizedBox(height: 8),
           Text(
-            'Crie uma meta (carro, pagar contas, reserva) e acompanhe o progresso com gráficos e dicas.',
+            'Crie um objetivo com Projeto 52 semanas — o app monta a programação semanal automaticamente.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
           ),
           const SizedBox(height: 24),
-          _buildNovaMetaButton(expand: true, label: 'Criar minha primeira meta'),
+          _buildNovaMetaButton(expand: true, label: 'Criar meu primeiro objetivo'),
         ],
       ),
     );
@@ -1647,6 +1790,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
       priority = GoalPriority.values.firstWhere((e) => e.name == (data['priority'] ?? ''));
     } catch (_) {}
     final interestRate = (data['interestRateMonthly'] ?? 0).toDouble();
+    final is52Weeks = FiftyTwoWeeksPlan.is52WeeksGoal(data);
 
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: goalDoc.reference.collection('contributions').orderBy('date', descending: false).snapshots(),
@@ -1958,6 +2102,24 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                           ),
                         ),
+                        if (is52Weeks) ...[
+                          const SizedBox(height: 10),
+                          OutlinedButton.icon(
+                            onPressed: () => showFiftyTwoWeeksScheduleSheet(
+                              context: context,
+                              goalDoc: goalDoc,
+                              profile: widget.profile,
+                            ),
+                            icon: const Icon(Icons.calendar_view_week_rounded, size: 20),
+                            label: const Text('Projeto 52 semanas'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF6366F1),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              minimumSize: const Size(0, 50),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 10),
                         FilledButton.icon(
                           onPressed: () => _verEditarLancamentos(context, goalDoc, title),

@@ -7,12 +7,15 @@ import 'brl_amount_text_field.dart';
 import '../models/user_profile.dart';
 import '../utils/premium_upgrade.dart';
 import '../utils/date_picker_a11y.dart';
+import '../utils/fifty_two_weeks_plan.dart';
 
 /// Abre o diálogo de aporte com parse BRL correto e foco no campo após 1 frame (teclado mais fluido).
 Future<bool> showRegistrarAporteDialog({
   required BuildContext context,
   required DocumentReference<Map<String, dynamic>> goalRef,
   required UserProfile profile,
+  double? initialAmount,
+  int? weekNumber,
 }) async {
   if (!profile.hasActiveLicense) {
     mostrarAvisoSeLicencaInativa(context, profile);
@@ -21,15 +24,25 @@ Future<bool> showRegistrarAporteDialog({
   final saved = await showDialog<bool>(
     context: context,
     barrierDismissible: true,
-    builder: (ctx) => _RegistrarAporteDialogContent(goalRef: goalRef),
+    builder: (ctx) => _RegistrarAporteDialogContent(
+      goalRef: goalRef,
+      initialAmount: initialAmount,
+      weekNumber: weekNumber,
+    ),
   );
   return saved == true;
 }
 
 class _RegistrarAporteDialogContent extends StatefulWidget {
   final DocumentReference<Map<String, dynamic>> goalRef;
+  final double? initialAmount;
+  final int? weekNumber;
 
-  const _RegistrarAporteDialogContent({required this.goalRef});
+  const _RegistrarAporteDialogContent({
+    required this.goalRef,
+    this.initialAmount,
+    this.weekNumber,
+  });
 
   @override
   State<_RegistrarAporteDialogContent> createState() => _RegistrarAporteDialogContentState();
@@ -43,6 +56,10 @@ class _RegistrarAporteDialogContentState extends State<_RegistrarAporteDialogCon
   @override
   void initState() {
     super.initState();
+    final seed = widget.initialAmount;
+    if (seed != null && seed > 0) {
+      _amountCtrl.text = CurrencyFormats.formatBRLInput(seed);
+    }
     // Evita competir com a animação do diálogo no mesmo frame.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _focusNode.requestFocus();
@@ -80,7 +97,17 @@ class _RegistrarAporteDialogContentState extends State<_RegistrarAporteDialogCon
         'amount': amount,
         'date': Timestamp.fromDate(_date),
         'createdAt': FieldValue.serverTimestamp(),
+        if (widget.weekNumber != null) 'weekNumber': widget.weekNumber,
       });
+      if (widget.weekNumber != null) {
+        final goalSnap = await widget.goalRef.get();
+        final paid = FiftyTwoWeeksPlan.paidWeeksFromData(goalSnap.data() ?? {});
+        if (!paid.contains(widget.weekNumber)) {
+          paid.add(widget.weekNumber!);
+          paid.sort();
+          await widget.goalRef.update({'weeksPaid': paid});
+        }
+      }
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (e) {

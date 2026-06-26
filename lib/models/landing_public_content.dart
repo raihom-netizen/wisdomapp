@@ -8,6 +8,14 @@ import '../services/mp_checkout_pricing_service.dart';
 // `app_config/mp_checkout_prices` via [applyPremiumTextsFromCheckoutPricing]
 // para não ficarem presos a texto antigo gravado só em `landing_content/main`.
 
+/// URL padrão da Google Play (pacote Android oficial).
+const String kDefaultPlayStoreUrl =
+    'https://play.google.com/store/apps/details?id=com.wisdomapp.app';
+
+/// Instagram oficial WISDOMAPP (@wisdomappgo).
+const String kDefaultWisdomAppInstagramUrl =
+    'https://www.instagram.com/wisdomappgo/';
+
 /// Definição de campo para o editor Admin (página /divulgacao).
 class LandingFieldDef {
   const LandingFieldDef(this.key, this.label, this.defaultValue);
@@ -49,7 +57,7 @@ const List<LandingFieldDef> kDivulgacaoLandingFields = [
   LandingFieldDef(
     'divInstagramUrl',
     'Canais oficiais — URL Instagram',
-    'https://instagram.com/',
+    kDefaultWisdomAppInstagramUrl,
   ),
   LandingFieldDef(
     'divWhatsappUrl',
@@ -59,6 +67,16 @@ const List<LandingFieldDef> kDivulgacaoLandingFields = [
   LandingFieldDef('divYoutubeLabel', 'Canais — rótulo YouTube', 'YouTube'),
   LandingFieldDef('divInstagramLabel', 'Canais — rótulo Instagram', 'Instagram'),
   LandingFieldDef('divWhatsappLabel', 'Canais — rótulo WhatsApp', 'WhatsApp'),
+  LandingFieldDef(
+    'divPlayStoreUrl',
+    'Baixar app — URL Google Play',
+    kDefaultPlayStoreUrl,
+  ),
+  LandingFieldDef(
+    'divPlayStoreLabel',
+    'Baixar app — rótulo botão Google Play',
+    'Google Play',
+  ),
   LandingFieldDef(
     'divBookBadge',
     'Livro (lançamento) — faixa',
@@ -101,8 +119,8 @@ const List<LandingFieldDef> kDivulgacaoLandingFields = [
   ),
   LandingFieldDef(
     'divMentorInstagramUrl',
-    'Mentor — URL Instagram',
-    '',
+    'Mentor (Tarley) — URL Instagram',
+    kDefaultWisdomAppInstagramUrl,
   ),
   LandingFieldDef(
     'divMentorWhatsappUrl',
@@ -281,6 +299,40 @@ const Set<String> kDivulgacaoPlanPricingKeys = {
   'divPremiumProExtrasLine',
 };
 
+/// Botão «Baixar o app» na landing (Google Play).
+const Set<String> kLandingAppDownloadFieldKeys = {
+  'divPlayStoreUrl',
+  'divPlayStoreLabel',
+};
+
+List<LandingFieldDef> get kLandingAppDownloadFields =>
+    kDivulgacaoLandingFields
+        .where((f) => kLandingAppDownloadFieldKeys.contains(f.key))
+        .toList();
+
+/// Livro + mentor Johnathan Tarley (`/divulgacao` e módulo Tarley).
+const Set<String> kLandingMentorTarleyFieldKeys = {
+  'divBookBadge',
+  'divBookTitle',
+  'divBookAuthor',
+  'divBookSubtitle',
+  'divBookLaunchText',
+  'divBookImageUrl',
+  'divMentorName',
+  'divMentorRole',
+  'divMentorInstagramUrl',
+  'divMentorWhatsappUrl',
+  'divMentorYoutubeUrl',
+  'divMentorInstagramLabel',
+  'divMentorWhatsappLabel',
+  'divMentorYoutubeLabel',
+};
+
+List<LandingFieldDef> get kLandingMentorTarleyFields =>
+    kDivulgacaoLandingFields
+        .where((f) => kLandingMentorTarleyFieldKeys.contains(f.key))
+        .toList();
+
 /// Campos da faixa «Canais oficiais» (site / landing).
 const Set<String> kLandingOfficialChannelsFieldKeys = {
   'divChannelsTitle',
@@ -303,7 +355,9 @@ List<LandingFieldDef> get kDivulgacaoLandingFieldsSemPlanos =>
     kDivulgacaoLandingFields
         .where((f) =>
             !kDivulgacaoPlanPricingKeys.contains(f.key) &&
-            !kLandingOfficialChannelsFieldKeys.contains(f.key))
+            !kLandingOfficialChannelsFieldKeys.contains(f.key) &&
+            !kLandingAppDownloadFieldKeys.contains(f.key) &&
+            !kLandingMentorTarleyFieldKeys.contains(f.key))
         .toList();
 
 /// Ordem fixa dos campos de plano para o bloco “Preços” no Admin.
@@ -434,6 +488,8 @@ class LandingPublicContent {
     required this.divYoutubeLabel,
     required this.divInstagramLabel,
     required this.divWhatsappLabel,
+    required this.divPlayStoreUrl,
+    required this.divPlayStoreLabel,
     required this.divLabelComoFunciona,
     required this.divStep1Title,
     required this.divStep1Body,
@@ -510,6 +566,8 @@ class LandingPublicContent {
   final String divYoutubeLabel;
   final String divInstagramLabel;
   final String divWhatsappLabel;
+  final String divPlayStoreUrl;
+  final String divPlayStoreLabel;
   final String divLabelComoFunciona;
   final String divStep1Title;
   final String divStep1Body;
@@ -600,6 +658,10 @@ class LandingPublicContent {
           _pickStr(raw, 'divInstagramLabel', _divDef('divInstagramLabel')),
       divWhatsappLabel:
           _pickStr(raw, 'divWhatsappLabel', _divDef('divWhatsappLabel')),
+      divPlayStoreUrl:
+          _pickStr(raw, 'divPlayStoreUrl', _divDef('divPlayStoreUrl')),
+      divPlayStoreLabel:
+          _pickStr(raw, 'divPlayStoreLabel', _divDef('divPlayStoreLabel')),
       divLabelComoFunciona: _pickStr(
           raw, 'divLabelComoFunciona', _divDef('divLabelComoFunciona')),
       divStep1Title: _pickStr(raw, 'divStep1Title', _divDef('divStep1Title')),
@@ -742,6 +804,8 @@ class LandingPublicContent {
       divYoutubeLabel: divYoutubeLabel,
       divInstagramLabel: divInstagramLabel,
       divWhatsappLabel: divWhatsappLabel,
+      divPlayStoreUrl: divPlayStoreUrl,
+      divPlayStoreLabel: divPlayStoreLabel,
       divLabelComoFunciona: divLabelComoFunciona,
       divStep1Title: divStep1Title,
       divStep1Body: divStep1Body,

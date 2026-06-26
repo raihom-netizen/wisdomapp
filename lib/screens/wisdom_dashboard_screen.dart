@@ -7,6 +7,7 @@ import '../models/user_profile.dart';
 import '../theme/app_colors.dart';
 import '../widgets/finance_tip_modern_card.dart';
 import '../widgets/home_finance_overview_panel.dart';
+import '../widgets/home_objective_finance_panel.dart';
 
 class WisdomDashboardScreen extends StatelessWidget {
   const WisdomDashboardScreen({
@@ -41,11 +42,15 @@ class WisdomDashboardScreen extends StatelessWidget {
       builder: (context, snap) {
         final catalog = snap.data ??
             HomeTipsCatalogSnapshot(tips: FinancialTipsCatalogService.biblicalCatalog());
-        final allTips = catalog.tips;
+        final allTips = catalog.tips.isNotEmpty
+            ? catalog.tips
+            : FinancialTipsCatalogService.biblicalCatalog();
         final preview = FinancialTipsCatalogService.partitionForHome(
           allTips,
           favoriteIds: catalog.favoriteIds,
         );
+        final hiddenCount =
+            preview.allTips.length - preview.homeVisibleTips.length;
         final syncing = snap.connectionState == ConnectionState.waiting &&
             snap.data == null;
 
@@ -89,7 +94,7 @@ class WisdomDashboardScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-              if (preview.allTips.length > FinancialTipsCatalogService.kMaxTipsOnHome) ...[
+              if (hiddenCount > 0) ...[
                   const SizedBox(height: 14),
                   SizedBox(
                     width: double.infinity,
@@ -100,7 +105,7 @@ class WisdomDashboardScreen extends StatelessWidget {
                       ),
                       icon: const Icon(Icons.auto_stories_rounded),
                       label: Text(
-                        'Veja mais (${preview.allTips.length - FinancialTipsCatalogService.kMaxTipsOnHome} dicas)',
+                        'Veja mais ($hiddenCount dicas)',
                       ),
                       style: FilledButton.styleFrom(
                         backgroundColor: const Color(0xFF0B1B4B),
@@ -118,6 +123,12 @@ class WisdomDashboardScreen extends StatelessWidget {
                 uid: uid,
                 profile: profile,
                 onOpenFinanceiro: () => onNavigateTo?.call(1),
+              ),
+              const SizedBox(height: 22),
+              HomeObjectiveFinancePanel(
+                uid: uid,
+                profile: profile,
+                onOpenObjetivoModule: () => onNavigateTo?.call(2),
               ),
             ],
           ),

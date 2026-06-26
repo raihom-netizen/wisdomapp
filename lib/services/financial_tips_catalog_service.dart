@@ -144,25 +144,34 @@ class FinancialTipsCatalogService {
     List<FinancialTipDisplayItem> all, {
     List<String> favoriteIds = const [],
   }) {
-    if (all.isEmpty) {
-      final fallback = biblicalCatalog();
-      return partitionForHome(fallback, favoriteIds: favoriteIds);
+    final catalog = all.isEmpty ? biblicalCatalog() : all;
+    if (catalog.length == 1) {
+      return HomeTipsPreview(
+        tipOfDay: catalog.first,
+        previewExtras: const [],
+        allTips: catalog,
+      );
     }
-    final pool = favoriteIds.isNotEmpty
-        ? all.where((t) => favoriteIds.contains(t.id)).toList()
-        : all;
-    final effective = pool.isNotEmpty ? pool : all;
-    final idx = tipOfDayIndex(effective.length);
-    final tipOfDay = effective[idx];
-    final rest = <FinancialTipDisplayItem>[
-      ...effective.sublist(idx + 1),
-      ...effective.sublist(0, idx),
+
+    // Favoritos só definem a «dica do dia», nunca encolhem o catálogo visível no Início.
+    final favInCatalog =
+        catalog.where((t) => favoriteIds.contains(t.id)).toList();
+    final tipOfDay = favInCatalog.isNotEmpty
+        ? favInCatalog[tipOfDayIndex(favInCatalog.length)]
+        : catalog[tipOfDayIndex(catalog.length)];
+
+    final rest = catalog.where((t) => t.id != tipOfDay.id).toList();
+    final rotate = tipOfDayIndex(rest.length);
+    final rotated = [
+      ...rest.sublist(rotate),
+      ...rest.sublist(0, rotate),
     ];
-    final extras = rest.take(kMaxTipsOnHome - 1).toList();
+    final extras = rotated.take(kMaxTipsOnHome - 1).toList();
+
     return HomeTipsPreview(
       tipOfDay: tipOfDay,
       previewExtras: extras,
-      allTips: all,
+      allTips: catalog,
     );
   }
 
@@ -211,12 +220,10 @@ class FinancialTipsCatalogService {
     if (config == null || !config.hasSelection) {
       return HomeTipsCatalogSnapshot(tips: biblicalCatalog());
     }
-    final tips = await _fetchTipsByIds(config.homeTipIds);
-    if (tips.isEmpty) {
-      return HomeTipsCatalogSnapshot(tips: biblicalCatalog());
-    }
+    final firestoreTips = await _fetchTipsByIds(config.homeTipIds);
+    final merged = resolveHomeCatalog(firestoreTips);
     return HomeTipsCatalogSnapshot(
-      tips: tips,
+      tips: merged,
       favoriteIds: config.favoriteTipIds,
       syncedAt: config.syncedAt,
       fromSyncedConfig: true,

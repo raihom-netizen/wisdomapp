@@ -18,6 +18,7 @@ import '../services/version_check_service.dart';
 import '../utils/url_launcher_helper.dart';
 import '../widgets/divulgacao_public_promo_card.dart';
 import '../widgets/oauth_login_buttons.dart';
+import '../widgets/official_social_top_buttons.dart';
 import '../widgets/wisdomapp_hero_brand.dart';
 
 /// Página de divulgação (rota `/divulgacao`) — visual alinhado à landing super premium.
@@ -909,6 +910,8 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
                     ),
                 ],
               ),
+              const SizedBox(height: 12),
+              OfficialSocialTopButtons.fromLanding(c),
               const SizedBox(height: 20),
               const WisdomappHeroBrand(showMicroTagline: true, showIdealizer: true, compact: true),
               const SizedBox(height: 12),

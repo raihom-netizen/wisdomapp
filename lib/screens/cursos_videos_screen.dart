@@ -6,8 +6,17 @@ import '../models/wisdom_courses_module_config.dart';
 import '../theme/app_colors.dart';
 import '../utils/course_content_link_helper.dart';
 import '../utils/youtube_url_helper.dart';
+import '../widgets/course_media_preview.dart';
 import '../widgets/course_mp4_player_dialog.dart';
 import '../widgets/youtube_video_player_dialog.dart';
+
+BoxFit _courseThumbFit(Map<String, dynamic> data) {
+  final type = (data['type'] ?? 'curso').toString();
+  if (type == 'dica' && (data['imageUrl'] ?? '').toString().trim().isNotEmpty) {
+    return BoxFit.contain;
+  }
+  return BoxFit.cover;
+}
 
 /// Módulo **Cursos** — vídeos YouTube publicados pelo admin (`course_videos`).
 class CursosVideosScreen extends StatefulWidget {
@@ -441,10 +450,7 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
               ),
               if (img.isNotEmpty) ...[
                 const SizedBox(height: 14),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: Image.network(img, fit: BoxFit.cover),
-                ),
+                CourseImagePreview(networkUrl: img, maxHeight: 240),
               ],
               if (body.isNotEmpty) ...[
                 const SizedBox(height: 16),
@@ -743,6 +749,7 @@ class _FeaturedVideoHighlight extends StatelessWidget {
     final body = (data['bodyText'] ?? '').toString();
     final preview = body.isNotEmpty ? body : description;
     final thumb = thumbUrl ?? '';
+    final thumbFit = _courseThumbFit(data);
     final overlayIcon = videoId != null
         ? Icons.play_circle_fill_rounded
         : Icons.article_rounded;
@@ -779,10 +786,10 @@ class _FeaturedVideoHighlight extends StatelessWidget {
                     fit: StackFit.expand,
                     children: [
                       if (thumb.isNotEmpty)
-                        Image.network(
-                          thumb,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => _coverPlaceholder(accent),
+                        CourseCoverImage(
+                          url: thumb,
+                          fit: thumbFit,
+                          fallback: _coverPlaceholder(accent),
                         )
                       else
                         _coverPlaceholder(accent),
@@ -925,6 +932,7 @@ class _ModernVideoCard extends StatelessWidget {
     final preview = body.isNotEmpty ? body : description;
     final type = (data['type'] ?? 'curso').toString();
     final thumb = thumbUrl ?? '';
+    final thumbFit = _courseThumbFit(data);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -958,11 +966,10 @@ class _ModernVideoCard extends StatelessWidget {
                     fit: StackFit.expand,
                     children: [
                       if (thumb.isNotEmpty)
-                        Image.network(
-                          thumb,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) =>
-                              _coverFallback(type, accent, accent2),
+                        CourseCoverImage(
+                          url: thumb,
+                          fit: thumbFit,
+                          fallback: _coverFallback(type, accent, accent2),
                         )
                       else
                         _coverFallback(type, accent, accent2),
@@ -1087,6 +1094,7 @@ class _DicaGridCard extends StatelessWidget {
     final title = (data['title'] ?? 'Dica').toString();
     final body = (data['bodyText'] ?? data['description'] ?? '').toString();
     final thumb = thumbUrl ?? '';
+    final thumbFit = _courseThumbFit(data);
     final overlayIcon = videoId != null
         ? Icons.play_circle_fill_rounded
         : ((data['linkUrl'] ?? data['externalUrl'] ?? '').toString().isNotEmpty
@@ -1121,10 +1129,10 @@ class _DicaGridCard extends StatelessWidget {
                   fit: StackFit.expand,
                   children: [
                     if (thumb.isNotEmpty)
-                      Image.network(
-                        thumb,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _fallback(accent, accent2),
+                      CourseCoverImage(
+                        url: thumb,
+                        fit: thumbFit,
+                        fallback: _fallback(accent, accent2),
                       )
                     else
                       _fallback(accent, accent2),

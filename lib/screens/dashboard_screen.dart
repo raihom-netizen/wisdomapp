@@ -58,6 +58,7 @@ import '../services/transaction_save_service.dart';
 import '../services/version_check_service.dart';
 import '../constants/app_version.dart';
 import '../utils/app_update_launcher.dart';
+import '../utils/finance_server_totals.dart';
 import '../utils/finance_line_opening.dart';
 import '../utils/firestore_query_batched_collect.dart';
 import '../utils/firestore_user_doc_id.dart';
@@ -244,6 +245,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _dashboardOpeningBalancePeriodKey = '';
   double? _dashboardOpeningBalanceCached;
 
+  /// KPIs financeiros do resumo verde (servidor — evita varrer transactions no cliente).
+  String _dashboardFinanceKpiKey = '';
+  double? _dashboardFinanceIncomeCached;
+  double? _dashboardFinanceExpenseCached;
+  int _dashboardFinancePendingCountCached = 0;
+  bool _dashboardFinanceKpiLoading = false;
+
   Timer? _agendaAutoCloseDebounce;
   final Set<String> _agendaAutoCloseInFlight = {};
 
@@ -255,6 +263,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _dashboardOpeningMemoFuture = null;
       _dashboardOpeningBalancePeriodKey = '';
       _dashboardOpeningBalanceCached = null;
+      _dashboardFinanceKpiKey = '';
+      _dashboardFinanceIncomeCached = null;
+      _dashboardFinanceExpenseCached = null;
+      _dashboardFinancePendingCountCached = 0;
     }
   }
 
@@ -329,6 +341,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         unawaited(RelatorioService.warmUpPdfAssets());
         unawaited(_ensureFinanceOpeningBucketsRebuildOnce());
         _ensureDashboardOpeningBalance(initLimite);
+        final (rs, re) = _rangeForPeriod();
+        _ensureDashboardFinanceKpis(rs, re);
       });
     });
     FinanceTransactionsHub.revision.addListener(_onFinanceHubRevision);
@@ -336,15 +350,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _onFinanceHubRevision() {
     if (!mounted) return;
-    final (rs, _) = _rangeForPeriod();
-    final limite = DateTime(rs.year, rs.month, rs.day);
     setState(() {
       _dashboardOpeningMemoKey = null;
       _dashboardOpeningMemoFuture = null;
       _dashboardOpeningBalancePeriodKey = '';
       _dashboardOpeningBalanceCached = null;
+      _dashboardFinanceKpiKey = '';
+      _dashboardFinanceIncomeCached = null;
+      _dashboardFinanceExpenseCached = null;
+      _dashboardFinancePendingCountCached = 0;
     });
-    _ensureDashboardOpeningBalance(limite);
+    FinanceServerTotals.invalidateForUser(_userFsId);
+    final (rs, re) = _rangeForPeriod();
+    _ensureDashboardFinanceKpis(rs, re);
+    _ensureDashboardOpeningBalance(DateTime(rs.year, rs.month, rs.day));
   }
 
   /// Reconstrói agregados mensais no servidor (uma vez por sessão se ainda não migrado).
@@ -3492,6 +3511,61 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (_) {}
   }
 
+  String _dashboardFinanceKpiCacheKey(DateTime rangeStart, DateTime rangeEnd) {
+    return '${rangeStart.millisecondsSinceEpoch}|${rangeEnd.millisecondsSinceEpoch}|$_userFsId';
+  }
+
+  void _ensureDashboardFinanceKpis(DateTime rangeStart, DateTime rangeEnd) {
+    if (_userFsId.isEmpty) return;
+    final key = _dashboardFinanceKpiCacheKey(rangeStart, rangeEnd);
+    if (_dashboardFinanceKpiKey == key &&
+        _dashboardFinanceIncomeCached != null &&
+        _dashboardFinanceExpenseCached != null) {
+      return;
+    }
+    _dashboardFinanceKpiKey = key;
+    final peek = FinanceServerTotals.peekCached(
+      uid: _userFsId,
+      from: rangeStart,
+      to: rangeEnd,
+      statusFilter: 'paid',
+    );
+    if (peek != null) {
+      _dashboardFinanceIncomeCached = peek.income;
+      _dashboardFinanceExpenseCached = peek.expense;
+      _dashboardFinancePendingCountCached = peek.pendingExpenseCount;
+    }
+    unawaited(_loadDashboardFinanceKpis(rangeStart, rangeEnd, key));
+  }
+
+  Future<void> _loadDashboardFinanceKpis(
+    DateTime rangeStart,
+    DateTime rangeEnd,
+    String key,
+  ) async {
+    if (!mounted || _dashboardFinanceKpiKey != key) return;
+    setState(() => _dashboardFinanceKpiLoading = true);
+    try {
+      final totals = await FinanceServerTotals.load(
+        uid: _userFsId,
+        from: rangeStart,
+        to: rangeEnd,
+        statusFilter: 'paid',
+      );
+      if (!mounted || _dashboardFinanceKpiKey != key) return;
+      setState(() {
+        _dashboardFinanceIncomeCached = totals.income;
+        _dashboardFinanceExpenseCached = totals.expense;
+        _dashboardFinancePendingCountCached = totals.pendingExpenseCount;
+        _dashboardFinanceKpiLoading = false;
+      });
+    } catch (_) {
+      if (mounted && _dashboardFinanceKpiKey == key) {
+        setState(() => _dashboardFinanceKpiLoading = false);
+      }
+    }
+  }
+
   /// Faixa verde no topo com Receitas / Despesas / Saldo do período (campos em retângulos brancos).
   /// Inclui Saldo de abertura (saldo anterior ao início do período) quando aplicável.
   Widget _buildBlueSummaryBand(
@@ -3500,85 +3574,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final limiteAnterior =
         DateTime(rangeStart.year, rangeStart.month, rangeStart.day);
     _ensureDashboardOpeningBalance(limiteAnterior);
-    return StreamBuilder<List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
-      stream: financeTransactionsPeriodDocs(
-        uid: _userFsId,
-        rangeStart: rangeStart,
-        rangeEnd: rangeEnd,
-      ),
-      builder: (context, snap) {
-        if (_userFsId.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.all(24),
-            child: Center(
-                child: SizedBox(
-                    width: 32,
-                    height: 32,
-                    child: CircularProgressIndicator(strokeWidth: 2.5))),
-          );
-        }
-        if (snap.hasError) {
-          return _dashboardFinanceFirestoreErrorBanner(() {
-            if (mounted) setState(() {});
-          });
-        }
-        double receitas = 0, despesasPagas = 0;
-        final listReceitas = <Map<String, dynamic>>[];
-        final listDespesas = <Map<String, dynamic>>[];
-        int despesasPendentesCount = 0;
-        for (final doc in snap.data ?? []) {
-          final d = Map<String, dynamic>.from(doc.data());
-          d['id'] = doc.id;
-          final ts = d['date'];
-          if (ts is! Timestamp) continue;
-          final date = ts.toDate();
-          final amount = (d['amount'] ?? 0).toDouble();
-          final type = (d['type'] ?? 'expense').toString();
-          final isPending = (d['status'] ?? 'paid').toString() != 'paid';
-          final effectiveDate = FinanceLineOpening.effectiveDateTimeFromMap(d) ?? date;
-          if (type == 'income') {
-            if (!isPending) {
-              if (!effectiveDate.isBefore(rangeStart) &&
-                  !effectiveDate.isAfter(rangeEnd)) {
-                receitas += amount;
-                listReceitas.add(d);
-              }
-            }
-          } else {
-            if (isPending) {
-              if (!date.isBefore(rangeStart) && !date.isAfter(rangeEnd)) {
-                despesasPendentesCount++;
-              }
-            } else {
-              final absAmount = amount.abs();
-              if (!effectiveDate.isBefore(rangeStart) &&
-                  !effectiveDate.isAfter(rangeEnd)) {
-                despesasPagas += absAmount;
-                listDespesas.add(d);
-              }
-            }
-          }
-        }
-        listReceitas.sort((a, b) {
-          final ta = (a['paidAt'] as Timestamp?)?.toDate() ??
-              (a['date'] as Timestamp?)?.toDate();
-          final tb = (b['paidAt'] as Timestamp?)?.toDate() ??
-              (b['date'] as Timestamp?)?.toDate();
-          if (ta == null || tb == null) return 0;
-          return tb.compareTo(ta);
-        });
-        listDespesas.sort((a, b) {
-          final ta = (a['paidAt'] as Timestamp?)?.toDate() ??
-              (a['date'] as Timestamp?)?.toDate();
-          final tb = (b['paidAt'] as Timestamp?)?.toDate() ??
-              (b['date'] as Timestamp?)?.toDate();
-          if (ta == null || tb == null) return 0;
-          return tb.compareTo(ta);
-        });
-        final saldoPeriodo = receitas - despesasPagas;
-        final saldoAnterior = _dashboardOpeningBalanceCached ?? 0.0;
-        final saldoAcumulado = saldoAnterior + saldoPeriodo;
-        return Container(
+    _ensureDashboardFinanceKpis(rangeStart, rangeEnd);
+
+    if (_userFsId.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(24),
+        child: Center(
+          child: SizedBox(
+            width: 32,
+            height: 32,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
+          ),
+        ),
+      );
+    }
+
+    final receitas = _dashboardFinanceIncomeCached;
+    final despesasPagas = _dashboardFinanceExpenseCached;
+    final despesasPendentesCount = _dashboardFinancePendingCountCached;
+    final kpiLoading = _dashboardFinanceKpiLoading &&
+        receitas == null &&
+        despesasPagas == null;
+
+    if (kpiLoading) {
+      return const Padding(
+        padding: EdgeInsets.all(24),
+        child: Center(
+          child: SizedBox(
+            width: 32,
+            height: 32,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
+          ),
+        ),
+      );
+    }
+
+    final receitasVal = receitas ?? 0.0;
+    final despesasVal = despesasPagas ?? 0.0;
+    final saldoPeriodo = receitasVal - despesasVal;
+    final saldoAnterior = _dashboardOpeningBalanceCached ?? 0.0;
+    final saldoAcumulado = saldoAnterior + saldoPeriodo;
+    return Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
@@ -3654,7 +3690,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Expanded(
                     child: _summaryCard(
                       label: 'Receitas',
-                      value: receitas,
+                      value: receitasVal,
                       labelAndValueColor: AppColors.saldoPositive,
                       hint: 'Toque para gráficos',
                       hideAmount: _hideSensitiveBalances,
@@ -3671,7 +3707,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Expanded(
                     child: _summaryCard(
                       label: 'Despesas pagas',
-                      value: despesasPagas,
+                      value: despesasVal,
                       labelAndValueColor: AppColors.saldoNegative,
                       hint: despesasPendentesCount > 0
                           ? '$despesasPendentesCount pendente(s) · Toque para gráficos'
@@ -3796,9 +3832,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             context,
                             rangeStart,
                             rangeEnd,
-                            cachedDocs: snap.data ??
-                                const <QueryDocumentSnapshot<
-                                    Map<String, dynamic>>>[],
+                            cachedDocs: const <QueryDocumentSnapshot<Map<String, dynamic>>>[],
                             openingBalanceHint: saldoAnterior,
                           )
                       : () =>
@@ -3816,8 +3850,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
         );
-      },
-    );
   }
 
   /// Quadro azul claro: receitas pendentes. Respeita preferências de receitas fixas (igual Financeiro).
@@ -7212,7 +7244,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          const Text('Crie metas na aba Meta Financeira e acompanhe aqui.',
+          const Text('Crie objetivos no módulo Objetivo Financeiro e acompanhe aqui.',
               style: TextStyle(color: Colors.white70, fontSize: 12)),
           if (widget.onNavigateTo != null) ...[
             const SizedBox(height: 16),
@@ -7222,7 +7254,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 onPressed: () => widget.onNavigateTo!(2),
                 icon: const Icon(Icons.add_rounded,
                     size: 20, color: Colors.white),
-                label: const Text('Criar meta',
+                label: const Text('Criar objetivo',
                     style: TextStyle(
                         color: Colors.white, fontWeight: FontWeight.w600)),
                 style: OutlinedButton.styleFrom(

@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
 import '../constants/google_oauth_config.dart';
+import '../utils/firestore_web_guard.dart';
 import 'google_calendar_auth_helper.dart';
 
 /// Evento externo do Google Calendar (somente leitura na Agenda).
@@ -153,14 +154,16 @@ class GoogleCalendarSyncService {
       final connectedEmail = (auth.email ?? preferredEmail ?? loginEmail).trim();
       _activeConnectedEmail = connectedEmail.isEmpty ? null : connectedEmail;
 
-      await _settingsRef(uid).set({
-        'enabled': true,
-        'provider': 'google_calendar',
-        'connectedEmail': _activeConnectedEmail ?? '',
-        'loginProviderApple': GoogleCalendarAuthHelper.isApplePrimaryLogin(),
-        'connectedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      await FirestoreWebGuard.runWithWebRecovery(() async {
+        await _settingsRef(uid).set({
+          'enabled': true,
+          'provider': 'google_calendar',
+          'connectedEmail': _activeConnectedEmail ?? '',
+          'loginProviderApple': GoogleCalendarAuthHelper.isApplePrimaryLogin(),
+          'connectedAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      });
 
       unawaited(syncAllLocalReminders(userDocId: uid));
 
@@ -176,16 +179,23 @@ class GoogleCalendarSyncService {
   }
 
   static Future<bool> _testCalendarAccess(String token) async {
+    // Usa a mesma API dos eventos (escopo calendar.events) — calendarList exige outro escopo.
     final uri = Uri.parse(
-      'https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=1',
+      'https://www.googleapis.com/calendar/v3/calendars/primary/events?maxResults=1',
     );
     try {
       final res = await http.get(
         uri,
         headers: {'Authorization': 'Bearer $token'},
       );
-      return res.statusCode >= 200 && res.statusCode < 300;
-    } catch (_) {
+      if (res.statusCode >= 200 && res.statusCode < 300) return true;
+      debugPrint(
+        'GoogleCalendar _testCalendarAccess HTTP ${res.statusCode}: '
+        '${res.body.length > 200 ? res.body.substring(0, 200) : res.body}',
+      );
+      return false;
+    } catch (e) {
+      debugPrint('GoogleCalendar _testCalendarAccess: $e');
       return false;
     }
   }
