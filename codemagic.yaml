@@ -1,10 +1,7 @@
 # Codemagic CI/CD — WISDOMAPP (somente iOS iPhone)
 # Versão marketing: lib/constants/app_version.dart → AppVersion.current
-# Disparo: Start new build na UI (branch codemagic-ios-ready ou codemagic-{versao}-ready).
-# O deploy.ps1 envia ao remoto via scripts/push-codemagic-ready.ps1
-#
-# OBRIGATÓRIO na UI: Application settings → Workflow Editor → "Switch to YAML configuration"
-# Toggle "Make builds public" ON (uma vez).
+# Disparo: push em main/codemagic-* (triggering abaixo) ou API/scripts/Fix-CodemagicIosCompleto.ps1
+# UI: se wisdomapp estiver Archived, rode Fix-CodemagicIos.bat (registra app novo + inicia build via API)
 #
 # Assinatura AUTOMÁTICA — integração Apple WISDOMAPP:
 #   Team integrations → Developer Portal → wisdomapp (Key 4UMWWALR3U)
@@ -16,6 +13,15 @@ workflows:
   ios-workflow:
     name: iOS Build — WISDOMAPP
     max_build_duration: 60
+    instance_type: mac_mini_m2
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+        - pattern: codemagic-*-ready
+          include: true
     integrations:
       app_store_connect: wisdomapp
     environment:
