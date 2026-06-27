@@ -69,8 +69,9 @@ class _GoogleCalendarIntegrationToggleState
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Calendário Google ativo${res.email != null ? ' · ${res.email}' : ''}. '
-          'Preferência salva na sua conta.',
+          res.email != null && res.email!.isNotEmpty
+              ? 'Google Calendar ativo · ${res.email} — sincronização automática.'
+              : 'Google Calendar ativo — sincronização automática.',
         ),
       ),
     );

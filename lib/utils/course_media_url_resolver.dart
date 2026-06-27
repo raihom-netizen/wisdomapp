@@ -52,6 +52,37 @@ class CourseMediaUrlResolver {
 
   static const _arrayPathKeys = ['imageStoragePaths', 'photoStoragePaths'];
 
+  static Map<String, dynamic> enrichWithDocId(
+    Map<String, dynamic> data,
+    String? docId,
+  ) {
+    if (docId == null || docId.trim().isEmpty) return data;
+    if (data['id']?.toString() == docId) return data;
+    return {...data, 'id': docId};
+  }
+
+  /// Evita gravar URLs vazias (quebram preview no painel).
+  static Map<String, dynamic> stripEmptyMediaFields(Map<String, dynamic> fields) {
+    final out = <String, dynamic>{};
+    fields.forEach((key, value) {
+      if (value is String && value.trim().isEmpty) return;
+      out[key] = value;
+    });
+    return out;
+  }
+
+  /// thumbnailUrl sempre aponta para a primeira imagem publicada.
+  static Map<String, dynamic> finalizeImageFields(Map<String, dynamic> fields) {
+    final cleaned = stripEmptyMediaFields(fields);
+    final urls = collectHttpUrls(cleaned);
+    if (urls.isNotEmpty) {
+      cleaned['thumbnailUrl'] = urls.first;
+      cleaned['imageUrl'] ??= urls.first;
+      cleaned['coverUrl'] ??= urls.first;
+    }
+    return cleaned;
+  }
+
   static bool looksLikeHttpUrl(String raw) {
     final u = raw.trim().toLowerCase();
     return u.startsWith('http://') || u.startsWith('https://');
@@ -340,14 +371,14 @@ class CourseMediaUrlResolver {
     final urls = uploads.map((e) => e.downloadUrl).toList();
     final paths = uploads.map((e) => e.storagePath).toList();
     final first = urls.first;
-    return {
+    return finalizeImageFields({
       'imageUrls': urls,
       'imageStoragePaths': paths,
       'imageUrl': first,
       'coverUrl': first,
       'thumbnailUrl': first,
       'coverStoragePath': paths.first,
-    };
+    });
   }
 
   static Map<String, dynamic> videoFieldsFromUploads(

@@ -3,9 +3,7 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
@@ -129,7 +127,7 @@ class GoogleCalendarSyncService {
         );
   }
 
-  /// Ativa: reutiliza credencial salva ou pede autorização (GIS, sem aba Firebase).
+  /// Ativa: silent-first; popup só se necessário.
   static Future<GoogleCalendarEnableResult> enable(
     String uid, {
     bool forceNewCredentials = false,
@@ -138,12 +136,10 @@ class GoogleCalendarSyncService {
     if (uid.isEmpty) {
       return GoogleCalendarEnableResult.fail('Sessão inválida. Entre novamente.');
     }
-    return FirestoreWebGuard.runWebGoogleSignInFlow(
-      () => _enableCore(
-        uid,
-        forceNewCredentials: forceNewCredentials,
-        skipSilent: skipSilent,
-      ),
+    return _enableCore(
+      uid,
+      forceNewCredentials: forceNewCredentials,
+      skipSilent: skipSilent,
     );
   }
 
@@ -156,8 +152,8 @@ class GoogleCalendarSyncService {
   }
 
   /// Renova token silenciosamente se a integração já está ativa (boot / abrir Agenda).
-  static Future<void> warmUpIfEnabled(String uid) async {
-    if (uid.isEmpty || !await isEnabled(uid)) return;
+  static Future<bool> warmUpIfEnabled(String uid) async {
+    if (uid.isEmpty || !await isEnabled(uid)) return false;
     try {
       final snap = await FirestoreWebGuard.runWithWebRecovery(
         () => _settingsRef(uid).get(),
@@ -165,17 +161,26 @@ class GoogleCalendarSyncService {
       final e = (snap.data()?['connectedEmail'] ?? '').toString().trim();
       if (e.isNotEmpty) _activeConnectedEmail = e;
     } catch (_) {}
-    await _accessToken(uid);
+
+    await GoogleCalendarAuthHelper.bootstrapSession(
+      preferredEmail: _activeConnectedEmail,
+    );
+
+    final auth = await GoogleCalendarAuthHelper.requestSilent(
+      preferredEmail: _activeConnectedEmail,
+    );
+    if (auth.ok) {
+      _activeConnectedEmail = auth.email ?? _activeConnectedEmail;
+      return true;
+    }
+    return false;
   }
 
   /// Limpa credencial Google Calendar para escolher outra conta Gmail.
   static Future<void> prepareGoogleAccountChange(String uid) async {
     if (uid.isEmpty) return;
-    await GoogleCalendarAuthHelper.clearCache();
+    await GoogleCalendarAuthHelper.signOutCalendarSession();
     _activeConnectedEmail = null;
-    try {
-      await _calendarSignIn().signOut();
-    } catch (_) {}
     await disable(uid, keepLocalCredentials: false);
     await FirestoreWebGuard.runWithWebRecovery(() async {
       await _settingsRef(uid).set({
@@ -183,14 +188,6 @@ class GoogleCalendarSyncService {
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     });
-  }
-
-  static GoogleSignIn _calendarSignIn() {
-    return GoogleSignIn(
-      clientId: kIsWeb ? GoogleOAuthConfig.webClientId : null,
-      scopes: const [GoogleOAuthConfig.calendarScope, 'email', 'profile'],
-      serverClientId: kIsWeb ? null : GoogleOAuthConfig.webClientId,
-    );
   }
 
   static Future<GoogleCalendarEnableResult> _enableCore(
@@ -229,7 +226,12 @@ class GoogleCalendarSyncService {
           preferredEmail: emailHint,
         );
         if (!auth.ok) {
-          return GoogleCalendarEnableResult.needsAuth(emailHint);
+          if (auth.needsInteractive) {
+            return GoogleCalendarEnableResult.needsAuth(emailHint);
+          }
+          return GoogleCalendarEnableResult.fail(
+            auth.errorMessage ?? 'Não foi possível conectar ao Google Calendar.',
+          );
         }
       }
 
@@ -347,8 +349,10 @@ class GoogleCalendarSyncService {
     final auth = await GoogleCalendarAuthHelper.requestSilent(
       preferredEmail: email,
     );
-    if (auth.ok) return auth.accessToken;
-
+    if (auth.ok) {
+      _activeConnectedEmail = auth.email ?? _activeConnectedEmail;
+      return auth.accessToken;
+    }
     return null;
   }
 
@@ -367,6 +371,7 @@ class GoogleCalendarSyncService {
       );
       token = refreshed.accessToken;
       if (token != null && token.isNotEmpty) {
+        _activeConnectedEmail = refreshed.email ?? _activeConnectedEmail;
         res = await request(token);
       }
     }
@@ -452,7 +457,8 @@ class GoogleCalendarSyncService {
     );
 
     try {
-      final res = await _authorizedGet(uri, userDocId: userDocId);
+      final res = await _authorizedGet(uri, userDocId: userDocId)
+          .timeout(const Duration(seconds: 25));
       if (res.statusCode < 200 || res.statusCode >= 300) return [];
       final body = jsonDecode(res.body) as Map<String, dynamic>;
       return _filterEventsFromSyncMin(_parseEventsResponse(body));

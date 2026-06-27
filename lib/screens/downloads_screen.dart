@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../models/user_profile.dart';
 import '../services/account_switch_flow.dart';
 import '../services/relatorio_service.dart';
+import '../services/version_check_service.dart';
 import '../utils/pdf_financeiro_super_extrato.dart';
 import '../theme/app_colors.dart';
 import 'report_preview_screen.dart';
@@ -40,7 +41,8 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       FirebaseFirestore.instance.collection('public_downloads');
 
   static const String _versionJsonUrl = 'https://controletotal-4c867.web.app/version.json';
-  static const String _defaultTestFlightPublicLink = 'https://testflight.apple.com/join/pugVHQ6C';
+  static const String _defaultTestFlightPublicLink =
+      VersionCheckService.defaultTestFlightPublicUrl;
   static const String _playStoreUrl =
       'https://play.google.com/store/apps/details?id=com.wisdomapp.app';
 

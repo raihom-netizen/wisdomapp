@@ -78,8 +78,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
   void initState() {
     super.initState();
     _selectedDay = DateTime.now();
-    unawaited(GoogleCalendarSyncService.warmUpIfEnabled(_userDocId));
-    _refreshGoogleDays();
+    unawaited(_bootstrapGoogleCalendar());
     _googleEnabledSub =
         GoogleCalendarSyncService.enabledStream(_userDocId).listen(
       (enabled) {
@@ -104,6 +103,12 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
   }
 
   void _retryStream() => setState(() => _streamGeneration++);
+
+  Future<void> _bootstrapGoogleCalendar() async {
+    if (_userDocId.isEmpty) return;
+    await GoogleCalendarSyncService.warmUpIfEnabled(_userDocId);
+    if (mounted) await _refreshGoogleDays();
+  }
 
   Future<void> _refreshGoogleDays() async {
     if (_userDocId.isEmpty) return;

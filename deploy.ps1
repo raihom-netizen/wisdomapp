@@ -62,6 +62,7 @@ if (Test-Path $bootstrapPath) {
 
 Write-Host "`n=== 3/7 version.json ===" -ForegroundColor Cyan
 $playUrl = "https://play.google.com/store/apps/details?id=com.wisdomapp.app"
+$testFlightUrl = "https://testflight.apple.com/join/qWpWwhnN"
 $versionJsonPath = Join-Path $publicDir "version.json"
 $json = @{
   version = $ver.Version
@@ -69,6 +70,7 @@ $json = @{
   versionCode = $ver.VersionCode
   releaseTag = $ver.Tag
   apkDownloadUrl = $playUrl
+  testFlightUrl = $testFlightUrl
 } | ConvertTo-Json -Compress
 $utf8 = New-Object System.Text.UTF8Encoding $false
 [System.IO.File]::WriteAllText($versionJsonPath, $json, $utf8)
@@ -129,7 +131,7 @@ if (-not $NoCodemagicPush -and -not $WebOnly) {
   if (Test-Path $trigger) {
     & node $trigger 2>&1 | ForEach-Object { Write-Host $_ }
     if ($LASTEXITCODE -ne 0) {
-      Write-Host "  [CodeMagic] App ARCHIVED ou sem API token — rode Fix-CodemagicIos.bat ou desarquive na UI." -ForegroundColor Yellow
+      Write-Host "  [CodeMagic] App ARCHIVED ou sem API token - rode Fix-CodemagicIos.bat ou desarquive na UI." -ForegroundColor Yellow
     }
   }
 }

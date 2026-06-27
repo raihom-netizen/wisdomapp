@@ -29,7 +29,7 @@ class VersionCheckService {
   static String? testFlightUrl;
 
   static const String defaultTestFlightPublicUrl =
-      'https://testflight.apple.com/join/pugVHQ6C';
+      'https://testflight.apple.com/join/qWpWwhnN';
 
   static const String testFlightJoinUrl = defaultTestFlightPublicUrl;
 

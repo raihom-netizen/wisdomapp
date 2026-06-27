@@ -137,7 +137,11 @@ class _CoursePhotoGalleryState extends State<CoursePhotoGallery> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final urls = await CourseMediaUrlResolver.resolveImageUrls(widget.data);
+    final docId = widget.data['id']?.toString();
+    final urls = await CourseMediaUrlResolver.resolveImageUrls(
+      widget.data,
+      docId: docId,
+    );
     if (!mounted) return;
     setState(() {
       _urls = urls;
@@ -170,10 +174,24 @@ class _CoursePhotoGalleryState extends State<CoursePhotoGallery> {
       return SizedBox(
         height: widget.height,
         child: Center(
-          child: Icon(
-            Icons.image_not_supported_outlined,
-            size: 40,
-            color: Colors.white.withValues(alpha: 0.45),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.image_not_supported_outlined,
+                size: 40,
+                color: Colors.white.withValues(alpha: 0.45),
+              ),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: _load,
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Recarregar imagem'),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white.withValues(alpha: 0.85),
+                ),
+              ),
+            ],
           ),
         ),
       );
@@ -406,7 +424,9 @@ class CourseMediaThumbnail extends StatefulWidget {
     bool showPlayButton = true,
     double playIconSize = 56,
   }) {
-    final merged = docId != null ? {...data, 'id': docId} : data;
+    final merged = docId != null
+        ? CourseMediaUrlResolver.enrichWithDocId(data, docId)
+        : data;
     final isVideo = CourseThumbResolver.isVideoContent(merged);
     final isYt = CourseThumbResolver.videoIdFromData(merged) != null;
     final photo = CourseThumbResolver.isDicaPhoto(merged) ||
@@ -491,7 +511,11 @@ class _CourseMediaThumbnailState extends State<CourseMediaThumbnail> {
     try {
       List<String> urls;
       if (widget.firestoreData != null) {
-        urls = await CourseMediaUrlResolver.resolveImageUrls(widget.firestoreData!);
+        final docId = widget.firestoreData!['id']?.toString();
+        urls = await CourseMediaUrlResolver.resolveImageUrls(
+          widget.firestoreData!,
+          docId: docId,
+        );
       } else {
         urls = await CourseMediaUrlResolver.resolveRawUrls(widget.urls);
       }

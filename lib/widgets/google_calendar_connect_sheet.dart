@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/google_calendar_auth_helper.dart';
 import '../services/google_calendar_sync_service.dart';
 
-/// Autorização Google Calendar **dentro do módulo** (sem abrir aba Firebase).
+/// Autorização Google Calendar — reconexão automática e popup só quando necessário.
 class GoogleCalendarConnectSheet extends StatefulWidget {
   const GoogleCalendarConnectSheet({
     super.key,
@@ -43,12 +43,15 @@ class GoogleCalendarConnectSheet extends StatefulWidget {
 class _GoogleCalendarConnectSheetState extends State<GoogleCalendarConnectSheet> {
   bool _busy = false;
   String? _error;
+  String _status = 'Verificando sessão Google…';
 
   @override
   void initState() {
     super.initState();
     if (!widget.forceNewCredentials) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _connect(silentFirst: true));
+    } else {
+      _status = 'Escolha a conta Gmail para sincronizar.';
     }
   }
 
@@ -57,6 +60,9 @@ class _GoogleCalendarConnectSheetState extends State<GoogleCalendarConnectSheet>
     setState(() {
       _busy = true;
       _error = null;
+      _status = silentFirst
+          ? 'Reconectando automaticamente…'
+          : 'Abrindo autorização Google…';
     });
     try {
       final result = await GoogleCalendarSyncService.enable(
@@ -64,9 +70,9 @@ class _GoogleCalendarConnectSheetState extends State<GoogleCalendarConnectSheet>
         forceNewCredentials: widget.forceNewCredentials,
         skipSilent: !silentFirst && !widget.forceNewCredentials,
       ).timeout(
-        const Duration(seconds: 120),
+        const Duration(seconds: 90),
         onTimeout: () => GoogleCalendarEnableResult.fail(
-          'Tempo esgotado ao conectar. Feche e tente de novo, ou verifique se o popup do Google foi bloqueado.',
+          'Tempo esgotado. Verifique se o popup do Google foi bloqueado e tente de novo.',
         ),
       );
       if (!mounted) return;
@@ -84,11 +90,13 @@ class _GoogleCalendarConnectSheetState extends State<GoogleCalendarConnectSheet>
         _error = result.message?.trim().isNotEmpty == true
             ? result.message!.trim()
             : 'Não foi possível conectar ao Google Calendar.';
+        _status = 'Autorização necessária';
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _error = e.toString().split('\n').first;
+        _status = 'Erro ao conectar';
       });
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -127,7 +135,7 @@ class _GoogleCalendarConnectSheetState extends State<GoogleCalendarConnectSheet>
                   height: 4,
                   decoration: BoxDecoration(
                     color: Colors.grey.shade400,
-                    borderRadius: BorderRadius.circular(99),
+                    borderRadius: BorderRadius.circular(999),
                   ),
                 ),
               ),
@@ -149,7 +157,7 @@ class _GoogleCalendarConnectSheetState extends State<GoogleCalendarConnectSheet>
                   const SizedBox(width: 12),
                   const Expanded(
                     child: Text(
-                      'Conectar Google Calendar',
+                      'Google Calendar',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
@@ -161,10 +169,9 @@ class _GoogleCalendarConnectSheetState extends State<GoogleCalendarConnectSheet>
               const SizedBox(height: 12),
               Text(
                 appleLogin
-                    ? 'Você entrou com Apple. Escolha a conta Gmail que deseja '
-                        'sincronizar com a agenda — seu login Apple continua igual.'
-                    : 'Autorize o WISDOMAPP a ler e enviar compromissos ao seu '
-                        'Google Calendar. A janela do Google abre aqui, sem sair do app.',
+                    ? 'Escolha o Gmail que deseja sincronizar. Seu login Apple continua igual.'
+                    : 'Se já autorizou antes, reconectamos em segundos — sem popup. '
+                        'Caso contrário, abrimos a janela do Google aqui mesmo.',
                 style: TextStyle(
                   fontSize: 13.5,
                   height: 1.4,
@@ -176,7 +183,7 @@ class _GoogleCalendarConnectSheetState extends State<GoogleCalendarConnectSheet>
                   !widget.forceNewCredentials) ...[
                 const SizedBox(height: 10),
                 Text(
-                  'Conta salva: ${widget.preferredEmail!.trim()}',
+                  'Conta vinculada: ${widget.preferredEmail!.trim()}',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -184,8 +191,30 @@ class _GoogleCalendarConnectSheetState extends State<GoogleCalendarConnectSheet>
                   ),
                 ),
               ],
+              const SizedBox(height: 14),
+              if (_busy)
+                Row(
+                  children: [
+                    const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2.5),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _status,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               if (_error != null) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 Text(
                   _error!,
                   style: TextStyle(
@@ -199,11 +228,7 @@ class _GoogleCalendarConnectSheetState extends State<GoogleCalendarConnectSheet>
               FilledButton.icon(
                 onPressed: _busy ? null : () => _connect(silentFirst: false),
                 icon: _busy
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
+                    ? const SizedBox.shrink()
                     : Image.network(
                         'https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg',
                         width: 20,
@@ -215,8 +240,8 @@ class _GoogleCalendarConnectSheetState extends State<GoogleCalendarConnectSheet>
                   _busy
                       ? 'Conectando…'
                       : (widget.forceNewCredentials
-                          ? 'Escolher outra conta Google'
-                          : 'Continuar com Google'),
+                          ? 'Escolher outra conta'
+                          : 'Autorizar Google Calendar'),
                 ),
                 style: FilledButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 14),

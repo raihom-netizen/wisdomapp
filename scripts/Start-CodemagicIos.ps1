@@ -23,7 +23,7 @@ if ([string]::IsNullOrWhiteSpace($GitHubRepo)) {
     $GitHubRepo = $env:WISDOMAPP_GITHUB_REPO
 }
 if ([string]::IsNullOrWhiteSpace($GitHubRepo)) {
-    $GitHubRepo = "https://github.com/ralhom-netizen/wisdomapp.git"
+    $GitHubRepo = "https://github.com/raihom-netizen/wisdomapp.git"
 }
 
 function Add-CodemagicGitFiles {

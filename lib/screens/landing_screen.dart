@@ -406,7 +406,8 @@ class _LandingScreenState extends State<LandingScreen>
 
   static const String _versionJsonUrl = 'https://wisdomapp-b9e98.web.app/version.json';
   /// Link público TestFlight (beta no iPhone sem publicar na App Store). Sobrescrito por version.json / Firestore.
-  static const String _defaultTestFlightPublicLink = 'https://testflight.apple.com/join/pugVHQ6C';
+  static const String _defaultTestFlightPublicLink =
+      VersionCheckService.defaultTestFlightPublicUrl;
 
   String? _resolvePlayStoreUrl(String? fallback) {
     final fromLanding = _landing.divPlayStoreUrl.trim();

@@ -44,7 +44,7 @@ android {
         applicationId = "com.wisdomapp.app"
         minSdkVersion = flutter.minSdkVersion
         targetSdk = 36
-        versionCode = 10
+        versionCode = 11
         versionName = "10.04"
         multiDexEnabled = true
     }

@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/wisdom_courses_module_config.dart';
 import '../services/course_video_file_service.dart';
 import '../services/course_video_image_service.dart';
+import '../services/course_media_storage_cleanup.dart';
 import '../theme/app_colors.dart';
 import '../utils/course_content_link_helper.dart';
 import '../utils/course_media_url_resolver.dart';
@@ -440,19 +441,34 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       ),
     );
     if (ok != true) return;
-    await _courseFirestoreOp(() async {
-      final batch = FirebaseFirestore.instance.batch();
-      for (final id in _selectedIds) {
-        batch.delete(
-            FirebaseFirestore.instance.collection('course_videos').doc(id));
-      }
-      await batch.commit();
-    });
-    setState(() {
-      _selectedIds.clear();
-      _selectionMode = false;
-    });
-    _snack('$n conteúdo(s) removido(s).');
+    try {
+      final ids = _selectedIds.toList();
+      await _courseFirestoreOp(() async {
+        for (final id in ids) {
+          final snap = await FirebaseFirestore.instance
+              .collection('course_videos')
+              .doc(id)
+              .get();
+          await CourseMediaStorageCleanup.deleteForCourseDoc(
+            id,
+            data: snap.data(),
+          );
+        }
+        final batch = FirebaseFirestore.instance.batch();
+        for (final id in ids) {
+          batch.delete(
+              FirebaseFirestore.instance.collection('course_videos').doc(id));
+        }
+        await batch.commit();
+      });
+      setState(() {
+        _selectedIds.clear();
+        _selectionMode = false;
+      });
+      _snack('$n conteúdo(s) removido(s).');
+    } catch (e) {
+      _snack('Erro ao excluir: $e');
+    }
   }
 
   Future<void> _saveModuleConfig() async {
@@ -583,7 +599,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
             ? 'upload_youtube'
             : (hasMp4 ? 'upload' : 'youtube');
 
-        await _courseFirestoreOp(() => docRef.set({
+        final docPayload = CourseMediaUrlResolver.finalizeImageFields({
           'title': title,
           'description': _descriptionCtrl.text.trim(),
           'bodyText': '',
@@ -603,7 +619,9 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
           'authorEmail': email,
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
-        }));
+        });
+
+        await _courseFirestoreOp(() => docRef.set(docPayload));
       } else {
         final linkRaw = _youtubeCtrl.text.trim();
         String? linkUrl;
@@ -627,30 +645,32 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
             : (imageUrl != null && linkUrl != null)
                 ? 'image_link'
                 : (imageUrl != null ? 'image' : 'link');
-        await _courseFirestoreOp(() => docRef.set({
-          'title': title,
-          'description': desc,
-          'bodyText': body,
-          'type': 'dica',
-          'source': source,
-          if (linkUrl != null) ...{
-            'linkUrl': linkUrl,
-            'externalUrl': linkUrl,
-          },
-          if (videoId != null) ...{
-            'videoUrl': linkUrl,
-            'youtubeUrl': linkUrl,
-            'youtubeVideoId': videoId,
-          },
-          ...imageFields,
-          'thumbnailUrl': imageUrl ?? ytThumb ?? '',
-          'published': _published,
-          ...validityFields,
-          'authorUid': uid,
-          'authorEmail': email,
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        }));
+        await _courseFirestoreOp(() => docRef.set(
+              CourseMediaUrlResolver.finalizeImageFields({
+                'title': title,
+                'description': desc,
+                'bodyText': body,
+                'type': 'dica',
+                'source': source,
+                if (linkUrl != null) ...{
+                  'linkUrl': linkUrl,
+                  'externalUrl': linkUrl,
+                },
+                if (videoId != null) ...{
+                  'videoUrl': linkUrl,
+                  'youtubeUrl': linkUrl,
+                  'youtubeVideoId': videoId,
+                },
+                ...imageFields,
+                if (ytThumb != null) 'thumbnailUrl': ytThumb,
+                'published': _published,
+                ...validityFields,
+                'authorUid': uid,
+                'authorEmail': email,
+                'createdAt': FieldValue.serverTimestamp(),
+                'updatedAt': FieldValue.serverTimestamp(),
+              }),
+            ));
       }
 
       _titleCtrl.clear();
@@ -812,7 +832,12 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
             'youtubeVideoId': videoId,
           });
         }
-        patch['thumbnailUrl'] = thumbUrl;
+        _applyThumbnailPatch(
+          patch,
+          existing: existingData,
+          explicitThumb: thumbUrl,
+          youtubeThumb: videoId != null ? YoutubeUrlHelper.thumbnailUrl(videoId) : null,
+        );
       } else {
         String? linkUrl;
         String? videoId;
@@ -869,7 +894,12 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
             : (imageUrl != null && linkUrl != null)
                 ? 'image_link'
                 : (imageUrl != null ? 'image' : (linkUrl != null ? 'link' : 'text'));
-        patch['thumbnailUrl'] = imageUrl ?? ytThumb ?? '';
+        _applyThumbnailPatch(
+          patch,
+          existing: existingData,
+          explicitThumb: imageUrl,
+          youtubeThumb: ytThumb,
+        );
         if (imageUrl != null && imageUrl.isNotEmpty) patch['coverUrl'] = imageUrl;
       }
 
@@ -895,27 +925,44 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
     }, SetOptions(merge: true)));
   }
 
-  Future<void> _deleteVideo(String docId) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Excluir conteúdo?'),
-        content: const Text('Remove do módulo Cursos. Esta ação não pode ser desfeita.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Excluir'),
+  Future<void> _deleteVideo(String docId, {bool skipConfirm = false}) async {
+    if (!skipConfirm) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Excluir conteúdo?'),
+          content: const Text(
+            'Remove do módulo Cursos e apaga arquivos no Storage. Esta ação não pode ser desfeita.',
           ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    await _courseFirestoreOp(() => FirebaseFirestore.instance
-        .collection('course_videos')
-        .doc(docId)
-        .delete());
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Excluir'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+    try {
+      final snap = await _courseFirestoreOp(() => FirebaseFirestore.instance
+          .collection('course_videos')
+          .doc(docId)
+          .get());
+      await CourseMediaStorageCleanup.deleteForCourseDoc(
+        docId,
+        data: snap.data(),
+      );
+      await _courseFirestoreOp(() => FirebaseFirestore.instance
+          .collection('course_videos')
+          .doc(docId)
+          .delete());
+      _snack('Conteúdo excluído.');
+    } catch (e) {
+      _snack('Erro ao excluir: $e');
+    }
   }
 
   Future<void> _openEditSheet(QueryDocumentSnapshot<Map<String, dynamic>> doc) async {
@@ -931,7 +978,10 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
     var published = data['published'] != false;
     var validityPermanent = CourseVideoValidity.isPermanent(data);
     var expiresAtDate = CourseVideoValidity.expiresAtDay(data);
-    final existingData = Map<String, dynamic>.from(data);
+    final existingData = CourseMediaUrlResolver.enrichWithDocId(
+      Map<String, dynamic>.from(data),
+      doc.id,
+    );
     final List<_PickedMedia> editImages = [];
     final List<_PickedMedia> editVideos = [];
     var removeImages = false;
@@ -1227,6 +1277,42 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                         ),
                       ),
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          final confirm = await showDialog<bool>(
+                            context: ctx,
+                            builder: (dCtx) => AlertDialog(
+                              title: Text('Excluir ${isDica ? 'dica' : 'curso'}?'),
+                              content: const Text(
+                                'Remove permanentemente do módulo Cursos e apaga arquivos no Storage.',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(dCtx, false),
+                                  child: const Text('Cancelar'),
+                                ),
+                                FilledButton(
+                                  onPressed: () => Navigator.pop(dCtx, true),
+                                  style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                                  child: const Text('Excluir'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirm != true) return;
+                          if (ctx.mounted) Navigator.pop(ctx);
+                          await _deleteVideo(doc.id, skipConfirm: true);
+                        },
+                        icon: const Icon(Icons.delete_forever_rounded),
+                        label: Text('Excluir ${isDica ? 'dica' : 'curso'}'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red.shade700,
+                          side: BorderSide(color: Colors.red.shade300),
+                          minimumSize: const Size(double.infinity, 46),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1245,6 +1331,36 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
   void _snack(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  /// Nunca grava [thumbnailUrl] vazio — prioriza imagens do patch/Firestore, depois YouTube.
+  void _applyThumbnailPatch(
+    Map<String, dynamic> patch, {
+    required Map<String, dynamic> existing,
+    String? explicitThumb,
+    String? youtubeThumb,
+  }) {
+    final merged = <String, dynamic>{...existing};
+    patch.forEach((key, value) {
+      if (value is FieldValue) return;
+      merged[key] = value;
+    });
+    final urls = CourseMediaUrlResolver.collectHttpUrls(merged);
+    if (urls.isNotEmpty) {
+      patch['thumbnailUrl'] = urls.first;
+      return;
+    }
+    final thumb = explicitThumb?.trim();
+    if (thumb != null && thumb.isNotEmpty) {
+      patch['thumbnailUrl'] = thumb;
+      return;
+    }
+    final yt = youtubeThumb?.trim();
+    if (yt != null && yt.isNotEmpty) {
+      patch['thumbnailUrl'] = yt;
+      return;
+    }
+    patch['thumbnailUrl'] = FieldValue.delete();
   }
 
   String _formatPublishError(Object e) {
@@ -1281,7 +1397,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
   }
 
   Future<void> _openContentPreview(QueryDocumentSnapshot<Map<String, dynamic>> doc) async {
-    final data = doc.data();
+    final data = CourseMediaUrlResolver.enrichWithDocId(doc.data(), doc.id);
     final type = (data['type'] ?? 'curso').toString();
     final title = (data['title'] ?? 'Vídeo').toString();
     if (CourseMediaUrlResolver.collectVideoEntries(data).isNotEmpty) {
