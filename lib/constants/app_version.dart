@@ -18,11 +18,11 @@ class AppVersion {
   /// Versão atual do app — 10.04 (marketing; usuário vê no rodapé como principal).
   static const String current = '10.04';
 
-  /// Build do pubspec (`10.04.0+11` → **11**). Atualizar junto com pubspec em cada release.
-  static const int buildNumber = 11;
+  /// Build do pubspec (`10.04.0+12` → **12**). Atualizar junto com pubspec em cada release.
+  static const int buildNumber = 12;
 
   /// Mesmo inteiro que `versionCode` no Android (Play). Atualizar junto com build.gradle em cada release.
-  static const int versionCode = 11;
+  static const int versionCode = 12;
 
   /// Identificador único do release: marketing + build (mesmo deploy em todas as plataformas).
   static String get releaseTag => '$current+$buildNumber';

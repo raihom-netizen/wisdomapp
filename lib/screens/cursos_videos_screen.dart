@@ -13,8 +13,7 @@ import '../utils/course_thumb_resolver.dart';
 import '../utils/youtube_url_helper.dart';
 import '../utils/course_media_url_resolver.dart';
 import '../widgets/course_media_preview.dart';
-import '../widgets/course_mp4_player_dialog.dart';
-import '../widgets/youtube_video_player_dialog.dart';
+import '../widgets/course_video/course_video_watch_screen.dart';
 
 BoxFit _courseThumbFit(Map<String, dynamic> data) {
   final type = (data['type'] ?? 'curso').toString();
@@ -206,6 +205,7 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
                     _buildListBody(
                       cfg: cfg,
                       docs: cursos,
+                      allDocs: cursos,
                       syncing: syncing,
                       accent: AppColors.primary,
                       accent2: AppColors.deepBlue,
@@ -362,7 +362,11 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
             accent: accent,
             accent2: accent2,
             badge: 'DESTAQUE · $label',
-            onTap: () => _openContent(context, docs.first.data()),
+            onTap: () => _openContent(
+              context,
+              {...docs.first.data(), 'id': docs.first.id},
+              related: docs.map((d) => {...d.data(), 'id': d.id}).toList(),
+            ),
           ),
           if (docs.length > 1) ...[
             const SizedBox(height: 14),
@@ -374,6 +378,7 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
           _buildDicasGrid(
             cfg: cfg,
             docs: docs.length > 1 ? docs.sublist(1) : (docs.isEmpty ? docs : []),
+            allDocs: docs,
             syncing: syncing,
             accent: accent,
             accent2: accent2,
@@ -383,6 +388,7 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
           _buildListBody(
             cfg: cfg,
             docs: docs.length > 1 ? docs.sublist(1) : (docs.isEmpty ? docs : []),
+            allDocs: docs,
             syncing: syncing,
             accent: accent,
             accent2: accent2,
@@ -392,24 +398,23 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
     );
   }
 
-  Future<void> _openContent(BuildContext context, Map<String, dynamic> data) async {
+  Future<void> _openContent(
+    BuildContext context,
+    Map<String, dynamic> data, {
+    List<Map<String, dynamic>> related = const [],
+  }) async {
     final type = (data['type'] ?? 'curso').toString();
-    final title = (data['title'] ?? 'Vídeo').toString();
-    if (CourseMediaUrlResolver.collectVideoEntries(data).isNotEmpty) {
-      await openCourseMp4FromData(context, data: data, title: title);
-      return;
-    }
-    final mp4 = _mp4Url(data);
-    if (mp4 != null) {
-      await showCourseMp4PlayerDialog(context, videoUrl: mp4, title: title);
+    if (CourseMediaUrlResolver.collectVideoEntries(data).isNotEmpty ||
+        _mp4Url(data) != null) {
+      await openCourseVideoFromData(context, data: data, related: related);
       return;
     }
     final videoId = _videoId(data);
     if (videoId != null) {
-      showYoutubeVideoPlayerDialog(
-        context,
-        videoId: videoId,
-        title: (data['title'] ?? 'Vídeo').toString(),
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => CourseVideoWatchScreen(data: data, related: related),
+        ),
       );
       return;
     }
@@ -482,6 +487,7 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
   Widget _buildDicasGrid({
     required WisdomCoursesModuleConfig cfg,
     required List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    required List<QueryDocumentSnapshot<Map<String, dynamic>>> allDocs,
     required bool syncing,
     required Color accent,
     required Color accent2,
@@ -505,13 +511,14 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
           itemCount: docs.length,
           itemBuilder: (context, i) {
             final data = docs[i].data();
+            final related = allDocs.map((d) => {...d.data(), 'id': d.id}).toList();
             return _DicaGridCard(
               data: {...data, 'id': docs[i].id},
               videoId: _videoId(data),
               thumbUrl: _thumbUrl(data),
               accent: accent,
               accent2: accent2,
-              onTap: () => _openContent(context, data),
+              onTap: () => _openContent(context, {...data, 'id': docs[i].id}, related: related),
             );
           },
         );
@@ -522,6 +529,7 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
   Widget _buildListBody({
     required WisdomCoursesModuleConfig cfg,
     required List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    required List<QueryDocumentSnapshot<Map<String, dynamic>>> allDocs,
     required bool syncing,
     required Color accent,
     required Color accent2,
@@ -539,7 +547,11 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
             thumbUrl: _thumbUrl(doc.data()),
             accent: accent,
             accent2: accent2,
-            onTap: () => _openContent(context, doc.data()),
+            onTap: () => _openContent(
+              context,
+              {...doc.data(), 'id': doc.id},
+              related: allDocs.map((d) => {...d.data(), 'id': d.id}).toList(),
+            ),
           ),
       ],
     );

@@ -22,10 +22,9 @@ import '../utils/course_video_validity.dart';
 import '../utils/course_thumb_resolver.dart';
 import '../utils/youtube_url_helper.dart';
 import '../widgets/course_media_preview.dart';
-import '../widgets/course_mp4_player_dialog.dart';
+import '../widgets/course_video/course_video_watch_screen.dart';
 import '../widgets/fast_text_field.dart';
 import '../widgets/module_header_premium.dart';
-import '../widgets/youtube_video_player_dialog.dart';
 
 /// Arquivo escolhido no admin (imagem ou vídeo) antes do upload.
 class _PickedMedia {
@@ -1399,23 +1398,10 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
   Future<void> _openContentPreview(QueryDocumentSnapshot<Map<String, dynamic>> doc) async {
     final data = CourseMediaUrlResolver.enrichWithDocId(doc.data(), doc.id);
     final type = (data['type'] ?? 'curso').toString();
-    final title = (data['title'] ?? 'Vídeo').toString();
-    if (CourseMediaUrlResolver.collectVideoEntries(data).isNotEmpty) {
-      await openCourseMp4FromData(context, data: data, title: title);
-      return;
-    }
-    final mp4 = _mp4Url(data);
-    if (mp4 != null) {
-      await showCourseMp4PlayerDialog(context, videoUrl: mp4, title: title);
-      return;
-    }
-    final videoId = _videoId(data);
-    if (videoId != null) {
-      showYoutubeVideoPlayerDialog(
-        context,
-        videoId: videoId,
-        title: (data['title'] ?? 'Vídeo').toString(),
-      );
+    if (CourseMediaUrlResolver.collectVideoEntries(data).isNotEmpty ||
+        _mp4Url(data) != null ||
+        _videoId(data) != null) {
+      await openCourseVideoFromData(context, data: data);
       return;
     }
     final link = (data['linkUrl'] ?? data['externalUrl'] ?? '').toString().trim();

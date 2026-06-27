@@ -78,6 +78,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
   void initState() {
     super.initState();
     _selectedDay = DateTime.now();
+    unawaited(GoogleCalendarSyncService.completeWebOAuthReturnIfNeeded());
     unawaited(_bootstrapGoogleCalendar());
     _googleEnabledSub =
         GoogleCalendarSyncService.enabledStream(_userDocId).listen(

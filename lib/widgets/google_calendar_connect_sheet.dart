@@ -1,9 +1,10 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../services/google_calendar_auth_helper.dart';
 import '../services/google_calendar_sync_service.dart';
 
-/// Autorização Google Calendar — reconexão automática e popup só quando necessário.
+/// Autorização Google Calendar — Web: redirect OAuth; mobile: sheet in-app.
 class GoogleCalendarConnectSheet extends StatefulWidget {
   const GoogleCalendarConnectSheet({
     super.key,
@@ -22,6 +23,14 @@ class GoogleCalendarConnectSheet extends StatefulWidget {
     String? preferredEmail,
     bool forceNewCredentials = false,
   }) {
+    if (kIsWeb) {
+      GoogleCalendarAuthHelper.startWebOAuthRedirect(
+        preferredEmail: preferredEmail,
+        enableUserDocId: userDocId,
+        selectAccount: forceNewCredentials,
+      );
+      return Future.value(null);
+    }
     return showModalBottomSheet<GoogleCalendarEnableResult>(
       context: context,
       isScrollControlled: true,
@@ -61,7 +70,7 @@ class _GoogleCalendarConnectSheetState extends State<GoogleCalendarConnectSheet>
       _busy = true;
       _error = null;
       _status = silentFirst
-          ? 'Reconectando automaticamente…'
+          ? 'Verificando credencial salva…'
           : 'Abrindo autorização Google…';
     });
     try {
@@ -70,9 +79,9 @@ class _GoogleCalendarConnectSheetState extends State<GoogleCalendarConnectSheet>
         forceNewCredentials: widget.forceNewCredentials,
         skipSilent: !silentFirst && !widget.forceNewCredentials,
       ).timeout(
-        const Duration(seconds: 90),
+        const Duration(seconds: 45),
         onTimeout: () => GoogleCalendarEnableResult.fail(
-          'Tempo esgotado. Verifique se o popup do Google foi bloqueado e tente de novo.',
+          'Tempo esgotado. Tente de novo.',
         ),
       );
       if (!mounted) return;
@@ -83,7 +92,10 @@ class _GoogleCalendarConnectSheetState extends State<GoogleCalendarConnectSheet>
       if (result.needsInteractiveAuth &&
           silentFirst &&
           !widget.forceNewCredentials) {
-        await _connect(silentFirst: false);
+        setState(() {
+          _busy = false;
+          _status = 'Toque para autorizar';
+        });
         return;
       }
       setState(() {
@@ -169,9 +181,9 @@ class _GoogleCalendarConnectSheetState extends State<GoogleCalendarConnectSheet>
               const SizedBox(height: 12),
               Text(
                 appleLogin
-                    ? 'Escolha o Gmail que deseja sincronizar. Seu login Apple continua igual.'
-                    : 'Se já autorizou antes, reconectamos em segundos — sem popup. '
-                        'Caso contrário, abrimos a janela do Google aqui mesmo.',
+                    ? 'Escolha o Gmail que deseja sincronizar.'
+                    : 'Se já autorizou antes, reconectamos com a credencial salva. '
+                        'Caso contrário, abra a autorização Google.',
                 style: TextStyle(
                   fontSize: 13.5,
                   height: 1.4,
@@ -229,19 +241,9 @@ class _GoogleCalendarConnectSheetState extends State<GoogleCalendarConnectSheet>
                 onPressed: _busy ? null : () => _connect(silentFirst: false),
                 icon: _busy
                     ? const SizedBox.shrink()
-                    : Image.network(
-                        'https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg',
-                        width: 20,
-                        height: 20,
-                        errorBuilder: (_, __, ___) =>
-                            const Icon(Icons.login_rounded, size: 20),
-                      ),
+                    : const Icon(Icons.login_rounded, size: 20),
                 label: Text(
-                  _busy
-                      ? 'Conectando…'
-                      : (widget.forceNewCredentials
-                          ? 'Escolher outra conta'
-                          : 'Autorizar Google Calendar'),
+                  _busy ? 'Conectando…' : 'Autorizar Google Calendar',
                 ),
                 style: FilledButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 14),

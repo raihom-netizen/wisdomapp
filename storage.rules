@@ -1,140 +1,279 @@
-rules_version = '2';
-// Comprovantes, cursos (vídeo/capa), relatórios. Gestor/admin/master: conteúdo público.
-service firebase.storage {
-  match /b/{bucket}/o {
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function userDoc() {
-      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
-    }
-
-    function isAdmin() {
-      return isSignedIn() && userDoc().role == 'admin';
-    }
-
-    function isMaster() {
-      return isSignedIn() && userDoc().role == 'master';
-    }
-
-    function isGestor() {
-      return isSignedIn() && userDoc().role == 'gestor';
-    }
-
-    function isSystemManager() {
-      return isSignedIn() && request.auth.token.email == 'raihom@gmail.com';
-    }
-
-    /// Alinhado a Firestore `canEditPublicContent` — vídeos, capas e dicas no admin.
-    function canEditPublicContent() {
-      return isAdmin() || isGestor() || isMaster() || isSystemManager();
-    }
-
-    function isAdminPanelReader() {
-      return isAdmin() || isMaster();
-    }
-
-    function underComprovanteLimit() {
-      return request.resource == null || request.resource.size < 5 * 1024 * 1024;
-    }
-
-    function underVideoLimit() {
-      return request.resource == null || request.resource.size < 250 * 1024 * 1024;
-    }
-
-    function isPremiumPlan(plan) {
-      let p = plan.toString().toLowerCase();
-      return p == 'premium' || p == 'master' || p == 'basic'
-        || p == 'premium_monthly' || p == 'premium_annual'
-        || p == 'master_monthly' || p == 'master_annual'
-        || p == 'premium_assego' || p == 'premium_pro';
-    }
-
-    function planIsActiveStatus(status) {
-      let s = status.toString().toLowerCase();
-      return s == '' || s == 'active' || s == 'ativo' || s == 'ativa'
-        || s == 'trialing' || s == 'paid' || s == 'pago' || s == 'paga';
-    }
-
-    function isPremiumAndActive() {
-      let user = userDoc();
-      let plan = user.get('plan', user.get('licensePlan', 'free'));
-      let status = user.get('planStatus', 'active');
-      let exp = user.get('licenseExpiresAt', null);
-      return isPremiumPlan(plan) && planIsActiveStatus(status)
-        && (exp == null || exp > request.time);
-    }
-
-    function isPremium() {
-      let user = userDoc();
-      let plan = user.get('plan', user.get('licensePlan', 'free'));
-      let exp = user.get('licenseExpiresAt', null);
-      return isPremiumPlan(plan) && (exp == null || exp > request.time);
-    }
-
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    // Comprovantes financeiros (receitas/despesas) — dono com licença ativa.
-    match /comprovantes/{userId}/{allPaths=**} {
-      allow write: if isOwner(userId) && underComprovanteLimit() && isPremiumAndActive();
-      allow read: if isOwner(userId) || isAdminPanelReader();
-    }
-
-    match /users/{userId}/receipts/{allPaths=**} {
-      allow read: if isOwner(userId) || isAdminPanelReader();
-      allow write: if isOwner(userId) && underComprovanteLimit() && isPremiumAndActive();
-    }
-
-    match /users/{userId}/audiencias/{allPaths=**} {
-      allow read: if isOwner(userId) || isAdminPanelReader();
-      allow write: if isOwner(userId) && underComprovanteLimit();
-    }
-
-    match /users/{userId}/ocorrencias/{allPaths=**} {
-      allow read: if isOwner(userId) || isAdminPanelReader();
-      allow write: if isOwner(userId) && underComprovanteLimit();
-    }
-
-    match /users/{userId}/reports/{allPaths=**} {
-      allow read: if isOwner(userId) || isAdminPanelReader();
-      allow write: if isOwner(userId) && underComprovanteLimit() && (isPremium() || isAdminPanelReader());
-    }
-
-    match /users/{userId}/budgets/{allPaths=**} {
-      allow read: if isOwner(userId) || isAdminPanelReader();
-      allow write: if isOwner(userId) && underComprovanteLimit() && (isPremium() || isAdminPanelReader());
-    }
-
-    // Vídeos MP4 e capas de cursos/dicas (admin + gestor de conteúdo).
-    match /wisdomapp/course_videos/{allPaths=**} {
-      allow read: if isSignedIn();
-      allow write: if canEditPublicContent() && underVideoLimit();
-    }
-
-    match /users/{userId}/{allPaths=**} {
-      allow read: if isOwner(userId) || isAdminPanelReader();
-      allow write: if isOwner(userId) && underComprovanteLimit() && (isPremium() || isAdminPanelReader());
-    }
-
-    match /releases/{allPaths=**} {
-      allow read, write: if isAdmin() || isMaster();
-    }
-
-    match /admin/{allPaths=**} {
-      allow read, write: if canEditPublicContent();
-    }
-
-    match /backups/{allPaths=**} {
-      allow read, write: if isAdmin() || isMaster();
-    }
-
-    match /app/ipa/{allPaths=**} {
-      allow read: if true;
-      allow write: if false;
-    }
-  }
-}
-
+rules_version = '2';
+
+// Comprovantes, cursos (vídeo/capa), relatórios. Gestor/admin/master: conteúdo público.
+
+service firebase.storage {
+
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+
+      return request.auth != null;
+
+    }
+
+
+
+    function userDoc() {
+
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+
+    }
+
+
+
+    function isAdmin() {
+
+      return isSignedIn() && userDoc().role == 'admin';
+
+    }
+
+
+
+    function isMaster() {
+
+      return isSignedIn() && userDoc().role == 'master';
+
+    }
+
+
+
+    function isGestor() {
+
+      return isSignedIn() && userDoc().role == 'gestor';
+
+    }
+
+
+
+    function isSystemManager() {
+
+      return isSignedIn() && request.auth.token.email == 'raihom@gmail.com';
+
+    }
+
+
+
+    /// Alinhado a Firestore `canEditPublicContent` — vídeos, capas e dicas no admin.
+
+    function canEditPublicContent() {
+
+      return isAdmin() || isGestor() || isMaster() || isSystemManager();
+
+    }
+
+
+
+    function isAdminPanelReader() {
+
+      return isAdmin() || isMaster();
+
+    }
+
+
+
+    function underComprovanteLimit() {
+
+      return request.resource == null || request.resource.size < 5 * 1024 * 1024;
+
+    }
+
+
+
+    function underVideoLimit() {
+
+      return request.resource == null || request.resource.size < 250 * 1024 * 1024;
+
+    }
+
+
+
+    function isPremiumPlan(plan) {
+
+      let p = plan.toString().toLowerCase();
+
+      return p == 'premium' || p == 'master' || p == 'basic'
+
+        || p == 'premium_monthly' || p == 'premium_annual'
+
+        || p == 'master_monthly' || p == 'master_annual'
+
+        || p == 'premium_assego' || p == 'premium_pro';
+
+    }
+
+
+
+    function planIsActiveStatus(status) {
+
+      let s = status.toString().toLowerCase();
+
+      return s == '' || s == 'active' || s == 'ativo' || s == 'ativa'
+
+        || s == 'trialing' || s == 'paid' || s == 'pago' || s == 'paga';
+
+    }
+
+
+
+    function isPremiumAndActive() {
+
+      let user = userDoc();
+
+      let plan = user.get('plan', user.get('licensePlan', 'free'));
+
+      let status = user.get('planStatus', 'active');
+
+      let exp = user.get('licenseExpiresAt', null);
+
+      return isPremiumPlan(plan) && planIsActiveStatus(status)
+
+        && (exp == null || exp > request.time);
+
+    }
+
+
+
+    function isPremium() {
+
+      let user = userDoc();
+
+      let plan = user.get('plan', user.get('licensePlan', 'free'));
+
+      let exp = user.get('licenseExpiresAt', null);
+
+      return isPremiumPlan(plan) && (exp == null || exp > request.time);
+
+    }
+
+
+
+    function isOwner(userId) {
+
+      return isSignedIn() && request.auth.uid == userId;
+
+    }
+
+
+
+    // Comprovantes financeiros (receitas/despesas) — dono com licença ativa.
+
+    match /comprovantes/{userId}/{allPaths=**} {
+
+      allow write: if isOwner(userId) && underComprovanteLimit() && isPremiumAndActive();
+
+      allow read: if isOwner(userId) || isAdminPanelReader();
+
+    }
+
+
+
+    match /users/{userId}/receipts/{allPaths=**} {
+
+      allow read: if isOwner(userId) || isAdminPanelReader();
+
+      allow write: if isOwner(userId) && underComprovanteLimit() && isPremiumAndActive();
+
+    }
+
+
+
+    match /users/{userId}/audiencias/{allPaths=**} {
+
+      allow read: if isOwner(userId) || isAdminPanelReader();
+
+      allow write: if isOwner(userId) && underComprovanteLimit();
+
+    }
+
+
+
+    match /users/{userId}/ocorrencias/{allPaths=**} {
+
+      allow read: if isOwner(userId) || isAdminPanelReader();
+
+      allow write: if isOwner(userId) && underComprovanteLimit();
+
+    }
+
+
+
+    match /users/{userId}/reports/{allPaths=**} {
+
+      allow read: if isOwner(userId) || isAdminPanelReader();
+
+      allow write: if isOwner(userId) && underComprovanteLimit() && (isPremium() || isAdminPanelReader());
+
+    }
+
+
+
+    match /users/{userId}/budgets/{allPaths=**} {
+
+      allow read: if isOwner(userId) || isAdminPanelReader();
+
+      allow write: if isOwner(userId) && underComprovanteLimit() && (isPremium() || isAdminPanelReader());
+
+    }
+
+
+
+    // Vídeos MP4 e capas de cursos/dicas (admin + gestor de conteúdo).
+
+    match /wisdomapp/course_videos/{allPaths=**} {
+
+      allow read: if isSignedIn();
+
+      allow write: if canEditPublicContent() && underVideoLimit();
+
+    }
+
+
+
+    match /users/{userId}/{allPaths=**} {
+
+      allow read: if isOwner(userId) || isAdminPanelReader();
+
+      allow write: if isOwner(userId) && underComprovanteLimit() && (isPremium() || isAdminPanelReader());
+
+    }
+
+
+
+    match /releases/{allPaths=**} {
+
+      allow read, write: if isAdmin() || isMaster();
+
+    }
+
+
+
+    match /admin/{allPaths=**} {
+
+      allow read, write: if canEditPublicContent();
+
+    }
+
+
+
+    match /backups/{allPaths=**} {
+
+      allow read, write: if isAdmin() || isMaster();
+
+    }
+
+
+
+    match /app/ipa/{allPaths=**} {
+
+      allow read: if true;
+
+      allow write: if false;
+
+    }
+
+  }
+
+}
+
+

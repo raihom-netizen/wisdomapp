@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WISDOMAPP — Google Calendar</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #061428, #0A1F56);
+      color: #fff;
+      min-height: 100vh;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 24px;
+    }
+    .card {
+      max-width: 360px;
+      padding: 28px 22px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid rgba(255,255,255,0.25);
+      border-top-color: #4285F4;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    p { opacity: 0.88; line-height: 1.45; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="spinner"></div>
+    <p id="msg">Conectando ao Google Calendar…</p>
+  </div>
+  <script>
+    (function () {
+      var CLIENT_ID = '766524666378-ce9albkkvn01si77s6ofcqvoaatn29s0.apps.googleusercontent.com';
+      var STORAGE_KEY = 'wisdomapp_gcal_oauth';
+      var STATE_KEY = 'wisdomapp_gcal_oauth_state';
+      var RETURN_KEY = 'wisdomapp_gcal_return';
+      var ENABLE_UID_KEY = 'wisdomapp_gcal_enable_uid';
+      var REDIRECT_URI = window.location.origin + '/google_calendar_oauth.html';
+      var SCOPE = 'https://www.googleapis.com/auth/calendar.events openid email profile';
+
+      function setMsg(t) {
+        var el = document.getElementById('msg');
+        if (el) el.textContent = t;
+      }
+
+      function parseHash() {
+        var out = {};
+        var h = (window.location.hash || '').replace(/^#/, '');
+        if (!h) return out;
+        h.split('&').forEach(function (part) {
+          var i = part.indexOf('=');
+          if (i < 0) return;
+          out[decodeURIComponent(part.slice(0, i))] = decodeURIComponent(part.slice(i + 1));
+        });
+        return out;
+      }
+
+      function safeReturnPath(raw) {
+        if (!raw || typeof raw !== 'string') return '/';
+        try {
+          var u = new URL(raw, window.location.origin);
+          if (u.origin !== window.location.origin) return '/';
+          return u.pathname + u.search + u.hash;
+        } catch (e) {
+          return '/';
+        }
+      }
+
+      function finishReturn(extraQuery) {
+        var ret = safeReturnPath(sessionStorage.getItem(RETURN_KEY) || '/');
+        sessionStorage.removeItem(RETURN_KEY);
+        sessionStorage.removeItem(STATE_KEY);
+        var sep = ret.indexOf('?') >= 0 ? '&' : '?';
+        window.location.replace(ret + sep + (extraQuery || 'gcal=ok'));
+      }
+
+      function failReturn(code) {
+        finishReturn('gcal_error=' + encodeURIComponent(code || 'unknown'));
+      }
+
+      // Retorno do Google (#access_token=…)
+      var hash = parseHash();
+      if (hash.error) {
+        if (hash.error === 'interaction_required' || hash.error === 'login_required') {
+          failReturn('interaction_required');
+          return;
+        }
+        failReturn(hash.error);
+        return;
+      }
+
+      if (hash.access_token) {
+        var savedState = sessionStorage.getItem(STATE_KEY);
+        if (savedState && hash.state && savedState !== hash.state) {
+          failReturn('state_mismatch');
+          return;
+        }
+        var expiresIn = parseInt(hash.expires_in || '3600', 10);
+        if (!isFinite(expiresIn) || expiresIn < 60) expiresIn = 3600;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          access_token: hash.access_token,
+          expires_at: Date.now() + expiresIn * 1000,
+          scope: hash.scope || SCOPE,
+          token_type: hash.token_type || 'Bearer'
+        }));
+        finishReturn('gcal=ok');
+        return;
+      }
+
+      // Iniciar fluxo OAuth
+      var qs = new URLSearchParams(window.location.search);
+      if (qs.get('start') !== '1') {
+        setMsg('Link inválido. Volte ao WISDOMAPP e tente de novo.');
+        return;
+      }
+
+      var ret = safeReturnPath(qs.get('return') || '/');
+      sessionStorage.setItem(RETURN_KEY, ret);
+
+      var enableUid = qs.get('enable_uid') || '';
+      if (enableUid) sessionStorage.setItem(ENABLE_UID_KEY, enableUid);
+
+      var state = (window.crypto && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : String(Date.now()) + Math.random().toString(36).slice(2);
+      sessionStorage.setItem(STATE_KEY, state);
+
+      var params = {
+        client_id: CLIENT_ID,
+        redirect_uri: REDIRECT_URI,
+        response_type: 'token',
+        scope: SCOPE,
+        state: state,
+        include_granted_scopes: 'true'
+      };
+
+      var email = (qs.get('email') || '').trim();
+      if (email) params.login_hint = email;
+
+      var prompt = (qs.get('prompt') || '').trim();
+      if (prompt) params.prompt = prompt;
+      else if (qs.get('select_account') === '1') params.prompt = 'select_account';
+
+      var authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' +
+        Object.keys(params).map(function (k) {
+          return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+        }).join('&');
+
+      setMsg('Redirecionando para o Google…');
+      window.location.assign(authUrl);
+    })();
+  </script>
+</body>
+</html>

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../services/google_calendar_auth_helper.dart';
@@ -100,6 +101,14 @@ class _GoogleCalendarIntegrationToggleState
         if (!mounted) return;
         if (res.needsInteractiveAuth) {
           setState(() => _busy = false);
+          if (kIsWeb) {
+            GoogleCalendarAuthHelper.startWebOAuthRedirect(
+              preferredEmail: res.email,
+              enableUserDocId: widget.userDocId,
+            );
+            widget.onChanged?.call();
+            return;
+          }
           await _openConnectSheet(preferredEmail: res.email);
           widget.onChanged?.call();
           return;

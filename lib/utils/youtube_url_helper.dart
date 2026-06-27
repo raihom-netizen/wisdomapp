@@ -24,8 +24,29 @@ class YoutubeUrlHelper {
 
   static String watchUrl(String videoId) => 'https://www.youtube.com/watch?v=$videoId';
 
-  static String embedUrl(String videoId) =>
-      'https://www.youtube.com/embed/$videoId?rel=0&modestbranding=1';
+  /// Embed otimizado — fullscreen, autoplay, qualidade máxima disponível (até 4K).
+  static String embedUrl(
+    String videoId, {
+    bool autoplay = false,
+    String? origin,
+  }) {
+    final params = <String, String>{
+      'rel': '0',
+      'modestbranding': '1',
+      'playsinline': '1',
+      'fs': '1',
+      'enablejsapi': '1',
+      'iv_load_policy': '3',
+      'cc_load_policy': '0',
+      'color': 'white',
+      if (autoplay) 'autoplay': '1',
+      if (origin != null && origin.isNotEmpty) 'origin': origin,
+    };
+    final query = params.entries
+        .map((e) => '${e.key}=${Uri.encodeComponent(e.value)}')
+        .join('&');
+    return 'https://www.youtube.com/embed/$videoId?$query';
+  }
 
   /// Thumbnails em cascata (Full HD quando disponível no YouTube).
   static List<String> thumbnailUrls(String videoId) => [

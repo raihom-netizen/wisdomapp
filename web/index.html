@@ -57,6 +57,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="WISDOMAPP">
   <meta name="google-signin-client_id" content="766524666378-ce9albkkvn01si77s6ofcqvoaatn29s0.apps.googleusercontent.com">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <meta name="format-detection" content="telephone=no">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="icons/Icon-192.png">
@@ -358,9 +359,7 @@
 
   <title>WISDOMAPP — Sabedoria financeira | Financeiro, agenda e cursos</title>
   <link rel="manifest" href="manifest.json">
-  <!-- Preload: carrega mais rápido ao abrir o PWA -->
-  <link rel="preload" href="main.dart.js" as="script">
-  <link rel="preload" href="flutter_bootstrap.js" as="script">
+  <!-- Preload só de assets leves — main.dart.js via rede local no Safari iOS -->
   <link rel="preload" href="icons/wisdomapp_emblem.png" as="image">
   <link rel="icon" type="image/png" href="favicon.png">
   <!--
@@ -373,8 +372,8 @@
     Config atual (espelho de firebase_options.dart): apiKey, projectId: controletotal-4c867,
     authDomain: controletotal-4c867.firebaseapp.com, storageBucket: controletotal-4c867.firebasestorage.app.
   -->
-  <!-- PDF.js para impressão/visualização de PDFs na web -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- PDF.js — defer: não bloquear parse no Safari iOS -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
 </head>
 <body>
   <!-- Pré-aquecimento do teclado nativo (Android/iOS):
@@ -414,18 +413,32 @@
         var status = document.getElementById("splash-status");
         var msgs = ["Abrindo…", "Preparando módulos…", "Quase pronto…"];
         var msgIdx = 0;
+        var loaded = false;
         var msgTimer = setInterval(function(){
           if (!status || !splash || splash.style.display === "none") return;
           msgIdx = Math.min(msgIdx + 1, msgs.length - 1);
           status.textContent = msgs[msgIdx];
-        }, 900);
+        }, 1200);
         function hideSplash() {
           try {
+            loaded = true;
             clearInterval(msgTimer);
             if (splash) {
               splash.style.opacity = "0";
               splash.style.visibility = "hidden";
               setTimeout(function() { if (splash) splash.style.display = "none"; }, 350);
+            }
+          } catch (e) {}
+        }
+        function showLoadError(hint) {
+          try {
+            clearInterval(msgTimer);
+            if (progress) progress.style.width = "100%";
+            if (status) {
+              status.innerHTML = hint +
+                '<br><button type="button" id="splash-retry" style="margin-top:14px;padding:10px 18px;border-radius:14px;border:1px solid rgba(212,175,55,0.55);background:rgba(255,255,255,0.1);color:#fff;font-weight:700;font-size:14px;">Tentar novamente</button>';
+              var btn = document.getElementById("splash-retry");
+              if (btn) btn.onclick = function() { location.reload(); };
             }
           } catch (e) {}
         }
@@ -436,10 +449,35 @@
             setTimeout(hideSplash, 180);
           } catch (e) {}
         });
-        setTimeout(function() { try { if (progress) progress.style.width = "35%"; } catch (e) {} }, 120);
-        setTimeout(function() { try { if (progress) progress.style.width = "62%"; } catch (e) {} }, 700);
-        setTimeout(function() { try { if (progress) progress.style.width = "85%"; } catch (e) {} }, 1400);
-        setTimeout(hideSplash, 8000);
+        // Fallback: esconde splash mesmo se flutter-first-frame não disparar (evita overlay eterno).
+        setTimeout(function() {
+          if (loaded) return;
+          try {
+            var canvas = document.querySelector("canvas");
+            if (canvas && canvas.width > 0) hideSplash();
+          } catch (e) {}
+        }, 12000);
+        window.addEventListener("error", function(ev) {
+          if (loaded) return;
+          var src = (ev.filename || "") + (ev.message || "");
+          if (/main\.dart\.js|canvaskit|flutter/i.test(src)) {
+            showLoadError("Não foi possível carregar o app. Verifique a conexão.");
+          }
+        });
+        setTimeout(function() { try { if (progress) progress.style.width = "35%"; } catch (e) {} }, 200);
+        setTimeout(function() { try { if (progress) progress.style.width = "55%"; } catch (e) {} }, 1200);
+        setTimeout(function() { try { if (progress) progress.style.width = "72%"; } catch (e) {} }, 2800);
+        setTimeout(function() {
+          if (loaded) return;
+          try { if (progress) progress.style.width = "88%"; } catch (e) {}
+        }, 6000);
+        setTimeout(function() {
+          if (loaded) return;
+          var inApp = /WhatsApp|FBAN|FBAV|Instagram|Line\//i.test(navigator.userAgent || "");
+          showLoadError(inApp
+            ? "Se estiver no WhatsApp, toque ⋯ e abra no <b>Safari</b>."
+            : "Carregamento demorou. Toque abaixo ou atualize a página.");
+        }, 22000);
       } catch (e) {}
     })();
   </script>
@@ -490,13 +528,19 @@
       }
     };
   </script>
-  <!-- Service Worker FCM (Web Push): obrigatório para notificações com app fechado. O arquivo web/firebase-messaging-sw.js é copiado no build. -->
+  <!-- FCM SW: desktop/Android Chrome — Safari iOS/in-app browsers podem travar o boot -->
   <script>
-    if ("serviceWorker" in navigator && "PushManager" in window) {
-      navigator.serviceWorker.register("/firebase-messaging-sw.js")
-        .then(function(swReg) { console.log("FCM Service Worker registrado.", swReg.scope); })
-        .catch(function(err) { console.warn("Registro FCM Service Worker falhou:", err); });
-    }
+    (function () {
+      var ua = navigator.userAgent || "";
+      var isIOS = /iphone|ipad|ipod/i.test(ua);
+      var inApp = /WhatsApp|FBAN|FBAV|Instagram|Line\//i.test(ua);
+      if (isIOS || inApp) return;
+      if ("serviceWorker" in navigator && "PushManager" in window) {
+        navigator.serviceWorker.register("/firebase-messaging-sw.js")
+          .then(function (swReg) { console.log("FCM Service Worker registrado.", swReg.scope); })
+          .catch(function (err) { console.warn("Registro FCM Service Worker falhou:", err); });
+      }
+    })();
     document.addEventListener("touchstart", function(){}, { passive: true });
   </script>
   <!-- Warm-up do teclado nativo: pisca foco no input invisível assim que o
@@ -609,5 +653,28 @@
     })();
   </script>
   <script src="flutter_bootstrap.js" async></script>
+  <script>
+    (function () {
+      function bootFlutter() {
+        if (!window._flutter || !_flutter.loader || !_flutter.buildConfig) {
+          setTimeout(bootFlutter, 40);
+          return;
+        }
+        try {
+          _flutter.loader.load({
+            serviceWorkerSettings: null,
+            config: {
+              canvasKitVariant: "full",
+              canvasKitBaseUrl: "/canvaskit/"
+            }
+          });
+        } catch (e) {
+          console.error("Flutter loader:", e);
+        }
+      }
+      if (document.readyState === "complete") bootFlutter();
+      else window.addEventListener("load", bootFlutter);
+    })();
+  </script>
 </body>
 </html>

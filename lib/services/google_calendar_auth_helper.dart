@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-import '../constants/google_oauth_config.dart';
+import 'google_calendar_oauth_platform.dart';
+import 'google_calendar_token_store.dart';
 
 /// Resultado OAuth Google Calendar.
 class GoogleCalendarAuthResult {
@@ -26,124 +26,64 @@ class GoogleCalendarAuthResult {
   bool get ok => accessToken != null && accessToken!.isNotEmpty;
 }
 
-/// Sessão Google Calendar — **uma** instância [GoogleSignIn], silent-first, estável Web/mobile.
-///
-/// Não usa popup Firebase na Web (evita origin_mismatch e conflito com login).
+/// Sessão Google Calendar — Web: OAuth 2.0 redirect; mobile: google_sign_in.
 class GoogleCalendarAuthHelper {
   GoogleCalendarAuthHelper._();
 
-  static const _calendarScope = GoogleOAuthConfig.calendarScope;
-  static const _scopes = [_calendarScope, 'email', 'profile'];
+  static Future<void> cacheToken(String token, {String? email}) =>
+      GoogleCalendarTokenStore.save(token, email: email);
 
-  static const _prefsTokenKey = 'google_calendar_access_token';
-  static const _prefsTokenUntilKey = 'google_calendar_access_until_ms';
-  static const _prefsTokenEmailKey = 'google_calendar_token_email';
+  static Future<void> clearCache() => GoogleCalendarTokenStore.clear();
 
-  /// Token Google expira ~1h — cache local evita GIS a cada request HTTP.
-  static const _tokenCacheTtl = Duration(minutes: 50);
+  static Future<String?> storedCalendarEmail() =>
+      GoogleCalendarTokenStore.storedEmail();
 
-  static GoogleSignIn? _gsi;
-  static String? _cachedToken;
-  static DateTime? _cachedUntil;
-  static Future<GoogleCalendarAuthResult>? _inFlightEnsure;
-
-  static GoogleSignIn _signIn({bool recreate = false}) {
-    if (recreate || _gsi == null) {
-      _gsi = GoogleSignIn(
-        clientId: kIsWeb ? GoogleOAuthConfig.webClientId : null,
-        serverClientId: kIsWeb ? null : GoogleOAuthConfig.webClientId,
-        scopes: _scopes,
-      );
-    }
-    return _gsi!;
-  }
-
-  static Future<void> cacheToken(String token, {String? email}) async {
-    _cachedToken = token;
-    _cachedUntil = DateTime.now().add(_tokenCacheTtl);
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_prefsTokenKey, token);
-      await prefs.setInt(
-        _prefsTokenUntilKey,
-        _cachedUntil!.millisecondsSinceEpoch,
-      );
-      final e = email?.trim();
-      if (e != null && e.isNotEmpty) {
-        await prefs.setString(_prefsTokenEmailKey, e);
-      }
-    } catch (_) {}
-  }
-
-  static Future<void> clearCache() async {
-    _cachedToken = null;
-    _cachedUntil = null;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_prefsTokenKey);
-      await prefs.remove(_prefsTokenUntilKey);
-      await prefs.remove(_prefsTokenEmailKey);
-    } catch (_) {}
-  }
-
-  static Future<String?> storedCalendarEmail() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final e = (prefs.getString(_prefsTokenEmailKey) ?? '').trim();
-      return e.isEmpty ? null : e;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  static String? cachedTokenIfValid() {
-    final t = _cachedToken;
-    final until = _cachedUntil;
-    if (t == null || until == null) return null;
-    if (DateTime.now().isAfter(until)) {
-      _cachedToken = null;
-      _cachedUntil = null;
-      return null;
-    }
-    return t;
-  }
+  static String? cachedTokenIfValid() =>
+      GoogleCalendarTokenStore.cachedTokenIfValid();
 
   static Future<bool> hasStoredCalendarLink() async {
     final email = await storedCalendarEmail();
     return email != null && email.isNotEmpty;
   }
 
-  static Future<void> _hydrateFromPrefs() async {
-    if (cachedTokenIfValid() != null) return;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = (prefs.getString(_prefsTokenKey) ?? '').trim();
-      final untilMs = prefs.getInt(_prefsTokenUntilKey);
-      if (token.isEmpty || untilMs == null) return;
-      final until = DateTime.fromMillisecondsSinceEpoch(untilMs);
-      if (DateTime.now().isBefore(until)) {
-        _cachedToken = token;
-        _cachedUntil = until;
-      }
-    } catch (_) {}
-  }
+  /// Após redirect OAuth na Web — lê token do localStorage.
+  static Future<bool> consumeWebOAuthReturn() =>
+      GoogleCalendarOAuthPlatform.consumeWebOAuthReturn();
 
-  /// Boot silencioso — login / abrir Agenda (sem UI).
-  static Future<void> bootstrapSession({String? preferredEmail}) async {
-    await _hydrateFromPrefs();
-    if (cachedTokenIfValid() != null) return;
-    unawaited(
-      ensureToken(preferredEmail: preferredEmail, interactive: false),
+  static String? pendingWebEnableUserDocId() =>
+      GoogleCalendarOAuthPlatform.pendingEnableUserDocId();
+
+  static void clearPendingWebEnableUserDocId() =>
+      GoogleCalendarOAuthPlatform.clearPendingEnableUserDocId();
+
+  /// Redireciona para OAuth Google (somente Web).
+  static void startWebOAuthRedirect({
+    String? preferredEmail,
+    String? enableUserDocId,
+    bool selectAccount = false,
+  }) {
+    GoogleCalendarOAuthPlatform.startWebOAuthRedirect(
+      preferredEmail: preferredEmail,
+      enableUserDocId: enableUserDocId,
+      selectAccount: selectAccount,
     );
   }
 
-  /// Token silencioso — **nunca** abre popup.
+  static Future<void> bootstrapSession({String? preferredEmail}) async {
+    await GoogleCalendarTokenStore.hydrateFromPrefs();
+    if (cachedTokenIfValid() != null) return;
+    if (!kIsWeb) {
+      unawaited(
+        ensureToken(preferredEmail: preferredEmail, interactive: false),
+      );
+    }
+  }
+
   static Future<GoogleCalendarAuthResult> requestSilent({
     String? preferredEmail,
   }) =>
       ensureToken(preferredEmail: preferredEmail, interactive: false);
 
-  /// Autorização com UI — tenta silent antes; só abre Google se necessário.
   static Future<GoogleCalendarAuthResult> requestInteractive({
     String? preferredEmail,
     bool forceNewCredentials = false,
@@ -159,17 +99,10 @@ class GoogleCalendarAuthHelper {
     );
   }
 
-  /// Após HTTP 401 da API Calendar.
   static Future<GoogleCalendarAuthResult> refreshAfterUnauthorized({
     String? preferredEmail,
   }) async {
-    _cachedToken = null;
-    _cachedUntil = null;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_prefsTokenKey);
-      await prefs.remove(_prefsTokenUntilKey);
-    } catch (_) {}
+    await clearCache();
     final silent = await ensureToken(
       preferredEmail: preferredEmail,
       interactive: false,
@@ -182,29 +115,42 @@ class GoogleCalendarAuthHelper {
     );
   }
 
-  /// Obtém token válido — deduplica chamadas simultâneas.
   static Future<GoogleCalendarAuthResult> ensureToken({
     String? preferredEmail,
     required bool interactive,
     bool forceAccountPicker = false,
   }) {
-    if (_inFlightEnsure != null) return _inFlightEnsure!;
-
-    _inFlightEnsure = _ensureTokenCore(
+    return _ensureTokenCore(
       preferredEmail: preferredEmail,
       interactive: interactive,
       forceAccountPicker: forceAccountPicker,
-    ).whenComplete(() => _inFlightEnsure = null);
-
-    return _inFlightEnsure!;
+    );
   }
+
+  static Future<GoogleCalendarAuthResult>? _inFlight;
 
   static Future<GoogleCalendarAuthResult> _ensureTokenCore({
     String? preferredEmail,
     required bool interactive,
     bool forceAccountPicker = false,
   }) async {
-    await _hydrateFromPrefs();
+    if (_inFlight != null) return _inFlight!;
+
+    _inFlight = _doEnsure(
+      preferredEmail: preferredEmail,
+      interactive: interactive,
+      forceAccountPicker: forceAccountPicker,
+    ).whenComplete(() => _inFlight = null);
+
+    return _inFlight!;
+  }
+
+  static Future<GoogleCalendarAuthResult> _doEnsure({
+    String? preferredEmail,
+    required bool interactive,
+    bool forceAccountPicker = false,
+  }) async {
+    await GoogleCalendarTokenStore.hydrateFromPrefs();
 
     final cached = cachedTokenIfValid();
     if (cached != null) {
@@ -216,77 +162,21 @@ class GoogleCalendarAuthHelper {
 
     if (forceAccountPicker) {
       await clearCache();
-      try {
-        await _signIn(recreate: true).signOut();
-      } catch (_) {}
+      await GoogleCalendarOAuthPlatform.signOutCalendarSession();
     }
 
     try {
-      final gs = _signIn();
-      var account = await gs.signInSilently(suppressErrors: true);
-
       final hint = _resolveEmailHint(preferredEmail);
-      if (account != null && hint != null && !_emailsMatch(account.email, hint)) {
-        if (interactive || forceAccountPicker) {
-          try {
-            await gs.signOut();
-          } catch (_) {}
-          account = null;
-        } else {
-          return const GoogleCalendarAuthResult(
-            errorMessage: 'Conta Google diferente da vinculada.',
-          );
-        }
-      }
-
-      if (account == null && interactive) {
-        account = await gs.signIn();
-        if (account == null) {
-          return const GoogleCalendarAuthResult(cancelled: true);
-        }
-      }
-
-      if (account == null) {
-        return GoogleCalendarAuthResult(
-          needsInteractive: !interactive,
-          email: hint,
-          errorMessage: interactive
-              ? 'Selecione sua conta Google.'
-              : 'Autorize o Google Calendar para sincronizar.',
-        );
-      }
-
-      var hasScope = await gs.canAccessScopes([_calendarScope]);
-      if (!hasScope) {
-        if (!interactive) {
-          return GoogleCalendarAuthResult(
-            needsInteractive: true,
-            email: account.email,
-            errorMessage: 'Permissão do calendário necessária.',
-          );
-        }
-        hasScope = await gs.requestScopes([_calendarScope]);
-        if (!hasScope) {
-          return const GoogleCalendarAuthResult(
-            errorMessage: 'Permissão do Google Calendar negada.',
-          );
-        }
-      }
-
-      final token = await _readAccessToken(account);
-      if (token == null || token.isEmpty) {
-        return GoogleCalendarAuthResult(
-          needsInteractive: interactive,
-          email: account.email,
-          errorMessage: 'Token Google indisponível. Tente autorizar de novo.',
-        );
-      }
-
-      await cacheToken(token, email: account.email);
-      return GoogleCalendarAuthResult(
-        accessToken: token,
-        email: account.email,
+      final result = await GoogleCalendarOAuthPlatform.ensureToken(
+        preferredEmail: hint,
+        interactive: interactive,
+        forceAccountPicker: forceAccountPicker,
       );
+
+      if (result.ok && result.accessToken != null) {
+        await cacheToken(result.accessToken!, email: result.email);
+      }
+      return result;
     } catch (e, st) {
       debugPrint('GoogleCalendarAuthHelper.ensureToken: $e\n$st');
       if (_userCancelled(e)) {
@@ -300,15 +190,6 @@ class GoogleCalendarAuthHelper {
     }
   }
 
-  static Future<String?> _readAccessToken(GoogleSignInAccount account) async {
-    final auth = await account.authentication;
-    var token = auth.accessToken;
-    if (token != null && token.isNotEmpty) return token;
-    await Future<void>.delayed(const Duration(milliseconds: 120));
-    final retry = await account.authentication;
-    return retry.accessToken;
-  }
-
   static String? _resolveEmailHint(String? preferredEmail) {
     final p = preferredEmail?.trim();
     if (p != null && p.isNotEmpty) return p;
@@ -317,29 +198,16 @@ class GoogleCalendarAuthHelper {
     return login.isEmpty ? null : login;
   }
 
-  static bool _emailsMatch(String a, String b) =>
-      a.trim().toLowerCase() == b.trim().toLowerCase();
-
   static String _friendlyError(Object e) {
     final raw = e.toString();
     if (raw.contains('origin_mismatch')) {
-      final origin = Uri.base.origin;
-      return 'Erro de autorização Google (origin_mismatch). '
-          'Origem: $origin. Adicione em «Origens JavaScript autorizadas» '
-          'do cliente OAuth Web no Google Cloud Console.';
+      return 'Configure no Google Cloud Console (cliente OAuth Web): '
+          'Origem JS: ${Uri.base.origin} · '
+          'Redirect: ${Uri.base.origin}/google_calendar_oauth.html';
     }
-    if (raw.contains('popup_closed_by_user') ||
-        raw.contains('cancelled-popup') ||
-        raw.contains('popup-blocked')) {
-      return '';
-    }
+    if (raw.contains('popup_closed') || raw.contains('cancelled')) return '';
     if (raw.contains('access_denied') || raw.contains('permission')) {
       return 'Permissão do Google Calendar negada.';
-    }
-    if (raw.contains('interaction_required') ||
-        raw.contains('login_required') ||
-        raw.contains('consent_required')) {
-      return '';
     }
     return raw.split('\n').first;
   }
@@ -348,22 +216,19 @@ class GoogleCalendarAuthHelper {
     final raw = e.toString().toLowerCase();
     return raw.contains('popup_closed') ||
         raw.contains('cancelled') ||
-        raw.contains('canceled') ||
-        raw.contains('user_cancel');
+        raw.contains('canceled');
   }
 
-  /// Instância compartilhada (ex.: trocar conta / signOut).
-  static GoogleSignIn sharedSignIn() => _signIn();
+  static GoogleSignIn? sharedSignIn() {
+    if (kIsWeb) return null;
+    return GoogleCalendarOAuthPlatform.sharedSignIn() as GoogleSignIn?;
+  }
 
-  /// Encerra sessão GIS do calendário.
   static Future<void> signOutCalendarSession() async {
     await clearCache();
-    try {
-      await _signIn().signOut();
-    } catch (_) {}
+    await GoogleCalendarOAuthPlatform.signOutCalendarSession();
   }
 
-  /// Login principal foi Apple — Gmail da agenda pode ser outro.
   static bool isApplePrimaryLogin() {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return false;

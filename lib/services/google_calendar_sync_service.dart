@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
@@ -148,12 +149,25 @@ class GoogleCalendarSyncService {
     if (uid.isEmpty) {
       return GoogleCalendarEnableResult.fail('Sessão inválida. Entre novamente.');
     }
+    await completeWebOAuthReturnIfNeeded();
     return _enableCore(uid, forceNewCredentials: false, skipSilent: false);
+  }
+
+  /// Web: após redirect OAuth, grava token e ativa integração se pendente.
+  static Future<void> completeWebOAuthReturnIfNeeded() async {
+    if (!kIsWeb) return;
+    final consumed = await GoogleCalendarAuthHelper.consumeWebOAuthReturn();
+    if (!consumed) return;
+    final uid = GoogleCalendarAuthHelper.pendingWebEnableUserDocId();
+    if (uid == null || uid.isEmpty) return;
+    GoogleCalendarAuthHelper.clearPendingWebEnableUserDocId();
+    await enable(uid, skipSilent: false);
   }
 
   /// Renova token silenciosamente se a integração já está ativa (boot / abrir Agenda).
   static Future<bool> warmUpIfEnabled(String uid) async {
     if (uid.isEmpty || !await isEnabled(uid)) return false;
+    await completeWebOAuthReturnIfNeeded();
     try {
       final snap = await FirestoreWebGuard.runWithWebRecovery(
         () => _settingsRef(uid).get(),
