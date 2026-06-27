@@ -62,7 +62,7 @@ $readme = @"
 WISDOMAPP — export $tag (#$vc)
 AAB: $destAab
 ZIP iOS: $zip
-Branch CodeMagic sugerida: codemagic-10-02-ready
+Branch CodeMagic sugerida: codemagic-10-03-ready (ou rode Start-CodemagicIos.bat)
 "@
 Set-Content -Path (Join-Path $destDir "WISDOMAPP_EXPORT_${tag}_${vc}.txt") -Value $readme -Encoding UTF8
 Write-Host "Concluido." -ForegroundColor Green

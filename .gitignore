@@ -47,6 +47,8 @@ app.*.map.json
 # Secrets e tokens locais
 .deploy-token
 .firebase-ci-token
+**/AuthKey_*.p8
+**/*.p8
 firebase-adminsdk*/
 **/firebase-adminsdk*/
 

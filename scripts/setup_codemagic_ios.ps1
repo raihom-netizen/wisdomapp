@@ -10,7 +10,7 @@ $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $repoUrl = $env:WISDOMAPP_GITHUB_REPO
 if ([string]::IsNullOrWhiteSpace($repoUrl)) {
-    $repoUrl = "https://github.com/Raihom-Barbosa/wisdomapp.git"
+    $repoUrl = "https://github.com/ralhom-netizen/wisdomapp.git"
 }
 
 if (Get-Command git -ErrorAction SilentlyContinue) {

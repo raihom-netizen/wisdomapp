@@ -23,7 +23,7 @@ if ([string]::IsNullOrWhiteSpace($GitHubRepo)) {
     $GitHubRepo = $env:WISDOMAPP_GITHUB_REPO
 }
 if ([string]::IsNullOrWhiteSpace($GitHubRepo)) {
-    $GitHubRepo = "https://github.com/Raihom-Barbosa/wisdomapp.git"
+    $GitHubRepo = "https://github.com/ralhom-netizen/wisdomapp.git"
 }
 
 function Add-CodemagicGitFiles {
@@ -72,7 +72,7 @@ function Get-VersionBranch {
 }
 
 Write-Host "=== WISDOMAPP - Setup iOS CodeMagic (um clique) ===" -ForegroundColor Cyan
-Write-Host "Bundle: com.wisdomapp | API Apple: ControleTotalAPI1 (mesmo do Controle Total)" -ForegroundColor Yellow
+Write-Host "Bundle: com.wisdomapp | API Apple: wisdomapp (4UMWWALR3U)" -ForegroundColor Yellow
 $versionBranch = Get-VersionBranch
 Write-Host "Branch CodeMagic: $versionBranch + codemagic-ios-ready" -ForegroundColor Yellow
 
@@ -151,7 +151,7 @@ if (-not $SkipCodemagicApi) {
 # --- 4) Resumo ---
 Write-Host "`n[4/4] Proximos passos ===" -ForegroundColor Green
 Write-Host '  1. Codemagic: app WISDOMAPP, Settings, Workflow Editor, Switch to YAML' -ForegroundColor White
-Write-Host '  2. Integracao Team ControleTotalAPI1 + appstore_credentials (mesmo do CT)' -ForegroundColor White
+Write-Host '  2. Integracao Team wisdomapp + appstore_credentials (CERTIFICATE_PRIVATE_KEY)' -ForegroundColor White
 Write-Host ('  3. Start new build: workflow iOS, branch ' + $versionBranch) -ForegroundColor White
 Write-Host '  4. IPA e TestFlight automaticos apos o build.' -ForegroundColor White
 Write-Host ''
