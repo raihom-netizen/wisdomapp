@@ -42,6 +42,7 @@ class _BiometricSwitchTile extends StatefulWidget {
 
 class _BiometricSwitchTileState extends State<_BiometricSwitchTile> {
   bool _enabled = false;
+  bool _busy = false;
 
   @override
   void initState() {
@@ -49,6 +50,39 @@ class _BiometricSwitchTileState extends State<_BiometricSwitchTile> {
     BiometricPreferences.isEnabled().then((v) {
       if (mounted) setState(() => _enabled = v);
     });
+  }
+
+  Future<void> _onToggle(bool wantEnable) async {
+    if (_busy) return;
+    if (wantEnable) {
+      setState(() => _busy = true);
+      final ok = await authenticateWithBiometric();
+      if (!mounted) return;
+      setState(() => _busy = false);
+      if (!ok) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Não foi possível confirmar digital ou rosto. Tente de novo.'),
+          ),
+        );
+        return;
+      }
+    }
+    await BiometricPreferences.setEnabled(wantEnable);
+    await BiometricPreferences.setAsked();
+    BiometricStartupCache.invalidate();
+    if (mounted) {
+      setState(() => _enabled = wantEnable);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            wantEnable
+                ? 'Digital/facial ativado. Ao voltar do app, pede confirmação.'
+                : 'Digital/facial desativado. Entrada direta com sessão salva.',
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -64,23 +98,12 @@ class _BiometricSwitchTileState extends State<_BiometricSwitchTile> {
             style: TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text(
           _enabled
-              ? 'Ativado. Após ${AppBusinessRules.inactivityTimeoutMinutes} min fechado, pede digital de novo.'
-              : 'Desativado',
+              ? 'Ativado. Sessão mantida no aparelho; após ${AppBusinessRules.inactivityTimeoutMinutes} min em segundo plano, pede digital de novo.'
+              : 'Desativado — abre direto com a sessão guardada (como Controle Total). Funciona offline.',
           style: TextStyle(fontSize: 12, color: AppColors.textMuted),
         ),
         value: _enabled,
-        onChanged: (v) async {
-          await BiometricPreferences.setEnabled(v);
-          await BiometricPreferences.setAsked();
-          if (mounted) {
-            setState(() => _enabled = v);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                  content:
-                      Text(v ? 'Biometria ativada.' : 'Biometria desativada.')),
-            );
-          }
-        },
+        onChanged: _busy ? null : _onToggle,
       ),
     );
   }
@@ -785,6 +808,7 @@ class SettingsScreen extends StatelessWidget {
             _sectionTitle('AGENDA'),
             GoogleCalendarIntegrationToggle(
               userDocId: _docUid,
+              showChangeAccountAction: true,
             ),
             Padding(
               padding: const EdgeInsets.only(top: 6, left: 4, right: 4, bottom: 8),
@@ -1267,7 +1291,7 @@ class SettingsScreen extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Text(
-              'Encerra a sessão e volta à tela inicial com login Google ou Apple.',
+              'Encerra a sessão, apaga credenciais locais e abre login para outra conta.',
               style: TextStyle(
                 fontSize: 11,
                 color: Colors.white.withOpacity(0.88),
@@ -1282,7 +1306,25 @@ class SettingsScreen extends StatelessWidget {
   }
 
   Widget _tileBiometria(BuildContext context) {
-    if (kIsWeb) return const SizedBox.shrink();
+    if (kIsWeb) {
+      return Card(
+        margin: const EdgeInsets.only(bottom: 8),
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: ListTile(
+          leading: Icon(Icons.lock_open_rounded, color: AppColors.primary, size: 26),
+          title: const Text(
+            'Sessão neste navegador',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text(
+            'Permanece logada até «Entrar com outra conta». Com internet off, '
+            'continua a usar dados guardados no aparelho.',
+            style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+          ),
+        ),
+      );
+    }
     return const _BiometricSwitchTile();
   }
 

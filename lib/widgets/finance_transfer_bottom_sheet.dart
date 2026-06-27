@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'fast_text_field.dart';
@@ -18,14 +17,13 @@ import '../services/logs_service.dart';
 import '../theme/app_colors.dart';
 import '../screens/anexo_viewer_screen.dart';
 import '../utils/firestore_user_doc_id.dart';
+import '../utils/receipt_attachment_utils.dart';
 import '../utils/keyboard_form_scaffold.dart';
 import '../utils/premium_upgrade.dart';
 import 'brl_amount_text_field.dart';
 import 'finance_bank_brand_thumb.dart';
 import 'finance_premium_ui.dart';
 import '../utils/finance_transaction_datetime.dart';
-
-const List<String> _kTransferReceiptExtensions = ['pdf', 'png', 'jpg', 'jpeg'];
 
 /// Dados preenchidos na tela de transferência.
 class FinanceTransferSheetResult {
@@ -167,54 +165,14 @@ class _FinanceTransferPageState extends State<_FinanceTransferPage> {
   FinanceAccount _acc(String id) => widget.accounts.firstWhere((a) => a.id == id);
 
   Future<void> _pickReceipt() async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: _kTransferReceiptExtensions,
-        withData: true,
-      );
-      if (result == null || result.files.isEmpty) return;
-      final f = result.files.single;
-      final ext = (f.extension ?? '').toLowerCase();
-      if (!_kTransferReceiptExtensions.contains(ext) && ext != 'jpeg') {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Arquivo inválido. Use JPEG, PNG ou PDF.')),
-          );
-        }
-        return;
-      }
-      final bytes = f.bytes;
-      if (bytes == null || bytes.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Não foi possível ler o arquivo. Tente outro.')),
-          );
-        }
-        return;
-      }
-      if (bytes.lengthInBytes > 5 * 1024 * 1024) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Arquivo grande demais. Limite: 5 MB.')),
-          );
-        }
-        return;
-      }
-      final mime = ext == 'pdf' ? 'application/pdf' : (ext == 'png' ? 'image/png' : 'image/jpeg');
-      setState(() {
-        _hasReceipt = true;
-        _receiptBytes = bytes;
-        _receiptName = f.name;
-        _receiptMime = mime;
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao selecionar arquivo: ${e.toString().split('\n').first}')),
-        );
-      }
-    }
+    final picked = await ReceiptAttachmentUtils.pickValidated(context);
+    if (picked == null || !mounted) return;
+    setState(() {
+      _hasReceipt = true;
+      _receiptBytes = picked.bytes;
+      _receiptName = picked.name;
+      _receiptMime = picked.mime;
+    });
   }
 
   Widget _buildReceiptPicker() {
@@ -912,38 +870,13 @@ class _FinanceTransferEdit {
                                     : 'Anexar comprovante (PDF, PNG, JPG)',
                               ),
                               onPressed: () async {
-                                final pick = await FilePicker.platform.pickFiles(
-                                  type: FileType.custom,
-                                  allowedExtensions: _kTransferReceiptExtensions,
-                                  withData: true,
-                                );
-                                if (pick == null || pick.files.isEmpty) return;
-                                final f = pick.files.first;
-                                final bytes = f.bytes ?? Uint8List(0);
-                                final ext = (f.extension ?? '').toLowerCase();
-                                if (!_kTransferReceiptExtensions.contains(ext)) {
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Use PDF, PNG ou JPG.')),
-                                    );
-                                  }
-                                  return;
-                                }
-                                if (bytes.lengthInBytes > 5 * 1024 * 1024) {
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Arquivo grande. Máx. 5 MB.')),
-                                    );
-                                  }
-                                  return;
-                                }
+                                final picked = await ReceiptAttachmentUtils.pickValidated(context);
+                                if (picked == null) return;
                                 setState(() {
                                   removeReceipt = false;
-                                  newReceiptBytes = bytes;
-                                  newReceiptName = f.name;
-                                  newReceiptMime = ext == 'pdf'
-                                      ? 'application/pdf'
-                                      : (ext == 'png' ? 'image/png' : 'image/jpeg');
+                                  newReceiptBytes = picked.bytes;
+                                  newReceiptName = picked.name;
+                                  newReceiptMime = picked.mime;
                                 });
                               },
                             ),

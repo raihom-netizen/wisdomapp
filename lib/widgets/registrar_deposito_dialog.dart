@@ -3,12 +3,11 @@ import 'package:flutter/material.dart' hide showDatePicker;
 import 'package:intl/intl.dart';
 
 import '../constants/currency_formats.dart';
-import '../models/finance_account.dart';
 import '../models/user_profile.dart';
-import '../services/finance_accounts_service.dart';
 import '../services/goal_deposit_service.dart';
 import '../utils/premium_upgrade.dart';
 import '../utils/date_picker_a11y.dart';
+import 'goal_finance_account_field.dart';
 import 'brl_amount_text_field.dart';
 
 /// Abre o diálogo «Registrar depósito» (meta clássica ou complemento).
@@ -21,6 +20,7 @@ Future<bool> showRegistrarDepositoDialog({
   required UserProfile profile,
   double? initialAmount,
   List<int>? weekNumbers,
+  String? initialFinanceAccountId,
 }) async {
   if (!profile.hasActiveLicense) {
     mostrarAvisoSeLicencaInativa(context, profile);
@@ -36,6 +36,7 @@ Future<bool> showRegistrarDepositoDialog({
       uid: uid,
       initialAmount: initialAmount,
       weekNumbers: weekNumbers,
+      initialFinanceAccountId: initialFinanceAccountId,
     ),
   );
   return saved == true;
@@ -73,6 +74,7 @@ class _RegistrarDepositoDialogContent extends StatefulWidget {
     required this.uid,
     this.initialAmount,
     this.weekNumbers,
+    this.initialFinanceAccountId,
   });
 
   final DocumentReference<Map<String, dynamic>> goalRef;
@@ -81,6 +83,7 @@ class _RegistrarDepositoDialogContent extends StatefulWidget {
   final String uid;
   final double? initialAmount;
   final List<int>? weekNumbers;
+  final String? initialFinanceAccountId;
 
   @override
   State<_RegistrarDepositoDialogContent> createState() =>
@@ -99,12 +102,17 @@ class _RegistrarDepositoDialogContentState
   @override
   void initState() {
     super.initState();
+    final seedAccount = widget.initialFinanceAccountId?.trim();
+    if (seedAccount != null && seedAccount.isNotEmpty) {
+      _financeAccountId = seedAccount;
+    }
     final seed = widget.initialAmount;
     if (seed != null && seed > 0) {
       _amountCtrl.text = CurrencyFormats.formatBRLInput(seed);
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _focusNode.requestFocus();
+      if (_financeAccountId != null) _loadBalance(_financeAccountId);
     });
   }
 
@@ -180,7 +188,22 @@ class _RegistrarDepositoDialogContentState
   Widget build(BuildContext context) {
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      title: const Text('Registrar depósito'),
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF0D9488)]),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.savings_rounded, color: Colors.white, size: 20),
+          ),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text('Registrar depósito', style: TextStyle(fontWeight: FontWeight.w900)),
+          ),
+        ],
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -213,33 +236,12 @@ class _RegistrarDepositoDialogContentState
               ),
             ),
             const SizedBox(height: 12),
-            StreamBuilder<List<FinanceAccount>>(
-              stream: FinanceAccountsService().streamAccounts(widget.uid),
-              builder: (context, snap) {
-                final accounts = snap.data ?? const <FinanceAccount>[];
-                return DropdownButtonFormField<String?>(
-                  value: _financeAccountId,
-                  decoration: const InputDecoration(
-                    labelText: 'Conta que recebe o depósito',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  items: [
-                    const DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text('Sem conta vinculada'),
-                    ),
-                    for (final a in accounts)
-                      DropdownMenuItem<String?>(
-                        value: a.id,
-                        child: Text(a.displayName),
-                      ),
-                  ],
-                  onChanged: (v) {
-                    setState(() => _financeAccountId = v);
-                    _loadBalance(v);
-                  },
-                );
+            GoalFinanceAccountField(
+              uid: widget.uid,
+              selectedAccountId: _financeAccountId,
+              onChanged: (v) {
+                setState(() => _financeAccountId = v);
+                _loadBalance(v);
               },
             ),
             if (_accountBalance != null) ...[

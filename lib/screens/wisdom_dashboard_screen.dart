@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../screens/financial_tips_fullscreen_page.dart';
 import '../services/financial_tips_catalog_service.dart';
+import '../utils/user_display_name.dart';
 import '../constants/app_brand.dart';
 import '../models/user_profile.dart';
 import '../theme/app_colors.dart';
@@ -31,8 +32,17 @@ class WisdomDashboardScreen extends StatelessWidget {
       return StreamBuilder<HomeTipsCatalogSnapshot>(
         stream: FinancialTipsCatalogService.watchHomeTips(),
         builder: (context, snap) {
-          final tips = snap.data?.tips ?? FinancialTipsCatalogService.biblicalCatalog();
-          return FinancialTipsFullscreenPage(tips: tips);
+          final catalog = snap.data ??
+              HomeTipsCatalogSnapshot(tips: FinancialTipsCatalogService.biblicalCatalog());
+          final tips = catalog.tips.isNotEmpty
+              ? catalog.tips
+              : FinancialTipsCatalogService.biblicalCatalog();
+          return FinancialTipsFullscreenPage(
+            tips: tips,
+            config: catalog.config,
+            embeddedInShell: true,
+            onReturn: () => onNavigateTo?.call(0),
+          );
         },
       );
     }
@@ -47,10 +57,8 @@ class WisdomDashboardScreen extends StatelessWidget {
             : FinancialTipsCatalogService.biblicalCatalog();
         final preview = FinancialTipsCatalogService.partitionForHome(
           allTips,
-          favoriteIds: catalog.favoriteIds,
+          config: catalog.config,
         );
-        final hiddenCount =
-            preview.allTips.length - preview.homeVisibleTips.length;
         final syncing = snap.connectionState == ConnectionState.waiting &&
             snap.data == null;
 
@@ -75,7 +83,7 @@ class WisdomDashboardScreen extends StatelessWidget {
               const SizedBox(height: 18),
               _TipsSectionHeader(
                 syncing: syncing,
-                total: allTips.length,
+                dayLabel: preview.dayLabel,
               ),
               const SizedBox(height: 12),
               FinanceTipModernCard(
@@ -84,40 +92,47 @@ class WisdomDashboardScreen extends StatelessWidget {
                 isTipOfDay: true,
                 showFullText: true,
               ),
-              ...preview.previewExtras.asMap().entries.map(
-                    (e) => Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: FinanceTipModernCard(
-                        tip: e.value,
-                        index: e.key + 1,
-                        showFullText: true,
-                      ),
-                    ),
-                  ),
-              if (hiddenCount > 0) ...[
-                  const SizedBox(height: 14),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: () => openFinancialTipsFullscreen(
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () {
+                    if (onNavigateTo != null) {
+                      onNavigateTo!.call(5);
+                    } else {
+                      openFinancialTipsFullscreen(
                         context,
-                        preview.allTips,
-                      ),
-                      icon: const Icon(Icons.auto_stories_rounded),
-                      label: Text(
-                        'Veja mais ($hiddenCount dicas)',
-                      ),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF0B1B4B),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
+                        tips: allTips,
+                        config: catalog.config,
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.auto_stories_rounded),
+                  label: const Text('Veja mais'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF0B1B4B),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
                     ),
                   ),
-                ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'No módulo Dicas você vê só os últimos '
+                  '${FinancialTipsCatalogService.kModuleHistoryDays} dias.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade600,
+                    height: 1.35,
+                  ),
+                ),
+              ),
               const SizedBox(height: 24),
               HomeFinanceOverviewPanel(
                 uid: uid,
@@ -139,10 +154,10 @@ class WisdomDashboardScreen extends StatelessWidget {
 }
 
 class _TipsSectionHeader extends StatelessWidget {
-  const _TipsSectionHeader({required this.syncing, required this.total});
+  const _TipsSectionHeader({required this.syncing, required this.dayLabel});
 
   final bool syncing;
-  final int total;
+  final String dayLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -176,7 +191,7 @@ class _TipsSectionHeader extends StatelessWidget {
               Text(
                 syncing
                     ? 'A sincronizar com a nuvem…'
-                    : 'Sabedoria bíblica para suas finanças · $total dicas no catálogo',
+                    : 'Sabedoria bíblica para suas finanças · $dayLabel',
                 style: TextStyle(
                   color: Colors.grey.shade700,
                   fontWeight: FontWeight.w600,
@@ -206,7 +221,7 @@ class _HeroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = profile.name.trim().isEmpty ? 'Gestor' : profile.name.trim();
+    final name = resolveUserDisplayName(profile);
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
@@ -248,29 +263,28 @@ class _HeroCard extends StatelessWidget {
           Text(
             AppBrand.idealizerName.toUpperCase(),
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.88),
+              color: Colors.white.withValues(alpha: 0.82),
               fontWeight: FontWeight.w800,
               letterSpacing: 1.6,
-              fontSize: 11,
+              fontSize: 10,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           Text(
-            'Olá, $name!',
+            'Olá, $name',
             style: const TextStyle(
               color: Colors.white,
-              fontWeight: FontWeight.w900,
-              fontSize: 22,
-              height: 1.2,
+              fontWeight: FontWeight.w800,
+              fontSize: 18,
             ),
           ),
           const SizedBox(height: 6),
           Text(
-            'Sabedoria financeira com base na Bíblia.',
+            'Sabedoria financeira com base na Bíblia',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.9),
+              color: Colors.white.withValues(alpha: 0.88),
               fontWeight: FontWeight.w600,
-              height: 1.35,
+              fontSize: 13,
             ),
           ),
           const SizedBox(height: 16),
@@ -281,19 +295,19 @@ class _HeroCard extends StatelessWidget {
               _QuickChip(
                 label: 'Financeiro',
                 icon: Icons.account_balance_wallet_rounded,
-                color: const Color(0xFF10B981),
+                color: const Color(0xFF5EEAD4),
                 onTap: onOpenFinanceiro,
               ),
               _QuickChip(
                 label: 'Agenda',
                 icon: Icons.event_note_rounded,
-                color: const Color(0xFF8B5CF6),
+                color: const Color(0xFFC4B5FD),
                 onTap: onOpenAgenda,
               ),
               _QuickChip(
                 label: 'Cursos',
                 icon: Icons.ondemand_video_rounded,
-                color: const Color(0xFF38BDF8),
+                color: const Color(0xFF7DD3FC),
                 onTap: onOpenCursos,
               ),
             ],

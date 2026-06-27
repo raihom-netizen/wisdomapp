@@ -3,6 +3,8 @@ import 'dart:async';
 /// Stub para plataformas não-web: não recarrega.
 void reloadPage([String? serverVersion, bool forceReload = false]) {}
 
+bool isWebReloadLoopBlocked(String serverVersion) => false;
+
 /// Stub: não-web não tem URL.
 bool urlAlreadyHasVersion(String version) => false;
 

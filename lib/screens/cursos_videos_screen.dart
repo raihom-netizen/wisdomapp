@@ -1,12 +1,17 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/wisdom_courses_module_config.dart';
 import '../theme/app_colors.dart';
+import '../services/course_videos_expiry_cleanup_service.dart';
+import '../utils/course_video_validity.dart';
 import '../utils/course_content_link_helper.dart';
 import '../utils/course_thumb_resolver.dart';
 import '../utils/youtube_url_helper.dart';
+import '../utils/course_media_url_resolver.dart';
 import '../widgets/course_media_preview.dart';
 import '../widgets/course_mp4_player_dialog.dart';
 import '../widgets/youtube_video_player_dialog.dart';
@@ -37,8 +42,21 @@ class CursosVideosScreen extends StatefulWidget {
 class _CursosVideosScreenState extends State<CursosVideosScreen> {
   int _tabIndex = 0;
   int _retryGen = 0;
+  bool _expiryCleanupScheduled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!_expiryCleanupScheduled) {
+      _expiryCleanupScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(CourseVideosExpiryCleanupService.purgeExpired());
+      });
+    }
+  }
 
   bool _isPublished(Map<String, dynamic> data) {
+    if (!CourseVideoValidity.isStillValid(data)) return false;
     if (data['published'] == false) return false;
     final type = (data['type'] ?? 'curso').toString();
     if (type == 'curso') return _isPublishedCurso(data);
@@ -46,6 +64,7 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
   }
 
   bool _isPublishedCurso(Map<String, dynamic> data) {
+    if (CourseMediaUrlResolver.collectVideoEntries(data).isNotEmpty) return true;
     if (_mp4Url(data) != null) return true;
     if (_videoId(data) != null) return true;
     final source = (data['source'] ?? '').toString().toLowerCase();
@@ -63,7 +82,7 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
     final link = _externalLink(data);
     if (link != null && CourseContentLinkHelper.isValidHttpUrl(link)) return true;
     if ((data['bodyText'] ?? '').toString().trim().isNotEmpty) return true;
-    if ((data['imageUrl'] ?? '').toString().trim().isNotEmpty) return true;
+    if (CourseMediaUrlResolver.hasResolvableImage(data)) return true;
     return (data['description'] ?? '').toString().trim().isNotEmpty;
   }
 
@@ -337,7 +356,7 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
       children: [
         if (docs.isNotEmpty) ...[
           _FeaturedVideoHighlight(
-            data: docs.first.data(),
+            data: {...docs.first.data(), 'id': docs.first.id},
             videoId: _videoId(docs.first.data()),
             thumbUrl: _thumbUrl(docs.first.data()),
             accent: accent,
@@ -375,13 +394,14 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
 
   Future<void> _openContent(BuildContext context, Map<String, dynamic> data) async {
     final type = (data['type'] ?? 'curso').toString();
+    final title = (data['title'] ?? 'Vídeo').toString();
+    if (CourseMediaUrlResolver.collectVideoEntries(data).isNotEmpty) {
+      await openCourseMp4FromData(context, data: data, title: title);
+      return;
+    }
     final mp4 = _mp4Url(data);
     if (mp4 != null) {
-      showCourseMp4PlayerDialog(
-        context,
-        videoUrl: mp4,
-        title: (data['title'] ?? 'Vídeo').toString(),
-      );
+      await showCourseMp4PlayerDialog(context, videoUrl: mp4, title: title);
       return;
     }
     final videoId = _videoId(data);
@@ -408,7 +428,7 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
 
   Future<void> _showDicaDetail(BuildContext context, Map<String, dynamic> data) async {
     final body = (data['bodyText'] ?? data['description'] ?? '').toString();
-    final img = (data['imageUrl'] ?? '').toString().trim();
+    final hasGallery = CourseMediaUrlResolver.hasResolvableImage(data);
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -441,9 +461,9 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
                 (data['title'] ?? 'Dica').toString(),
                 style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20, height: 1.25),
               ),
-              if (img.isNotEmpty) ...[
+              if (hasGallery) ...[
                 const SizedBox(height: 14),
-                CourseImagePreview(networkUrl: img, maxHeight: 240),
+                CoursePhotoGallery(data: data, height: 280),
               ],
               if (body.isNotEmpty) ...[
                 const SizedBox(height: 16),
@@ -486,7 +506,7 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
           itemBuilder: (context, i) {
             final data = docs[i].data();
             return _DicaGridCard(
-              data: data,
+              data: {...data, 'id': docs[i].id},
               videoId: _videoId(data),
               thumbUrl: _thumbUrl(data),
               accent: accent,
@@ -514,7 +534,7 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
       children: [
         for (final doc in docs)
           _ModernVideoCard(
-            data: doc.data(),
+            data: {...doc.data(), 'id': doc.id},
             videoId: _videoId(doc.data()),
             thumbUrl: _thumbUrl(doc.data()),
             accent: accent,

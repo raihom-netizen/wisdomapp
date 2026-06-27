@@ -12,6 +12,7 @@ import '../utils/premium_upgrade.dart';
 import '../widgets/goal_contributions_sheet.dart';
 import '../widgets/create_financial_goal_dialog.dart';
 import '../widgets/fifty_two_weeks_schedule_sheet.dart';
+import '../widgets/goal_52_weeks_summary_panel.dart';
 import '../widgets/registrar_deposito_dialog.dart';
 
 /// Card «Objetivo Financeiro» no Início — Projeto 52 semanas + progresso.
@@ -22,6 +23,8 @@ class HomeObjectiveFinancePanel extends StatelessWidget {
     required this.profile,
     required this.onOpenObjetivoModule,
   });
+
+  static const int maxGoalsOnHome = 3;
 
   final String uid;
   final UserProfile profile;
@@ -61,24 +64,39 @@ class HomeObjectiveFinancePanel extends StatelessWidget {
           if (tb == null) return -1;
           return tb.compareTo(ta);
         });
-        final primary = goals.first;
+        final visible = goals.take(maxGoalsOnHome).toList();
+        final hiddenCount = goals.length - visible.length;
+        final showModuleLinkOnCards = visible.length == 1 && hiddenCount == 0;
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _ActiveObjectiveCard(
-              goalDoc: primary,
-              uid: uid,
-              profile: profile,
-              onOpenModule: onOpenObjetivoModule,
-            ),
-            if (goals.length > 1) ...[
-              const SizedBox(height: 10),
-              TextButton.icon(
+            for (var i = 0; i < visible.length; i++) ...[
+              if (i > 0) const SizedBox(height: 12),
+              _ActiveObjectiveCard(
+                goalDoc: visible[i],
+                uid: uid,
+                profile: profile,
+                onOpenModule: onOpenObjetivoModule,
+                showModuleLink: showModuleLinkOnCards,
+              ),
+            ],
+            if (hiddenCount > 0) ...[
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
                 onPressed: onOpenObjetivoModule,
-                icon: const Icon(Icons.layers_rounded, size: 18),
+                icon: const Icon(Icons.flag_rounded, size: 20),
                 label: Text(
-                  'Ver mais ${goals.length - 1} objetivo(s)',
-                  style: const TextStyle(fontWeight: FontWeight.w800),
+                  hiddenCount == 1
+                      ? 'Veja mais 1 objetivo no módulo Objetivo'
+                      : 'Veja mais $hiddenCount objetivos no módulo Objetivo',
+                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF4F46E5),
+                  side: const BorderSide(color: Color(0xFF6366F1), width: 1.5),
+                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
               ),
             ],
@@ -144,7 +162,7 @@ class _EmptyObjectiveCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      'Projeto 52 semanas — viagem, carro, casa, reforma…',
+                      'Projeto 52 semanas - viagem, carro, casa, reforma...',
                       style: TextStyle(
                         color: Colors.white70,
                         fontWeight: FontWeight.w600,
@@ -195,12 +213,14 @@ class _ActiveObjectiveCard extends StatelessWidget {
     required this.uid,
     required this.profile,
     required this.onOpenModule,
+    this.showModuleLink = true,
   });
 
   final QueryDocumentSnapshot<Map<String, dynamic>> goalDoc;
   final String uid;
   final UserProfile profile;
   final VoidCallback onOpenModule;
+  final bool showModuleLink;
 
   @override
   Widget build(BuildContext context) {
@@ -275,7 +295,7 @@ class _ActiveObjectiveCard extends StatelessWidget {
                         ),
                         Text(
                           is52
-                              ? 'Projeto 52 semanas · semana $currentWeek de 52'
+                              ? 'Projeto 52 semanas - semana $currentWeek de 52'
                               : 'Objetivo financeiro',
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.88),
@@ -297,6 +317,17 @@ class _ActiveObjectiveCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 12),
+              if (is52) ...[
+                Goal52WeeksSummaryPanel(
+                  target: target,
+                  deposited: current,
+                  paidWeeks: paidCount,
+                  currentWeek: currentWeek,
+                  gradient: visual.gradient,
+                  compact: true,
+                ),
+                const SizedBox(height: 12),
+              ],
               ClipRRect(
                 borderRadius: BorderRadius.circular(10),
                 child: LinearProgressIndicator(
@@ -524,10 +555,13 @@ class _ActiveObjectiveCard extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      icon: const Icon(Icons.savings_rounded, size: 18),
-                      label: const Text(
-                        'Depositar',
-                        style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+                      icon: Icon(
+                        is52 ? Icons.calendar_view_week_rounded : Icons.savings_rounded,
+                        size: 18,
+                      ),
+                      label: Text(
+                        is52 ? 'Selecionar semanas' : 'Depositar',
+                        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
                       ),
                     ),
                   ),
@@ -582,26 +616,36 @@ class _ActiveObjectiveCard extends StatelessWidget {
                     style: OutlinedButton.styleFrom(
                       side: BorderSide(color: Colors.white.withValues(alpha: 0.45)),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Goal52WeeksPdfButton(
+                  onPressed: profile.hasActiveLicense
+                      ? () => exportFiftyTwoWeeksGoalPdf(context: context, goalDoc: goalDoc)
+                      : () => mostrarAvisoSeLicencaInativa(context, profile),
+                  label: 'Exportar PDF',
+                ),
+              ],
+              if (showModuleLink) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: onOpenModule,
+                    icon: Icon(Icons.open_in_new_rounded, size: 16, color: Colors.white.withValues(alpha: 0.95)),
+                    label: Text(
+                      'Abrir Objetivo Financeiro',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.95),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 ),
               ],
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: onOpenModule,
-                  icon: Icon(Icons.open_in_new_rounded, size: 16, color: Colors.white.withValues(alpha: 0.95)),
-                  label: Text(
-                    'Abrir Objetivo Financeiro',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.95),
-                      fontWeight: FontWeight.w800,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ),
             ],
           ),
         );

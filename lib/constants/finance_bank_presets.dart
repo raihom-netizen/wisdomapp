@@ -41,6 +41,14 @@ const List<FinanceBankPreset> kFinanceBankPresets = [
   FinanceBankPreset(id: 'pagbank', name: 'PagBank / PagSeguro', initials: 'PG', color1: Color(0xFFFFC107), color2: Color(0xFFFF9800), icon: Icons.account_balance_wallet_rounded),
   FinanceBankPreset(id: 'neon', name: 'Neon', initials: 'NE', color1: Color(0xFF00E5FF), color2: Color(0xFF00B4D8), icon: Icons.credit_card_rounded),
   FinanceBankPreset(id: 'will', name: 'Will Bank', initials: 'WL', color1: Color(0xFF7C4DFF), color2: Color(0xFF5E35B1), icon: Icons.credit_card_rounded),
+  FinanceBankPreset(
+    id: 'caixa_pessoal',
+    name: 'Caixa pessoal',
+    initials: 'CP',
+    color1: Color(0xFF059669),
+    color2: Color(0xFF047857),
+    icon: Icons.savings_rounded,
+  ),
   FinanceBankPreset(id: 'outro_banco', name: 'Outro banco', initials: 'BK', color1: Color(0xFF475569), color2: Color(0xFF334155), icon: Icons.account_balance_rounded),
   FinanceBankPreset(id: 'outro_cartao', name: 'Outro cartão', initials: 'CR', color1: Color(0xFF64748B), color2: Color(0xFF475569), icon: Icons.credit_card_rounded),
 ];

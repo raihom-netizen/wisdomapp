@@ -13,6 +13,7 @@ import '../models/budget_provider.dart';
 import '../services/theme.dart';
 import '../services/functions_service.dart';
 import '../constants/currency_formats.dart';
+import '../constants/app_strings.dart';
 import '../theme/app_colors.dart';
 import '../utils/date_picker_a11y.dart';
 import '../utils/firestore_user_doc_id.dart';
@@ -684,7 +685,7 @@ class _NewBudgetFlowScreenState extends State<NewBudgetFlowScreen> {
         Text('Revisar e gerar', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
         Text('Cliente: ${_clientNameCtrl.text.trim()}', style: const TextStyle(fontWeight: FontWeight.w600)),
-        Text('${_items.length} itens • Total ${CurrencyFormats.formatBRL(_total)}'),
+        Text('${AppStrings.itemCountLabel(_items.length)} • Total ${CurrencyFormats.formatBRL(_total)}'),
         Text('Pagamento: ${_paymentSelected.join(', ')}'),
         Text('Válido até: ${_dueDays != null ? 'em $_dueDays dias' : '${_dueDate.day.toString().padLeft(2, '0')}/${_dueDate.month.toString().padLeft(2, '0')}/${_dueDate.year}'}'),
         const SizedBox(height: 24),

@@ -322,10 +322,12 @@ void main() async {
     );
   }
   unawaited(IosPaymentsGate.initialize());
-  VersionCheckService.checkAndReloadIfNeeded()
-      .timeout(const Duration(seconds: 2), onTimeout: () {})
-      .catchError((_) {});
-  VersionCheckService.startWatchingForUpdates();
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    VersionCheckService.checkAndReloadIfNeeded()
+        .timeout(const Duration(seconds: 3), onTimeout: () {})
+        .catchError((_) {});
+    VersionCheckService.startWatchingForUpdates();
+  });
   if (kIsWeb) {
     FunctionsService().logDomainAccess().catchError((_) => <String, dynamic>{});
   }
@@ -468,6 +470,11 @@ class _ViewportStabilizerState extends State<ViewportStabilizer>
   /// ou ao alternar PWA/aba (vários repaints seguidos).
   void _bumpLayoutOnce() {
     if (!mounted) return;
+    // Web: só agenda frame — setState na raiz causava flash preto ao voltar da aba.
+    if (kIsWeb) {
+      WidgetsBinding.instance.scheduleFrame();
+      return;
+    }
     setState(() {});
     WidgetsBinding.instance.scheduleFrame();
   }
@@ -526,7 +533,7 @@ class _ViewportStabilizerState extends State<ViewportStabilizer>
     if (!mounted) return;
     final now = DateTime.now();
     if (_lastVisibleAt != null &&
-        now.difference(_lastVisibleAt!).inMilliseconds < 300) {
+        now.difference(_lastVisibleAt!).inMilliseconds < (kIsWeb ? 800 : 300)) {
       return;
     }
     _lastVisibleAt = now;
@@ -657,7 +664,7 @@ class _ControleTotalAppState extends State<ControleTotalApp> {
               ),
             ),
           ),
-          child: child ?? const SizedBox.shrink(),
+          child: child ?? const ColoredBox(color: Color(0xFF1A237E)),
         );
         // iPad / tablet nativo: NÃO usar SelectionArea na raiz — captura gestos e já causou
         // relatos de tela preta / toque morto na análise da Apple (Diretriz 2.1).
@@ -900,13 +907,20 @@ class _AuthWrapperState extends State<AuthWrapper> {
     _restoreGiveUpTimer?.cancel();
     final uid = AppSessionCache.cachedUidSync();
     final fastPath = uid != null && AppSessionCache.isShellReadyForSync(uid);
+    // Sessão já aberta neste aparelho: nunca desistir e mandar para landing.
+    if (fastPath) return;
     _restoreGiveUpTimer = Timer(
-      Duration(milliseconds: fastPath ? 600 : 2000),
+      const Duration(seconds: 45),
       () {
         if (!mounted) return;
-        if (FirebaseAuth.instance.currentUser == null && _cachedUser == null) {
-          setState(() => _restoreGiveUp = true);
+        if (FirebaseAuth.instance.currentUser != null || _cachedUser != null) {
+          return;
         }
+        final cached = AppSessionCache.cachedUidSync();
+        if (cached != null && AppSessionCache.isShellReadyForSync(cached)) {
+          return;
+        }
+        setState(() => _restoreGiveUp = true);
       },
     );
   }
@@ -1043,6 +1057,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
           return const _AuthLoadingScreen(restoreHint: true);
         }
         if (_returningUserOnDevice && _restoreGiveUp) {
+          final cachedUid = AppSessionCache.cachedUidSync();
+          if (cachedUid != null && AppSessionCache.isShellReadyForSync(cachedUid)) {
+            return _authedShell(cachedUid);
+          }
           return const LandingScreen();
         }
 

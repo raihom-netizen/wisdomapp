@@ -29,6 +29,46 @@ bool urlAlreadyHasVersion(String version) {
   }
 }
 
+const _reloadAttemptsKey = 'wisdomapp_reload_attempts';
+const _reloadVersionKey = 'wisdomapp_reload_version';
+const _reloadWindowMs = 120000;
+const _maxReloadAttempts = 2;
+
+/// Evita loop infinito quando o cache ainda serve JS antigo após reload forçado.
+bool isWebReloadLoopBlocked(String serverVersion) {
+  try {
+    final storage = html.window.sessionStorage;
+    final prevVersion = storage[_reloadVersionKey];
+    final attempts = int.tryParse(storage[_reloadAttemptsKey] ?? '') ?? 0;
+    final tsRaw = storage['wisdomapp_reload_ts'];
+    final ts = int.tryParse(tsRaw ?? '') ?? 0;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (prevVersion == serverVersion.trim() &&
+        attempts >= _maxReloadAttempts &&
+        now - ts < _reloadWindowMs) {
+      return true;
+    }
+  } catch (_) {}
+  return false;
+}
+
+void _recordWebReloadAttempt(String serverVersion) {
+  try {
+    final storage = html.window.sessionStorage;
+    final v = serverVersion.trim();
+    final prevVersion = storage[_reloadVersionKey];
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final prevTs = int.tryParse(storage['wisdomapp_reload_ts'] ?? '') ?? 0;
+    var attempts = int.tryParse(storage[_reloadAttemptsKey] ?? '') ?? 0;
+    if (prevVersion != v || now - prevTs > _reloadWindowMs) {
+      attempts = 0;
+    }
+    storage[_reloadVersionKey] = v;
+    storage[_reloadAttemptsKey] = '${attempts + 1}';
+    storage['wisdomapp_reload_ts'] = '$now';
+  } catch (_) {}
+}
+
 /// Recarrega a página. Se [serverVersion] for informado, usa ?v= e _= (timestamp)
 /// na URL para forçar o navegador a buscar a nova versão (evita cache).
 /// [forceReload]: quando true (ex.: usuário clicou "Atualizar agora"), SEMPRE recarrega
@@ -37,6 +77,8 @@ bool urlAlreadyHasVersion(String version) {
 void reloadPage([String? serverVersion, bool forceReload = false]) {
   if (serverVersion != null && serverVersion.isNotEmpty) {
     if (!forceReload && urlAlreadyHasVersion(serverVersion)) return;
+    if (isWebReloadLoopBlocked(serverVersion)) return;
+    _recordWebReloadAttempt(serverVersion);
     final ts = DateTime.now().millisecondsSinceEpoch;
     // Sempre ir para a raiz com query para evitar loop (hash routing pode confundir)
     final base = html.window.location.origin;
@@ -74,10 +116,10 @@ Future<Map<String, dynamic>?> fetchVersionJsonFromHost() async {
 /// Última vez que a checagem foi executada (para cooldown no visibility).
 DateTime? _lastCheckTime;
 
-/// Registra checagem automática: ao voltar para a aba (com cooldown 60s) e a cada 10 min.
-/// Cooldown no visibility evita múltiplas checagens seguidas e reduz risco de piscar.
+/// Registra checagem automática: ao voltar para a aba (cooldown 5 min) e a cada 15 min.
+/// Cooldown longo evita piscar/reload ao alternar abas rapidamente.
 void registerUpdateChecker(void Function() check) {
-  const cooldown = Duration(seconds: 60);
+  const cooldown = Duration(minutes: 5);
   void runCheck() {
     _lastCheckTime = DateTime.now();
     check();
@@ -90,5 +132,5 @@ void registerUpdateChecker(void Function() check) {
       }
     }
   });
-  Timer.periodic(const Duration(minutes: 10), (_) => runCheck());
+  Timer.periodic(const Duration(minutes: 15), (_) => runCheck());
 }

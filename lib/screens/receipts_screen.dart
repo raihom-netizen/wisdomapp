@@ -1,13 +1,15 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart' hide showDatePicker;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fa;
+import 'package:flutter/material.dart' hide showDatePicker;
+
 import '../models/user_profile.dart';
-import '../utils/url_launcher_helper.dart';
 import '../theme/app_colors.dart';
+import '../utils/anexo_viewer_helper.dart';
 import '../utils/date_picker_a11y.dart';
 import '../utils/firestore_user_doc_id.dart';
+import '../utils/receipt_attachment_utils.dart';
 
 class ReceiptsScreen extends StatefulWidget {
   final String uid;
@@ -172,8 +174,8 @@ class _ReceiptItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final data = doc.data() ?? {};
     final receipt = Map<String, dynamic>.from(data['receipt'] ?? {});
-    final name = (receipt['name'] ?? receipt['originalName'] ?? 'Comprovante').toString();
-    final link = (receipt['downloadUrl'] ?? receipt['webViewLink'] ?? receipt['webContentLink'] ?? '').toString();
+    final name = ReceiptAttachmentUtils.fileName(receipt);
+    final hasView = ReceiptAttachmentUtils.hasViewableReceipt(receipt);
     final date = (data['date'] as Timestamp?)?.toDate();
 
     return Card(
@@ -181,21 +183,14 @@ class _ReceiptItem extends StatelessWidget {
         leading: const Icon(Icons.receipt_long),
         title: Text(name),
         subtitle: Text(date == null ? '' : '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}'),
-        trailing: link.isEmpty
-            ? const Icon(Icons.link_off)
-            : IconButton(
-                icon: const Icon(Icons.open_in_new),
-                onPressed: () async {
-                  if (link.isEmpty) return;
-                  try {
-                    await openUrlPreferChrome(link);
-                  } catch (_) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Não foi possível abrir o link.')));
-                    }
-                  }
-                },
-              ),
+        trailing: hasView
+            ? IconButton(
+                icon: const Icon(Icons.visibility_rounded),
+                tooltip: 'Ver comprovante',
+                onPressed: () => mostrarComprovanteReceipt(context, receipt),
+              )
+            : const Icon(Icons.link_off),
+        onTap: hasView ? () => mostrarComprovanteReceipt(context, receipt) : null,
       ),
     );
   }

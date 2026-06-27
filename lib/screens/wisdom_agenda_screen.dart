@@ -29,8 +29,11 @@ import '../utils/premium_upgrade.dart';
 import '../widgets/agenda_finance_pending_item_card.dart';
 import '../widgets/agenda_open_item_card.dart';
 import '../widgets/finance_transaction_edit_dialog.dart';
+import '../widgets/agenda_pdf_export_sheet.dart';
 import '../widgets/google_calendar_integration_toggle.dart';
 import '../widgets/shell_keyboard_bottom_pad.dart';
+
+enum _AgendaMesAba { financeiro, particular }
 
 /// Módulo **Agenda** WISDOMAPP — calendário premium (padrão Controle Total),
 /// resumo do dia, feriados e grid de compromissos com edição/exclusão.
@@ -65,6 +68,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
   bool _googleEnabled = false;
   StreamSubscription<bool>? _googleEnabledSub;
   int _streamGeneration = 0;
+  int _mesAbaIndex = 0;
+
+  _AgendaMesAba get _mesAba => _AgendaMesAba.values[_mesAbaIndex];
 
   String get _userDocId => firestoreUserDocIdForAppShell(widget.uid);
 
@@ -72,6 +78,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
   void initState() {
     super.initState();
     _selectedDay = DateTime.now();
+    unawaited(GoogleCalendarSyncService.warmUpIfEnabled(_userDocId));
     _refreshGoogleDays();
     _googleEnabledSub =
         GoogleCalendarSyncService.enabledStream(_userDocId).listen(
@@ -202,13 +209,42 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     return items;
   }
 
-  List<Map<String, dynamic>> _financeItemsForFocusedMonth(
+  List<Map<String, dynamic>> _itemsForDateRange(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    DateTime start,
+    DateTime end,
+  ) {
+    final startDay = _dayKey(start);
+    final endDay = DateTime(end.year, end.month, end.day, 23, 59, 59);
+    final items = <Map<String, dynamic>>[];
+    for (final doc in docs) {
+      final data = doc.data();
+      final date = CompromissoReminderService.dateFromDoc(data);
+      if (date == null) continue;
+      if (date.isBefore(startDay) || date.isAfter(endDay)) continue;
+      items.add({...data, 'id': doc.id});
+    }
+    items.sort((a, b) {
+      final da = CompromissoReminderService.dateFromDoc(a);
+      final db = CompromissoReminderService.dateFromDoc(b);
+      if (da == null || db == null) return 0;
+      final cmp = da.compareTo(db);
+      if (cmp != 0) return cmp;
+      return (a['time'] ?? '').toString().compareTo((b['time'] ?? '').toString());
+    });
+    return items;
+  }
+
+  List<Map<String, dynamic>> _financeItemsForDateRange(
     Map<DateTime, List<AgendaFinancePendingItem>> financeByDay,
+    DateTime start,
+    DateTime end,
   ) {
     final out = <Map<String, dynamic>>[];
+    final endDay = _dayKey(end);
     for (final entry in financeByDay.entries) {
       final day = entry.key;
-      if (day.year != _focusedDay.year || day.month != _focusedDay.month) continue;
+      if (day.isBefore(_dayKey(start)) || day.isAfter(endDay)) continue;
       for (final item in entry.value) {
         out.add({
           'agendaRowKind': 'finance',
@@ -230,7 +266,222 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     return out;
   }
 
-  Future<void> _exportarMesPdf(
+  List<Map<String, dynamic>> _googleItemsForDateRange(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    DateTime start,
+    DateTime end,
+  ) {
+    final linked = _linkedGoogleEventIds(docs);
+    final startDay = _dayKey(start);
+    final endDay = _dayKey(end);
+    final out = <Map<String, dynamic>>[];
+    for (final entry in _googleEventsByDay.entries) {
+      final day = entry.key;
+      if (day.isBefore(startDay) || day.isAfter(endDay)) continue;
+      for (final e in entry.value) {
+        if (linked.contains(e.id)) continue;
+        out.add({
+          'agendaRowKind': 'google',
+          'title': e.title,
+          'date': Timestamp.fromDate(e.day),
+          'time': e.timeStart,
+          'endTime': e.timeEnd,
+          'notes': e.notes,
+        });
+      }
+    }
+    out.sort((a, b) {
+      final da = (a['date'] as Timestamp?)?.toDate();
+      final db = (b['date'] as Timestamp?)?.toDate();
+      if (da == null || db == null) return 0;
+      final cmp = da.compareTo(db);
+      if (cmp != 0) return cmp;
+      return (a['time'] ?? '').toString().compareTo((b['time'] ?? '').toString());
+    });
+    return out;
+  }
+
+  String _periodoLabel(DateTime start, DateTime end) {
+    final sameMonth =
+        start.year == end.year && start.month == end.month && start.day == 1;
+    if (sameMonth &&
+        end.day ==
+            DateTime(end.year, end.month + 1, 0).day) {
+      final raw = DateFormat("MMMM 'de' y", 'pt_BR').format(start);
+      return raw[0].toUpperCase() + raw.substring(1);
+    }
+    final a = DateFormat('dd/MM/y', 'pt_BR').format(start);
+    final b = DateFormat('dd/MM/y', 'pt_BR').format(end);
+    return '$a — $b';
+  }
+
+  List<GoogleCalendarEventItem> _googleParticularForMonth(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) {
+    final linked = _linkedGoogleEventIds(docs);
+    final out = <GoogleCalendarEventItem>[];
+    for (final entry in _googleEventsByDay.entries) {
+      final day = entry.key;
+      if (day.year != _focusedDay.year || day.month != _focusedDay.month) {
+        continue;
+      }
+      for (final e in entry.value) {
+        if (!linked.contains(e.id)) out.add(e);
+      }
+    }
+    out.sort((a, b) {
+      final c = a.day.compareTo(b.day);
+      if (c != 0) return c;
+      return a.timeStart.compareTo(b.timeStart);
+    });
+    return out;
+  }
+
+  ({Color? fillColor, bool googleOnly}) _dayVisualCombined(
+    DateTime day,
+    Map<DateTime, List<QueryDocumentSnapshot<Map<String, dynamic>>>> byDay,
+    Map<DateTime, List<AgendaFinancePendingItem>> financeByDay,
+  ) {
+    final key = _dayKey(day);
+    final financeColor = _financeMarkerColor(day, financeByDay);
+    final items = byDay[key] ?? [];
+    final localColor = items.isNotEmpty
+        ? _colorFromHex(items.first.data()['colorHex']?.toString())
+        : null;
+    if (localColor != null) {
+      return (fillColor: localColor, googleOnly: false);
+    }
+    if (financeColor != null) {
+      return (fillColor: financeColor, googleOnly: false);
+    }
+    if (_googleBusyDays.contains(key)) {
+      return (fillColor: null, googleOnly: true);
+    }
+    return (fillColor: null, googleOnly: false);
+  }
+
+  Widget _buildModernMesAbas({required bool isNarrow}) {
+    const financeColor = Color(0xFFF97316);
+    const particularColor = Color(0xFF12B5A5);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.deepBlue.withValues(alpha: 0.08)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: _mesAbaChip(
+                  label: 'Financeiros',
+                  icon: Icons.payments_outlined,
+                  selected: _mesAba == _AgendaMesAba.financeiro,
+                  color: financeColor,
+                  compact: isNarrow,
+                  onTap: () => setState(() => _mesAbaIndex = 0),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: _mesAbaChip(
+                  label: 'Particulares',
+                  icon: Icons.event_available_rounded,
+                  selected: _mesAba == _AgendaMesAba.particular,
+                  color: particularColor,
+                  compact: isNarrow,
+                  onTap: () => setState(() => _mesAbaIndex = 1),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 6, bottom: 4, left: 4),
+          child: Text(
+            'Filtra somente a lista de lançamentos do mês e do dia selecionado.',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _mesAbaChip({
+    required String label,
+    required IconData icon,
+    required bool selected,
+    required Color color,
+    required bool compact,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          padding: EdgeInsets.symmetric(
+            vertical: compact ? 10 : 12,
+            horizontal: compact ? 8 : 12,
+          ),
+          decoration: BoxDecoration(
+            gradient: selected
+                ? LinearGradient(
+                    colors: [color, color.withValues(alpha: 0.82)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : null,
+            color: selected ? null : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.28),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: compact ? 16 : 18,
+                color: selected ? Colors.white : color,
+              ),
+              SizedBox(width: compact ? 4 : 8),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: compact ? 11.5 : 13,
+                    color: selected ? Colors.white : AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openExportPdfSheet(
     BuildContext context,
     List<QueryDocumentSnapshot<Map<String, dynamic>>> allDocs, {
     required Map<DateTime, List<AgendaFinancePendingItem>> financeByDay,
@@ -239,6 +490,23 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
       mostrarAvisoSeLicencaInativa(context, widget.profile);
       return;
     }
+    final opts = await AgendaPdfExportSheet.show(
+      context,
+      focusedDay: _focusedDay,
+      initialFilter: _mesAba == _AgendaMesAba.financeiro
+          ? AgendaPdfContentFilter.financeiro
+          : AgendaPdfContentFilter.particular,
+    );
+    if (opts == null || !context.mounted) return;
+    await _exportarPdf(context, allDocs, financeByDay: financeByDay, opts: opts);
+  }
+
+  Future<void> _exportarPdf(
+    BuildContext context,
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> allDocs, {
+    required Map<DateTime, List<AgendaFinancePendingItem>> financeByDay,
+    required AgendaPdfExportOptions opts,
+  }) async {
     if (!context.mounted) return;
     showDialog<void>(
       context: context,
@@ -263,20 +531,29 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
       ),
     );
     try {
-      final items = _itemsForFocusedMonth(allDocs);
-      final financeItems = _financeItemsForFocusedMonth(financeByDay);
-      final start = DateTime(_focusedDay.year, _focusedDay.month, 1);
-      final end = DateTime(_focusedDay.year, _focusedDay.month + 1, 0);
-      final periodo = _focusedMonthTitle();
+      final start = opts.rangeStart;
+      final end = opts.rangeEnd;
+      final items = _itemsForDateRange(allDocs, start, end);
+      final financeItems = _financeItemsForDateRange(financeByDay, start, end);
+      final googleItems = _googleItemsForDateRange(allDocs, start, end);
+      final periodo = _periodoLabel(start, end);
+      final filterSuffix = switch (opts.contentFilter) {
+        AgendaPdfContentFilter.financeiro => '_financeiro',
+        AgendaPdfContentFilter.particular => '_particular',
+        AgendaPdfContentFilter.todos => '_completo',
+      };
       final filename = RelatorioService.reportFilenameFromPeriod(
-        'compromissos_audiencia',
+        'agenda$filterSuffix',
         start,
         end,
       );
-      final (bytes, _) = await RelatorioService.buildRelatorioCompromissosAudienciaBytes(
+      final (bytes, _) =
+          await RelatorioService.buildRelatorioCompromissosAudienciaBytes(
         periodo: periodo,
         items: items,
         financeItems: financeItems,
+        googleItems: googleItems,
+        contentFilter: opts.contentFilter,
         suggestedFilename: filename,
       );
       if (!context.mounted) return;
@@ -2105,70 +2382,48 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
           );
         },
         todayBuilder: (context, day, _) {
-          final key = _dayKey(day);
-          final items = byDay[key] ?? [];
-          final localColor = items.isNotEmpty
-              ? _colorFromHex(items.first.data()['colorHex']?.toString())
-              : _financeMarkerColor(day, financeByDay);
-          final googleOnly =
-              localColor == null && _googleBusyDays.contains(key);
+          final visual = _dayVisualCombined(day, byDay, financeByDay);
           return _dayCell(
             day: day,
             isToday: true,
             isSelected: _isSameDay(_selectedDay, day),
             isHoliday: _isHolidayDay(day, holidayKeys),
-            fillColor: localColor,
-            googleOnly: googleOnly,
+            fillColor: visual.fillColor,
+            googleOnly: visual.googleOnly,
             isNarrow: isNarrow,
           );
         },
         selectedBuilder: (context, day, _) {
           if (!_isSameDay(_selectedDay, day)) return null;
-          final key = _dayKey(day);
-          final items = byDay[key] ?? [];
-          final localColor = items.isNotEmpty
-              ? _colorFromHex(items.first.data()['colorHex']?.toString())
-              : _financeMarkerColor(day, financeByDay);
-          final googleOnly =
-              localColor == null && _googleBusyDays.contains(key);
+          final visual = _dayVisualCombined(day, byDay, financeByDay);
           return _dayCell(
             day: day,
             isToday: _isSameDay(DateTime.now(), day),
             isSelected: true,
             isHoliday: _isHolidayDay(day, holidayKeys),
-            fillColor: localColor,
-            googleOnly: googleOnly,
+            fillColor: visual.fillColor,
+            googleOnly: visual.googleOnly,
             isNarrow: isNarrow,
           );
         },
         holidayBuilder: (context, day, _) {
-          final key = _dayKey(day);
-          final items = byDay[key] ?? [];
-          if (items.isNotEmpty ||
-              (financeByDay[key] ?? []).isNotEmpty) {
-            return null;
-          }
+          final visual = _dayVisualCombined(day, byDay, financeByDay);
+          if (visual.fillColor != null || visual.googleOnly) return null;
           return _dayCell(
             day: day,
             isToday: _isSameDay(DateTime.now(), day),
             isSelected: _isSameDay(_selectedDay, day),
             isHoliday: true,
             fillColor: null,
-            googleOnly: _googleBusyDays.contains(key),
+            googleOnly: false,
             isNarrow: isNarrow,
           );
         },
         defaultBuilder: (context, day, _) {
-          final key = _dayKey(day);
-          final items = byDay[key] ?? [];
-          final localColor = items.isNotEmpty
-              ? _colorFromHex(items.first.data()['colorHex']?.toString())
-              : _financeMarkerColor(day, financeByDay);
-          final googleOnly =
-              localColor == null && _googleBusyDays.contains(key);
+          final visual = _dayVisualCombined(day, byDay, financeByDay);
           final isHol = _isHolidayDay(day, holidayKeys);
-          if (localColor != null ||
-              googleOnly ||
+          if (visual.fillColor != null ||
+              visual.googleOnly ||
               _isSameDay(DateTime.now(), day) ||
               isHol) {
             return _dayCell(
@@ -2176,8 +2431,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
               isToday: _isSameDay(DateTime.now(), day),
               isSelected: _isSameDay(_selectedDay, day),
               isHoliday: isHol,
-              fillColor: localColor,
-              googleOnly: googleOnly,
+              fillColor: visual.fillColor,
+              googleOnly: visual.googleOnly,
               isNarrow: isNarrow,
             );
           }
@@ -2245,11 +2500,28 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            if (items.isEmpty &&
-                incomePending.isEmpty &&
-                expensePending.isEmpty)
+            if (_mesAba == _AgendaMesAba.financeiro) ...[
+              if (items.isEmpty &&
+                  incomePending.isEmpty &&
+                  expensePending.isEmpty)
+                Text(
+                  'Nenhum lançamento financeiro pendente neste dia.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade700,
+                    height: 1.35,
+                  ),
+                )
+              else ...[
+                for (final item in incomePending)
+                  _resumoFinancePendingLinha(item),
+                for (final item in expensePending)
+                  _resumoFinancePendingLinha(item),
+              ],
+            ] else if (items.isEmpty && expensePending.isEmpty && incomePending.isEmpty)
               Text(
-                'Nenhum compromisso ou lançamento pendente neste dia.',
+                'Nenhum compromisso particular neste dia.',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -2329,10 +2601,6 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                   ),
                 );
               }),
-              for (final item in incomePending)
-                _resumoFinancePendingLinha(item),
-              for (final item in expensePending)
-                _resumoFinancePendingLinha(item),
             ],
             const SizedBox(height: 4),
             FilledButton.icon(
@@ -2413,6 +2681,169 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildMesGridModerno(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    Map<DateTime, List<AgendaFinancePendingItem>> financeByDay,
+  ) {
+    final tituloMes = _focusedMonthTitle();
+    var cardIndex = 0;
+
+    if (_mesAba == _AgendaMesAba.financeiro) {
+      final monthItems = <AgendaFinancePendingItem>[];
+      for (final entry in financeByDay.entries) {
+        final day = entry.key;
+        if (day.year != _focusedDay.year || day.month != _focusedDay.month) {
+          continue;
+        }
+        monthItems.addAll(entry.value);
+      }
+      monthItems.sort((a, b) {
+        final da = agendaFinanceEffectiveDay(a.data);
+        final db = agendaFinanceEffectiveDay(b.data);
+        if (da == null || db == null) return 0;
+        return da.compareTo(db);
+      });
+      if (monthItems.isEmpty) {
+        return _premiumCardShell(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              'Nenhum compromisso financeiro pendente em $tituloMes.',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade700,
+              ),
+            ),
+          ),
+        );
+      }
+      return _premiumCardShell(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              AgendaModernUI.sectionHeader(
+                title: 'Financeiros do mês',
+                subtitle: '${monthItems.length} lançamento${monthItems.length == 1 ? '' : 's'} · $tituloMes',
+                icon: Icons.payments_outlined,
+                color: const Color(0xFFF97316),
+              ),
+              ...monthItems.map((item) {
+                final idx = cardIndex++;
+                final day = agendaFinanceEffectiveDay(item.data);
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (day != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4, bottom: 6),
+                        child: Text(
+                          DateFormat('EEEE, dd/MM', 'pt_BR').format(day),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
+                    AgendaFinancePendingItemCard(
+                      item: item,
+                      index: idx,
+                      onEdit: () => _editFinancePending(item),
+                      onDelete: () => _deleteFinancePending(item),
+                    ),
+                  ],
+                );
+              }),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final monthItems = _itemsForFocusedMonth(docs);
+    final googleMonth = _googleParticularForMonth(docs);
+    final total = monthItems.length + googleMonth.length;
+    if (total == 0) {
+      return _premiumCardShell(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            'Nenhum compromisso particular em $tituloMes.'
+            '${_googleEnabled ? ' Eventos Google aparecem aqui quando houver sync.' : ''}',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade700,
+              height: 1.35,
+            ),
+          ),
+        ),
+      );
+    }
+
+    final docsById = {for (final d in docs) d.id: d};
+    return _premiumCardShell(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AgendaModernUI.sectionHeader(
+              title: 'Particulares do mês',
+              subtitle: '$total item${total == 1 ? '' : 'ns'} · $tituloMes'
+                  '${googleMonth.isNotEmpty ? ' · inclui Google Calendar' : ''}',
+              icon: Icons.event_available_rounded,
+              color: _corCompromisso,
+            ),
+            ...monthItems.map((row) {
+              final id = (row['id'] ?? '').toString();
+              final doc = docsById[id];
+              if (doc == null) return const SizedBox.shrink();
+              final idx = cardIndex++;
+              final date = CompromissoReminderService.dateFromDoc(row);
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (date != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4, bottom: 6),
+                      child: Text(
+                        DateFormat('EEEE, dd/MM', 'pt_BR').format(date),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ),
+                  AgendaModernFadeIn(
+                    index: idx,
+                    child: AgendaOpenItemCard(
+                      doc: doc,
+                      isAudiencia: false,
+                      profile: widget.profile,
+                      onEdit: () => _openCompromissoForm(
+                        context: context,
+                        existing: doc,
+                      ),
+                      onDelete: () => _confirmDelete(doc),
+                    ),
+                  ),
+                ],
+              );
+            }),
+            ...googleMonth.map(
+              (e) => _buildGoogleEventCard(e, cardIndex++),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2532,7 +2963,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
               ),
             const SizedBox(height: 14),
             FilledButton.icon(
-              onPressed: () => _exportarMesPdf(
+              onPressed: () => _openExportPdfSheet(
                 context,
                 docs,
                 financeByDay: financeByDay,
@@ -2687,30 +3118,64 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     List<AgendaFinancePendingItem> expensePending = const [],
   }) {
     final financeCount = incomePending.length + expensePending.length;
-    if (items.isEmpty && googleOnly.isEmpty && financeCount == 0) {
-      return const SizedBox.shrink();
+    final particularCount = items.length + googleOnly.length;
+
+    if (_mesAba == _AgendaMesAba.financeiro) {
+      if (financeCount == 0) return const SizedBox.shrink();
+      var cardIndex = 0;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AgendaFinancePendingDayBand(
+            isIncome: true,
+            count: incomePending.length,
+            total: sumAgendaFinancePendingAmount(incomePending),
+          ),
+          AgendaFinancePendingDayBand(
+            isIncome: false,
+            count: expensePending.length,
+            total: sumAgendaFinancePendingAmount(expensePending),
+          ),
+          AgendaModernUI.sectionHeader(
+            title: 'Financeiros do dia',
+            subtitle: '$financeCount lançamento${financeCount == 1 ? '' : 's'}',
+            icon: Icons.payments_outlined,
+            color: const Color(0xFFF97316),
+          ),
+          ...incomePending.map((item) {
+            final idx = cardIndex++;
+            return AgendaFinancePendingItemCard(
+              item: item,
+              index: idx,
+              onEdit: () => _editFinancePending(item),
+              onDelete: () => _deleteFinancePending(item),
+            );
+          }),
+          ...expensePending.map((item) {
+            final idx = cardIndex++;
+            return AgendaFinancePendingItemCard(
+              item: item,
+              index: idx,
+              onEdit: () => _editFinancePending(item),
+              onDelete: () => _deleteFinancePending(item),
+            );
+          }),
+        ],
+      );
     }
 
-    final total = items.length + googleOnly.length + financeCount;
+    if (particularCount == 0) return const SizedBox.shrink();
+
     var cardIndex = 0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        AgendaFinancePendingDayBand(
-          isIncome: true,
-          count: incomePending.length,
-          total: sumAgendaFinancePendingAmount(incomePending),
-        ),
-        AgendaFinancePendingDayBand(
-          isIncome: false,
-          count: expensePending.length,
-          total: sumAgendaFinancePendingAmount(expensePending),
-        ),
         AgendaModernUI.sectionHeader(
-          title: 'Itens do dia',
-          subtitle: '$total item${total == 1 ? '' : 'ns'}',
-          icon: Icons.grid_view_rounded,
-          color: AppColors.primary,
+          title: 'Particulares do dia',
+          subtitle: '$particularCount item${particularCount == 1 ? '' : 'ns'}'
+              '${googleOnly.isNotEmpty ? ' · Google Calendar' : ''}',
+          icon: Icons.event_available_rounded,
+          color: _corCompromisso,
         ),
         ...items.map((doc) {
           final idx = cardIndex++;
@@ -2726,24 +3191,6 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
               ),
               onDelete: () => _confirmDelete(doc),
             ),
-          );
-        }),
-        ...incomePending.map((item) {
-          final idx = cardIndex++;
-          return AgendaFinancePendingItemCard(
-            item: item,
-            index: idx,
-            onEdit: () => _editFinancePending(item),
-            onDelete: () => _deleteFinancePending(item),
-          );
-        }),
-        ...expensePending.map((item) {
-          final idx = cardIndex++;
-          return AgendaFinancePendingItemCard(
-            item: item,
-            index: idx,
-            onEdit: () => _editFinancePending(item),
-            onDelete: () => _deleteFinancePending(item),
           );
         }),
         ...googleOnly.asMap().entries.map(
@@ -3025,7 +3472,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                                 const SizedBox(width: 6),
                                 Expanded(
                                   child: Text(
-                                    'Vermelho/negrito: sábado, domingo e feriados. Azul/laranja: receitas/despesas pendentes do Financeiro.',
+                                    'Calendário com todos os compromissos: '
+                                    'azul/laranja = financeiro · cores = particulares · '
+                                    'nuvem = Google Calendar · vermelho = fim de semana/feriado.',
                                     style: TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
@@ -3038,6 +3487,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                           ],
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      _buildModernMesAbas(isNarrow: isNarrow),
+                      _buildMesGridModerno(docs, financeByDay),
                       const SizedBox(height: 12),
                       _buildRodapeFeriadosMes(
                         docs,

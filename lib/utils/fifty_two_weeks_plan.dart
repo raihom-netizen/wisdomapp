@@ -101,6 +101,65 @@ class FiftyTwoWeeksPlan {
     if (ts is Timestamp) return ts.toDate();
     return null;
   }
+
+  /// Agrupa cronograma por mês (rótulo + entradas).
+  static List<({String monthKey, String label, List<FiftyTwoWeeksWeekEntry> weeks})>
+      groupScheduleByMonth(List<FiftyTwoWeeksWeekEntry> schedule) {
+    if (schedule.isEmpty) return const [];
+    final map = <String, List<FiftyTwoWeeksWeekEntry>>{};
+    for (final e in schedule) {
+      map.putIfAbsent(e.monthKey, () => []).add(e);
+    }
+    final keys = map.keys.toList()..sort();
+    return keys.map((k) {
+      final first = map[k]!.first.dueDate;
+      final label = _monthLabelPt(first);
+      return (monthKey: k, label: label, weeks: map[k]!);
+    }).toList();
+  }
+
+  static String _monthLabelPt(DateTime d) {
+    const months = [
+      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+    ];
+    return '${months[d.month - 1]} ${d.year}';
+  }
+
+  /// Semanas não pagas a marcar quando o usuário informa um valor (ordem crescente).
+  static List<int> weeksForDepositAmount({
+    required double amount,
+    required List<FiftyTwoWeeksWeekEntry> schedule,
+    required List<int> paidWeeks,
+  }) {
+    if (amount <= 0 || schedule.isEmpty) return const [];
+    final paid = paidWeeks.toSet();
+    final unpaid = schedule.where((e) => !paid.contains(e.week)).toList()
+      ..sort((a, b) => a.week.compareTo(b.week));
+    if (unpaid.isEmpty) return const [];
+
+    final selected = <int>[];
+    var sum = 0.0;
+    for (final e in unpaid) {
+      if (sum >= amount - 0.009) break;
+      selected.add(e.week);
+      sum += e.amount;
+    }
+    if (selected.isEmpty) selected.add(unpaid.first.week);
+    return selected;
+  }
+
+  static double sumWeekAmounts(
+    List<FiftyTwoWeeksWeekEntry> schedule,
+    Iterable<int> weeks,
+  ) {
+    final set = weeks.toSet();
+    var total = 0.0;
+    for (final e in schedule) {
+      if (set.contains(e.week)) total += e.amount;
+    }
+    return total;
+  }
 }
 
 class FiftyTwoWeeksWeekEntry {

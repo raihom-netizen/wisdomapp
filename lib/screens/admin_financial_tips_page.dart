@@ -13,6 +13,7 @@ import '../theme/app_colors.dart';
 import '../utils/admin_financial_tip_utils.dart';
 import '../utils/insights_engine.dart';
 import '../widgets/admin/admin_financial_tip_editor_sheet.dart';
+import '../widgets/admin/admin_financial_tips_schedule_sheet.dart';
 import '../widgets/admin/admin_page_shell.dart';
 import '../widgets/admin/admin_tip_grid_card.dart';
 import '../widgets/fast_text_field.dart';
@@ -123,13 +124,55 @@ class _AdminFinancialTipsPageState extends State<AdminFinancialTipsPage>
   int _generalCount(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) =>
       docs.length - _biblicalCount(docs);
 
+  List<String> _homeTipIdsFromDocs(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) =>
+      docs.where((d) => d.data()['exibirNoInicio'] == true).map((d) => d.id).toList();
+
+  List<String> _rotationOrderFromDocs(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) {
+    final existing = _homeConfig?.effectiveRotationOrder ?? [];
+    if (existing.isNotEmpty) {
+      final ids = _homeTipIdsFromDocs(docs).toSet();
+      return [
+        for (final id in existing)
+          if (ids.contains(id)) id,
+        for (final id in _sortDocs(docs).map((d) => d.id))
+          if (ids.contains(id) && !existing.contains(id)) id,
+      ];
+    }
+    return _sortDocs(docs)
+        .where((d) => d.data()['exibirNoInicio'] == true)
+        .map((d) => d.id)
+        .toList();
+  }
+
+  Future<void> _openScheduleSheet(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) async {
+    final ok = await AdminFinancialTipsScheduleSheet.show(
+      context,
+      docs: docs,
+      initialConfig: _homeConfig,
+    );
+    if (ok == true && mounted) {
+      await _loadHomeConfig();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Programação publicada no Início dos usuários.'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    }
+  }
+
   Future<void> _maybeAutoSync(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> docs, {
     bool silent = true,
   }) async {
     if (!_autoSync) return;
-    final selected =
-        docs.where((d) => d.data()['exibirNoInicio'] == true).map((d) => d.id).toList();
+    final selected = _homeTipIdsFromDocs(docs);
     if (selected.isEmpty) return;
     final favorites =
         docs.where((d) => d.data()['favorita'] == true).map((d) => d.id).toList();
@@ -138,6 +181,8 @@ class _AdminFinancialTipsPageState extends State<AdminFinancialTipsPage>
       await FinancialTipsHomeSyncService().publish(
         homeTipIds: selected,
         favoriteTipIds: favorites,
+        rotationOrder: _rotationOrderFromDocs(docs),
+        weekdayTipIds: _homeConfig?.weekdayTipIds ?? const {},
         syncedByEmail: email,
       );
       InsightsEngine.clearTipsCache();
@@ -154,8 +199,7 @@ class _AdminFinancialTipsPageState extends State<AdminFinancialTipsPage>
   }
 
   Future<void> _syncToUsers(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) async {
-    final selected =
-        docs.where((d) => d.data()['exibirNoInicio'] == true).map((d) => d.id).toList();
+    final selected = _homeTipIdsFromDocs(docs);
     if (selected.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Marque «Início» em pelo menos uma dica.')),
@@ -170,6 +214,8 @@ class _AdminFinancialTipsPageState extends State<AdminFinancialTipsPage>
       await FinancialTipsHomeSyncService().publish(
         homeTipIds: selected,
         favoriteTipIds: favorites,
+        rotationOrder: _rotationOrderFromDocs(docs),
+        weekdayTipIds: _homeConfig?.weekdayTipIds ?? const {},
         syncedByEmail: email,
       );
       InsightsEngine.clearTipsCache();
@@ -616,6 +662,7 @@ class _AdminFinancialTipsPageState extends State<AdminFinancialTipsPage>
                         isBiblical: _isBiblicalTab,
                         onAutoSyncChanged: (v) => setState(() => _autoSync = v),
                         onSync: () => _syncToUsers(allDocs),
+                        onSchedule: () => _openScheduleSheet(allDocs),
                         onImportFull: _importFullCatalog,
                         onNew: () => _openEditor(null),
                         onSelectMode: () => setState(() => _selectionMode = true),
@@ -770,7 +817,7 @@ class _HeroHeader extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Tempo real · bíblicas e gerais · sync automático para o Início',
+                  '1 dica/dia no Início · módulo com 3 dias · programe rotação e dias da semana',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.9),
                     fontSize: 12.5,
@@ -941,6 +988,7 @@ class _ActionBar extends StatelessWidget {
     required this.isBiblical,
     required this.onAutoSyncChanged,
     required this.onSync,
+    required this.onSchedule,
     required this.onImportFull,
     required this.onNew,
     required this.onSelectMode,
@@ -952,6 +1000,7 @@ class _ActionBar extends StatelessWidget {
   final bool isBiblical;
   final ValueChanged<bool> onAutoSyncChanged;
   final VoidCallback onSync;
+  final VoidCallback onSchedule;
   final VoidCallback onImportFull;
   final VoidCallback onNew;
   final VoidCallback onSelectMode;
@@ -962,6 +1011,12 @@ class _ActionBar extends StatelessWidget {
       spacing: 8,
       runSpacing: 8,
       children: [
+        FilledButton.icon(
+          onPressed: onSchedule,
+          icon: const Icon(Icons.calendar_month_rounded, size: 18),
+          label: const Text('Programar Início'),
+          style: FilledButton.styleFrom(backgroundColor: const Color(0xFF4F46E5)),
+        ),
         FilterChip(
           label: Text(autoSync ? 'Auto-sync ON' : 'Auto-sync OFF'),
           selected: autoSync,

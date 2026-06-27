@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart' hide showDatePicker;
 import '../widgets/fast_text_field.dart';
 import 'package:flutter/services.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import '../constants/currency_formats.dart';
 import '../theme/app_colors.dart';
@@ -25,6 +24,7 @@ import '../utils/keyboard_form_scaffold.dart';
 import '../widgets/finance_premium_ui.dart';
 import '../widgets/date_time_field.dart';
 import '../utils/finance_transaction_datetime.dart';
+import '../utils/receipt_attachment_utils.dart';
 
 class NovoLancamentoPage extends StatefulWidget {
   final String uid;
@@ -78,8 +78,6 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
   String? _lastAutoDescription;
   bool _settingDescProgrammatically = false;
   Timer? _categoryCustomDebounce;
-
-  static const List<String> _allowedExtensions = ['jpg', 'jpeg', 'png', 'pdf'];
 
   /// Evita recriar [ThemeData] a cada rebuild (teclado / viewInsets disparam muitos rebuilds).
   Brightness? _cachedThemeBrightness;
@@ -280,68 +278,20 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
     }
   }
 
-  /// Seleção de comprovante: apenas JPEG, PNG e PDF. Retém bytes para envio ao Firebase.
+  /// Seleção de comprovante: câmera, galeria ou PDF/imagem.
   Future<void> _pickFile() async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: _allowedExtensions,
-        withData: true,
+    final picked = await ReceiptAttachmentUtils.pickValidated(context);
+    if (picked == null || !mounted) return;
+    setState(() {
+      _hasReceipt = true;
+      _receiptName = picked.name;
+      _receiptBytes = picked.bytes;
+      _receiptMime = picked.mime;
+    });
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Arquivo anexado: ${picked.name}')),
       );
-
-      if (result == null || result.files.isEmpty) return;
-
-      final f = result.files.single;
-      final ext = (f.extension ?? '').toLowerCase().replaceAll('jpeg', 'jpg');
-      final extOk = ext == 'jpg' || ext == 'jpeg' || ext == 'png' || ext == 'pdf';
-      if (!extOk) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Arquivo inválido. Use apenas JPEG, PNG ou PDF.')),
-          );
-        }
-        return;
-      }
-
-      Uint8List? bytes = f.bytes;
-      if (bytes == null || bytes.lengthInBytes == 0) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Não foi possível ler o arquivo. Tente outro ou um tamanho menor.'),
-              duration: Duration(seconds: 4),
-            ),
-          );
-        }
-        return;
-      }
-      if (bytes.lengthInBytes > 5 * 1024 * 1024) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Arquivo grande demais. Limite: 5 MB.')),
-          );
-        }
-        return;
-      }
-
-      final mime = ext == 'pdf' ? 'application/pdf' : (ext == 'png' ? 'image/png' : 'image/jpeg');
-      setState(() {
-        _hasReceipt = true;
-        _receiptName = f.name;
-        _receiptBytes = bytes;
-        _receiptMime = mime;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Arquivo anexado: ${f.name}')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao selecionar arquivo: ${e.toString().split('\n').first}')),
-        );
-      }
     }
   }
 

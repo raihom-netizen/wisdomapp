@@ -12,4 +12,17 @@ class GoogleOAuthConfig {
 
   static const String calendarScope =
       'https://www.googleapis.com/auth/calendar.events';
+
+  /// Origens que devem constar em «Origens JavaScript autorizadas» do cliente Web
+  /// (Google Cloud Console → APIs → Credenciais → cliente OAuth Web).
+  /// Rode: .\scripts\Register-GoogleCalendarOAuthOrigins.ps1
+  static const List<String> authorizedJavaScriptOrigins = [
+    'https://wisdomapp-b9e98.web.app',
+    'https://wisdomapp-b9e98.firebaseapp.com',
+    'http://localhost',
+    'http://localhost:5000',
+    'http://localhost:8080',
+    'http://127.0.0.1',
+    'http://127.0.0.1:5000',
+  ];
 }

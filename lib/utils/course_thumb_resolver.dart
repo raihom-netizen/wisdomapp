@@ -1,3 +1,4 @@
+import 'course_media_url_resolver.dart';
 import 'youtube_url_helper.dart';
 
 /// Resolve a melhor URL de capa/thumbnail para cursos e dicas.
@@ -18,6 +19,8 @@ class CourseThumbResolver {
 
   /// URL principal (imagem enviada ou thumbnail gravada).
   static String? primaryImageUrl(Map<String, dynamic> data) {
+    final fromList = CourseMediaUrlResolver.collectHttpUrls(data);
+    if (fromList.isNotEmpty) return fromList.first;
     for (final key in ['imageUrl', 'coverUrl', 'thumbnailUrl', 'posterUrl']) {
       final v = (data[key] ?? '').toString().trim();
       if (v.isNotEmpty && _looksLikeHttpUrl(v)) return v;
@@ -46,14 +49,16 @@ class CourseThumbResolver {
     return urls.isEmpty ? null : urls.first;
   }
 
-  static bool hasVisualThumb(Map<String, dynamic> data) => resolveUrls(data).isNotEmpty;
+  static bool hasVisualThumb(Map<String, dynamic> data) =>
+      CourseMediaUrlResolver.hasResolvableImage(data);
 
   static bool isDicaPhoto(Map<String, dynamic> data) {
     if ((data['type'] ?? 'curso').toString() != 'dica') return false;
-    return primaryImageUrl(data) != null;
+    return CourseMediaUrlResolver.hasResolvableImage(data);
   }
 
   static bool isVideoContent(Map<String, dynamic> data) {
+    if (CourseMediaUrlResolver.collectVideoEntries(data).isNotEmpty) return true;
     final mp4 = (data['mp4Url'] ?? '').toString().trim();
     if (mp4.isNotEmpty) return true;
     return videoIdFromData(data) != null;

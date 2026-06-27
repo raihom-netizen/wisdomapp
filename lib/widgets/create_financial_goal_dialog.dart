@@ -16,6 +16,7 @@ import '../utils/firestore_user_doc_id.dart';
 import '../utils/goal_objective_visuals.dart';
 import '../utils/premium_upgrade.dart';
 import '../widgets/brl_amount_text_field.dart';
+import '../widgets/goal_finance_account_field.dart';
 import '../widgets/fast_text_field.dart';
 
 /// Abre o formulário «Criar objetivo» (mesmo do módulo Objetivo Financeiro).
@@ -55,6 +56,7 @@ Future<void> showCreateFinancialGoalDialog(
   var hasInterest = false;
   var use52WeeksPlan = true;
   var selectedEmoji = '🎯';
+  String? financeAccountId;
   Timer? metaSuggestDebounce;
 
   final ok = await showDialog<bool>(
@@ -98,7 +100,11 @@ Future<void> showCreateFinancialGoalDialog(
           titlePadding: const EdgeInsets.fromLTRB(22, 20, 22, 4),
           contentPadding: const EdgeInsets.fromLTRB(22, 8, 22, 8),
           actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          title: _dialogTitleRow(icon: Icons.flag_rounded, title: 'Novo objetivo financeiro'),
+          title: goalFormDialogHeader(
+            title: 'Novo objetivo financeiro',
+            icon: Icons.savings_rounded,
+            subtitle: 'Defina a meta e onde o dinheiro será guardado.',
+          ),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -288,6 +294,12 @@ Future<void> showCreateFinancialGoalDialog(
                     ],
                   ),
                 ],
+                const SizedBox(height: 14),
+                GoalFinanceAccountField(
+                  uid: uid,
+                  selectedAccountId: financeAccountId,
+                  onChanged: (v) => setState(() => financeAccountId = v),
+                ),
                 const SizedBox(height: 12),
                 const Text('Prioridade', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                 const SizedBox(height: 6),
@@ -390,11 +402,22 @@ Future<void> showCreateFinancialGoalDialog(
       }
       return;
     }
+    if (financeAccountId == null || financeAccountId!.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Selecione ou cadastre a conta onde o dinheiro será guardado.'),
+          ),
+        );
+      }
+      return;
+    }
 
     final planStart = FiftyTwoWeeksPlan.normalizePlanStart(DateTime.now());
     await goals.add({
       'title': title,
       'targetAmount': target,
+      'financeAccountId': financeAccountId,
       'dueDate': use52WeeksPlan
           ? Timestamp.fromDate(planStart.add(const Duration(days: 52 * 7)))
           : (dueDate != null ? Timestamp.fromDate(dueDate!) : null),

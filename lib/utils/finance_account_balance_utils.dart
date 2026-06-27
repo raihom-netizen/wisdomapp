@@ -90,22 +90,19 @@ class FinanceAccountBalanceUtils {
     return n;
   }
 
-  /// Soma despesas pendentes por cartão (fatura em aberto) — só data >= início do módulo fatura.
+  /// Soma despesas pendentes por cartão (fatura em aberto) — só contas [isCreditCardProduct]
+  /// e data >= início do módulo fatura. Sem cartão cadastrado, retorna mapa vazio.
   static Map<String, double> faturaAbertaByCardId(
     Iterable<QueryDocumentSnapshot<Map<String, dynamic>>> pendingExpenseDocs, {
     Set<String>? creditCardIds,
   }) {
     final out = <String, double>{};
+    if (creditCardIds == null || creditCardIds.isEmpty) return out;
     for (final doc in pendingExpenseDocs) {
       final d = doc.data();
-      if ((d['type'] ?? 'expense').toString() != 'expense') continue;
-      if ((d['status'] ?? 'paid').toString() != 'pending') continue;
+      if (!_pendingExpenseOnCardForFatura(d, creditCardIds)) continue;
       final id = (d['financeAccountId'] ?? '').toString().trim();
       if (id.isEmpty) continue;
-      if (creditCardIds != null && creditCardIds.isNotEmpty && !creditCardIds.contains(id)) {
-        continue;
-      }
-      if (!countsForFaturaCartao(d)) continue;
       final amount = (d['amount'] as num?)?.toDouble().abs() ?? 0;
       if (amount <= 0) continue;
       out[id] = (out[id] ?? 0) + amount;
@@ -115,9 +112,19 @@ class FinanceAccountBalanceUtils {
 
   static double faturaAbertaForCard(
     Iterable<QueryDocumentSnapshot<Map<String, dynamic>>> pendingExpenseDocs,
-    String cardAccountId,
-  ) {
-    return faturaAbertaByCardId(pendingExpenseDocs)[cardAccountId] ?? 0;
+    String cardAccountId, {
+    Set<String>? creditCardIds,
+  }) {
+    if (creditCardIds != null &&
+        creditCardIds.isNotEmpty &&
+        !creditCardIds.contains(cardAccountId)) {
+      return 0;
+    }
+    return faturaAbertaByCardId(
+      pendingExpenseDocs,
+      creditCardIds: creditCardIds ?? {cardAccountId},
+    )[cardAccountId] ??
+        0;
   }
 
   /// Movimento líquido pago no período — cartão não entra no saldo; pagamento de fatura debita o banco escolhido.

@@ -2,6 +2,7 @@ import 'dart:math' show min;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:intl/intl.dart';
 
 import '../data/biblical_finance_tips.dart';
 import '../data/finance_tip_bank_static.dart';
@@ -31,7 +32,6 @@ class FinancialTipDisplayItem {
   final String colorKey;
   final int ordem;
   final String referenciaBiblica;
-  /// Citação literal ou paráfrase do versículo (exibida em destaque no card).
   final String textoVersiculo;
 
   bool get isBiblical =>
@@ -68,44 +68,57 @@ class FinancialTipDisplayItem {
   }
 }
 
+/// Dica resolvida para um dia civil específico.
+class FinancialTipDayEntry {
+  const FinancialTipDayEntry({
+    required this.date,
+    required this.label,
+    required this.tip,
+    this.isToday = false,
+  });
+
+  final DateTime date;
+  final String label;
+  final FinancialTipDisplayItem tip;
+  final bool isToday;
+}
+
 /// Catálogo resolvido para o Início (após sync do admin ou fallback bíblico).
 class HomeTipsCatalogSnapshot {
   const HomeTipsCatalogSnapshot({
     required this.tips,
+    this.config,
     this.favoriteIds = const [],
     this.syncedAt,
     this.fromSyncedConfig = false,
   });
 
   final List<FinancialTipDisplayItem> tips;
+  final FinancialTipsHomeConfig? config;
   final List<String> favoriteIds;
   final DateTime? syncedAt;
   final bool fromSyncedConfig;
 }
 
-/// Bloco para o Início: dica do dia + até [maxOnHome] no total.
+/// Bloco para o Início: apenas a dica do dia.
 class HomeTipsPreview {
   const HomeTipsPreview({
     required this.tipOfDay,
-    required this.previewExtras,
     required this.allTips,
+    this.dayLabel = 'Hoje',
   });
 
   final FinancialTipDisplayItem tipOfDay;
-  final List<FinancialTipDisplayItem> previewExtras;
   final List<FinancialTipDisplayItem> allTips;
-
-  List<FinancialTipDisplayItem> get homeVisibleTips => [
-        tipOfDay,
-        ...previewExtras,
-      ];
+  final String dayLabel;
 }
 
 /// Catálogo de dicas bíblicas para o painel Início.
 class FinancialTipsCatalogService {
   FinancialTipsCatalogService._();
 
-  static const int kMaxTipsOnHome = 3;
+  /// Histórico visível no módulo Dicas (últimos N dias).
+  static const int kModuleHistoryDays = 3;
 
   static int tipOfDayIndex(int length) {
     if (length <= 0) return 0;
@@ -115,6 +128,9 @@ class FinancialTipsCatalogService {
     return day % length;
   }
 
+  static int _daySerial(DateTime d) =>
+      DateTime(d.year, d.month, d.day).millisecondsSinceEpoch ~/ 86400000;
+
   static List<FinancialTipDisplayItem> biblicalCatalog() =>
       List<FinancialTipDisplayItem>.from(kBiblicalFinanceTips);
 
@@ -123,6 +139,12 @@ class FinancialTipsCatalogService {
     return kFinanceTipBankStatic
         .map((e) => FinancialTipDisplayItem.fromBankEntry(e, ordem: (i += 10)))
         .toList();
+  }
+
+  static Map<String, FinancialTipDisplayItem> _indexById(
+    Iterable<FinancialTipDisplayItem> tips,
+  ) {
+    return {for (final t in tips) t.id: t};
   }
 
   /// Catálogo do Início: base bíblica local + overrides do Firestore (editáveis no admin).
@@ -135,43 +157,102 @@ class FinancialTipsCatalogService {
     for (final f in firestoreTips) {
       if (f.isBiblical) byId[f.id] = f;
     }
+    for (final f in firestoreTips) {
+      byId[f.id] = f;
+    }
     final out = byId.values.toList()
       ..sort((a, b) => a.ordem.compareTo(b.ordem));
     return out.isNotEmpty ? out : biblicalCatalog();
   }
 
-  static HomeTipsPreview partitionForHome(
-    List<FinancialTipDisplayItem> all, {
-    List<String> favoriteIds = const [],
-  }) {
-    final catalog = all.isEmpty ? biblicalCatalog() : all;
-    if (catalog.length == 1) {
-      return HomeTipsPreview(
-        tipOfDay: catalog.first,
-        previewExtras: const [],
-        allTips: catalog,
-      );
+  static List<String> _rotationIds(
+    List<FinancialTipDisplayItem> catalog,
+    FinancialTipsHomeConfig? config,
+  ) {
+    final byId = _indexById(catalog);
+    final raw = config?.effectiveRotationOrder ?? [];
+    final fromConfig = [
+      for (final id in raw)
+        if (byId.containsKey(id)) id,
+    ];
+    if (fromConfig.isNotEmpty) return fromConfig;
+    return catalog.map((t) => t.id).toList();
+  }
+
+  /// Dica de um dia: prioridade dia da semana (admin) → rotação ordenada → fallback.
+  static FinancialTipDisplayItem resolveTipForDate(
+    List<FinancialTipDisplayItem> catalog,
+    FinancialTipsHomeConfig? config,
+    DateTime date,
+  ) {
+    if (catalog.isEmpty) return biblicalCatalog().first;
+    final byId = _indexById(catalog);
+    final weekday = date.weekday;
+
+    final overrideId = config?.weekdayTipIds[weekday];
+    if (overrideId != null &&
+        overrideId.isNotEmpty &&
+        byId.containsKey(overrideId)) {
+      return byId[overrideId]!;
     }
 
-    // Favoritos só definem a «dica do dia», nunca encolhem o catálogo visível no Início.
-    final favInCatalog =
-        catalog.where((t) => favoriteIds.contains(t.id)).toList();
-    final tipOfDay = favInCatalog.isNotEmpty
-        ? favInCatalog[tipOfDayIndex(favInCatalog.length)]
-        : catalog[tipOfDayIndex(catalog.length)];
+    final rotation = _rotationIds(catalog, config);
+    if (rotation.isEmpty) {
+      return catalog[tipOfDayIndex(catalog.length)];
+    }
+    final idx = _daySerial(date) % rotation.length;
+    return byId[rotation[idx]] ?? catalog.first;
+  }
 
-    final rest = catalog.where((t) => t.id != tipOfDay.id).toList();
-    final rotate = tipOfDayIndex(rest.length);
-    final rotated = [
-      ...rest.sublist(rotate),
-      ...rest.sublist(0, rotate),
-    ];
-    final extras = rotated.take(kMaxTipsOnHome - 1).toList();
+  static String dayOffsetLabel(int daysAgo) {
+    switch (daysAgo) {
+      case 0:
+        return 'Hoje';
+      case 1:
+        return 'Ontem';
+      case 2:
+        return 'Anteontem';
+      default:
+        final d = DateTime.now().subtract(Duration(days: daysAgo));
+        return DateFormat('EEEE, dd/MM', 'pt_BR').format(d);
+    }
+  }
 
+  /// Últimos [days] dias (módulo Dicas) — usuário não vê o catálogo inteiro.
+  static List<FinancialTipDayEntry> recentTipDays(
+    List<FinancialTipDisplayItem> catalog,
+    FinancialTipsHomeConfig? config, {
+    int days = kModuleHistoryDays,
+  }) {
+    if (catalog.isEmpty) catalog = biblicalCatalog();
+    final today = DateTime.now();
+    final base = DateTime(today.year, today.month, today.day);
+    final out = <FinancialTipDayEntry>[];
+    for (var i = 0; i < days; i++) {
+      final date = base.subtract(Duration(days: i));
+      out.add(
+        FinancialTipDayEntry(
+          date: date,
+          label: dayOffsetLabel(i),
+          tip: resolveTipForDate(catalog, config, date),
+          isToday: i == 0,
+        ),
+      );
+    }
+    return out;
+  }
+
+  static HomeTipsPreview partitionForHome(
+    List<FinancialTipDisplayItem> all, {
+    FinancialTipsHomeConfig? config,
+  }) {
+    final catalog = all.isEmpty ? biblicalCatalog() : all;
+    final today = DateTime.now();
+    final tipOfDay = resolveTipForDate(catalog, config, today);
     return HomeTipsPreview(
       tipOfDay: tipOfDay,
-      previewExtras: extras,
       allTips: catalog,
+      dayLabel: 'Hoje',
     );
   }
 
@@ -214,16 +295,30 @@ class FinancialTipsCatalogService {
     ];
   }
 
+  static Set<String> _idsNeededForConfig(FinancialTipsHomeConfig? config) {
+    final ids = <String>{};
+    if (config == null) return ids;
+    ids.addAll(config.homeTipIds);
+    ids.addAll(config.rotationOrder);
+    ids.addAll(config.weekdayTipIds.values);
+    ids.addAll(config.favoriteTipIds);
+    return ids;
+  }
+
   static Future<HomeTipsCatalogSnapshot> _buildFromHomeConfig(
     FinancialTipsHomeConfig? config,
   ) async {
     if (config == null || !config.hasSelection) {
       return HomeTipsCatalogSnapshot(tips: biblicalCatalog());
     }
-    final firestoreTips = await _fetchTipsByIds(config.homeTipIds);
+    final needed = _idsNeededForConfig(config).toList();
+    final firestoreTips = needed.isEmpty
+        ? <FinancialTipDisplayItem>[]
+        : await _fetchTipsByIds(needed);
     final merged = resolveHomeCatalog(firestoreTips);
     return HomeTipsCatalogSnapshot(
       tips: merged,
+      config: config,
       favoriteIds: config.favoriteTipIds,
       syncedAt: config.syncedAt,
       fromSyncedConfig: true,

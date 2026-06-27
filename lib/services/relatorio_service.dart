@@ -149,6 +149,9 @@ class ResumoBancoHorasPdf {
 /// Geração de relatórios PDF no estilo Clean Premium: cabeçalho com marca,
 /// resumo financeiro **em dados e tabelas** (sem gráficos — gráficos só na tela do app)
 /// e balanceta de lançamentos. Usado pelo plano Premium.
+/// Conteúdo incluído no PDF exportado da Agenda.
+enum AgendaPdfContentFilter { financeiro, particular, todos }
+
 class RelatorioService {
   /// Margens iguais em **todos** os PDFs A4 deste serviço (~24 pt cada lado).
   static const pw.EdgeInsets _kA4PageMargin = pw.EdgeInsets.all(24);
@@ -1919,18 +1922,46 @@ class RelatorioService {
   static const _nomeCompromissosAudiencia = 'RELATORIO AGENDA WISDOMAPP';
   static final PdfColor _pdfAgendaReceita = PdfColor.fromInt(0xFF0EA5E9);
   static final PdfColor _pdfAgendaDespesa = PdfColor.fromInt(0xFFF97316);
+  static final PdfColor _pdfAgendaGoogle = PdfColor.fromInt(0xFF4285F4);
 
-  /// Gera bytes do PDF da Agenda (compromissos, audiências e financeiro pendente).
+  /// Filtro do PDF da Agenda: financeiro, particular (compromissos + Google) ou todos.
+  static List<Map<String, dynamic>> filterAgendaPdfRows(
+    List<Map<String, dynamic>> rows,
+    AgendaPdfContentFilter filter,
+  ) {
+    switch (filter) {
+      case AgendaPdfContentFilter.financeiro:
+        return rows.where((e) => e['agendaRowKind'] == 'finance').toList();
+      case AgendaPdfContentFilter.particular:
+        return rows.where((e) => e['agendaRowKind'] != 'finance').toList();
+      case AgendaPdfContentFilter.todos:
+        return rows;
+    }
+  }
+
+  static String agendaPdfFilterLabel(AgendaPdfContentFilter filter) =>
+      switch (filter) {
+        AgendaPdfContentFilter.financeiro => 'Compromissos financeiros',
+        AgendaPdfContentFilter.particular =>
+          'Compromissos particulares e Google Calendar',
+        AgendaPdfContentFilter.todos => 'Todos os itens da Agenda',
+      };
+
+  /// Gera bytes do PDF da Agenda (compromissos, audiências, Google e financeiro).
   static Future<(Uint8List, String)> buildRelatorioCompromissosAudienciaBytes({
     required String periodo,
     required List<Map<String, dynamic>> items,
     List<Map<String, dynamic>> financeItems = const [],
+    List<Map<String, dynamic>> googleItems = const [],
+    AgendaPdfContentFilter contentFilter = AgendaPdfContentFilter.todos,
     String? suggestedFilename,
   }) async {
     final pdf = await _buildCompromissosAudienciaPdf(
       periodo: periodo,
       items: items,
       financeItems: financeItems,
+      googleItems: googleItems,
+      contentFilter: contentFilter,
     );
     final bytes = await _pdfDocumentToBytes(pdf);
     return (bytes, suggestedFilename ?? _nomeCompromissosAudiencia);
@@ -1948,11 +1979,13 @@ class RelatorioService {
 
   static List<Map<String, dynamic>> _mergeAgendaPdfRows(
     List<Map<String, dynamic>> reminders,
-    List<Map<String, dynamic>> financeItems,
-  ) {
+    List<Map<String, dynamic>> financeItems, [
+    List<Map<String, dynamic>> googleItems = const [],
+  ]) {
     final all = <Map<String, dynamic>>[
       ...reminders.map((e) => {...e, 'agendaRowKind': 'reminder'}),
       ...financeItems.map((e) => {...e, 'agendaRowKind': 'finance'}),
+      ...googleItems.map((e) => {...e, 'agendaRowKind': 'google'}),
     ];
     all.sort((a, b) {
       final cmp = _agendaPdfSortDate(a).compareTo(_agendaPdfSortDate(b));
@@ -2016,16 +2049,28 @@ class RelatorioService {
     required String periodo,
     required List<Map<String, dynamic>> items,
     List<Map<String, dynamic>> financeItems = const [],
+    List<Map<String, dynamic>> googleItems = const [],
+    AgendaPdfContentFilter contentFilter = AgendaPdfContentFilter.todos,
   }) async {
     final theme = await _latinPdfTheme();
-    final merged = _mergeAgendaPdfRows(items, financeItems);
-    final compromissosCount = items.where((e) {
+    final merged = filterAgendaPdfRows(
+      _mergeAgendaPdfRows(items, financeItems, googleItems),
+      contentFilter,
+    );
+    final filterLabel = agendaPdfFilterLabel(contentFilter);
+    final compromissosCount = merged.where((e) {
+      if (e['agendaRowKind'] != 'reminder') return false;
       final t = (e['type'] ?? 'compromisso').toString();
       return t != 'audiencia';
     }).length;
-    final audienciasCount = items.where((e) => (e['type'] ?? '').toString() == 'audiencia').length;
-    final incomeItems = financeItems.where((e) => (e['financeType'] ?? e['type'] ?? '').toString() == 'income');
-    final expenseItems = financeItems.where((e) => (e['financeType'] ?? e['type'] ?? '').toString() == 'expense');
+    final audienciasCount = merged.where((e) => (e['type'] ?? '').toString() == 'audiencia').length;
+    final googleCount = merged.where((e) => e['agendaRowKind'] == 'google').length;
+    final incomeItems = merged.where((e) =>
+        e['agendaRowKind'] == 'finance' &&
+        (e['financeType'] ?? e['type'] ?? '').toString() == 'income');
+    final expenseItems = merged.where((e) =>
+        e['agendaRowKind'] == 'finance' &&
+        (e['financeType'] ?? e['type'] ?? '').toString() == 'expense');
     final totalReceitas = incomeItems.fold<double>(
       0,
       (s, e) => s + ((e['amount'] ?? 0) as num).toDouble().abs(),
@@ -2077,7 +2122,17 @@ class RelatorioService {
       String details;
       PdfColor? tipoColor;
 
-      if (isFinance) {
+      if (e['agendaRowKind'] == 'google') {
+        tipoLabel = 'Google';
+        tipoColor = _pdfAgendaGoogle;
+        title = (e['title'] ?? 'Evento Google').toString();
+        final time = (e['time'] ?? '').toString();
+        final end = (e['endTime'] ?? '').toString();
+        timeOrValue = end.isNotEmpty && time.isNotEmpty ? '$time – $end' : (time.isEmpty ? '—' : time);
+        sit = 'Calendário';
+        details = (e['notes'] ?? '').toString().trim();
+        if (details.isEmpty) details = 'Google Calendar';
+      } else if (isFinance) {
         final isIncome = (e['financeType'] ?? e['type'] ?? '').toString() == 'income';
         tipoLabel = isIncome ? 'Receita' : 'Despesa';
         tipoColor = isIncome ? _pdfAgendaReceita : _pdfAgendaDespesa;
@@ -2113,7 +2168,9 @@ class RelatorioService {
 
       final dateLabel = isFinance
           ? _reminderDatePdf(agendaFinanceEffectiveDay(e))
-          : _reminderDatePdf(e['date']);
+          : (e['agendaRowKind'] == 'google'
+              ? _reminderDatePdf(e['date'])
+              : _reminderDatePdf(e['date']));
       final rowBg = alt ? _pdfGrey100 : PdfColors.white;
       return pw.TableRow(
         decoration: pw.BoxDecoration(color: rowBg),
@@ -2197,7 +2254,7 @@ class RelatorioService {
                           ),
                         ),
                         pw.Text(
-                          'Compromissos, audiências e lançamentos financeiros pendentes',
+                          filterLabel,
                           style: pw.TextStyle(
                             fontSize: 9,
                             color: PdfColor(0.75, 0.82, 0.92),
@@ -2255,6 +2312,12 @@ class RelatorioService {
                   '${expenseItems.length} · ${CurrencyFormats.formatBRL(totalDespesas)}',
                   _pdfAgendaDespesa,
                 ),
+                if (googleCount > 0)
+                  _buildPdfStatCard(
+                    'Google Calendar',
+                    '$googleCount',
+                    _pdfAgendaGoogle,
+                  ),
               ],
             ),
             pw.SizedBox(height: 18),

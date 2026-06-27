@@ -21,6 +21,7 @@ import '../constants/admin_partner_config.dart';
 import '../constants/app_version.dart';
 import '../constants/premium_pro_limits.dart';
 import '../constants/currency_formats.dart';
+import '../constants/app_strings.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_logo.dart';
 import '../widgets/module_header_premium.dart';
@@ -8655,7 +8656,7 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          'CSV copiado (${filteredDocs.length} itens). Cole em um arquivo .csv para salvar.',
+                          'CSV copiado (${AppStrings.itemCountLabel(filteredDocs.length)}). Cole em um arquivo .csv para salvar.',
                         ),
                       ),
                     );

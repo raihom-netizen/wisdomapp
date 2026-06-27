@@ -6,7 +6,9 @@ import 'package:flutter/foundation.dart'
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../utils/firestore_user_doc_id.dart';
+import '../utils/user_display_name.dart';
+import '../services/login_preferences.dart';
+import '../services/app_session_cache.dart';
 import '../services/account_switch_flow.dart';
 import '../services/delegate_access_service.dart';
 import '../services/auth_service.dart';
@@ -25,6 +27,7 @@ import '../services/functions_service.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/pwa_install_helper.dart';
+import '../utils/firestore_user_doc_id.dart';
 import '../pwa_install/install_card.dart';
 import '../theme/app_colors.dart';
 import '../services/push_notification_service.dart';
@@ -238,7 +241,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     final isDelegate = DelegateAccessService.isActingAsDelegate;
     final sessionEmail = FirebaseAuth.instance.currentUser?.email?.trim() ?? '';
     final ownerEmail = (DelegateAccessService.principalEmail ?? '').trim();
-    final name = profile.name.trim().isEmpty ? 'Usuário' : profile.name;
+    final name = resolveUserDisplayName(profile, uid: _profileFirestoreUid);
     final fontSize = isCompact ? 16.0 : 17.0;
     final smallFontSize = isCompact ? 10.5 : 11.5;
     final email =
@@ -1279,6 +1282,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         }
         if (snap.hasData) {
           unawaited(UserProfileStartupCache.save(profileUid, snap.data!));
+          final dn = snap.data!.name.trim();
+          if (dn.isNotEmpty) {
+            unawaited(LoginPreferences.setLastDisplayName(dn));
+          }
         }
 
         // Telemetria leve — uma vez por sessão/uid (evita postFrame a cada rebuild do perfil).

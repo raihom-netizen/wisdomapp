@@ -92,9 +92,9 @@
 		<string>remote-notification</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>O app usa a câmara quando você opta por tirar uma foto em ecrãs que permitem anexar imagem (ex.: orçamento, anexos).</string>
+	<string>O app usa a câmara para tirar foto de comprovantes financeiros, anexos e orçamentos quando você escolher essa opção.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>O app usa a galeria para anexar fotos em comprovantes, anotações e perfil quando você escolher enviar uma imagem.</string>
+	<string>O app acessa a galeria para anexar fotos, prints e PDFs salvos em comprovantes financeiros e anotações.</string>
 	<!-- iOS 14+ (PHPicker / acesso limitado): mesma finalidade; evita rejeição por falta de chave em revisões estritas -->
 	<key>NSPhotoLibraryLimitedUsageDescription</key>
 	<string>O app usa fotos que você selecionar da galeria para anexar em comprovantes e anotações.</string>

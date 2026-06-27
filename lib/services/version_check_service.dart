@@ -50,6 +50,7 @@ class VersionCheckService {
   static void clearPendingUpdate() {
     pendingUpdateVersion = null;
     apkDownloadUrl = null;
+    forceUpdateRequired = false;
     forceUpdateNotifier.value = !forceUpdateNotifier.value;
   }
 
@@ -66,7 +67,9 @@ class VersionCheckService {
 
   static void _onNewVersionFound(String serverVersion, {required bool forceBlock}) {
     pendingUpdateVersion = serverVersion;
-    forceUpdateRequired = forceBlock;
+    // Web: nunca bloqueia a árvore inteira nem recarrega sozinho — só faixa/banner.
+    // Evita tela preta e loop de reload ao alternar abas ou com cache antigo.
+    forceUpdateRequired = forceBlock && !kIsWeb;
     forceUpdateNotifier.value = true;
   }
 
@@ -90,6 +93,7 @@ class VersionCheckService {
 
   static void reloadWebPageNow({bool force = true}) {
     if (!kIsWeb || pendingUpdateVersion == null) return;
+    if (reload_impl.isWebReloadLoopBlocked(pendingUpdateVersion!)) return;
     reload_impl.reloadPage(pendingUpdateVersion, force);
   }
 

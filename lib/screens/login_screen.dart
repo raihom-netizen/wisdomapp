@@ -333,6 +333,10 @@ class _LoginScreenState extends State<LoginScreen> {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid != null) {
       AppSessionCache.markShellReady(uid).catchError((_) {});
+      final dn = FirebaseAuth.instance.currentUser?.displayName?.trim();
+      if (dn != null && dn.isNotEmpty) {
+        LoginPreferences.setLastDisplayName(dn).catchError((_) {});
+      }
     }
     if (!mounted) return;
     if (_afterLoginRoute == '/escolha-plano') {

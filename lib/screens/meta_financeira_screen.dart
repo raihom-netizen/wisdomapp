@@ -25,20 +25,22 @@ import '../utils/home_shell_layout.dart';
 import '../utils/fifty_two_weeks_plan.dart';
 import '../utils/goal_objective_visuals.dart';
 import '../widgets/fifty_two_weeks_schedule_sheet.dart';
+import '../widgets/goal_52_weeks_summary_panel.dart';
+import '../widgets/goal_finance_account_field.dart';
 
 /// Categorias de metas (estrutura base Premium).
 final List<GoalCategory> kGoalCategories = GoalCategory.values.toList();
 
-/// SugestÃµes rÃ¡pidas de metas para o usuÃ¡rio escolher ou inspirar.
+/// Sugestões rápidas de metas para o usuário escolher ou inspirar.
 const List<Map<String, String>> kMetaSugestoes = [
-  {'title': 'Comprar um carro', 'emoji': 'ðŸš—', 'cat': 'veiculo'},
-  {'title': 'Pagar contas / quitar dÃ­vidas', 'emoji': 'ðŸ“‹', 'cat': 'personalizada'},
-  {'title': 'Reserva de emergÃªncia', 'emoji': 'ðŸ›¡ï¸', 'cat': 'reserva_emergencia'},
-  {'title': 'Viagem', 'emoji': 'âœˆï¸', 'cat': 'viagem'},
-  {'title': 'Reforma da casa', 'emoji': 'ðŸ ', 'cat': 'casa'},
-  {'title': 'Curso ou especializaÃ§Ã£o', 'emoji': 'ðŸ“š', 'cat': 'estudo'},
-  {'title': 'Investimento', 'emoji': 'ðŸ“ˆ', 'cat': 'investimento'},
-  {'title': 'Outro', 'emoji': 'ðŸŽ¯', 'cat': 'personalizada'},
+  {'title': 'Comprar um carro', 'emoji': '🚗', 'cat': 'veiculo'},
+  {'title': 'Pagar contas / quitar dívidas', 'emoji': '📋', 'cat': 'personalizada'},
+  {'title': 'Reserva de emergência', 'emoji': '🛡️', 'cat': 'reserva_emergencia'},
+  {'title': 'Viagem', 'emoji': '✈️', 'cat': 'viagem'},
+  {'title': 'Reforma da casa', 'emoji': '🏠', 'cat': 'casa'},
+  {'title': 'Curso ou especialização', 'emoji': '📚', 'cat': 'estudo'},
+  {'title': 'Investimento', 'emoji': '📈', 'cat': 'investimento'},
+  {'title': 'Outro', 'emoji': '🎯', 'cat': 'personalizada'},
 ];
 
 class MetaFinanceiraScreen extends StatefulWidget {
@@ -122,6 +124,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
       return;
     }
     final title = (data['title'] ?? 'Objetivo').toString();
+    final goalAccountId = (data['financeAccountId'] ?? '').toString().trim();
     final ok = await showRegistrarDepositoDialog(
       context: context,
       goalRef: goalDoc.reference,
@@ -129,6 +132,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
       goalTitle: title,
       uid: widget.uid,
       profile: widget.profile,
+      initialFinanceAccountId: goalAccountId.isEmpty ? null : goalAccountId,
     );
     if (ok && mounted && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -137,10 +141,10 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
     }
   }
 
-  /// Barra superior padrÃ£o dos previews/sheets do mÃ³dulo Meta â€” pedido do
-  /// usuÃ¡rio: cada preview tem **Â«VoltarÂ»** Ã  esquerda (paridade total
-  /// iPhone / iOS / Android / Web) + atalho **Â«XÂ»** Ã  direita. Mesmo
-  /// visual dos previews do Painel Inicial e dos demais mÃ³dulos.
+  /// Barra superior padrão dos previews/sheets do módulo Meta — pedido do
+  /// usuário: cada preview tem **«Voltar»** à esquerda (paridade total
+  /// iPhone / iOS / Android / Web) + atalho **«X»** à direita. Mesmo
+  /// visual dos previews do Painel Inicial e dos demais módulos.
   Widget _metaPreviewTopBar(BuildContext ctx) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 12, 8, 4),
@@ -232,17 +236,23 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
     try {
       priority = GoalPriority.values.firstWhere((e) => e.name == (data['priority'] ?? ''));
     } catch (_) {}
+    final storedAccount = (data['financeAccountId'] ?? '').toString().trim();
+    String? financeAccountId = storedAccount.isEmpty ? null : storedAccount;
 
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setState) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
           titlePadding: const EdgeInsets.fromLTRB(22, 20, 22, 4),
           contentPadding: const EdgeInsets.fromLTRB(22, 8, 22, 8),
           actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          title: _metaDialogTitleRow(icon: Icons.edit_rounded, title: 'Editar meta'),
+          title: goalFormDialogHeader(
+            title: 'Editar meta',
+            icon: Icons.savings_rounded,
+            subtitle: 'Atualize dados e a conta vinculada aos depósitos.',
+          ),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -259,6 +269,12 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                     labelText: 'Valor alvo (R\$)',
                     prefixText: 'R\$ ',
                   ),
+                ),
+                const SizedBox(height: 14),
+                GoalFinanceAccountField(
+                  uid: widget.uid,
+                  selectedAccountId: financeAccountId,
+                  onChanged: (v) => setState(() => financeAccountId = v),
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -282,7 +298,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                       icon: const Icon(Icons.calendar_today_rounded, size: 18),
                       label: const Text('Alterar'),
                       style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.accent.withOpacity(0.16),
+                        backgroundColor: AppColors.accent.withValues(alpha: 0.16),
                         foregroundColor: AppColors.accent,
                         elevation: 0,
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -318,7 +334,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
               children: [
                 _metaDialogCancel(onPressed: () => Navigator.pop(ctx, false)),
                 _metaDialogGradientButton(
-                  label: 'Salvar alteraÃ§Ãµes',
+                  label: 'Salvar alterações',
                   onPressed: () => Navigator.pop(ctx, true),
                 ),
               ],
@@ -340,12 +356,21 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Informe o valor alvo.')));
         return;
       }
+      if (financeAccountId == null || financeAccountId!.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Selecione ou cadastre a conta onde o dinheiro será guardado.')),
+          );
+        }
+        return;
+      }
       try {
         await goalDoc.reference.update({
           'title': title,
           'targetAmount': target,
           'dueDate': dueDate != null ? Timestamp.fromDate(dueDate!) : null,
           'priority': priority.name,
+          'financeAccountId': financeAccountId,
         });
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Meta atualizada.')));
       } catch (e) {
@@ -368,7 +393,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: _metaDialogTitleRow(icon: Icons.flag_outlined, title: 'Excluir meta'),
         content: Text(
-          'Excluir "${(goalDoc.data()['title'] ?? 'Meta').toString()}"? Os aportes jÃ¡ registrados nÃ£o serÃ£o removidos.',
+          'Excluir "${(goalDoc.data()['title'] ?? 'Meta').toString()}"? Os aportes já registrados não serão removidos.',
         ),
         actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         actions: [
@@ -395,7 +420,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
     if (confirm != true) return;
     try {
       await goalDoc.reference.delete();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Meta excluÃ­da.')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Meta excluída.')));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao excluir: ${e.toString().split('\n').first}')));
     }
@@ -518,7 +543,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                               active: _sortPrazo,
                             ),
                             _buildSortChip(
-                              label: 'TÃ­tulo Aâ€“Z',
+                              label: 'Título A-Z',
                               selected: _goalListSort == _GoalListSort.titulo,
                               onTap: () => setState(() => _goalListSort = _GoalListSort.titulo),
                               active: _sortTitulo,
@@ -549,7 +574,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
     );
   }
 
-  /// CabeÃ§alho colorido do mÃ³dulo Objetivo Financeiro.
+  /// Cabeçalho colorido do módulo Objetivo Financeiro.
   Widget _buildModuleHeroHeader({required bool isCompact}) {
     return Container(
       width: double.infinity,
@@ -580,7 +605,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                   color: Colors.white.withOpacity(0.18),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: const Icon(Icons.flag_rounded, color: Colors.white, size: 26),
+                child: const Icon(Icons.savings_rounded, color: Colors.white, size: 26),
               ),
               const SizedBox(width: 12),
               const Expanded(
@@ -597,7 +622,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Projeto 52 semanas Â· viagem, carro, casa, reforma, quitar dÃ­vidas',
+            'Projeto 52 semanas - viagem, carro, casa, reforma, quitar dívidas',
             style: TextStyle(
               color: Colors.white.withOpacity(0.92),
               fontWeight: FontWeight.w600,
@@ -610,7 +635,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
     );
   }
 
-  /// CTA principal â€” gradiente + sombra (visual premium).
+  /// CTA principal — gradiente + sombra (visual premium).
   Widget _buildNovaMetaButton({required bool expand, String label = 'Nova meta'}) {
     return Material(
       color: Colors.transparent,
@@ -737,7 +762,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
     );
   }
 
-  /// Barra de progresso com gradiente e altura confortÃ¡vel para leitura.
+  /// Barra de progresso com gradiente e altura confortável para leitura.
   Widget _buildGoalProgressTrack(double progress, Color accentEnd) {
     final p = progress.clamp(0.0, 1.0);
     return ClipRRect(
@@ -962,7 +987,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
             children: [
               CircularProgressIndicator(strokeWidth: 2),
               SizedBox(height: 16),
-              Text('A sincronizar sessÃ£oâ€¦', textAlign: TextAlign.center),
+              Text('A sincronizar sessão…', textAlign: TextAlign.center),
             ],
           ),
         ),
@@ -1046,7 +1071,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Crie um objetivo com Projeto 52 semanas â€” o app monta a programaÃ§Ã£o semanal automaticamente.',
+            'Crie um objetivo com Projeto 52 semanas - o app monta a programação semanal automaticamente.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
           ),
@@ -1261,7 +1286,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                               Padding(
                                 padding: const EdgeInsets.only(top: 2),
                                 child: Text(
-                                  'Rendimento: ${interestRate.toStringAsFixed(1)}%/mÃªs',
+                                  'Rendimento: ${interestRate.toStringAsFixed(1)}%/mês',
                                   style: TextStyle(fontSize: 11, color: AppColors.accent, fontWeight: FontWeight.w600),
                                 ),
                               ),
@@ -1361,7 +1386,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                   ],
                   if (lineSpots.length > 1) ...[
                     const SizedBox(height: 20),
-                    const Text('EvoluÃ§Ã£o do alcance', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.grey)),
+                    const Text('Evolução do alcance', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.grey)),
                     const SizedBox(height: 8),
                     SizedBox(
                       height: 120,
@@ -1403,26 +1428,40 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                   ],
                   if (is52Weeks) ...[
                     const SizedBox(height: 14),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _goalStatPill(
-                          icon: Icons.check_circle_outline_rounded,
-                          label: '${FiftyTwoWeeksPlan.paidWeeksFromData(data).length} sem. guardadas',
-                          color: AppColors.success,
+                    Goal52WeeksSummaryPanel(
+                      target: target,
+                      deposited: current,
+                      paidWeeks: FiftyTwoWeeksPlan.paidWeeksFromData(data).length,
+                      currentWeek: FiftyTwoWeeksPlan.currentWeekNumber(
+                        FiftyTwoWeeksPlan.planStartFromData(data) ?? DateTime.now(),
+                      ),
+                      gradient: goalVisualForData(data).gradient,
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => showFiftyTwoWeeksScheduleSheet(
+                          context: context,
+                          goalDoc: goalDoc,
+                          profile: widget.profile,
+                          uid: widget.uid,
                         ),
-                        _goalStatPill(
-                          icon: Icons.timelapse_rounded,
-                          label: '${(52 - FiftyTwoWeeksPlan.paidWeeksFromData(data).length).clamp(0, 52)} sem. faltam',
-                          color: Colors.orange,
+                        icon: const Icon(Icons.calendar_view_week_rounded, size: 18),
+                        label: const Text('Ver cronograma 52 semanas'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                         ),
-                        _goalStatPill(
-                          icon: Icons.savings_rounded,
-                          label: 'Total ${CurrencyFormats.formatBRLTight(current)}',
-                          color: AppColors.primary,
-                        ),
-                      ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Goal52WeeksPdfButton(
+                      onPressed: () => exportFiftyTwoWeeksGoalPdf(
+                        context: context,
+                        goalDoc: goalDoc,
+                      ),
+                      label: 'Exportar PDF',
                     ),
                   ],
                   if (target > 0) ...[
@@ -1451,7 +1490,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                         FilledButton.icon(
                           onPressed: () => _registrarDeposito(context, goalDoc),
                           icon: const Icon(Icons.savings_rounded, size: 20),
-                          label: const Text('Registrar depósito'),
+                          label: const Text('Selecionar semanas e depositar'),
                           style: FilledButton.styleFrom(
                             backgroundColor: AppColors.primary,
                             foregroundColor: Colors.white,
@@ -1483,8 +1522,11 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                         Expanded(
                           child: FilledButton.icon(
                             onPressed: () => _registrarDeposito(context, goalDoc),
-                            icon: const Icon(Icons.savings_rounded, size: 20),
-                            label: const Text('Depósito'),
+                            icon: Icon(
+                              is52Weeks ? Icons.calendar_view_week_rounded : Icons.savings_rounded,
+                              size: 20,
+                            ),
+                            label: Text(is52Weeks ? 'Semanas' : 'Depósito'),
                             style: FilledButton.styleFrom(
                               backgroundColor: AppColors.primary,
                               foregroundColor: Colors.white,

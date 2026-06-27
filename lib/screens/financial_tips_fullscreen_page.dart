@@ -1,22 +1,113 @@
 import 'package:flutter/material.dart';
 
 import '../services/financial_tips_catalog_service.dart';
+import '../services/financial_tips_home_sync_service.dart';
 import '../widgets/finance_tip_modern_card.dart';
 
-/// Lista completa de dicas bíblicas — tela cheia com botão voltar.
+/// Módulo Dicas: últimos 3 dias + botão voltar (Início ou pop).
 class FinancialTipsFullscreenPage extends StatelessWidget {
   const FinancialTipsFullscreenPage({
     super.key,
     required this.tips,
-    this.highlightTipOfDay = true,
+    this.config,
+    this.onReturn,
+    this.embeddedInShell = false,
   });
 
   final List<FinancialTipDisplayItem> tips;
-  final bool highlightTipOfDay;
+  final FinancialTipsHomeConfig? config;
+  final VoidCallback? onReturn;
+  final bool embeddedInShell;
 
   @override
   Widget build(BuildContext context) {
-    final dayIdx = FinancialTipsCatalogService.tipOfDayIndex(tips.length);
+    final entries = FinancialTipsCatalogService.recentTipDays(
+      tips,
+      config,
+      days: FinancialTipsCatalogService.kModuleHistoryDays,
+    );
+
+    void handleReturn() {
+      if (onReturn != null) {
+        onReturn!();
+        return;
+      }
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+    }
+
+    final body = ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+      children: [
+        Text(
+          'Últimos ${FinancialTipsCatalogService.kModuleHistoryDays} dias — '
+          'cada dia traz uma dica diferente, alternando conforme a programação do app.',
+          style: TextStyle(
+            color: Colors.grey.shade800,
+            fontWeight: FontWeight.w600,
+            height: 1.45,
+          ),
+        ),
+        const SizedBox(height: 16),
+        ...entries.map(
+          (entry) => Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, bottom: 8),
+                  child: Row(
+                    children: [
+                      Icon(
+                        entry.isToday
+                            ? Icons.wb_sunny_rounded
+                            : Icons.history_rounded,
+                        size: 18,
+                        color: entry.isToday
+                            ? const Color(0xFFD97706)
+                            : Colors.grey.shade600,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        entry.label,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 15,
+                          color: entry.isToday
+                              ? const Color(0xFF0B1B4B)
+                              : Colors.grey.shade800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                FinanceTipModernCard(
+                  tip: entry.tip,
+                  index: 0,
+                  isTipOfDay: entry.isToday,
+                  showFullText: true,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+
+    if (embeddedInShell) {
+      return Container(
+        color: const Color(0xFFF0F4FF),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _TipsModuleTopBar(onReturn: handleReturn),
+            Expanded(child: body),
+          ],
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4FF),
@@ -24,56 +115,70 @@ class FinancialTipsFullscreenPage extends StatelessWidget {
         backgroundColor: const Color(0xFF0B1B4B),
         foregroundColor: Colors.white,
         title: const Text(
-          'Dicas Financeiras Bíblicas',
+          'Dicas Financeiras',
           style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => Navigator.of(context).pop(),
+          tooltip: 'Voltar',
+          onPressed: handleReturn,
         ),
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
-        itemCount: tips.length + 1,
-        itemBuilder: (context, i) {
-          if (i == 0) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: Text(
-                '${tips.length} dicas com base na Bíblia para organizar, poupar e decidir com sabedoria.',
-                style: TextStyle(
-                  color: Colors.grey.shade800,
-                  fontWeight: FontWeight.w600,
-                  height: 1.4,
+      body: body,
+    );
+  }
+}
+
+class _TipsModuleTopBar extends StatelessWidget {
+  const _TipsModuleTopBar({required this.onReturn});
+
+  final VoidCallback onReturn;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFF0B1B4B),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(4, 8, 8, 12),
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                tooltip: 'Voltar ao Início',
+                onPressed: onReturn,
+              ),
+              const Expanded(
+                child: Text(
+                  'Dicas Financeiras',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 17,
+                  ),
                 ),
               ),
-            );
-          }
-          final tip = tips[i - 1];
-          final isDay = highlightTipOfDay && (i - 1) == dayIdx;
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: FinanceTipModernCard(
-              tip: tip,
-              index: i - 1,
-              isTipOfDay: isDay,
-              showFullText: true,
-            ),
-          );
-        },
+            ],
+          ),
+        ),
       ),
     );
   }
 }
 
 Future<void> openFinancialTipsFullscreen(
-  BuildContext context,
-  List<FinancialTipDisplayItem> tips,
-) {
+  BuildContext context, {
+  required List<FinancialTipDisplayItem> tips,
+  FinancialTipsHomeConfig? config,
+}) {
   return Navigator.of(context).push<void>(
     MaterialPageRoute<void>(
       fullscreenDialog: true,
-      builder: (_) => FinancialTipsFullscreenPage(tips: tips),
+      builder: (_) => FinancialTipsFullscreenPage(
+        tips: tips,
+        config: config,
+      ),
     ),
   );
 }

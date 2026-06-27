@@ -1,7 +1,7 @@
 name: controle_total_premium
 description: "Controle Total App â€” Premium"
 publish_to: 'none'
-version: 10.04.0+5
+version: 10.04.0+8
 
 environment:
   sdk: ">=3.3.0 <4.0.0"

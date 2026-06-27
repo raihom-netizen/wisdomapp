@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'agenda_notifications_refresher.dart';
 import 'agenda_server_sync_service.dart';
+import 'google_calendar_sync_service.dart';
 
 /// Boot de notificações **leve no cliente**: servidor monta a fila; app só
 /// reagenda lembretes locais (quando aberto) uma vez por sessão.
@@ -35,6 +36,7 @@ class AgendaBootOrchestrator {
 
   static Future<void> _run(String uid) async {
     unawaited(AgendaServerSyncService.requestLoginSync(uid));
+    unawaited(GoogleCalendarSyncService.warmUpIfEnabled(uid));
     await AgendaNotificationsRefresher.refresh(
       uid: uid,
       coalesceWithin: const Duration(seconds: 30),

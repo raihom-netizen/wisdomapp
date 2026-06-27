@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 
+import '../constants/app_strings.dart';
 import '../constants/currency_formats.dart';
 import '../theme/app_colors.dart';
 
@@ -86,7 +87,7 @@ class AppPieChart extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      '${visible.length} itens',
+                      AppStrings.itemCountLabel(visible.length),
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w700,

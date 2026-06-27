@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../utils/course_media_url_resolver.dart';
 import '../utils/course_thumb_resolver.dart';
 
 /// Preview de imagem — imagem inteira visível (contain), fundo escuro, alta qualidade.
@@ -10,12 +11,14 @@ class CourseImagePreview extends StatelessWidget {
     super.key,
     this.bytes,
     this.networkUrl,
+    this.firestoreData,
     this.maxHeight = 240,
     this.subtitle,
   });
 
   final Uint8List? bytes;
   final String? networkUrl;
+  final Map<String, dynamic>? firestoreData;
   final double maxHeight;
   final String? subtitle;
 
@@ -23,7 +26,8 @@ class CourseImagePreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasBytes = bytes != null && bytes!.isNotEmpty;
     final url = networkUrl?.trim() ?? '';
-    if (!hasBytes && url.isEmpty) return const SizedBox.shrink();
+    final hasData = firestoreData != null;
+    if (!hasBytes && url.isEmpty && !hasData) return const SizedBox.shrink();
 
     Widget image;
     if (hasBytes) {
@@ -33,6 +37,8 @@ class CourseImagePreview extends StatelessWidget {
         filterQuality: FilterQuality.high,
         gaplessPlayback: true,
       );
+    } else if (hasData) {
+      image = CoursePhotoGallery(data: firestoreData!, height: maxHeight - 40);
     } else {
       image = CourseMediaThumbnail(
         urls: [url],
@@ -85,6 +91,193 @@ class CourseImagePreview extends StatelessWidget {
             ),
           Expanded(child: Center(child: image)),
         ],
+      ),
+    );
+  }
+}
+
+/// Galeria moderna — deslize horizontal entre fotos (até 10).
+class CoursePhotoGallery extends StatefulWidget {
+  const CoursePhotoGallery({
+    super.key,
+    required this.data,
+    this.height = 260,
+    this.fit = BoxFit.contain,
+    this.borderRadius = BorderRadius.zero,
+    this.showIndicators = true,
+  });
+
+  final Map<String, dynamic> data;
+  final double height;
+  final BoxFit fit;
+  final BorderRadius borderRadius;
+  final bool showIndicators;
+
+  @override
+  State<CoursePhotoGallery> createState() => _CoursePhotoGalleryState();
+}
+
+class _CoursePhotoGalleryState extends State<CoursePhotoGallery> {
+  final PageController _pageCtrl = PageController();
+  List<String> _urls = const [];
+  bool _loading = true;
+  int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant CoursePhotoGallery oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.data != widget.data) _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final urls = await CourseMediaUrlResolver.resolveImageUrls(widget.data);
+    if (!mounted) return;
+    setState(() {
+      _urls = urls;
+      _loading = false;
+      _index = 0;
+    });
+  }
+
+  @override
+  void dispose() {
+    _pageCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return SizedBox(
+        height: widget.height,
+        child: const Center(
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
+          ),
+        ),
+      );
+    }
+    if (_urls.isEmpty) {
+      return SizedBox(
+        height: widget.height,
+        child: Center(
+          child: Icon(
+            Icons.image_not_supported_outlined,
+            size: 40,
+            color: Colors.white.withValues(alpha: 0.45),
+          ),
+        ),
+      );
+    }
+    if (_urls.length == 1) {
+      return ClipRRect(
+        borderRadius: widget.borderRadius,
+        child: SizedBox(
+          height: widget.height,
+          child: _networkImage(_urls.first),
+        ),
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: widget.borderRadius,
+      child: SizedBox(
+        height: widget.height,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            PageView.builder(
+              controller: _pageCtrl,
+              itemCount: _urls.length,
+              onPageChanged: (i) => setState(() => _index = i),
+              itemBuilder: (_, i) => _networkImage(_urls[i]),
+            ),
+            if (widget.showIndicators) ...[
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 10,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(_urls.length, (i) {
+                    final active = i == _index;
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      width: active ? 18 : 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: active
+                            ? Colors.white
+                            : Colors.white.withValues(alpha: 0.45),
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+              Positioned(
+                top: 10,
+                right: 10,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '${_index + 1}/${_urls.length}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _networkImage(String url) {
+    return ColoredBox(
+      color: const Color(0xFF0F172A),
+      child: Image.network(
+        url,
+        fit: widget.fit,
+        width: double.infinity,
+        height: double.infinity,
+        filterQuality: FilterQuality.high,
+        gaplessPlayback: true,
+        loadingBuilder: (_, child, progress) {
+          if (progress == null) return child;
+          return const Center(
+            child: SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2.5),
+            ),
+          );
+        },
+        errorBuilder: (_, __, ___) => Center(
+          child: Icon(
+            Icons.broken_image_outlined,
+            size: 36,
+            color: Colors.white.withValues(alpha: 0.5),
+          ),
+        ),
       ),
     );
   }
@@ -192,7 +385,8 @@ class CourseVideoFilePreview extends StatelessWidget {
 class CourseMediaThumbnail extends StatefulWidget {
   const CourseMediaThumbnail({
     super.key,
-    required this.urls,
+    this.urls = const [],
+    this.firestoreData,
     this.fit = BoxFit.cover,
     this.fallback,
     this.borderRadius = BorderRadius.zero,
@@ -205,18 +399,20 @@ class CourseMediaThumbnail extends StatefulWidget {
   /// Construtor a partir de documento Firestore.
   factory CourseMediaThumbnail.fromData(
     Map<String, dynamic> data, {
+    String? docId,
     BoxFit? fit,
     Widget? fallback,
     BorderRadius borderRadius = BorderRadius.zero,
     bool showPlayButton = true,
     double playIconSize = 56,
   }) {
-    final urls = CourseThumbResolver.resolveUrls(data);
-    final isVideo = CourseThumbResolver.isVideoContent(data);
-    final isYt = CourseThumbResolver.videoIdFromData(data) != null;
-    final photo = CourseThumbResolver.isDicaPhoto(data);
+    final merged = docId != null ? {...data, 'id': docId} : data;
+    final isVideo = CourseThumbResolver.isVideoContent(merged);
+    final isYt = CourseThumbResolver.videoIdFromData(merged) != null;
+    final photo = CourseThumbResolver.isDicaPhoto(merged) ||
+        CourseMediaUrlResolver.hasResolvableImage(merged);
     return CourseMediaThumbnail(
-      urls: urls,
+      firestoreData: merged,
       fit: fit ?? (photo ? BoxFit.contain : BoxFit.cover),
       fallback: fallback,
       borderRadius: borderRadius,
@@ -247,6 +443,7 @@ class CourseMediaThumbnail extends StatefulWidget {
   }
 
   final List<String> urls;
+  final Map<String, dynamic>? firestoreData;
   final BoxFit fit;
   final Widget? fallback;
   final BorderRadius borderRadius;
@@ -263,11 +460,59 @@ class _CourseMediaThumbnailState extends State<CourseMediaThumbnail> {
   int _urlIndex = 0;
   bool _loaded = false;
   bool _failedAll = false;
+  bool _resolving = true;
+  List<String> _resolvedUrls = const [];
 
-  List<String> get _urls => widget.urls.where((u) => u.trim().isNotEmpty).toList();
+  @override
+  void initState() {
+    super.initState();
+    _resolveUrls();
+  }
+
+  @override
+  void didUpdateWidget(covariant CourseMediaThumbnail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.firestoreData != widget.firestoreData ||
+        oldWidget.urls.join('|') != widget.urls.join('|')) {
+      _urlIndex = 0;
+      _loaded = false;
+      _failedAll = false;
+      _resolveUrls();
+    }
+  }
+
+  Future<void> _resolveUrls() async {
+    setState(() {
+      _resolving = true;
+      _failedAll = false;
+      _urlIndex = 0;
+      _loaded = false;
+    });
+    try {
+      List<String> urls;
+      if (widget.firestoreData != null) {
+        urls = await CourseMediaUrlResolver.resolveImageUrls(widget.firestoreData!);
+      } else {
+        urls = await CourseMediaUrlResolver.resolveRawUrls(widget.urls);
+      }
+      if (!mounted) return;
+      setState(() {
+        _resolvedUrls = urls;
+        _resolving = false;
+        _failedAll = urls.isEmpty;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _resolvedUrls = const [];
+        _resolving = false;
+        _failedAll = true;
+      });
+    }
+  }
 
   void _tryNextUrl() {
-    if (_urlIndex + 1 < _urls.length) {
+    if (_urlIndex + 1 < _resolvedUrls.length) {
       setState(() {
         _urlIndex++;
         _loaded = false;
@@ -278,25 +523,22 @@ class _CourseMediaThumbnailState extends State<CourseMediaThumbnail> {
   }
 
   @override
-  void didUpdateWidget(covariant CourseMediaThumbnail oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.urls.join('|') != widget.urls.join('|')) {
-      _urlIndex = 0;
-      _loaded = false;
-      _failedAll = false;
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    if (_urls.isEmpty || _failedAll) {
+    if (_resolving) {
+      return ClipRRect(
+        borderRadius: widget.borderRadius,
+        child: _loadingSkeleton(),
+      );
+    }
+
+    if (_resolvedUrls.isEmpty || _failedAll) {
       return ClipRRect(
         borderRadius: widget.borderRadius,
         child: widget.fallback ?? _defaultFallback(),
       );
     }
 
-    final url = _urls[_urlIndex.clamp(0, _urls.length - 1)];
+    final url = _resolvedUrls[_urlIndex.clamp(0, _resolvedUrls.length - 1)];
     final bg = widget.fit == BoxFit.contain ? const Color(0xFF0F172A) : null;
 
     return ClipRRect(
@@ -323,7 +565,7 @@ class _CourseMediaThumbnailState extends State<CourseMediaThumbnail> {
                 return _loadingSkeleton();
               },
               errorBuilder: (_, __, ___) {
-                if (_urlIndex + 1 < _urls.length) {
+                if (_urlIndex + 1 < _resolvedUrls.length) {
                   WidgetsBinding.instance.addPostFrameCallback((_) => _tryNextUrl());
                   return _loadingSkeleton();
                 }

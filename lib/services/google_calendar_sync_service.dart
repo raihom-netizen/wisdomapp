@@ -3,8 +3,9 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
@@ -43,12 +44,14 @@ class GoogleCalendarEnableResult {
     this.email,
     this.message,
     this.cancelled = false,
+    this.needsInteractiveAuth = false,
   });
 
   final bool ok;
   final String? email;
   final String? message;
   final bool cancelled;
+  final bool needsInteractiveAuth;
 
   factory GoogleCalendarEnableResult.success(String email) =>
       GoogleCalendarEnableResult._(ok: true, email: email);
@@ -58,6 +61,14 @@ class GoogleCalendarEnableResult {
 
   factory GoogleCalendarEnableResult.cancelledByUser() =>
       const GoogleCalendarEnableResult._(ok: false, cancelled: true);
+
+  factory GoogleCalendarEnableResult.needsAuth(String? preferredEmail) =>
+      GoogleCalendarEnableResult._(
+        ok: false,
+        needsInteractiveAuth: true,
+        email: preferredEmail,
+        message: 'Autorize o Google Calendar para continuar.',
+      );
 }
 
 /// Integração Google Calendar: leitura para colorir dias e escrita ao salvar compromissos.
@@ -92,8 +103,14 @@ class GoogleCalendarSyncService {
 
   static Future<bool> isEnabled(String uid) async {
     if (uid.isEmpty) return false;
-    final snap = await _settingsRef(uid).get();
-    return snap.data()?['enabled'] == true;
+    try {
+      final snap = await FirestoreWebGuard.runWithWebRecovery(
+        () => _settingsRef(uid).get(),
+      );
+      return snap.data()?['enabled'] == true;
+    } catch (_) {
+      return false;
+    }
   }
 
   static Stream<bool> enabledStream(String uid) {
@@ -112,27 +129,109 @@ class GoogleCalendarSyncService {
         );
   }
 
-  /// Ativa: reutiliza login Google (Web/Firebase) ou vincula Gmail se entrou com Apple.
-  static Future<GoogleCalendarEnableResult> enable(String uid) async {
+  /// Ativa: reutiliza credencial salva ou pede autorização (GIS, sem aba Firebase).
+  static Future<GoogleCalendarEnableResult> enable(
+    String uid, {
+    bool forceNewCredentials = false,
+    bool skipSilent = false,
+  }) async {
     if (uid.isEmpty) {
       return GoogleCalendarEnableResult.fail('Sessão inválida. Entre novamente.');
     }
+    return FirestoreWebGuard.runWebGoogleSignInFlow(
+      () => _enableCore(
+        uid,
+        forceNewCredentials: forceNewCredentials,
+        skipSilent: skipSilent,
+      ),
+    );
+  }
 
+  /// Reativa só com credencial já salva (toggle ON após desligar).
+  static Future<GoogleCalendarEnableResult> tryEnableSilent(String uid) async {
+    if (uid.isEmpty) {
+      return GoogleCalendarEnableResult.fail('Sessão inválida. Entre novamente.');
+    }
+    return _enableCore(uid, forceNewCredentials: false, skipSilent: false);
+  }
+
+  /// Renova token silenciosamente se a integração já está ativa (boot / abrir Agenda).
+  static Future<void> warmUpIfEnabled(String uid) async {
+    if (uid.isEmpty || !await isEnabled(uid)) return;
+    try {
+      final snap = await FirestoreWebGuard.runWithWebRecovery(
+        () => _settingsRef(uid).get(),
+      );
+      final e = (snap.data()?['connectedEmail'] ?? '').toString().trim();
+      if (e.isNotEmpty) _activeConnectedEmail = e;
+    } catch (_) {}
+    await _accessToken(uid);
+  }
+
+  /// Limpa credencial Google Calendar para escolher outra conta Gmail.
+  static Future<void> prepareGoogleAccountChange(String uid) async {
+    if (uid.isEmpty) return;
+    await GoogleCalendarAuthHelper.clearCache();
+    _activeConnectedEmail = null;
+    try {
+      await _calendarSignIn().signOut();
+    } catch (_) {}
+    await disable(uid, keepLocalCredentials: false);
+    await FirestoreWebGuard.runWithWebRecovery(() async {
+      await _settingsRef(uid).set({
+        'connectedEmail': FieldValue.delete(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    });
+  }
+
+  static GoogleSignIn _calendarSignIn() {
+    return GoogleSignIn(
+      clientId: kIsWeb ? GoogleOAuthConfig.webClientId : null,
+      scopes: const [GoogleOAuthConfig.calendarScope, 'email', 'profile'],
+      serverClientId: kIsWeb ? null : GoogleOAuthConfig.webClientId,
+    );
+  }
+
+  static Future<GoogleCalendarEnableResult> _enableCore(
+    String uid, {
+    required bool forceNewCredentials,
+    required bool skipSilent,
+  }) async {
     final firebaseUser = FirebaseAuth.instance.currentUser;
     final loginEmail = (firebaseUser?.email ?? '').trim();
-    final settingsSnap = await _settingsRef(uid).get();
-    final storedEmail =
-        (settingsSnap.data()?['connectedEmail'] ?? '').toString().trim();
+
+    String storedEmail = '';
+    try {
+      final settingsSnap = await FirestoreWebGuard.runWithWebRecovery(
+        () => _settingsRef(uid).get(),
+      );
+      storedEmail =
+          (settingsSnap.data()?['connectedEmail'] ?? '').toString().trim();
+    } catch (_) {}
+
     final preferredEmail = storedEmail.isNotEmpty
         ? storedEmail
         : (GoogleCalendarAuthHelper.isApplePrimaryLogin() ? null : loginEmail);
+    final emailHint = (preferredEmail == null || preferredEmail.isEmpty)
+        ? null
+        : preferredEmail;
 
     try {
-      final auth = await GoogleCalendarAuthHelper.requestInteractive(
-        preferredEmail: (preferredEmail == null || preferredEmail.isEmpty)
-            ? null
-            : preferredEmail,
-      );
+      final GoogleCalendarAuthResult auth;
+      if (skipSilent || forceNewCredentials) {
+        auth = await GoogleCalendarAuthHelper.requestInteractive(
+          preferredEmail: forceNewCredentials ? null : emailHint,
+          forceNewCredentials: forceNewCredentials,
+        );
+      } else {
+        auth = await GoogleCalendarAuthHelper.requestSilent(
+          preferredEmail: emailHint,
+        );
+        if (!auth.ok) {
+          return GoogleCalendarEnableResult.needsAuth(emailHint);
+        }
+      }
 
       if (auth.cancelled) {
         return GoogleCalendarEnableResult.cancelledByUser();
@@ -154,6 +253,7 @@ class GoogleCalendarSyncService {
       final connectedEmail = (auth.email ?? preferredEmail ?? loginEmail).trim();
       _activeConnectedEmail = connectedEmail.isEmpty ? null : connectedEmail;
 
+      await FirestoreWebGuard.stabilizeAfterWebSignIn();
       await FirestoreWebGuard.runWithWebRecovery(() async {
         await _settingsRef(uid).set({
           'enabled': true,
@@ -162,10 +262,22 @@ class GoogleCalendarSyncService {
           'loginProviderApple': GoogleCalendarAuthHelper.isApplePrimaryLogin(),
           'connectedAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
+          'disabledAt': FieldValue.delete(),
+          'disabledByUser': false,
         }, SetOptions(merge: true));
       });
 
-      unawaited(syncAllLocalReminders(userDocId: uid));
+      unawaited(
+        Future<void>.delayed(const Duration(milliseconds: 600), () async {
+          try {
+            await FirestoreWebGuard.runWithWebRecovery(
+              () => syncAllLocalReminders(userDocId: uid),
+            );
+          } catch (e, st) {
+            debugPrint('syncAllLocalReminders após enable: $e\n$st');
+          }
+        }),
+      );
 
       return GoogleCalendarEnableResult.success(
         _activeConnectedEmail ?? connectedEmail,
@@ -200,15 +312,24 @@ class GoogleCalendarSyncService {
     }
   }
 
-  /// Desativa integração (mantém conta Google no dispositivo).
-  static Future<void> disable(String uid) async {
+  /// Desativa integração — mantém credencial local para reativar com um toque.
+  static Future<void> disable(
+    String uid, {
+    bool keepLocalCredentials = true,
+  }) async {
     if (uid.isEmpty) return;
-    await GoogleCalendarAuthHelper.clearCache();
-    _activeConnectedEmail = null;
-    await _settingsRef(uid).set({
-      'enabled': false,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    if (!keepLocalCredentials) {
+      await GoogleCalendarAuthHelper.clearCache();
+      _activeConnectedEmail = null;
+    }
+    await FirestoreWebGuard.runWithWebRecovery(() async {
+      await _settingsRef(uid).set({
+        'enabled': false,
+        'disabledByUser': true,
+        'disabledAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    });
   }
 
   static Future<String?> _accessToken([String? uid]) async {
@@ -220,11 +341,43 @@ class GoogleCalendarSyncService {
       } catch (_) {}
     }
 
+    final email = _activeConnectedEmail ??
+        await GoogleCalendarAuthHelper.storedCalendarEmail();
+
     final auth = await GoogleCalendarAuthHelper.requestSilent(
-      preferredEmail: _activeConnectedEmail,
+      preferredEmail: email,
     );
     if (auth.ok) return auth.accessToken;
-    return GoogleCalendarAuthHelper.cachedTokenIfValid();
+
+    return null;
+  }
+
+  static Future<http.Response> _authorizedRequest(
+    Future<http.Response> Function(String token) request, {
+    String? userDocId,
+  }) async {
+    var token = await _accessToken(userDocId);
+    if (token == null) {
+      return http.Response('', 401);
+    }
+    var res = await request(token);
+    if (res.statusCode == 401) {
+      final refreshed = await GoogleCalendarAuthHelper.refreshAfterUnauthorized(
+        preferredEmail: _activeConnectedEmail,
+      );
+      token = refreshed.accessToken;
+      if (token != null && token.isNotEmpty) {
+        res = await request(token);
+      }
+    }
+    return res;
+  }
+
+  static Future<http.Response> _authorizedGet(Uri uri, {String? userDocId}) async {
+    return _authorizedRequest(
+      (token) => http.get(uri, headers: {'Authorization': 'Bearer $token'}),
+      userDocId: userDocId,
+    );
   }
 
   static DateTime _dayKey(DateTime d) => DateTime(d.year, d.month, d.day);
@@ -286,9 +439,6 @@ class GoogleCalendarSyncService {
     final monthEnd = DateTime(month.year, month.month + 1, 0, 23, 59, 59);
     if (monthEnd.isBefore(syncMinDate)) return [];
 
-    final token = await _accessToken(userDocId);
-    if (token == null) return [];
-
     final monthStart = DateTime(month.year, month.month, 1);
     final start = monthStart.isBefore(syncMinDate) ? syncMinDate : monthStart;
     final end = monthEnd;
@@ -302,7 +452,7 @@ class GoogleCalendarSyncService {
     );
 
     try {
-      final res = await http.get(uri, headers: {'Authorization': 'Bearer $token'});
+      final res = await _authorizedGet(uri, userDocId: userDocId);
       if (res.statusCode < 200 || res.statusCode >= 300) return [];
       final body = jsonDecode(res.body) as Map<String, dynamic>;
       return _filterEventsFromSyncMin(_parseEventsResponse(body));
@@ -358,11 +508,13 @@ class GoogleCalendarSyncService {
   /// Envia todos os compromissos locais sem `googleEventId` para o Google Calendar.
   static Future<int> syncAllLocalReminders({required String userDocId}) async {
     if (userDocId.isEmpty || !await isEnabled(userDocId)) return 0;
-    final snap = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(userDocId)
-        .collection('reminders')
-        .get();
+    final snap = await FirestoreWebGuard.runWithWebRecovery(
+      () => FirebaseFirestore.instance
+          .collection('users')
+          .doc(userDocId)
+          .collection('reminders')
+          .get(),
+    );
     var n = 0;
     for (final doc in snap.docs) {
       final data = doc.data();
@@ -402,9 +554,6 @@ class GoogleCalendarSyncService {
     if (!await isEnabled(userDocId)) return;
     if (!isOnOrAfterSyncMin(date)) return;
 
-    final token = await _accessToken(userDocId);
-    if (token == null) return;
-
     final payload = _eventPayload(
       title: title,
       notes: notes,
@@ -429,23 +578,26 @@ class GoogleCalendarSyncService {
             'https://www.googleapis.com/calendar/v3/calendars/primary/events',
           );
 
-    final res = oldEventId.isNotEmpty
-        ? await http.put(
-            uri,
-            headers: {
-              'Authorization': 'Bearer $token',
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode(payload),
-          )
-        : await http.post(
-            uri,
-            headers: {
-              'Authorization': 'Bearer $token',
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode(payload),
-          );
+    final res = await _authorizedRequest(
+      (token) => oldEventId.isNotEmpty
+          ? http.put(
+              uri,
+              headers: {
+                'Authorization': 'Bearer $token',
+                'Content-Type': 'application/json',
+              },
+              body: jsonEncode(payload),
+            )
+          : http.post(
+              uri,
+              headers: {
+                'Authorization': 'Bearer $token',
+                'Content-Type': 'application/json',
+              },
+              body: jsonEncode(payload),
+            ),
+      userDocId: userDocId,
+    );
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
       debugPrint('syncReminderToGoogle HTTP ${res.statusCode}: ${res.body}');
@@ -510,9 +662,6 @@ class GoogleCalendarSyncService {
     if (!await isEnabled(userDocId)) return false;
     if (!isOnOrAfterSyncMin(date)) return false;
 
-    final token = await _accessToken(userDocId);
-    if (token == null) return false;
-
     final uri = Uri.parse(
       'https://www.googleapis.com/calendar/v3/calendars/primary/events/${Uri.encodeComponent(eventId)}',
     );
@@ -525,13 +674,16 @@ class GoogleCalendarSyncService {
     );
 
     try {
-      final res = await http.put(
-        uri,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(payload),
+      final res = await _authorizedRequest(
+        (token) => http.put(
+          uri,
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode(payload),
+        ),
+        userDocId: userDocId,
       );
       if (res.statusCode < 200 || res.statusCode >= 300) {
         debugPrint('updateGoogleEventById HTTP ${res.statusCode}: ${res.body}');
@@ -552,14 +704,14 @@ class GoogleCalendarSyncService {
     if (userDocId.isEmpty || eventId.trim().isEmpty) return false;
     if (!await isEnabled(userDocId)) return false;
 
-    final token = await _accessToken(userDocId);
-    if (token == null) return false;
-
     final uri = Uri.parse(
       'https://www.googleapis.com/calendar/v3/calendars/primary/events/${Uri.encodeComponent(eventId)}',
     );
     try {
-      final res = await http.delete(uri, headers: {'Authorization': 'Bearer $token'});
+      final res = await _authorizedRequest(
+        (token) => http.delete(uri, headers: {'Authorization': 'Bearer $token'}),
+        userDocId: userDocId,
+      );
       return res.statusCode == 204 || res.statusCode == 200 || res.statusCode == 410;
     } catch (e) {
       debugPrint('deleteGoogleEventById: $e');

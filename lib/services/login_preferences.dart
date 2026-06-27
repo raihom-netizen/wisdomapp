@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 
 import 'app_session_cache.dart';
+import 'google_calendar_auth_helper.dart';
 import 'home_start_module_cache.dart';
 import 'offline_credentials_store.dart';
 import 'user_profile_startup_cache.dart';
@@ -19,6 +20,8 @@ const String _kLastOAuthProvider = 'last_oauth_provider';
 
 const String _kAccountSwitchPending = 'account_switch_pending';
 
+const String _kLastDisplayName = 'last_display_name_v1';
+
 
 
 /// Preferência: mostrar formulário de e-mail/senha na próxima abertura do login.
@@ -31,6 +34,8 @@ class LoginPreferences {
 
   static bool? _startupReturningUser;
 
+  static String? _startupLastDisplayName;
+
 
 
   /// Resultado síncrono após [warmUpForStartup] (cold start).
@@ -38,6 +43,8 @@ class LoginPreferences {
   static bool? get startupAccountSwitchPending => _startupAccountSwitchPending;
 
   static bool? get startupReturningUser => _startupReturningUser;
+
+  static String? get startupLastDisplayName => _startupLastDisplayName;
 
 
 
@@ -52,13 +59,17 @@ class LoginPreferences {
   /// Pré-carrega prefs + flag «returning user» antes do primeiro frame autenticado.
 
   static Future<void> warmUpForStartup() async {
-
-    if (_startupReturningUser != null) return;
-
     final prefs = await _prefsOrLoad();
+    _startupLastDisplayName = (prefs.getString(_kLastDisplayName) ?? '').trim();
+    if (_startupLastDisplayName!.isEmpty) _startupLastDisplayName = null;
+
+    if (_startupReturningUser != null) {
+      _startupAccountSwitchPending ??=
+          prefs.getBool(_kAccountSwitchPending) ?? false;
+      return;
+    }
 
     _startupAccountSwitchPending =
-
         prefs.getBool(_kAccountSwitchPending) ?? false;
 
     if (_startupAccountSwitchPending!) {
@@ -206,6 +217,8 @@ class LoginPreferences {
     await prefs.remove(_kLastOAuthProvider);
 
     await prefs.remove(_kLastLoginIdentifier);
+    await prefs.remove(_kLastDisplayName);
+    _startupLastDisplayName = null;
 
     await prefs.setBool(_kPreferEmailPassword, preferEmailForm);
 
@@ -214,6 +227,7 @@ class LoginPreferences {
     await AppSessionCache.clear();
     await UserProfileStartupCache.clear();
     await HomeStartModuleCache.clear();
+    await GoogleCalendarAuthHelper.clearCache();
 
     _startupAccountSwitchPending = true;
 
@@ -295,6 +309,24 @@ class LoginPreferences {
 
     return OfflineCredentialsStore.instance.hasStored();
 
+  }
+
+  static Future<void> setLastDisplayName(String name) async {
+    final clean = name.trim();
+    final prefs = await _prefsOrLoad();
+    if (clean.isEmpty) {
+      await prefs.remove(_kLastDisplayName);
+      _startupLastDisplayName = null;
+      return;
+    }
+    await prefs.setString(_kLastDisplayName, clean);
+    _startupLastDisplayName = clean;
+  }
+
+  static Future<String> getLastDisplayName() async {
+    if (_startupLastDisplayName != null) return _startupLastDisplayName!;
+    final prefs = await _prefsOrLoad();
+    return (prefs.getString(_kLastDisplayName) ?? '').trim();
   }
 
 }

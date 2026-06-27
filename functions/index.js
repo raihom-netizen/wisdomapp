@@ -2125,7 +2125,11 @@ exports.ctUploadReceiptToStorage = onCall(async (req) => {
   };
 
   try {
-    await admin.firestore().doc(txPath).set({ receipt }, { merge: true });
+    await admin.firestore().doc(txPath).set({
+      receipt,
+      hasReceipt: true,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
   } catch (e) {
     console.error("ctUploadReceiptToStorage firestore set error:", e);
     throw new functions.https.HttpsError(
@@ -9579,6 +9583,9 @@ exports.ctFinanceGetTransferPair = onCall({ region: "us-central1", memory: "256M
 // Dicas financeiras — push agendado (coleção `financial_tips`, mesmas condições que o app).
 const { financialTipsInsightPushScheduled } = require("./financialTipsInsightPushScheduled");
 exports.financialTipsInsightPushScheduled = financialTipsInsightPushScheduled;
+
+const { courseVideosExpiryCleanupScheduled } = require("./courseVideosExpiryCleanup");
+exports.courseVideosExpiryCleanupScheduled = courseVideosExpiryCleanupScheduled;
 
 const { generateFinancialTipWithAI } = require("./generateFinancialTipAI");
 exports.ctGenerateFinancialTipWithAI = onCall(

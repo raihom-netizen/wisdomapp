@@ -2,7 +2,9 @@
 class AppStrings {
   AppStrings._();
 
-  // UX e descoberta
+  /// Retorna "1 item" ou "N itens" (pluralização PT-BR).
+  static String itemCountLabel(int count) =>
+      count == 1 ? '1 item' : '$count itens';
   static const String sheetSelectionHint =
       'Toque em "Selecionar" para marcar vários e excluir em lote.';
   static const String refreshUpdated = 'Atualizado';

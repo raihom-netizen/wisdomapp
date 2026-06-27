@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -11,6 +10,7 @@ import '../services/functions_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/firestore_user_doc_id.dart';
 import '../utils/finance_transactions_hub.dart';
+import '../utils/receipt_attachment_utils.dart';
 import 'finance_premium_ui.dart';
 
 /// Resultado da confirmação de pagamento/recebimento.
@@ -70,8 +70,6 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentSheet({
   Uint8List? receiptBytes;
   var receiptName = '';
   String? receiptMime;
-  const maxBytes = 5 * 1024 * 1024;
-  const allowedExt = ['pdf', 'png', 'jpg', 'jpeg'];
 
   final confirmTitle = isIncome ? 'Confirmar recebimento' : 'Confirmar pagamento';
   final confirmDateLabel = isIncome ? 'Data do recebimento' : 'Data do pagamento';
@@ -214,35 +212,12 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentSheet({
                       child: InkWell(
                         borderRadius: BorderRadius.circular(18),
                         onTap: () async {
-                          final pick = await FilePicker.platform.pickFiles(withData: true);
-                          if (pick == null || pick.files.isEmpty) return;
-                          final f = pick.files.first;
-                          final bytes = f.bytes ?? Uint8List(0);
-                          var ext = (f.extension ?? '').toLowerCase();
-                          if (ext == 'jpeg') ext = 'jpg';
-                          if (!allowedExt.contains(ext)) {
-                            if (ctx.mounted) {
-                              ScaffoldMessenger.of(ctx).showSnackBar(
-                                const SnackBar(content: Text('Use PDF, PNG ou JPG.')),
-                              );
-                            }
-                            return;
-                          }
-                          if (bytes.lengthInBytes > maxBytes) {
-                            if (ctx.mounted) {
-                              ScaffoldMessenger.of(ctx).showSnackBar(
-                                const SnackBar(content: Text('Arquivo grande. Limite 5 MB.')),
-                              );
-                            }
-                            return;
-                          }
-                          final mime = ext == 'pdf'
-                              ? 'application/pdf'
-                              : (ext == 'png' ? 'image/png' : 'image/jpeg');
+                          final picked = await ReceiptAttachmentUtils.pickValidated(ctx);
+                          if (picked == null) return;
                           setModalState(() {
-                            receiptBytes = bytes;
-                            receiptName = f.name;
-                            receiptMime = mime;
+                            receiptBytes = picked.bytes;
+                            receiptName = picked.name;
+                            receiptMime = picked.mime;
                           });
                         },
                         child: Ink(

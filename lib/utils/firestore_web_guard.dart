@@ -105,16 +105,26 @@ class FirestoreWebGuard {
     }
   }
 
+  static bool _googleSignInFlowActive = false;
+
   /// Fluxo completo login Google na Web (popup + perfil Firestore).
   static Future<T> runWebGoogleSignInFlow<T>(Future<T> Function() fn) async {
     if (!kIsWeb) return fn();
+    if (_googleSignInFlowActive) {
+      return fn();
+    }
+    _googleSignInFlowActive = true;
     await prepareBeforeWebSignIn();
     try {
-      return await runWithWebRecovery(fn);
+      final result = await runWithWebRecovery(fn);
+      await stabilizeAfterWebSignIn();
+      return result;
     } finally {
+      _googleSignInFlowActive = false;
       try {
         await FirebaseFirestore.instance.enableNetwork();
       } catch (_) {}
+      await stabilizeAfterWebSignIn();
     }
   }
 }

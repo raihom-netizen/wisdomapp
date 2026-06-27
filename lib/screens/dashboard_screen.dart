@@ -4143,6 +4143,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             final total = FinanceAccountBalanceUtils.totalFaturaEmAberto(faturaByCard);
             final count = FinanceAccountBalanceUtils.countPendingExpensesOnCreditCards(docs, ccIds);
             final cards = FinanceAccountBalanceUtils.creditCardProducts(accounts);
+            if (cards.isEmpty) return const SizedBox.shrink();
             return FinanceFaturaEmAbertoBand(
               totalFatura: total,
               lancamentoCount: count,

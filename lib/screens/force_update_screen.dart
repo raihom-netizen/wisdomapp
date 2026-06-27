@@ -9,7 +9,7 @@ import '../services/version_check_service.dart';
 import '../constants/app_strings.dart';
 
 /// Tela bloqueante quando há atualização obrigatória (forceUpdate).
-/// Web: recarrega automaticamente em 3s + botão manual. Mobile: abre loja/downloads.
+/// Web: não bloqueia mais a sessão (banner flutuante). Mobile: countdown + loja.
 class ForceUpdateScreen extends StatefulWidget {
   const ForceUpdateScreen({super.key});
 
@@ -25,7 +25,8 @@ class _ForceUpdateScreenState extends State<ForceUpdateScreen> {
   @override
   void initState() {
     super.initState();
-    if (kIsWeb) {
+    // Web: só recarrega quando o usuário tocar em "Atualizar" — evita reload surpresa.
+    if (!kIsWeb) {
       _startAutoReload();
     }
   }

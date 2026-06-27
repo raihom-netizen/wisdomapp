@@ -20,6 +20,9 @@ class FinanceAccountVisual {
     this.badgeColor = Colors.white24,
     this.badgeTextColor = Colors.white,
   });
+
+  /// Cor principal (primeiro tom do gradiente) para chips, bordas e ícones.
+  Color get color => gradient.first;
 }
 
 /// Cores e rótulos distintos: conta corrente/poupança (débito) vs cartão de crédito.

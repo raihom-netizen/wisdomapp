@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import '../theme/app_colors.dart';
+import '../constants/app_strings.dart';
 import '../services/user_restore_service.dart';
 import '../utils/date_utils_cordex.dart';
 
@@ -217,7 +218,7 @@ class _RestoreDataScreenState extends State<RestoreDataScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(_collectionLabel(e.key), style: const TextStyle(fontSize: 13)),
-                            Text('${e.value} itens', style: TextStyle(fontSize: 13, color: AppColors.textMuted)),
+                            Text(AppStrings.itemCountLabel(e.value), style: TextStyle(fontSize: 13, color: AppColors.textMuted)),
                           ],
                         ),
                       )),

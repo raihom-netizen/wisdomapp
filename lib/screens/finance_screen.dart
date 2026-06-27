@@ -824,6 +824,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
         final ccIds = _creditCardAccountIds;
         final count = FinanceAccountBalanceUtils.countPendingExpensesOnCreditCards(docs, ccIds);
         final cards = FinanceAccountBalanceUtils.creditCardProducts(_financeAccounts);
+        if (cards.isEmpty) return const SizedBox.shrink();
         return FinanceFaturaEmAbertoBand(
           totalFatura: total,
           lancamentoCount: count,
