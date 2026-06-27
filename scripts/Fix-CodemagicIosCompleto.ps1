@@ -53,9 +53,14 @@ if (-not $SkipGitPush) {
     Write-Host "GitHub OK: $repo (main + codemagic branches)" -ForegroundColor Green
 }
 
-if ($SkipBuild) { exit 0 }
-
-$token = Get-CmToken -Override $ApiToken
+if (-not $SkipBuild) {
+    Write-Host "`n[3/3] Disparar build CodeMagic..." -ForegroundColor Cyan
+    $nodeScript = Join-Path $root "scripts\trigger-codemagic-build.js"
+    if (Test-Path $nodeScript) {
+        & node $nodeScript
+        if ($LASTEXITCODE -eq 0) { Write-Host "`nConcluido." -ForegroundColor Green; exit 0 }
+    }
+    $token = Get-CmToken -Override $ApiToken
 if (-not $token) {
     Write-Host ""
     Write-Host "API token CodeMagic necessario (uma vez):" -ForegroundColor Yellow

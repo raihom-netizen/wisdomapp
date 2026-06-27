@@ -122,7 +122,16 @@ if (-not $WebOnly) {
 
 if (-not $NoCodemagicPush -and -not $WebOnly) {
   Write-Host "`n=== 7/8 CodeMagic Git (branch iOS) ===" -ForegroundColor Cyan
+  git remote set-url origin "https://github.com/raihom-netizen/wisdomapp.git" 2>$null | Out-Null
   & (Join-Path $root "scripts\push-codemagic-ready.ps1") -Root $root
+  Write-Host "`n=== 7b/8 CodeMagic build trigger ===" -ForegroundColor Cyan
+  $trigger = Join-Path $root "scripts\trigger-codemagic-build.js"
+  if (Test-Path $trigger) {
+    & node $trigger 2>&1 | ForEach-Object { Write-Host $_ }
+    if ($LASTEXITCODE -ne 0) {
+      Write-Host "  [CodeMagic] App ARCHIVED ou sem API token — rode Fix-CodemagicIos.bat ou desarquive na UI." -ForegroundColor Yellow
+    }
+  }
 }
 
 Write-Host "`n=== $(if ($NoCodemagicPush -or $WebOnly) { '7/7' } else { '8/8' }) Concluido ===" -ForegroundColor Green

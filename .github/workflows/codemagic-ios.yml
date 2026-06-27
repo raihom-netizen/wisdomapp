@@ -17,26 +17,7 @@ jobs:
           CM_BRANCH: ${{ github.ref_name }}
           CM_SHA: ${{ github.sha }}
         run: |
-          set -e
-          payload=$(cat <<EOF
-          {
-            "ref": "refs/heads/${CM_BRANCH}",
-            "repository": {
-              "name": "wisdomapp",
-              "full_name": "raihom-netizen/wisdomapp",
-              "html_url": "https://github.com/raihom-netizen/wisdomapp",
-              "default_branch": "main",
-              "private": true
-            },
-            "pusher": { "name": "github-actions" },
-            "head_commit": {
-              "id": "${CM_SHA}",
-              "message": "trigger CodeMagic iOS",
-              "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            }
-          }
-          EOF
-          )
+          payload="{\"ref\":\"refs/heads/${CM_BRANCH}\",\"repository\":{\"name\":\"wisdomapp\",\"full_name\":\"raihom-netizen/wisdomapp\",\"html_url\":\"https://github.com/raihom-netizen/wisdomapp\",\"default_branch\":\"main\",\"private\":true},\"pusher\":{\"name\":\"github-actions\"},\"head_commit\":{\"id\":\"${CM_SHA}\",\"message\":\"trigger CodeMagic iOS\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}}"
           code=$(curl -sS -o /tmp/cm_resp.txt -w "%{http_code}" \
             -X POST "https://api.codemagic.io/hooks/${CM_APP_ID}" \
             -H "Content-Type: application/json" \
@@ -44,16 +25,10 @@ jobs:
           echo "CodeMagic webhook HTTP $code"
           cat /tmp/cm_resp.txt || true
           if [ "$code" = "404" ]; then
-            echo "::warning::App ARCHIVED no CodeMagic — desarquive ou use API token em .codemagic-token"
+            echo "::warning::App wisdomapp ARCHIVED no CodeMagic. Desarquive ou configure CODEMAGIC_API_TOKEN no GitHub Secrets."
+            exit 0
           fi
-
-      - name: Build via API (se CODEMAGIC_API_TOKEN configurado)
-        if: ${{ secrets.CODEMAGIC_API_TOKEN != '' }}
-        env:
-          CM_TOKEN: ${{ secrets.CODEMAGIC_API_TOKEN }}
-          CM_BRANCH: ${{ github.ref_name }}
-        run: |
-          curl -sS -X POST "https://api.codemagic.io/builds" \
-            -H "Content-Type: application/json" \
-            -H "x-auth-token: ${CM_TOKEN}" \
-            -d "{\"appId\":\"6a3fe39cfbfdda27bec38156\",\"workflowId\":\"ios-workflow\",\"branch\":\"${CM_BRANCH}\",\"environment\":{\"groups\":[\"appstore_credentials\",\"firebase_ipa_upload\"]}}"
+          if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
+            echo "::warning::Webhook CodeMagic retornou $code"
+            exit 0
+          fi
