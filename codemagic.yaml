@@ -250,13 +250,36 @@ workflows:
         script: |
           set -e
           IPA_DIR="build/ios/ipa"
-          OLD=$(find "$IPA_DIR" -maxdepth 1 -name "*.ipa" | head -1)
-          if [ -z "$OLD" ]; then echo "Nenhum IPA em $IPA_DIR"; exit 1; fi
           NEW="$IPA_DIR/WISDOMAPP.ipa"
-          rm -f "$NEW"
-          mv "$OLD" "$NEW"
-          echo "IPA renomeado: $NEW"
-          ls -la "$IPA_DIR"
+          if [ ! -d "$IPA_DIR" ]; then
+            echo "Pasta $IPA_DIR inexistente. Procurando .ipa em build/ios..."
+            find build/ios -name "*.ipa" -print 2>/dev/null || true
+            exit 1
+          fi
+          echo "Conteudo de $IPA_DIR:"
+          ls -la "$IPA_DIR" || true
+          if [ -f "$NEW" ]; then
+            echo "IPA ja correto: $NEW"
+            exit 0
+          fi
+          for LEGACY in controle_total_premium.ipa Runner.ipa wisdomapp.ipa; do
+            if [ -f "$IPA_DIR/$LEGACY" ]; then
+              mv "$IPA_DIR/$LEGACY" "$NEW"
+              echo "Renomeado $LEGACY -> WISDOMAPP.ipa"
+              ls -la "$IPA_DIR"
+              exit 0
+            fi
+          done
+          OLD=$(find "$IPA_DIR" -maxdepth 1 -name "*.ipa" ! -name "WISDOMAPP.ipa" 2>/dev/null | head -1)
+          if [ -n "$OLD" ] && [ -f "$OLD" ]; then
+            mv "$OLD" "$NEW"
+            echo "Renomeado $OLD -> $NEW"
+            ls -la "$IPA_DIR"
+            exit 0
+          fi
+          echo "Nenhum IPA em $IPA_DIR"
+          find build/ios -name "*.ipa" -print 2>/dev/null || true
+          exit 1
       - name: Subir IPA para o site (Firebase Storage)
         script: |
           IPA_PATH="build/ios/ipa"
@@ -277,6 +300,7 @@ workflows:
           fi
     artifacts:
       - build/ios/ipa/WISDOMAPP.ipa
+      - build/ios/ipa/*.ipa
     publishing:
       app_store_connect:
         auth: integration
