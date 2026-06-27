@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="app_name">WISDOMAPP</string>
     <!-- Widget da tela inicial: Escalas do mês. -->
-    <string name="widget_scales_label">Controle Total — Escalas</string>
+    <string name="widget_scales_label">WISDOMAPP — Escalas</string>
     <string name="widget_scales_description">Calendário do mês com seus plantões e próximo evento. Toque para abrir Escalas.</string>
 </resources>

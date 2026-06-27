@@ -2,7 +2,7 @@
 <resources>
     <!-- Fundo azul ao abrir (evita tela branca no Android; combina com "Carregando...") -->
     <color name="launch_bg">#FF061428</color>
-    <!-- Ícone/accent das notificações FCM (laranja Controle Total) -->
-    <color name="notification_accent">#FFEA580C</color>
-	<color name="ic_launcher_background">#0A1F56</color>
+    <!-- Ícone/accent das notificações FCM (dourado WISDOMAPP) -->
+    <color name="notification_accent">#FFD4AF37</color>
+	<color name="ic_launcher_background">#000000</color>
 </resources>
