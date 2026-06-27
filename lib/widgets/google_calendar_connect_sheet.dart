@@ -44,7 +44,15 @@ class _GoogleCalendarConnectSheetState extends State<GoogleCalendarConnectSheet>
   bool _busy = false;
   String? _error;
 
-  Future<void> _connect() async {
+  @override
+  void initState() {
+    super.initState();
+    if (!widget.forceNewCredentials) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _connect(silentFirst: true));
+    }
+  }
+
+  Future<void> _connect({bool silentFirst = false}) async {
     if (_busy || widget.userDocId.isEmpty) return;
     setState(() {
       _busy = true;
@@ -54,11 +62,22 @@ class _GoogleCalendarConnectSheetState extends State<GoogleCalendarConnectSheet>
       final result = await GoogleCalendarSyncService.enable(
         widget.userDocId,
         forceNewCredentials: widget.forceNewCredentials,
-        skipSilent: true,
+        skipSilent: !silentFirst && !widget.forceNewCredentials,
+      ).timeout(
+        const Duration(seconds: 120),
+        onTimeout: () => GoogleCalendarEnableResult.fail(
+          'Tempo esgotado ao conectar. Feche e tente de novo, ou verifique se o popup do Google foi bloqueado.',
+        ),
       );
       if (!mounted) return;
       if (result.ok || result.cancelled) {
         Navigator.of(context).pop(result);
+        return;
+      }
+      if (result.needsInteractiveAuth &&
+          silentFirst &&
+          !widget.forceNewCredentials) {
+        await _connect(silentFirst: false);
         return;
       }
       setState(() {
@@ -178,7 +197,7 @@ class _GoogleCalendarConnectSheetState extends State<GoogleCalendarConnectSheet>
               ],
               const SizedBox(height: 18),
               FilledButton.icon(
-                onPressed: _busy ? null : _connect,
+                onPressed: _busy ? null : () => _connect(silentFirst: false),
                 icon: _busy
                     ? const SizedBox(
                         width: 18,

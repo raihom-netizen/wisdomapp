@@ -3488,9 +3488,6 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      _buildModernMesAbas(isNarrow: isNarrow),
-                      _buildMesGridModerno(docs, financeByDay),
-                      const SizedBox(height: 12),
                       _buildRodapeFeriadosMes(
                         docs,
                         financeByDay: financeByDay,
@@ -3509,8 +3506,10 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                           incomePending: selectedIncomePending,
                           expensePending: selectedExpensePending,
                         ),
-                        const SizedBox(height: 12),
                       ],
+                      const SizedBox(height: 12),
+                      _buildModernMesAbas(isNarrow: isNarrow),
+                      _buildMesGridModerno(docs, financeByDay),
                       const SizedBox(height: 8),
                       if (_googleEnabled)
                         Text(

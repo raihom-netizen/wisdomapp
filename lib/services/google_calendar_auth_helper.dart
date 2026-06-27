@@ -302,8 +302,8 @@ class GoogleCalendarAuthHelper {  GoogleCalendarAuthHelper._();
           cred = await auth.signInWithPopup(provider);
         }
 
-        final oauth = GoogleAuthProvider.credentialFromResult(cred);
-        final token = oauth?.accessToken;
+        final oauthCred = cred.credential;
+        final token = oauthCred is OAuthCredential ? oauthCred.accessToken : null;
         if (token == null || token.isEmpty) {
           return const GoogleCalendarAuthResult(
             errorMessage: 'Não foi possível obter token do Google Calendar.',
@@ -334,13 +334,6 @@ class GoogleCalendarAuthHelper {  GoogleCalendarAuthHelper._();
     String? preferredEmail,
   }) async {
     try {
-      if (kIsWeb && !isApplePrimaryLogin()) {
-        final fb = await _requestWebFirebaseCalendarAuth(
-          preferredEmail: preferredEmail,
-        );
-        if (fb.ok || fb.cancelled) return fb;
-      }
-
       final gs = _calendarSignIn(
         webClientId: kIsWeb ? GoogleOAuthConfig.webClientId : null,
       );
@@ -420,4 +413,82 @@ class GoogleCalendarAuthHelper {  GoogleCalendarAuthHelper._();
       final granted = await gs.requestScopes([_calendarScope]);
       if (!granted) {
         return const GoogleCalendarAuthResult(
-          errorMessage: 'Permiss�
+          errorMessage: 'Permissão do Google Calendar negada.',
+        );
+      }
+
+      final auth = await account.authentication;
+      final token = auth.accessToken;
+      if (token == null || token.isEmpty) {
+        return const GoogleCalendarAuthResult(
+          errorMessage: 'Não foi possível obter token do Google Calendar.',
+        );
+      }
+
+      await cacheToken(token, email: account.email);
+      return GoogleCalendarAuthResult(
+        accessToken: token,
+        email: account.email,
+      );
+    } catch (e, st) {
+      debugPrint('GoogleCalendarAuthHelper mobile interactive: $e\n$st');
+      if (_userCancelled(e)) {
+        return const GoogleCalendarAuthResult(cancelled: true);
+      }
+      return GoogleCalendarAuthResult(errorMessage: _friendlyError(e));
+    }
+  }
+
+  static Future<GoogleCalendarAuthResult> _requestMobileSilent({
+    String? preferredEmail,
+  }) async {
+    try {
+      final gs = _calendarSignIn();
+      var account = await gs.signInSilently(suppressErrors: true);
+      if (account == null) {
+        return const GoogleCalendarAuthResult(
+          errorMessage: 'Reative o Calendário Google nas configurações.',
+        );
+      }
+      if (preferredEmail != null &&
+          preferredEmail.isNotEmpty &&
+          account.email.trim().toLowerCase() != preferredEmail.toLowerCase()) {
+        return const GoogleCalendarAuthResult(
+          errorMessage: 'Conta Google diferente da sessão.',
+        );
+      }
+
+      final hasScope = await gs.canAccessScopes([_calendarScope]);
+      if (!hasScope) {
+        return const GoogleCalendarAuthResult(
+          errorMessage: 'Permissão do calendário revogada. Ative novamente.',
+        );
+      }
+
+      final auth = await account.authentication;
+      final token = auth.accessToken;
+      if (token == null || token.isEmpty) {
+        return const GoogleCalendarAuthResult(
+          errorMessage: 'Token expirado. Ative novamente o Calendário Google.',
+        );
+      }
+
+      await cacheToken(token, email: account.email);
+      return GoogleCalendarAuthResult(
+        accessToken: token,
+        email: account.email,
+      );
+    } catch (e, st) {
+      debugPrint('GoogleCalendarAuthHelper mobile silent: $e\n$st');
+      return GoogleCalendarAuthResult(errorMessage: _friendlyError(e));
+    }
+  }
+
+  /// Login principal foi Apple — pode usar Gmail diferente para agenda.
+  static bool isApplePrimaryLogin() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return false;
+    final providers = user.providerData.map((p) => p.providerId).toSet();
+    return providers.contains('apple.com') && !providers.contains('google.com');
+  }
+}
