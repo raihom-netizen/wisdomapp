@@ -246,12 +246,24 @@ workflows:
           grep "^version:" pubspec.yaml
       - name: Build iOS IPA (instalável)
         script: flutter build ipa --release --no-tree-shake-icons
+      - name: Renomear IPA para WISDOMAPP (nome pubspec legado controle_total_premium)
+        script: |
+          set -e
+          IPA_DIR="build/ios/ipa"
+          OLD=$(find "$IPA_DIR" -maxdepth 1 -name "*.ipa" | head -1)
+          if [ -z "$OLD" ]; then echo "Nenhum IPA em $IPA_DIR"; exit 1; fi
+          NEW="$IPA_DIR/WISDOMAPP.ipa"
+          rm -f "$NEW"
+          mv "$OLD" "$NEW"
+          echo "IPA renomeado: $NEW"
+          ls -la "$IPA_DIR"
       - name: Subir IPA para o site (Firebase Storage)
         script: |
           IPA_PATH="build/ios/ipa"
           if [ ! -d "$IPA_PATH" ]; then echo "IPA não encontrado"; exit 1; fi
-          IPA_FILE=$(find "$IPA_PATH" -name "*.ipa" | head -1)
-          if [ -z "$IPA_FILE" ]; then echo "Nenhum .ipa em $IPA_PATH"; exit 1; fi
+          IPA_FILE="$IPA_PATH/WISDOMAPP.ipa"
+          if [ ! -f "$IPA_FILE" ]; then IPA_FILE=$(find "$IPA_PATH" -name "*.ipa" | head -1); fi
+          if [ -z "$IPA_FILE" ] || [ ! -f "$IPA_FILE" ]; then echo "Nenhum .ipa em $IPA_PATH"; exit 1; fi
           IOS_URL="https://firebasestorage.googleapis.com/v0/b/wisdomapp-b9e98.firebasestorage.app/o/app%2Fipa%2FWISDOMAPP_app.ipa?alt=media"
           if [ -n "$FIREBASE_SERVICE_ACCOUNT_JSON" ]; then
             if node scripts/upload_ipa_to_storage.js "$IPA_FILE"; then
@@ -264,7 +276,7 @@ workflows:
             echo "Defina firebase_ipa_upload (FIREBASE_SERVICE_ACCOUNT_JSON) para subir IPA ao site."
           fi
     artifacts:
-      - build/ios/ipa/*.ipa
+      - build/ios/ipa/WISDOMAPP.ipa
     publishing:
       app_store_connect:
         auth: integration
