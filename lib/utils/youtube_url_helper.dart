@@ -45,7 +45,7 @@ class YoutubeUrlHelper {
     final query = params.entries
         .map((e) => '${e.key}=${Uri.encodeComponent(e.value)}')
         .join('&');
-    return 'https://www.youtube.com/embed/$videoId?$query';
+    return 'https://www.youtube-nocookie.com/embed/$videoId?$query';
   }
 
   /// Thumbnails em cascata (Full HD quando disponível no YouTube).

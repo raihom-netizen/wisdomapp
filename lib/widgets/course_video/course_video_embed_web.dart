@@ -6,6 +6,7 @@ import 'dart:html' as html;
 import 'package:flutter/material.dart';
 
 import '../../utils/youtube_url_helper.dart';
+import 'course_media_view_policy.dart';
 
 /// YouTube / MP4 na Web — iframe e `<video>` nativos (sem WebView).
 class CourseVideoEmbed extends StatefulWidget {
@@ -56,8 +57,7 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
           ..allowFullscreen = true
           ..setAttribute(
             'allow',
-            'accelerometer; autoplay; clipboard-write; encrypted-media; '
-            'gyroscope; picture-in-picture; web-share; fullscreen',
+            'accelerometer; autoplay; encrypted-media; gyroscope; fullscreen',
           );
         return iframe;
       }
@@ -67,11 +67,15 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
           ..controls = true
           ..autoplay = widget.autoplay
           ..setAttribute('playsinline', 'true')
+          ..setAttribute('controlsList', CourseMediaViewPolicy.videoControlsList)
+          ..setAttribute('disablePictureInPicture', 'true')
           ..preload = 'auto'
           ..style.width = '100%'
           ..style.height = '100%'
           ..style.objectFit = 'contain'
           ..style.backgroundColor = '#000';
+        video.onContextMenu.listen((e) => e.preventDefault());
+        video.onDragStart.listen((e) => e.preventDefault());
         return video;
       }
       return html.DivElement()
@@ -79,7 +83,9 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
         ..text = 'Vídeo indisponível';
     });
     _registered = true;
-    if (mounted) setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override

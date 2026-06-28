@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../utils/course_media_url_resolver.dart';
 import '../utils/course_thumb_resolver.dart';
+import 'course_video/course_photo_lightbox.dart';
+import 'course_video/course_protected_image.dart';
 
 /// Preview de imagem — imagem inteira visível (contain), fundo escuro, alta qualidade.
 class CourseImagePreview extends StatelessWidget {
@@ -105,6 +107,9 @@ class CoursePhotoGallery extends StatefulWidget {
     this.fit = BoxFit.contain,
     this.borderRadius = BorderRadius.zero,
     this.showIndicators = true,
+    this.allowExpand = true,
+    this.title,
+    this.accent = const Color(0xFF2563EB),
   });
 
   final Map<String, dynamic> data;
@@ -112,16 +117,24 @@ class CoursePhotoGallery extends StatefulWidget {
   final BoxFit fit;
   final BorderRadius borderRadius;
   final bool showIndicators;
+  final bool allowExpand;
+  final String? title;
+  final Color accent;
 
   @override
   State<CoursePhotoGallery> createState() => _CoursePhotoGalleryState();
 }
 
-class _CoursePhotoGalleryState extends State<CoursePhotoGallery> {
+class _CoursePhotoGalleryState extends State<CoursePhotoGallery>
+    with AutomaticKeepAliveClientMixin {
   final PageController _pageCtrl = PageController();
   List<String> _urls = const [];
   bool _loading = true;
   int _index = 0;
+  String? _loadedDocId;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -132,32 +145,83 @@ class _CoursePhotoGalleryState extends State<CoursePhotoGallery> {
   @override
   void didUpdateWidget(covariant CoursePhotoGallery oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.data != widget.data) _load();
+    final newId = widget.data['id']?.toString() ?? '';
+    if (newId != _loadedDocId) _load();
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
-    final docId = widget.data['id']?.toString();
+    final docId = widget.data['id']?.toString() ?? '';
+    if (!_loading && docId.isNotEmpty && docId == _loadedDocId && _urls.isNotEmpty) {
+      return;
+    }
+    if (mounted) setState(() => _loading = true);
     final urls = await CourseMediaUrlResolver.resolveImageUrls(
       widget.data,
-      docId: docId,
+      docId: docId.isEmpty ? null : docId,
     );
     if (!mounted) return;
     setState(() {
       _urls = urls;
       _loading = false;
       _index = 0;
+      _loadedDocId = docId.isEmpty ? null : docId;
     });
   }
 
-  @override
-  void dispose() {
-    _pageCtrl.dispose();
-    super.dispose();
+  void _openExpanded([int? atIndex]) {
+    if (!widget.allowExpand || _urls.isEmpty) return;
+    CoursePhotoLightbox.open(
+      context,
+      urls: _urls,
+      initialIndex: atIndex ?? _index,
+      title: widget.title ?? (widget.data['title'] ?? '').toString(),
+      accent: widget.accent,
+    );
+  }
+
+  Widget _wrapExpandable(Widget child) {
+    if (!widget.allowExpand) return child;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        GestureDetector(onTap: () => _openExpanded(), child: child),
+        Positioned(
+          right: 10,
+          bottom: 10,
+          child: Material(
+            color: Colors.black.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(999),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: () => _openExpanded(),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.zoom_out_map_rounded, color: Colors.white, size: 16),
+                    SizedBox(width: 5),
+                    Text(
+                      'Ampliar',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     if (_loading) {
       return SizedBox(
         height: widget.height,
@@ -201,7 +265,7 @@ class _CoursePhotoGalleryState extends State<CoursePhotoGallery> {
         borderRadius: widget.borderRadius,
         child: SizedBox(
           height: widget.height,
-          child: _networkImage(_urls.first),
+          child: _wrapExpandable(_networkImage(_urls.first)),
         ),
       );
     }
@@ -210,86 +274,87 @@ class _CoursePhotoGalleryState extends State<CoursePhotoGallery> {
       borderRadius: widget.borderRadius,
       child: SizedBox(
         height: widget.height,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            PageView.builder(
-              controller: _pageCtrl,
-              itemCount: _urls.length,
-              onPageChanged: (i) => setState(() => _index = i),
-              itemBuilder: (_, i) => _networkImage(_urls[i]),
-            ),
-            if (widget.showIndicators) ...[
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 10,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(_urls.length, (i) {
-                    final active = i == _index;
-                    return AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      margin: const EdgeInsets.symmetric(horizontal: 3),
-                      width: active ? 18 : 7,
-                      height: 7,
-                      decoration: BoxDecoration(
-                        color: active
-                            ? Colors.white
-                            : Colors.white.withValues(alpha: 0.45),
-                        borderRadius: BorderRadius.circular(99),
-                      ),
-                    );
-                  }),
-                ),
+        child: _wrapExpandable(
+          Stack(
+            fit: StackFit.expand,
+            children: [
+              PageView.builder(
+                controller: _pageCtrl,
+                itemCount: _urls.length,
+                onPageChanged: (i) => setState(() => _index = i),
+                itemBuilder: (_, i) => _networkImage(_urls[i]),
               ),
-              Positioned(
-                top: 10,
-                right: 10,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.45),
-                    borderRadius: BorderRadius.circular(999),
+              if (widget.showIndicators) ...[
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 10,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(_urls.length, (i) {
+                      final active = i == _index;
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        width: active ? 18 : 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                          color: active
+                              ? Colors.white
+                              : Colors.white.withValues(alpha: 0.45),
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                      );
+                    }),
                   ),
-                  child: Text(
-                    '${_index + 1}/${_urls.length}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
+                ),
+                Positioned(
+                  top: 10,
+                  right: 10,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      '${_index + 1}/${_urls.length}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
   }
 
+  @override
+  void dispose() {
+    _pageCtrl.dispose();
+    super.dispose();
+  }
+
   Widget _networkImage(String url) {
     return ColoredBox(
       color: const Color(0xFF0F172A),
-      child: Image.network(
-        url,
+      child: CourseProtectedNetworkImage(
+        url: url,
         fit: widget.fit,
-        width: double.infinity,
-        height: double.infinity,
-        filterQuality: FilterQuality.high,
-        gaplessPlayback: true,
-        loadingBuilder: (_, child, progress) {
-          if (progress == null) return child;
-          return const Center(
-            child: SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(strokeWidth: 2.5),
-            ),
-          );
-        },
-        errorBuilder: (_, __, ___) => Center(
+        loading: const Center(
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
+          ),
+        ),
+        error: Center(
           child: Icon(
             Icons.broken_image_outlined,
             size: 36,

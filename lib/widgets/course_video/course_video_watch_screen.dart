@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../../utils/course_media_url_resolver.dart';
@@ -179,35 +180,46 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
             ],
           ),
           SliverToBoxAdapter(
-            child: AspectRatio(
-              aspectRatio: 16 / 9,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  CourseVideoEmbed(
-                    key: ValueKey('${_youtubeId ?? ''}|${_mp4Url ?? ''}'),
-                    youtubeVideoId: _youtubeId,
-                    mp4Url: _mp4Url,
-                    autoplay: true,
-                  ),
-                  Positioned(
-                    right: 8,
-                    bottom: 8,
-                    child: Material(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(999),
-                      child: InkWell(
-                        onTap: _openFullscreen,
-                        borderRadius: BorderRadius.circular(999),
-                        child: const Padding(
-                          padding: EdgeInsets.all(8),
-                          child: Icon(Icons.fullscreen_rounded, color: Colors.white, size: 22),
-                        ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final w = MediaQuery.sizeOf(context).width;
+                final maxW = kIsWeb ? (w > 960 ? 720.0 : w) : w;
+                return Center(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: maxW),
+                    child: AspectRatio(
+                      aspectRatio: 16 / 9,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          CourseVideoEmbed(
+                            key: ValueKey('${_youtubeId ?? ''}|${_mp4Url ?? ''}'),
+                            youtubeVideoId: _youtubeId,
+                            mp4Url: _mp4Url,
+                            autoplay: true,
+                          ),
+                          Positioned(
+                            right: 8,
+                            bottom: 8,
+                            child: Material(
+                              color: Colors.black54,
+                              borderRadius: BorderRadius.circular(999),
+                              child: InkWell(
+                                onTap: _openFullscreen,
+                                borderRadius: BorderRadius.circular(999),
+                                child: const Padding(
+                                  padding: EdgeInsets.all(8),
+                                  child: Icon(Icons.fullscreen_rounded, color: Colors.white, size: 22),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                ],
-              ),
+                );
+              },
             ),
           ),
           SliverToBoxAdapter(
@@ -291,39 +303,24 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
                     ],
                   ),
                   const SizedBox(height: 14),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        _ActionPill(
-                          icon: Icons.thumb_up_outlined,
-                          label: 'Gostei',
-                          onTap: () {},
-                        ),
-                        const SizedBox(width: 8),
-                        _ActionPill(
-                          icon: Icons.share_outlined,
-                          label: 'Partilhar',
-                          onTap: () {},
-                        ),
-                        const SizedBox(width: 8),
-                        _ActionPill(
-                          icon: Icons.hd_rounded,
-                          label: '4K / HD',
-                          onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Use o ícone ⚙ no player para escolher a qualidade (até 4K no YouTube).',
-                                ),
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                          },
-                        ),
-                      ],
+                  if (_youtubeId != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          Icon(Icons.hd_rounded, size: 18, color: _accent),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Qualidade até 4K no player',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
                   if (_description.isNotEmpty) ...[
                     const SizedBox(height: 14),
                     GestureDetector(
@@ -429,44 +426,6 @@ class _CourseVideoFullscreenPage extends StatelessWidget {
               mp4Url: mp4Url,
               autoplay: true,
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ActionPill extends StatelessWidget {
-  const _ActionPill({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: const Color(0xFFF2F2F2),
-      borderRadius: BorderRadius.circular(999),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(999),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 18, color: const Color(0xFF0F0F0F)),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
-              ),
-            ],
           ),
         ),
       ),

@@ -162,9 +162,11 @@ class CompromissoReminderService {
   }
 
   /// Exclui evento Google (e reminder local vinculado, se existir).
-  static Future<void> deleteGoogleOnlyEvent({
+  static Future<bool> deleteGoogleOnlyEvent({
     required String userDocId,
     required String googleEventId,
+    String? recurringEventId,
+    bool tryDeleteEntireSeries = true,
   }) async {
     final linked = await _reminders(userDocId)
         .where('googleEventId', isEqualTo: googleEventId)
@@ -176,17 +178,18 @@ class CompromissoReminderService {
         userDocId: userDocId,
         reminderDocId: linked.docs.first.id,
         googleEventId: googleEventId,
+        recurringEventId: recurringEventId,
+        tryDeleteEntireSeries: tryDeleteEntireSeries,
       );
-      return;
+      return true;
     }
 
-    final ok = await GoogleCalendarSyncService.deleteGoogleEventById(
+    return GoogleCalendarSyncService.removeGoogleEventFromAgenda(
       userDocId: userDocId,
       eventId: googleEventId,
+      recurringEventId: recurringEventId,
+      tryDeleteEntireSeries: tryDeleteEntireSeries,
     );
-    if (!ok) {
-      throw Exception('Não foi possível excluir no Google Calendar.');
-    }
   }
 
   static Future<String> update({
@@ -222,12 +225,22 @@ class CompromissoReminderService {
     required String userDocId,
     required String reminderDocId,
     String? googleEventId,
+    String? recurringEventId,
+    bool tryDeleteEntireSeries = true,
   }) async {
-    await GoogleCalendarSyncService.deleteGoogleEventForReminder(
-      userDocId: userDocId,
-      reminderDocId: reminderDocId,
-      googleEventId: googleEventId,
-    );
+    var eventId = (googleEventId ?? '').trim();
+    if (eventId.isEmpty) {
+      final snap = await _reminders(userDocId).doc(reminderDocId).get();
+      eventId = (snap.data()?['googleEventId'] ?? '').toString().trim();
+    }
+    if (eventId.isNotEmpty) {
+      await GoogleCalendarSyncService.removeGoogleEventFromAgenda(
+        userDocId: userDocId,
+        eventId: eventId,
+        recurringEventId: recurringEventId,
+        tryDeleteEntireSeries: tryDeleteEntireSeries,
+      );
+    }
     await deleteAgendaReminderCore(
       userDocId: userDocId,
       reminderDocId: reminderDocId,

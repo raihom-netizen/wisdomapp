@@ -78,7 +78,7 @@ class SessionRestoreService {
 
               .signInWithGoogleSilently()
 
-              .timeout(const Duration(seconds: 3));
+              .timeout(const Duration(seconds: 8));
 
         } catch (_) {}
 

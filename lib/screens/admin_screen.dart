@@ -1100,6 +1100,10 @@ class _AdminScreenState extends State<AdminScreen> {
   static const int _kAdminTxMaxDetailDocs = 15000;
 
   String _formatAdminResumoError(Object error) {
+    if (FirestoreWebGuard.isRecoverableFirestoreWebError(error)) {
+      return 'Instabilidade temporária do Firestore na Web. '
+          'Toque em «Tentar novamente» (ou atualize a página).';
+    }
     if (FirestoreWebGuard.isInternalAssertionError(error)) {
       return 'Instabilidade temporária do Firestore na Web. '
           'Toque em «Tentar novamente» (ou atualize a página).';
@@ -4538,6 +4542,65 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   bool _pushingVersion = false;
+  bool _clearingForceUpdate = false;
+
+  Future<void> _pushAppVersionToServer({required bool forceUpdate}) async {
+    setState(() {
+      if (forceUpdate) {
+        _pushingVersion = true;
+      } else {
+        _clearingForceUpdate = true;
+      }
+    });
+    try {
+      final apkUrl = _apkDownloadUrlCtrl.text.trim();
+      Future<Map<String, dynamic>> call() => FunctionsService().adminPushAppVersion(
+            version: AppVersion.current,
+            buildNumber: AppVersion.buildNumber,
+            versionCode: AppVersion.versionCode,
+            releaseTag: AppVersion.releaseTag,
+            forceUpdate: forceUpdate,
+            apkDownloadUrl: apkUrl.isNotEmpty ? apkUrl : null,
+            testFlightUrl: VersionCheckService.defaultTestFlightPublicUrl,
+          );
+
+      final result = kIsWeb
+          ? await FirestoreWebGuard.runWithWebRecovery(call)
+          : await call();
+
+      if (!mounted) return;
+      if (result['ok'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              forceUpdate
+                  ? 'Release ${AppVersion.releaseTag} gravado. Usuários em build antigo serão obrigados a atualizar.'
+                  : 'Aviso de atualização obrigatória desativado (forceUpdate: false).',
+            ),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      } else {
+        throw StateError((result['error'] ?? 'Falha ao gravar versão.').toString());
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro: ${e.toString().split('\n').first}'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _pushingVersion = false;
+          _clearingForceUpdate = false;
+        });
+      }
+    }
+  }
 
   /// Card no Resumo: botão para gravar versão atual no Firestore com forceUpdate (obriga usuários a atualizar).
   Widget _buildForceUpdateCard() {
@@ -4616,57 +4679,9 @@ class _AdminScreenState extends State<AdminScreen> {
                 SizedBox(
                   width: narrow ? double.infinity : null,
                   child: FilledButton.icon(
-                    onPressed: _pushingVersion
+                    onPressed: (_pushingVersion || _clearingForceUpdate)
                         ? null
-                        : () async {
-                            setState(() => _pushingVersion = true);
-                            try {
-                              final apkUrl = _apkDownloadUrlCtrl.text.trim();
-                              final payload = <String, dynamic>{
-                                'version': AppVersion.current,
-                                'buildNumber': AppVersion.buildNumber,
-                                'versionCode': AppVersion.versionCode,
-                                'releaseTag': AppVersion.releaseTag,
-                                'forceUpdate': true,
-                                'updatedAt': FieldValue.serverTimestamp(),
-                              };
-                              if (apkUrl.isNotEmpty &&
-                                  (apkUrl.startsWith('http://') ||
-                                      apkUrl.startsWith('https://'))) {
-                                payload['apkDownloadUrl'] = apkUrl;
-                              }
-                              await FirebaseFirestore.instance
-                                  .collection('app_config')
-                                  .doc('version')
-                                  .set(
-                                    payload,
-                                    SetOptions(merge: true),
-                                  );
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      'Release ${AppVersion.releaseTag} gravado. Usuários em build antigo serão obrigados a atualizar.',
-                                    ),
-                                    backgroundColor: AppColors.success,
-                                  ),
-                                );
-                              }
-                            } catch (e) {
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                        'Erro: ${e.toString().split('\n').first}'),
-                                    backgroundColor: AppColors.error,
-                                  ),
-                                );
-                              }
-                            } finally {
-                              if (mounted)
-                                setState(() => _pushingVersion = false);
-                            }
-                          },
+                        : () => _pushAppVersionToServer(forceUpdate: true),
                     icon: _pushingVersion
                         ? const SizedBox(
                             width: 18,
@@ -4681,6 +4696,24 @@ class _AdminScreenState extends State<AdminScreen> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 12),
                     ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: narrow ? double.infinity : null,
+                  child: OutlinedButton.icon(
+                    onPressed: (_pushingVersion || _clearingForceUpdate)
+                        ? null
+                        : () => _pushAppVersionToServer(forceUpdate: false),
+                    icon: _clearingForceUpdate
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.notifications_off_outlined, size: 18),
+                    label: Text(_clearingForceUpdate
+                        ? 'Desativando...'
+                        : 'Desativar aviso obrigatório'),
                   ),
                 ),
                 const SizedBox(height: 12),

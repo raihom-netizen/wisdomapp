@@ -39,9 +39,14 @@ class GoogleCalendarTokenStore {
     } catch (_) {}
   }
 
-  static Future<void> save(String token, {String? email}) async {
+  static Future<void> save(
+    String token, {
+    String? email,
+    DateTime? expiresAt,
+  }) async {
     _cachedToken = token;
-    _cachedUntil = DateTime.now().add(tokenCacheTtl);
+    _cachedUntil = expiresAt ??
+        DateTime.now().add(tokenCacheTtl);
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(prefsTokenKey, token);

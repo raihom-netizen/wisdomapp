@@ -8,6 +8,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../utils/user_display_name.dart';
 import '../services/login_preferences.dart';
+import '../services/course_videos_cache_service.dart';
 import '../services/app_session_cache.dart';
 import '../services/account_switch_flow.dart';
 import '../services/delegate_access_service.dart';
@@ -338,6 +339,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _applyCachedPreferredStartModule();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(CourseVideosCacheService.prefetch());
       // Tarifas GO: só após idle longo (Escalas/Calculadora carregam ao abrir o módulo).
       Future<void>.delayed(const Duration(seconds: 8), () {
         if (!mounted) return;

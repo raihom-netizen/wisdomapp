@@ -80,6 +80,63 @@ class FunctionsService {
     return (data['deleted'] ?? data['count'] ?? 0) as int;
   }
 
+  /// Painel Admin: grava app_config/version via Cloud Function (Admin SDK).
+  Future<Map<String, dynamic>> adminPushAppVersion({
+    required String version,
+    required int buildNumber,
+    required int versionCode,
+    required String releaseTag,
+    bool forceUpdate = true,
+    String? apkDownloadUrl,
+    String? testFlightUrl,
+  }) async {
+    final res = await _fn.httpsCallable('ctAdminPushAppVersion').call<Map<String, dynamic>>({
+      'version': version,
+      'buildNumber': buildNumber,
+      'versionCode': versionCode,
+      'releaseTag': releaseTag,
+      'forceUpdate': forceUpdate,
+      if (apkDownloadUrl != null && apkDownloadUrl.trim().isNotEmpty)
+        'apkDownloadUrl': apkDownloadUrl.trim(),
+      if (testFlightUrl != null && testFlightUrl.trim().isNotEmpty)
+        'testFlightUrl': testFlightUrl.trim(),
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> adminUpsertCourseVideo({
+    required String docId,
+    required Map<String, dynamic> data,
+    bool create = false,
+    bool merge = true,
+  }) async {
+    final res = await _fn.httpsCallable('ctAdminUpsertCourseVideo').call<Map<String, dynamic>>({
+      'docId': docId,
+      'data': data,
+      'create': create,
+      'merge': merge,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> adminDeleteCourseVideos({
+    required List<String> docIds,
+  }) async {
+    final res = await _fn.httpsCallable('ctAdminDeleteCourseVideos').call<Map<String, dynamic>>({
+      'docIds': docIds,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> adminSaveWisdomCoursesModuleConfig({
+    required Map<String, dynamic> data,
+  }) async {
+    final res = await _fn
+        .httpsCallable('ctAdminSaveWisdomCoursesModuleConfig')
+        .call<Map<String, dynamic>>({'data': data});
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<Map<String, dynamic>> uploadReceiptToStorage({
     required String txPath, // ex: users_uid/<uid>/transactions/<id>
     required String filename,

@@ -1057,23 +1057,12 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
         );
       }
       for (final event in googleEvents) {
-        try {
-          await CompromissoReminderService.deleteGoogleOnlyEvent(
-            userDocId: _userDocId,
-            googleEventId: event.id,
-          );
-          removedGoogle++;
-        } catch (e) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Erro ao remover «${event.title}»: ${e.toString().split('\n').first}',
-                ),
-              ),
-            );
-          }
-        }
+        await CompromissoReminderService.deleteGoogleOnlyEvent(
+          userDocId: _userDocId,
+          googleEventId: event.id,
+          recurringEventId: event.recurringEventId,
+        );
+        removedGoogle++;
       }
     }
 
@@ -1772,13 +1761,19 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
   }
 
   Future<void> _confirmDeleteGoogleEvent(GoogleCalendarEventItem event) async {
+    final isRecurring = event.isRecurringInstance || event.isLikelyReadOnlyGoogleEvent;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Excluir evento Google?'),
         content: Text(
-          'Remover «${event.title}» do Google Calendar?\n\n'
-          'Esta ação também remove da Agenda WISDOMAPP.',
+          isRecurring
+              ? 'Remover «${event.title}»?\n\n'
+                  'Compromissos anuais/recorrentes serão excluídos da série no Google '
+                  'quando possível. Se o Google bloquear (ex.: aniversário de contatos), '
+                  'o evento será ocultado da Agenda WISDOMAPP.'
+              : 'Remover «${event.title}» do Google Calendar?\n\n'
+                  'Esta ação também remove da Agenda WISDOMAPP.',
         ),
         actions: [
           TextButton(
@@ -1794,24 +1789,24 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
       ),
     );
     if (ok != true || !mounted) return;
-    try {
-      await CompromissoReminderService.deleteGoogleOnlyEvent(
-        userDocId: _userDocId,
-        googleEventId: event.id,
+    final deletedOnGoogle = await CompromissoReminderService.deleteGoogleOnlyEvent(
+      userDocId: _userDocId,
+      googleEventId: event.id,
+      recurringEventId: event.recurringEventId,
+    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            deletedOnGoogle
+                ? 'Evento excluído do Google Calendar.'
+                : 'Removido da Agenda WISDOMAPP. '
+                    '(O Google não permitiu apagar na nuvem — comum em aniversários fixos.)',
+          ),
+        ),
       );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Evento excluído do Google Calendar.')),
-        );
-      }
-      if (_googleEnabled) unawaited(_refreshGoogleDays());
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro: ${e.toString().split('\n').first}')),
-        );
-      }
     }
+    if (_googleEnabled) unawaited(_refreshGoogleDays());
   }
 
   Future<void> _limparCompromissosSeletivo(
@@ -1951,13 +1946,12 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     }
 
     for (final event in googleEvents.where((e) => selectedGoogle.contains(e.id))) {
-      try {
-        await CompromissoReminderService.deleteGoogleOnlyEvent(
-          userDocId: _userDocId,
-          googleEventId: event.id,
-        );
-        removedGoogle++;
-      } catch (_) {}
+      await CompromissoReminderService.deleteGoogleOnlyEvent(
+        userDocId: _userDocId,
+        googleEventId: event.id,
+        recurringEventId: event.recurringEventId,
+      );
+      removedGoogle++;
     }
 
     if (!mounted) return;

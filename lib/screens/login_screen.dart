@@ -402,8 +402,25 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _loginWithGoogle() async {
     setState(() => _loading = true);
     try {
+      final forcePicker = _isSwitchAccountFlow();
+      if (!forcePicker) {
+        final silentCred = await _auth.signInWithGoogleSilently();
+        if (silentCred != null) {
+          final signedEmail =
+              FirebaseAuth.instance.currentUser?.email?.trim() ?? '';
+          if (signedEmail.isNotEmpty) {
+            await LoginPreferences.setLastLoginIdentifier(signedEmail);
+          }
+          await LoginPreferences.setLastOAuthProvider('google');
+          if (!kIsWeb) await enableBiometricAfterSuccessfulNativeLogin();
+          PushNotificationService().salvarTokenNoBanco().catchError((_) {});
+          VersionCheckService.checkAndReloadIfNeeded().catchError((_) {});
+          _goToRootAfterAuth();
+          return;
+        }
+      }
       final cred = await _auth.signInWithGoogle(
-        forceAccountPicker: _isSwitchAccountFlow(),
+        forceAccountPicker: forcePicker,
       );
       if (!mounted) return;
       if (cred != null) {

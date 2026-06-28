@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../utils/youtube_url_helper.dart';
+import 'course_media_view_policy.dart';
 
 /// YouTube / MP4 no Android/iOS — WebView com HTML5 (fullscreen nativo do player).
 class CourseVideoEmbed extends StatefulWidget {
@@ -59,11 +60,13 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
 <html><head>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <style>
-  *{margin:0;padding:0} html,body{width:100%;height:100%;background:#000}
+  *{margin:0;padding:0;-webkit-user-select:none;user-select:none}
+  html,body{width:100%;height:100%;background:#000}
   video{width:100%;height:100%;object-fit:contain}
 </style>
+<script>${CourseMediaViewPolicy.videoContextMenuBlockJs}</script>
 </head><body>
-<video controls playsinline preload="auto" $autoplayAttr src="$escaped"></video>
+<video controls playsinline preload="auto" controlslist="${CourseMediaViewPolicy.videoControlsList}" disablepictureinpicture oncontextmenu="return false;" $autoplayAttr src="$escaped"></video>
 </body></html>
 ''');
     }

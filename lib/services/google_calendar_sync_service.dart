@@ -11,6 +11,7 @@ import 'package:intl/intl.dart';
 import '../constants/google_oauth_config.dart';
 import '../utils/firestore_web_guard.dart';
 import 'google_calendar_auth_helper.dart';
+import 'google_calendar_oauth_bridge.dart';
 
 /// Evento do Google Calendar exibido na Agenda (editável quando integração ativa).
 class GoogleCalendarEventItem {
@@ -21,6 +22,8 @@ class GoogleCalendarEventItem {
     this.timeStart = '',
     this.timeEnd = '',
     this.notes = '',
+    this.recurringEventId,
+    this.eventType,
   });
 
   final String id;
@@ -29,6 +32,16 @@ class GoogleCalendarEventItem {
   final String timeStart;
   final String timeEnd;
   final String notes;
+  /// Id da série recorrente (instâncias expandidas com `singleEvents=true`).
+  final String? recurringEventId;
+  /// `birthday`, `default`, etc. — aniversários de contatos costumam ser somente leitura.
+  final String? eventType;
+
+  bool get isRecurringInstance =>
+      recurringEventId != null && recurringEventId!.isNotEmpty;
+
+  bool get isLikelyReadOnlyGoogleEvent =>
+      eventType == 'birthday' || eventType == 'fromGmail';
 
   String get horarioLabel {
     if (timeStart.isEmpty) return 'Dia inteiro';
@@ -103,7 +116,7 @@ class GoogleCalendarSyncService {
   static Future<bool> isEnabled(String uid) async {
     if (uid.isEmpty) return false;
     try {
-      final snap = await FirestoreWebGuard.runWithWebRecovery(
+      final snap = await FirestoreWebGuard.runFirestoreOpSafe(
         () => _settingsRef(uid).get(),
       );
       return snap.data()?['enabled'] == true;
@@ -126,6 +139,41 @@ class GoogleCalendarSyncService {
               ? null
               : (s.data()?['connectedEmail'] ?? '').toString().trim(),
         );
+  }
+
+  /// Leitura pontual (UI do toggle) — evita `snapshots()` durante OAuth Calendar.
+  static Future<({bool enabled, String? email})> readIntegrationState(
+    String uid,
+  ) async {
+    if (uid.isEmpty) return (enabled: false, email: null);
+    try {
+      final snap = await FirestoreWebGuard.runFirestoreOpSafe(
+        () => _settingsRef(uid).get(),
+      );
+      final data = snap.data() ?? const <String, dynamic>{};
+      final emailRaw = (data['connectedEmail'] ?? '').toString().trim();
+      return (
+        enabled: data['enabled'] == true,
+        email: emailRaw.isEmpty ? null : emailRaw,
+      );
+    } catch (_) {
+      return (enabled: false, email: null);
+    }
+  }
+
+  /// Config pública da landing (hint/cores do card Calendário Google).
+  static Future<Map<String, dynamic>> readLandingAgendaConfig() async {
+    try {
+      final snap = await FirestoreWebGuard.runFirestoreOpSafe(
+        () => FirebaseFirestore.instance
+            .collection('landing_content')
+            .doc('main')
+            .get(),
+      );
+      return snap.data() ?? const <String, dynamic>{};
+    } catch (_) {
+      return const <String, dynamic>{};
+    }
   }
 
   /// Ativa: silent-first; popup só se necessário.
@@ -156,6 +204,14 @@ class GoogleCalendarSyncService {
   /// Web: após redirect OAuth, grava token e ativa integração se pendente.
   static Future<void> completeWebOAuthReturnIfNeeded() async {
     if (!kIsWeb) return;
+
+    final gcalError = _readWebOAuthErrorQuery();
+    if (gcalError != null) {
+      debugPrint('Google Calendar OAuth error: $gcalError');
+      GoogleCalendarAuthHelper.clearPendingWebEnableUserDocId();
+      return;
+    }
+
     final consumed = await GoogleCalendarAuthHelper.consumeWebOAuthReturn();
     if (!consumed) return;
     final uid = GoogleCalendarAuthHelper.pendingWebEnableUserDocId();
@@ -164,12 +220,19 @@ class GoogleCalendarSyncService {
     await enable(uid, skipSilent: false);
   }
 
+  static String? _readWebOAuthErrorQuery() {
+    if (!kIsWeb) return null;
+    final err = Uri.base.queryParameters['gcal_error']?.trim();
+    if (err != null && err.isNotEmpty) return err;
+    return null;
+  }
+
   /// Renova token silenciosamente se a integração já está ativa (boot / abrir Agenda).
   static Future<bool> warmUpIfEnabled(String uid) async {
     if (uid.isEmpty || !await isEnabled(uid)) return false;
     await completeWebOAuthReturnIfNeeded();
     try {
-      final snap = await FirestoreWebGuard.runWithWebRecovery(
+      final snap = await FirestoreWebGuard.runFirestoreOpSafe(
         () => _settingsRef(uid).get(),
       );
       final e = (snap.data()?['connectedEmail'] ?? '').toString().trim();
@@ -196,7 +259,7 @@ class GoogleCalendarSyncService {
     await GoogleCalendarAuthHelper.signOutCalendarSession();
     _activeConnectedEmail = null;
     await disable(uid, keepLocalCredentials: false);
-    await FirestoreWebGuard.runWithWebRecovery(() async {
+    await FirestoreWebGuard.runFirestoreOpSafe(() async {
       await _settingsRef(uid).set({
         'connectedEmail': FieldValue.delete(),
         'updatedAt': FieldValue.serverTimestamp(),
@@ -214,7 +277,7 @@ class GoogleCalendarSyncService {
 
     String storedEmail = '';
     try {
-      final settingsSnap = await FirestoreWebGuard.runWithWebRecovery(
+      final settingsSnap = await FirestoreWebGuard.runFirestoreOpSafe(
         () => _settingsRef(uid).get(),
       );
       storedEmail =
@@ -269,8 +332,8 @@ class GoogleCalendarSyncService {
       final connectedEmail = (auth.email ?? preferredEmail ?? loginEmail).trim();
       _activeConnectedEmail = connectedEmail.isEmpty ? null : connectedEmail;
 
-      await FirestoreWebGuard.stabilizeAfterWebSignIn();
-      await FirestoreWebGuard.runWithWebRecovery(() async {
+      await FirestoreWebGuard.prepareForPublishWrite();
+      await FirestoreWebGuard.runFirestoreOpSafe(() async {
         await _settingsRef(uid).set({
           'enabled': true,
           'provider': 'google_calendar',
@@ -286,7 +349,7 @@ class GoogleCalendarSyncService {
       unawaited(
         Future<void>.delayed(const Duration(milliseconds: 600), () async {
           try {
-            await FirestoreWebGuard.runWithWebRecovery(
+            await FirestoreWebGuard.runFirestoreOpSafe(
               () => syncAllLocalReminders(userDocId: uid),
             );
           } catch (e, st) {
@@ -300,6 +363,11 @@ class GoogleCalendarSyncService {
       );
     } catch (e, st) {
       debugPrint('GoogleCalendarSyncService.enable: $e\n$st');
+      if (FirestoreWebGuard.isClientTerminatedError(e)) {
+        return GoogleCalendarEnableResult.fail(
+          'Conexão com o banco foi encerrada. Atualize a página (F5) e tente de novo.',
+        );
+      }
       return GoogleCalendarEnableResult.fail(
         'Erro ao conectar: ${e.toString().split('\n').first}',
       );
@@ -328,20 +396,24 @@ class GoogleCalendarSyncService {
     }
   }
 
-  /// Desativa integração — mantém credencial local para reativar com um toque.
+  /// Desativa integração — revoga refresh token no servidor (Web) e para sync.
   static Future<void> disable(
     String uid, {
     bool keepLocalCredentials = true,
   }) async {
     if (uid.isEmpty) return;
-    if (!keepLocalCredentials) {
-      await GoogleCalendarAuthHelper.clearCache();
-      _activeConnectedEmail = null;
+    _activeConnectedEmail = null;
+    await GoogleCalendarAuthHelper.clearCache();
+    if (kIsWeb) {
+      await GoogleCalendarOAuthBridge.disconnectServerSession();
+    } else if (!keepLocalCredentials) {
+      await GoogleCalendarAuthHelper.signOutCalendarSession();
     }
-    await FirestoreWebGuard.runWithWebRecovery(() async {
+    await FirestoreWebGuard.runFirestoreOpSafe(() async {
       await _settingsRef(uid).set({
         'enabled': false,
         'disabledByUser': true,
+        'hasRefreshToken': false,
         'disabledAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
@@ -444,6 +516,10 @@ class GoogleCalendarSyncService {
           timeStart: timeStart,
           timeEnd: timeEnd,
           notes: notes,
+          recurringEventId: (raw['recurringEventId'] ?? '').toString().trim().isEmpty
+              ? null
+              : (raw['recurringEventId'] ?? '').toString().trim(),
+          eventType: (raw['eventType'] ?? 'default').toString().trim(),
         ),
       );
     }
@@ -475,11 +551,120 @@ class GoogleCalendarSyncService {
           .timeout(const Duration(seconds: 25));
       if (res.statusCode < 200 || res.statusCode >= 300) return [];
       final body = jsonDecode(res.body) as Map<String, dynamic>;
-      return _filterEventsFromSyncMin(_parseEventsResponse(body));
+      final events = _filterEventsFromSyncMin(_parseEventsResponse(body));
+      if (userDocId == null || userDocId.isEmpty) return events;
+      final hidden = await _loadHiddenGoogleEventKeys(userDocId);
+      return events.where((e) => !_isGoogleEventHidden(e, hidden)).toList();
     } catch (e) {
       debugPrint('fetchEventsForMonth: $e');
       return [];
     }
+  }
+
+  static Future<Set<String>> _loadHiddenGoogleEventKeys(String uid) async {
+    if (uid.isEmpty) return {};
+    try {
+      final snap = await FirestoreWebGuard.runFirestoreOpSafe(
+        () => _settingsRef(uid).get(),
+      );
+      final raw = snap.data()?['hiddenGoogleEventKeys'];
+      if (raw is! List) return {};
+      return raw.map((e) => e.toString().trim()).where((k) => k.isNotEmpty).toSet();
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static bool _isGoogleEventHidden(
+    GoogleCalendarEventItem event,
+    Set<String> hidden,
+  ) {
+    if (hidden.contains(event.id)) return true;
+    final recurring = event.recurringEventId;
+    if (recurring != null && recurring.isNotEmpty && hidden.contains(recurring)) {
+      return true;
+    }
+    final inferred = _inferRecurringEventId(event.id);
+    if (inferred != null && hidden.contains(inferred)) return true;
+    return false;
+  }
+
+  /// Instâncias expandidas: `{recurringEventId}_{YYYYMMDD}` ou `…T…Z`.
+  static String? _inferRecurringEventId(String instanceId) {
+    final m = RegExp(r'^(.+)_(\d{8}(T\d{6}Z)?)$').firstMatch(instanceId.trim());
+    return m?.group(1)?.trim().isEmpty == true ? null : m?.group(1)?.trim();
+  }
+
+  /// Oculta evento Google da Agenda WISDOMAPP (mesmo se a API bloquear exclusão).
+  static Future<void> hideGoogleEventFromAgenda({
+    required String userDocId,
+    required String eventId,
+    String? recurringEventId,
+  }) async {
+    if (userDocId.isEmpty || eventId.trim().isEmpty) return;
+    final keys = <String>{eventId.trim()};
+    final recurring = (recurringEventId ?? '').trim();
+    if (recurring.isNotEmpty) keys.add(recurring);
+    final inferred = _inferRecurringEventId(eventId);
+    if (inferred != null && inferred.isNotEmpty) keys.add(inferred);
+
+    await FirestoreWebGuard.runFirestoreOpSafe(() async {
+      await _settingsRef(userDocId).set({
+        'hiddenGoogleEventKeys': FieldValue.arrayUnion(keys.toList()),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    });
+  }
+
+  static bool _deleteHttpOk(int status) =>
+      status == 200 || status == 204 || status == 410 || status == 404;
+
+  static Future<bool> _deleteGoogleEventHttp({
+    required String userDocId,
+    required String eventId,
+  }) async {
+    final uri = Uri.parse(
+      'https://www.googleapis.com/calendar/v3/calendars/primary/events/${Uri.encodeComponent(eventId)}',
+    );
+    final res = await _authorizedRequest(
+      (token) => http.delete(uri, headers: {'Authorization': 'Bearer $token'}),
+      userDocId: userDocId,
+    );
+    if (!_deleteHttpOk(res.statusCode)) {
+      debugPrint(
+        'DELETE google event $eventId → HTTP ${res.statusCode}: '
+        '${res.body.length > 280 ? res.body.substring(0, 280) : res.body}',
+      );
+    }
+    return _deleteHttpOk(res.statusCode);
+  }
+
+  static Future<bool> _cancelGoogleEventHttp({
+    required String userDocId,
+    required String eventId,
+  }) async {
+    final uri = Uri.parse(
+      'https://www.googleapis.com/calendar/v3/calendars/primary/events/${Uri.encodeComponent(eventId)}',
+    );
+    final res = await _authorizedRequest(
+      (token) => http.patch(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({'status': 'cancelled'}),
+      ),
+      userDocId: userDocId,
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      debugPrint(
+        'PATCH cancel google event $eventId → HTTP ${res.statusCode}: '
+        '${res.body.length > 280 ? res.body.substring(0, 280) : res.body}',
+      );
+      return false;
+    }
+    return true;
   }
 
   /// Dias do mês visível que possuem eventos no Google Calendar (primary).
@@ -528,7 +713,7 @@ class GoogleCalendarSyncService {
   /// Envia todos os compromissos locais sem `googleEventId` para o Google Calendar.
   static Future<int> syncAllLocalReminders({required String userDocId}) async {
     if (userDocId.isEmpty || !await isEnabled(userDocId)) return 0;
-    final snap = await FirestoreWebGuard.runWithWebRecovery(
+    final snap = await FirestoreWebGuard.runFirestoreOpSafe(
       () => FirebaseFirestore.instance
           .collection('users')
           .doc(userDocId)
@@ -716,33 +901,73 @@ class GoogleCalendarSyncService {
     }
   }
 
-  /// Remove evento do Google Calendar pelo id (sem reminder local).
+  /// Remove evento do Google Calendar (instância, série recorrente ou cancelamento).
   static Future<bool> deleteGoogleEventById({
     required String userDocId,
     required String eventId,
+    String? recurringEventId,
+    bool tryDeleteEntireSeries = true,
   }) async {
     if (userDocId.isEmpty || eventId.trim().isEmpty) return false;
     if (!await isEnabled(userDocId)) return false;
 
-    final uri = Uri.parse(
-      'https://www.googleapis.com/calendar/v3/calendars/primary/events/${Uri.encodeComponent(eventId)}',
-    );
+    final id = eventId.trim();
+    final seriesId = (recurringEventId ?? '').trim().isNotEmpty
+        ? recurringEventId!.trim()
+        : _inferRecurringEventId(id);
+
     try {
-      final res = await _authorizedRequest(
-        (token) => http.delete(uri, headers: {'Authorization': 'Bearer $token'}),
-        userDocId: userDocId,
-      );
-      return res.statusCode == 204 || res.statusCode == 200 || res.statusCode == 410;
+      if (await _deleteGoogleEventHttp(userDocId: userDocId, eventId: id)) {
+        return true;
+      }
+      if (await _cancelGoogleEventHttp(userDocId: userDocId, eventId: id)) {
+        return true;
+      }
+      if (tryDeleteEntireSeries &&
+          seriesId != null &&
+          seriesId.isNotEmpty &&
+          seriesId != id) {
+        if (await _deleteGoogleEventHttp(userDocId: userDocId, eventId: seriesId)) {
+          return true;
+        }
+        if (await _cancelGoogleEventHttp(userDocId: userDocId, eventId: seriesId)) {
+          return true;
+        }
+      }
+      return false;
     } catch (e) {
       debugPrint('deleteGoogleEventById: $e');
       return false;
     }
   }
 
+  /// Exclui no Google (se possível) e **sempre** oculta na Agenda WISDOMAPP.
+  static Future<bool> removeGoogleEventFromAgenda({
+    required String userDocId,
+    required String eventId,
+    String? recurringEventId,
+    bool tryDeleteEntireSeries = true,
+  }) async {
+    final deleted = await deleteGoogleEventById(
+      userDocId: userDocId,
+      eventId: eventId,
+      recurringEventId: recurringEventId,
+      tryDeleteEntireSeries: tryDeleteEntireSeries,
+    );
+    await hideGoogleEventFromAgenda(
+      userDocId: userDocId,
+      eventId: eventId,
+      recurringEventId: recurringEventId,
+    );
+    return deleted;
+  }
+
   static Future<void> deleteGoogleEventForReminder({
     required String userDocId,
     required String reminderDocId,
     String? googleEventId,
+    String? recurringEventId,
+    bool tryDeleteEntireSeries = true,
   }) async {
     if (userDocId.isEmpty) return;
     var eventId = (googleEventId ?? '').trim();
@@ -756,6 +981,11 @@ class GoogleCalendarSyncService {
       eventId = (snap.data()?['googleEventId'] ?? '').toString().trim();
     }
     if (eventId.isEmpty) return;
-    await deleteGoogleEventById(userDocId: userDocId, eventId: eventId);
+    await removeGoogleEventFromAgenda(
+      userDocId: userDocId,
+      eventId: eventId,
+      recurringEventId: recurringEventId,
+      tryDeleteEntireSeries: tryDeleteEntireSeries,
+    );
   }
 }

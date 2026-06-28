@@ -20,8 +20,11 @@ service cloud.firestore {
         || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'socio'
       );
     }
+    function isAdminOrMaster() {
+      return isAdmin() || isMaster();
+    }
     function isAdminPanelReader() {
-      return isAdmin() || isMaster() || isPartner() || isGestor();
+      return isAdminOrMaster() || isPartner() || isGestor();
     }
     function isGestor() {
       return isSignedIn() &&
@@ -52,7 +55,7 @@ service cloud.firestore {
     }
     match /app_config/{docId} {
       allow read: if true;
-      allow write: if isAdmin() || isSystemManager()
+      allow write: if isAdminOrMaster() || isSystemManager()
         || (isGestor() && docId == 'wisdom_courses_module')
         || (canEditPublicContent() && docId == 'financial_tips_home');
     }
@@ -67,22 +70,22 @@ service cloud.firestore {
       allow read, write: if false;
     }
     match /settings/{docId} {
-      allow read, write: if isAdmin();
+      allow read, write: if isAdminOrMaster() || isSystemManager();
     }
     match /partnerships/{partnershipId} {
-      allow read, write: if isAdmin();
+      allow read, write: if isAdminOrMaster() || isSystemManager();
       match /members/{memberId} {
-        allow read, write: if isAdmin();
+        allow read, write: if isAdminOrMaster() || isSystemManager();
       }
       match /submissions/{submissionId} {
-        allow read, write: if isAdmin();
+        allow read, write: if isAdminOrMaster() || isSystemManager();
       }
     }
     match /config/{docId} {
-      allow read, write: if isAdmin();
+      allow read, write: if isAdminOrMaster() || isSystemManager();
     }
     match /activity_logs/{docId} {
-      allow read, create: if isAdmin();
+      allow read, create: if isAdminOrMaster() || isSystemManager();
     }
     match /course_videos/{videoId} {
       allow read: if isSignedIn();
@@ -94,7 +97,7 @@ service cloud.firestore {
       allow create, update, delete: if canEditPublicContent();
     }
     match /admin_audit_log/{docId} {
-      allow read, create: if isAdmin();
+      allow read, create: if isAdminOrMaster() || isSystemManager();
     }
     match /mp_payments/{docId} {
       allow read: if isAdminPanelReader();
@@ -128,6 +131,10 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
     match /users/{userId}/entitlement_payments/{docId} {
+      allow read, write: if false;
+    }
+    // OAuth Google Calendar: refresh_token só Cloud Functions / Admin SDK.
+    match /users/{userId}/private/{docId} {
       allow read, write: if false;
     }
     match /users/{userId}/{allPaths=**} {

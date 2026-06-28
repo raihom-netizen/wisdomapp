@@ -23,6 +23,7 @@ const notifTpl = require("./notification_templates_config");
 const agendaDigest = require("./agenda_daily_digest");
 const agendaDelivery = require("./agenda_delivery_prefs");
 const agendaPeriodSnapshot = require("./agendaPeriodSnapshot");
+const googleCalendarOAuth = require("./googleCalendarOAuth");
 
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_MIME = new Set([
@@ -1571,6 +1572,8 @@ exports.ctSyncAppVersion = onRequest(async (req, res) => {
     const testFlightUrl = (req.query.testFlightUrl || (req.body && req.body.testFlightUrl) || "").toString().trim();
     const buildNumberRaw = (req.query.buildNumber ?? req.body?.buildNumber ?? "").toString().trim();
     const versionCodeRaw = (req.query.versionCode ?? req.body?.versionCode ?? "").toString().trim();
+    const forceRaw = (req.query.forceUpdate ?? req.body?.forceUpdate ?? "1").toString().trim().toLowerCase();
+    const forceUpdate = !(forceRaw === "0" || forceRaw === "false" || forceRaw === "off");
 
     if (!version || version.length > 20) {
       return res.status(400).json({ ok: false, error: "version invalida" });
@@ -1587,7 +1590,7 @@ exports.ctSyncAppVersion = onRequest(async (req, res) => {
     const vc = parseInt(versionCodeRaw, 10);
     const payload = {
       version,
-      forceUpdate: true,
+      forceUpdate,
       apkDownloadUrl,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
@@ -1610,6 +1613,165 @@ exports.ctSyncAppVersion = onRequest(async (req, res) => {
     console.error("ctSyncAppVersion:", e);
     return res.status(500).json({ ok: false, error: String(e && e.message) || "erro" });
   }
+});
+
+/**
+ * Painel Admin: gravar app_config/version (Admin SDK — evita erro Firestore Web
+ * «client has already been terminated»). Só admin/master.
+ * forceUpdate: true = obrigar atualização; false = cancelar aviso sem apagar versão.
+ */
+exports.ctAdminPushAppVersion = onCall(async (req) => {
+  if (!req.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
+  }
+  await requireAdminPanel(req.auth.uid);
+
+  const version = (req.data?.version || "").toString().trim();
+  const buildNumberRaw = req.data?.buildNumber;
+  const versionCodeRaw = req.data?.versionCode;
+  const releaseTag = (req.data?.releaseTag || "").toString().trim();
+  const apkDownloadUrl = (req.data?.apkDownloadUrl || "").toString().trim();
+  const testFlightUrl = (req.data?.testFlightUrl || "").toString().trim();
+  const forceUpdate = req.data?.forceUpdate !== false;
+
+  if (!version || version.length > 20) {
+    throw new functions.https.HttpsError("invalid-argument", "Versão inválida.");
+  }
+
+  const bn = parseInt(String(buildNumberRaw ?? ""), 10);
+  const vc = parseInt(String(versionCodeRaw ?? ""), 10);
+  const defaultStore = "https://play.google.com/store/apps/details?id=com.wisdomapp.app";
+
+  const payload = {
+    version,
+    forceUpdate: !!forceUpdate,
+    apkDownloadUrl: apkDownloadUrl.startsWith("http") ? apkDownloadUrl : defaultStore,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    app: "WISDOMAPP",
+  };
+  if (!Number.isNaN(bn) && bn >= 0) {
+    payload.buildNumber = bn;
+    payload.releaseTag = releaseTag || `${version}+${bn}`;
+  } else if (releaseTag) {
+    payload.releaseTag = releaseTag;
+  }
+  if (!Number.isNaN(vc) && vc > 0) payload.versionCode = vc;
+  if (testFlightUrl.startsWith("http")) payload.testFlightUrl = testFlightUrl;
+
+  await admin.firestore().collection("app_config").doc("version").set(payload, { merge: true });
+  return { ok: true, version, forceUpdate: payload.forceUpdate, releaseTag: payload.releaseTag || null };
+});
+
+function decodeAdminFirestoreValue(v) {
+  if (v === "__DELETE__") return admin.firestore.FieldValue.delete();
+  if (v && typeof v === "object" && typeof v._tsMs === "number") {
+    return admin.firestore.Timestamp.fromMillis(v._tsMs);
+  }
+  if (Array.isArray(v)) return v.map(decodeAdminFirestoreValue);
+  if (v && typeof v === "object") {
+    const out = {};
+    for (const [k, val] of Object.entries(v)) {
+      out[k] = decodeAdminFirestoreValue(val);
+    }
+    return out;
+  }
+  return v;
+}
+
+/** Admin/gestor/master — conteúdo público (cursos/dicas). */
+async function requireCourseContentEditor(uid) {
+  const userSnap = await admin.firestore().doc(`users/${uid}`).get();
+  const data = userSnap.data() || {};
+  const role = (data.role || "").toString().toLowerCase();
+  const email = (reqEmail(data) || "").toLowerCase();
+  if (role === "admin" || role === "master" || role === "gestor") return;
+  if (email === "raihom@gmail.com") return;
+  throw new functions.https.HttpsError(
+    "permission-denied",
+    "Acesso restrito a administradores/gestores."
+  );
+}
+
+function reqEmail(data) {
+  return (data.email || "").toString();
+}
+
+/** Grava curso/dica em course_videos via Admin SDK (estável na Web). */
+exports.ctAdminUpsertCourseVideo = onCall(async (req) => {
+  if (!req.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
+  }
+  await requireCourseContentEditor(req.auth.uid);
+
+  const docId = (req.data?.docId || "").toString().trim();
+  const create = req.data?.create === true;
+  const merge = req.data?.merge !== false;
+  const raw = req.data?.data;
+  if (!docId || docId.length > 128) {
+    throw new functions.https.HttpsError("invalid-argument", "docId inválido.");
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new functions.https.HttpsError("invalid-argument", "Payload inválido.");
+  }
+
+  const payload = decodeAdminFirestoreValue(raw);
+  payload.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+  if (create && !payload.createdAt) {
+    payload.createdAt = admin.firestore.FieldValue.serverTimestamp();
+  }
+
+  const ref = admin.firestore().collection("course_videos").doc(docId);
+  if (create) {
+    await ref.set(payload, { merge: false });
+  } else {
+    await ref.set(payload, { merge });
+  }
+  return { ok: true, docId };
+});
+
+/** Exclui documentos course_videos (Storage continua no cliente). */
+exports.ctAdminDeleteCourseVideos = onCall(async (req) => {
+  if (!req.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
+  }
+  await requireCourseContentEditor(req.auth.uid);
+
+  const ids = Array.isArray(req.data?.docIds) ? req.data.docIds : [];
+  const docIds = ids.map((x) => (x || "").toString().trim()).filter(Boolean);
+  if (docIds.length === 0) {
+    throw new functions.https.HttpsError("invalid-argument", "Nenhum id informado.");
+  }
+  if (docIds.length > 40) {
+    throw new functions.https.HttpsError("invalid-argument", "Limite de 40 exclusões por vez.");
+  }
+
+  const batch = admin.firestore().batch();
+  for (const id of docIds) {
+    batch.delete(admin.firestore().collection("course_videos").doc(id));
+  }
+  await batch.commit();
+  return { ok: true, deleted: docIds.length };
+});
+
+/** Config do módulo Cursos (app_config/wisdom_courses_module). */
+exports.ctAdminSaveWisdomCoursesModuleConfig = onCall(async (req) => {
+  if (!req.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
+  }
+  await requireCourseContentEditor(req.auth.uid);
+
+  const raw = req.data?.data;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new functions.https.HttpsError("invalid-argument", "Payload inválido.");
+  }
+  const payload = decodeAdminFirestoreValue(raw);
+  payload.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+  await admin
+    .firestore()
+    .collection("app_config")
+    .doc("wisdom_courses_module")
+    .set(payload, { merge: true });
+  return { ok: true };
 });
 
 exports.getPublicConfig = onCall(async (req) => {
@@ -2641,6 +2803,11 @@ exports.ctFinancePeriodTotals = onCall(
 );
 
 exports.ctAgendaRemindersForRange = agendaPeriodSnapshot.ctAgendaRemindersForRange;
+
+exports.ctGoogleCalendarExchangeCode = googleCalendarOAuth.ctGoogleCalendarExchangeCode;
+exports.ctGoogleCalendarRefreshAccessToken =
+  googleCalendarOAuth.ctGoogleCalendarRefreshAccessToken;
+exports.ctGoogleCalendarDisconnect = googleCalendarOAuth.ctGoogleCalendarDisconnect;
 
 /** Login rápido: confirma sub-login (compartilhamento) em 1 leitura no servidor. */
 exports.ctProbeDelegateAccess = onCall(async (req) => {

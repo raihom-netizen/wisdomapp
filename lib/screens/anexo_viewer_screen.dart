@@ -41,6 +41,13 @@ class _AnexoViewerScreenState extends State<AnexoViewerScreen> {
   String? _error;
   bool _loading = true;
   bool _webEmbedFallback = false;
+  String _effectiveUrl = '';
+
+  bool get _isImageAttachment {
+    return ReceiptAttachmentUtils.isImageMime(_mimeType, fileName: _resolvedFileName);
+  }
+
+  bool get _prefersWebDirectView => kIsWeb && _effectiveUrl.isNotEmpty && (_isImageAttachment || _isPdf);
 
   bool get _isPdf {
     final name = _resolvedFileName.toLowerCase();
@@ -71,7 +78,18 @@ class _AnexoViewerScreenState extends State<AnexoViewerScreen> {
   @override
   void initState() {
     super.initState();
+    _effectiveUrl = widget.url.trim();
     _load();
+  }
+
+  Future<String> _resolveDownloadUrl(String path) async {
+    if (path.isEmpty) return '';
+    try {
+      return await FirebaseStorage.instance.ref(path).getDownloadURL();
+    } catch (e) {
+      debugPrint('AnexoViewer getDownloadURL: $e');
+      return '';
+    }
   }
 
   Future<Uint8List?> _loadViaStorageSdk(String path) async {
@@ -109,7 +127,22 @@ class _AnexoViewerScreenState extends State<AnexoViewerScreen> {
     });
 
     final path = (widget.storagePath ?? '').trim();
-    final url = widget.url.trim();
+    var url = widget.url.trim();
+    if (url.isEmpty && path.isNotEmpty) {
+      url = await _resolveDownloadUrl(path);
+    }
+    _effectiveUrl = url;
+
+    if (!mounted) return;
+
+    // Web: imagens/PDF do Firebase — exibir URL direta (http.get falha por CORS).
+    if (_prefersWebDirectView) {
+      setState(() {
+        _loading = false;
+        _webEmbedFallback = true;
+      });
+      return;
+    }
 
     if (path.isNotEmpty) {
       final fromSdk = await _loadViaStorageSdk(path);
@@ -133,8 +166,30 @@ class _AnexoViewerScreenState extends State<AnexoViewerScreen> {
       }
     }
 
+    if (path.isNotEmpty && url.isNotEmpty) {
+      final refreshed = await _resolveDownloadUrl(path);
+      if (refreshed.isNotEmpty && refreshed != url) {
+        _effectiveUrl = refreshed;
+        if (_prefersWebDirectView && mounted) {
+          setState(() {
+            _loading = false;
+            _webEmbedFallback = true;
+          });
+          return;
+        }
+        final fromHttp = await _loadViaHttp(refreshed);
+        if (fromHttp != null && mounted) {
+          setState(() {
+            _bytes = fromHttp;
+            _loading = false;
+          });
+          return;
+        }
+      }
+    }
+
     if (!mounted) return;
-    if (kIsWeb && url.isNotEmpty) {
+    if (kIsWeb && _effectiveUrl.isNotEmpty) {
       setState(() {
         _loading = false;
         _webEmbedFallback = true;
@@ -149,7 +204,7 @@ class _AnexoViewerScreenState extends State<AnexoViewerScreen> {
   }
 
   Future<void> _abrirEmNovaAba() async {
-    final url = widget.url.trim();
+    final url = _effectiveUrl.isNotEmpty ? _effectiveUrl : widget.url.trim();
     if (url.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -234,7 +289,7 @@ class _AnexoViewerScreenState extends State<AnexoViewerScreen> {
         backgroundColor: AppColors.deepBlueDark,
         foregroundColor: Colors.white,
         actions: [
-          if (kIsWeb || widget.url.trim().isNotEmpty)
+          if (kIsWeb || _effectiveUrl.isNotEmpty || widget.url.trim().isNotEmpty)
             IconButton(
               icon: const Icon(Icons.open_in_new_rounded),
               tooltip: 'Abrir em nova aba',
@@ -280,8 +335,9 @@ class _AnexoViewerScreenState extends State<AnexoViewerScreen> {
 
     if (_webEmbedFallback) {
       return anexo_web.buildAnexoWebViewer(
-        widget.url,
+        _effectiveUrl,
         fileName: _resolvedFileName,
+        mimeType: _mimeType,
         onRetry: _load,
       );
     }
@@ -371,7 +427,7 @@ class _AnexoViewerScreenState extends State<AnexoViewerScreen> {
                 label: const Text('Tentar novamente'),
                 style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
               ),
-              if (widget.url.trim().isNotEmpty) ...[
+              if (_effectiveUrl.isNotEmpty || widget.url.trim().isNotEmpty) ...[
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
                   onPressed: _abrirEmNovaAba,

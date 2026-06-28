@@ -20,6 +20,7 @@ import '../services/mp_checkout_pricing_service.dart';
 import '../services/ios_payments_gate.dart';
 import '../services/login_preferences.dart';
 import '../services/push_notification_service.dart';
+import '../services/session_restore_service.dart';
 import '../widgets/divulgacao_public_promo_card.dart';
 import '../widgets/oauth_login_buttons.dart';
 import '../widgets/official_social_top_buttons.dart';
@@ -73,6 +74,39 @@ class _LandingScreenState extends State<LandingScreen>
     });
     if (!kIsWeb) {
       _tryInstantSessionRedirect();
+      WidgetsBinding.instance.addPostFrameCallback((_) => _autoRestoreSessionOnLanding());
+    }
+  }
+
+  /// Cold start: restaura Firebase/Google silencioso (igual Controle Total) — sem abrir Web.
+  Future<void> _autoRestoreSessionOnLanding() async {
+    if (!mounted || _loginLoading) return;
+    if (await LoginPreferences.isAccountSwitchPending()) return;
+
+    if (FirebaseAuth.instance.currentUser != null) {
+      _tryInstantSessionRedirect();
+      return;
+    }
+
+    final restored = await SessionRestoreService.tryRestoreIfNeeded();
+    if (restored != null && mounted) {
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+      return;
+    }
+
+    final last = await LoginPreferences.getLastOAuthProvider();
+    if (last != 'google') return;
+
+    setState(() => _loginLoading = true);
+    try {
+      final cred = await _auth.signInWithGoogleSilently();
+      if (cred != null && mounted) {
+        await _finishExpressLogin('google');
+      }
+    } catch (_) {
+      // Mantém landing — usuário toca em Google para escolher conta no app.
+    } finally {
+      if (mounted) setState(() => _loginLoading = false);
     }
   }
 
@@ -339,6 +373,15 @@ class _LandingScreenState extends State<LandingScreen>
     setState(() => _loginLoading = true);
     try {
       final forcePicker = await LoginPreferences.isAccountSwitchPending();
+
+      if (!forcePicker) {
+        final silentCred = await _auth.signInWithGoogleSilently();
+        if (silentCred != null) {
+          await _finishExpressLogin('google');
+          return;
+        }
+      }
+
       final cred = await _auth.signInWithGoogle(forceAccountPicker: forcePicker);
       if (!mounted) return;
       if (cred != null) {

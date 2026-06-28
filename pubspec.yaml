@@ -1,7 +1,7 @@
 name: controle_total_premium
 description: "WISDOMAPP — Sabedoria financeira baseada nos princípios bíblicos."
 publish_to: 'none'
-version: 10.04.0+12
+version: 10.04.0+13
 
 environment:
   sdk: ">=3.3.0 <4.0.0"

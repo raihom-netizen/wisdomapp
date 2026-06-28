@@ -28,6 +28,7 @@ import 'services/auth_service.dart';
 import 'services/app_session_cache.dart';
 import 'services/delegate_access_service.dart';
 import 'services/home_start_module_cache.dart';
+import 'services/course_videos_cache_service.dart';
 import 'services/login_preferences.dart';
 import 'services/user_profile_startup_cache.dart';
 import 'utils/firestore_user_doc_id.dart';
@@ -265,6 +266,7 @@ void main() async {
     BiometricStartupCache.warmUpEnabledHint(),
     UserProfileStartupCache.warmUp(),
     HomeStartModuleCache.warmUp(),
+    CourseVideosCacheService.warmUp(),
   ]);
   final reopenUid =
       FirebaseAuth.instance.currentUser?.uid ?? AppSessionCache.cachedUidSync();
@@ -297,6 +299,7 @@ void main() async {
       Future.wait<void>([
             UserProfileStartupCache.prefetch(reopenUid),
             HomeStartModuleCache.prefetch(reopenUid),
+            CourseVideosCacheService.prefetch(),
           ])
           .timeout(const Duration(milliseconds: 800), onTimeout: () => <void>[])
           .catchError((_) {}),
@@ -1159,6 +1162,7 @@ class _DelegateAccessGateState extends State<_DelegateAccessGate>
       await AppSessionCache.markShellReady(uid);
       unawaited(UserProfileStartupCache.prefetch(uid));
       unawaited(HomeStartModuleCache.prefetch(uid));
+      unawaited(CourseVideosCacheService.prefetch());
     }
   }
 

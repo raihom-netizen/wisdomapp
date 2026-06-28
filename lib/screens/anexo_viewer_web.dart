@@ -17,7 +17,9 @@ bool _pathLooksLikePdf(String s) {
   return s.toLowerCase().endsWith('.pdf');
 }
 
-bool isReceiptImageUrl(String url, String? fileName) {
+bool isReceiptImageUrl(String url, {String? fileName, String? mimeType}) {
+  final m = (mimeType ?? '').trim().toLowerCase();
+  if (m.startsWith('image/')) return true;
   final f = (fileName ?? '').trim();
   if (_pathLooksLikeImage(f)) return true;
   try {
@@ -36,7 +38,9 @@ bool isReceiptImageUrl(String url, String? fileName) {
   return false;
 }
 
-bool isReceiptPdfUrl(String url, String? fileName) {
+bool isReceiptPdfUrl(String url, {String? fileName, String? mimeType}) {
+  final m = (mimeType ?? '').trim().toLowerCase();
+  if (m == 'application/pdf') return true;
   final f = (fileName ?? '').trim().toLowerCase();
   if (_pathLooksLikePdf(f)) return true;
   try {
@@ -50,14 +54,6 @@ bool isReceiptPdfUrl(String url, String? fileName) {
   } catch (_) {}
   return false;
 }
-
-bool _isFirebaseStorage(String url) {
-  final l = url.toLowerCase();
-  return l.contains('firebasestorage.googleapis.com') || l.contains('firebasestorage.app');
-}
-
-String _googleViewerEmbedSrc(String url) =>
-    'https://docs.google.com/viewer?url=${Uri.encodeComponent(url)}&embedded=true';
 
 class _RegisteredIframe extends StatefulWidget {
   final String src;
@@ -90,10 +86,56 @@ class _RegisteredIframeState extends State<_RegisteredIframe> {
   Widget build(BuildContext context) => HtmlElementView(viewType: _viewType);
 }
 
-/// Pré-visualização na web quando bytes locais não estão disponíveis (fallback).
+class _RegisteredHtmlImage extends StatefulWidget {
+  final String url;
+
+  const _RegisteredHtmlImage({super.key, required this.url});
+
+  @override
+  State<_RegisteredHtmlImage> createState() => _RegisteredHtmlImageState();
+}
+
+class _RegisteredHtmlImageState extends State<_RegisteredHtmlImage> {
+  late final String _viewType;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _viewType = 'anexo-img-${widget.url.hashCode}-${DateTime.now().microsecondsSinceEpoch}';
+    ui_web.platformViewRegistry.registerViewFactory(_viewType, (int viewId) {
+      final img = html.ImageElement()
+        ..src = widget.url
+        ..style.maxWidth = '100%'
+        ..style.maxHeight = '100%'
+        ..style.objectFit = 'contain'
+        ..style.display = 'block'
+        ..style.margin = 'auto';
+      img.onError.listen((_) {
+        if (mounted) setState(() => _failed = true);
+      });
+      return img;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_failed) {
+      return _WebPreviewError(
+        message: 'Não foi possível carregar a imagem do comprovante.',
+        url: widget.url,
+      );
+    }
+    return HtmlElementView(viewType: _viewType);
+  }
+}
+
+/// Pré-visualização na web quando bytes locais não estão disponíveis (CORS no http.get).
+/// Firebase Storage: URL direta com token — nunca Google Docs Viewer.
 Widget buildAnexoWebViewer(
   String url, {
   String? fileName,
+  String? mimeType,
   VoidCallback? onRetry,
 }) {
   return LayoutBuilder(
@@ -105,6 +147,7 @@ Widget buildAnexoWebViewer(
       final w = constraints.hasBoundedWidth && constraints.maxWidth.isFinite && constraints.maxWidth > 48
           ? constraints.maxWidth
           : mq.width;
+      final isImage = isReceiptImageUrl(url, fileName: fileName, mimeType: mimeType);
       return SizedBox(
         width: w,
         height: h,
@@ -114,15 +157,22 @@ Widget buildAnexoWebViewer(
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
                 child: Text(
-                  'Visualização alternativa — se não carregar, use «Abrir em nova aba» ou «Tentar novamente».',
+                  isImage
+                      ? 'Visualização do comprovante — use «Abrir em nova aba» se não carregar.'
+                      : 'Visualização do PDF — use «Abrir em nova aba» se não carregar.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 12),
                 ),
               ),
             Expanded(
-              child: isReceiptImageUrl(url, fileName) && !_isFirebaseStorage(url)
-                  ? _WebImagePreview(url: url, fileName: fileName, width: w, height: h, onRetry: onRetry)
-                  : _WebEmbedPreview(url: url, fileName: fileName, width: w, height: h),
+              child: isImage
+                  ? _WebImagePreview(
+                      url: url,
+                      width: w,
+                      height: h,
+                      onRetry: onRetry,
+                    )
+                  : _DirectEmbedPreview(url: url, width: w, height: h),
             ),
           ],
         ),
@@ -133,14 +183,12 @@ Widget buildAnexoWebViewer(
 
 class _WebImagePreview extends StatelessWidget {
   final String url;
-  final String? fileName;
   final double width;
   final double height;
   final VoidCallback? onRetry;
 
   const _WebImagePreview({
     required this.url,
-    this.fileName,
     required this.width,
     required this.height,
     this.onRetry,
@@ -165,40 +213,63 @@ class _WebImagePreview extends StatelessWidget {
               ),
             );
           },
-          errorBuilder: (_, __, ___) => _WebEmbedPreview(
-            url: url,
-            fileName: fileName,
-            width: width,
-            height: height,
-          ),
+          errorBuilder: (_, __, ___) => _RegisteredHtmlImage(key: ValueKey<String>(url), url: url),
         ),
       ),
     );
   }
 }
 
-class _WebEmbedPreview extends StatelessWidget {
+/// PDF ou outros tipos: iframe com URL direta (Firebase Storage, etc.).
+class _DirectEmbedPreview extends StatelessWidget {
   final String url;
-  final String? fileName;
   final double width;
   final double height;
 
-  const _WebEmbedPreview({
+  const _DirectEmbedPreview({
     required this.url,
-    this.fileName,
     required this.width,
     required this.height,
   });
 
   @override
   Widget build(BuildContext context) {
-    final useGoogle = isReceiptPdfUrl(url, fileName) || _isFirebaseStorage(url) || isReceiptImageUrl(url, fileName);
-    final src = useGoogle ? _googleViewerEmbedSrc(url) : url;
+    if (url.trim().isEmpty) {
+      return const _WebPreviewError(message: 'Link do comprovante indisponível.');
+    }
     return ClipRRect(
       borderRadius: BorderRadius.circular(10),
       child: ColoredBox(
         color: const Color(0xFF2C2C2E),
-        child: _RegisteredIframe(key: ValueKey<String>(src), src: src),
+        child: _RegisteredIframe(key: ValueKey<String>(url), src: url),
+      ),
+    );
+  }
+}
+
+class _WebPreviewError extends StatelessWidget {
+  final String message;
+  final String? url;
+
+  const _WebPreviewError({required this.message, this.url});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.broken_image_outlined, size: 48, color: Colors.red.shade300),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white70, fontSize: 14),
+            ),
+          ],
+        ),
       ),
     );
   }

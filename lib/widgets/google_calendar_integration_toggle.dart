@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
@@ -31,6 +30,10 @@ class _GoogleCalendarIntegrationToggleState
     extends State<GoogleCalendarIntegrationToggle> {
   bool _busy = false;
   bool? _enabledOverride;
+  bool _loading = true;
+  Map<String, dynamic> _landingCfg = const {};
+  bool _enabledFromServer = false;
+  String? _emailFromServer;
 
   Color _hexToColor(String? raw, Color fallback) {
     if (raw == null) return fallback;
@@ -42,6 +45,55 @@ class _GoogleCalendarIntegrationToggleState
     );
     if (value == null) return fallback;
     return Color(value);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshState();
+  }
+
+  @override
+  void didUpdateWidget(covariant GoogleCalendarIntegrationToggle oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.userDocId != widget.userDocId) {
+      _enabledOverride = null;
+      _refreshState();
+    }
+  }
+
+  Future<void> _refreshState() async {
+    if (widget.userDocId.isEmpty) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
+    try {
+      final results = await Future.wait([
+        GoogleCalendarSyncService.readLandingAgendaConfig(),
+        GoogleCalendarSyncService.readIntegrationState(widget.userDocId),
+      ]);
+      if (!mounted) return;
+      final integration =
+          results[1] as ({bool enabled, String? email});
+      setState(() {
+        _landingCfg = results[0] as Map<String, dynamic>;
+        _enabledFromServer = integration.enabled;
+        _emailFromServer = integration.email;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _showFirestoreTerminatedHint() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Conexão com o banco foi encerrada. Atualize a página (F5) e tente de novo.',
+        ),
+      ),
+    );
   }
 
   Future<void> _finishEnable(GoogleCalendarEnableResult res) async {
@@ -66,7 +118,12 @@ class _GoogleCalendarIntegrationToggleState
       );
       return;
     }
-    setState(() => _enabledOverride = true);
+    setState(() {
+      _enabledOverride = true;
+      _enabledFromServer = true;
+      _emailFromServer =
+          res.email?.trim().isNotEmpty == true ? res.email!.trim() : null;
+    });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -117,12 +174,14 @@ class _GoogleCalendarIntegrationToggleState
       } else {
         await GoogleCalendarSyncService.disable(widget.userDocId);
         if (mounted) {
-          setState(() => _enabledOverride = false);
+          setState(() {
+            _enabledOverride = false;
+            _enabledFromServer = false;
+          });
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                'Calendário Google desativado. Pode reativar quando quiser — '
-                'a conta Gmail continua salva.',
+                'Calendário Google desativado. Para reativar, autorize o Google de novo.',
               ),
             ),
           );
@@ -131,8 +190,9 @@ class _GoogleCalendarIntegrationToggleState
       widget.onChanged?.call();
     } catch (e) {
       if (mounted) {
-        final msg = e.toString().split('\n').first;
-        if (FirestoreWebGuard.isRecoverableFirestoreWebError(e)) {
+        if (FirestoreWebGuard.isClientTerminatedError(e)) {
+          _showFirestoreTerminatedHint();
+        } else if (FirestoreWebGuard.isRecoverableFirestoreWebError(e)) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
@@ -141,6 +201,7 @@ class _GoogleCalendarIntegrationToggleState
             ),
           );
         } else {
+          final msg = e.toString().split('\n').first;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Erro: $msg')),
           );
@@ -162,7 +223,7 @@ class _GoogleCalendarIntegrationToggleState
               ? 'A conta $currentEmail será desvinculada da agenda. '
                   'Ao ativar de novo, você escolhe outro Gmail.'
               : 'As credenciais salvas serão removidas. '
-                  'Ao ativar de novo, você escolhe qual Gmail usar.',
+                  'Ao ativar de novo, você escolhe qual Gmail.',
         ),
         actions: [
           TextButton(
@@ -181,7 +242,11 @@ class _GoogleCalendarIntegrationToggleState
     try {
       await GoogleCalendarSyncService.prepareGoogleAccountChange(widget.userDocId);
       if (!mounted) return;
-      setState(() => _enabledOverride = false);
+      setState(() {
+        _enabledOverride = false;
+        _enabledFromServer = false;
+        _emailFromServer = null;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -190,6 +255,10 @@ class _GoogleCalendarIntegrationToggleState
         ),
       );
       widget.onChanged?.call();
+    } catch (e) {
+      if (mounted && FirestoreWebGuard.isClientTerminatedError(e)) {
+        _showFirestoreTerminatedHint();
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -198,189 +267,178 @@ class _GoogleCalendarIntegrationToggleState
   @override
   Widget build(BuildContext context) {
     if (widget.userDocId.isEmpty) return const SizedBox.shrink();
+    if (_loading) {
+      return SizedBox(
+        height: widget.compact ? 56 : 72,
+        child: const Center(
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
 
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('landing_content')
-          .doc('main')
-          .snapshots(),
-      builder: (context, cfgSnap) {
-        final cfg = cfgSnap.data?.data() ?? const <String, dynamic>{};
-        if (cfg['googleAgendaEnabled'] == false) {
-          return const SizedBox.shrink();
-        }
+    if (_landingCfg['googleAgendaEnabled'] == false) {
+      return const SizedBox.shrink();
+    }
 
-        final primary = _hexToColor(
-          cfg['divThemePrimaryColor']?.toString(),
-          const Color(0xFF0B1B4B),
-        );
-        final accent = _hexToColor(
-          cfg['divThemeAccentColor']?.toString(),
-          const Color(0xFFE8C547),
-        );
-        final hint = (cfg['googleAgendaHintText'] ?? '')
-                .toString()
-                .trim()
-                .isEmpty
-            ? (GoogleCalendarAuthHelper.isApplePrimaryLogin()
-                ? 'Entrou com Apple? Escolha qualquer conta Gmail para sincronizar a agenda. '
-                    'Seu login Apple continua igual.'
-                : 'Sincroniza automaticamente com o Gmail da sua conta. '
-                    'Compromissos coloridos no calendário e envio ao Google ao adicionar.')
-            : (cfg['googleAgendaHintText'] as String).trim();
+    final primary = _hexToColor(
+      _landingCfg['divThemePrimaryColor']?.toString(),
+      const Color(0xFF0B1B4B),
+    );
+    final accent = _hexToColor(
+      _landingCfg['divThemeAccentColor']?.toString(),
+      const Color(0xFFE8C547),
+    );
+    final hint = (_landingCfg['googleAgendaHintText'] ?? '')
+            .toString()
+            .trim()
+            .isEmpty
+        ? (GoogleCalendarAuthHelper.isApplePrimaryLogin()
+            ? 'Entrou com Apple? Escolha qualquer conta Gmail para sincronizar a agenda. '
+                'Seu login Apple continua igual.'
+            : 'Sincroniza automaticamente com o Gmail da sua conta. '
+                'Compromissos coloridos no calendário e envio ao Google ao adicionar.')
+        : (_landingCfg['googleAgendaHintText'] as String).trim();
 
-        return StreamBuilder<bool>(
-          stream: GoogleCalendarSyncService.enabledStream(widget.userDocId),
-          builder: (context, enabledSnap) {
-            final fromServer = enabledSnap.data ?? false;
-            final enabled = _enabledOverride ?? fromServer;
-            return StreamBuilder<String?>(
-              stream: GoogleCalendarSyncService.connectedEmailStream(
-                widget.userDocId,
+    final enabled = _enabledOverride ?? _enabledFromServer;
+    final email = _emailFromServer;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          width: double.infinity,
+          margin: EdgeInsets.only(bottom: widget.compact ? 8 : 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            gradient: LinearGradient(
+              colors: [primary, primary.withValues(alpha: 0.92)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: primary.withValues(alpha: 0.28),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
               ),
-              builder: (context, emailSnap) {
-                final email = emailSnap.data;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      margin: EdgeInsets.only(bottom: widget.compact ? 8 : 12),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(18),
-                        gradient: LinearGradient(
-                          colors: [primary, primary.withValues(alpha: 0.92)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                14,
+                widget.compact ? 10 : 12,
+                10,
+                widget.compact ? 10 : 12,
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: _busy
+                        ? SizedBox(
+                            width: 26,
+                            height: 26,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: accent,
+                            ),
+                          )
+                        : Icon(
+                            Icons.calendar_month_rounded,
+                            color: accent,
+                            size: 26,
+                          ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'CALENDÁRIO GOOGLE',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 15,
+                            letterSpacing: 0.6,
+                          ),
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: primary.withValues(alpha: 0.28),
-                            blurRadius: 14,
-                            offset: const Offset(0, 6),
+                        const SizedBox(height: 4),
+                        Text(
+                          hint,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.88),
+                            fontSize: 11.5,
+                            height: 1.35,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        if (enabled) ...[
+                          const SizedBox(height: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: accent.withValues(alpha: 0.22),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: accent.withValues(alpha: 0.55),
+                              ),
+                            ),
+                            child: Text(
+                              email != null && email.isNotEmpty
+                                  ? 'ATIVO · $email'
+                                  : 'ATIVO — dias coloridos e sync automático',
+                              style: TextStyle(
+                                color: accent,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
                           ),
                         ],
-                      ),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: Padding(
-                          padding: EdgeInsets.fromLTRB(
-                            14,
-                            widget.compact ? 10 : 12,
-                            10,
-                            widget.compact ? 10 : 12,
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                                child: _busy
-                                    ? SizedBox(
-                                        width: 26,
-                                        height: 26,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2.5,
-                                          color: accent,
-                                        ),
-                                      )
-                                    : Icon(
-                                        Icons.calendar_month_rounded,
-                                        color: accent,
-                                        size: 26,
-                                      ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      'CALENDÁRIO GOOGLE',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 15,
-                                        letterSpacing: 0.6,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      hint,
-                                      style: TextStyle(
-                                        color:
-                                            Colors.white.withValues(alpha: 0.88),
-                                        fontSize: 11.5,
-                                        height: 1.35,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    if (enabled) ...[
-                                      const SizedBox(height: 6),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 3,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: accent.withValues(alpha: 0.22),
-                                          borderRadius: BorderRadius.circular(8),
-                                          border: Border.all(
-                                            color: accent.withValues(alpha: 0.55),
-                                          ),
-                                        ),
-                                        child: Text(
-                                          email != null && email.isNotEmpty
-                                              ? 'ATIVO · $email'
-                                              : 'ATIVO — dias coloridos e sync automático',
-                                          style: TextStyle(
-                                            color: accent,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w800,
-                                            letterSpacing: 0.3,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                              Switch.adaptive(
-                                value: enabled,
-                                onChanged: _busy ? null : _onToggle,
-                                activeTrackColor: accent.withValues(alpha: 0.45),
-                                activeThumbColor: accent,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                      ],
                     ),
-                    if (widget.showChangeAccountAction &&
-                        (enabled || (email != null && email.isNotEmpty)))
-                      Padding(
-                        padding: const EdgeInsets.only(left: 4, right: 4, bottom: 8),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: TextButton.icon(
-                            onPressed:
-                                _busy ? null : () => _onChangeGoogleAccount(email),
-                            icon: const Icon(Icons.swap_horiz_rounded, size: 18),
-                            label: const Text('Trocar conta Google'),
-                          ),
-                        ),
-                      ),
-                  ],
-                );
-              },
-            );
-          },
-        );
-      },
+                  ),
+                  Switch.adaptive(
+                    value: enabled,
+                    onChanged: _busy ? null : _onToggle,
+                    activeTrackColor: accent.withValues(alpha: 0.45),
+                    activeThumbColor: accent,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (widget.showChangeAccountAction &&
+            (enabled || (email != null && email.isNotEmpty)))
+          Padding(
+            padding: const EdgeInsets.only(left: 4, right: 4, bottom: 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _busy ? null : () => _onChangeGoogleAccount(email),
+                icon: const Icon(Icons.swap_horiz_rounded, size: 18),
+                label: const Text('Trocar conta Google'),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

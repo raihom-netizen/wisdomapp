@@ -64,6 +64,31 @@ class ReceiptAttachmentUtils {
     return viewUrl(receipt).isNotEmpty || storagePath(receipt).isNotEmpty;
   }
 
+  static bool isImageMime(String mime, {String? fileName}) {
+    final m = mime.trim().toLowerCase();
+    if (m.startsWith('image/')) return true;
+    if (fileName == null) return false;
+    final ext = extensionFromName(fileName);
+    return ext == 'png' || ext == 'jpg' || ext == 'jpeg' || ext == 'webp' || ext == 'gif';
+  }
+
+  static bool isPdfMime(String mime, {String? fileName}) {
+    final m = mime.trim().toLowerCase();
+    if (m == 'application/pdf') return true;
+    if (fileName == null) return false;
+    return extensionFromName(fileName) == 'pdf';
+  }
+
+  static bool isImageReceipt(Map<String, dynamic>? receipt) {
+    if (receipt == null || receipt.isEmpty) return false;
+    return isImageMime(mimeType(receipt), fileName: fileName(receipt));
+  }
+
+  static bool isPdfReceipt(Map<String, dynamic>? receipt) {
+    if (receipt == null || receipt.isEmpty) return false;
+    return isPdfMime(mimeType(receipt), fileName: fileName(receipt));
+  }
+
   /// Seleciona PDF/PNG/JPG (câmera, galeria ou arquivo) com validação.
   static Future<({Uint8List bytes, String name, String mime})?> pickValidated(
     BuildContext context, {

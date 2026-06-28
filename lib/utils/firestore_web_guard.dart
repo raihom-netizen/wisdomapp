@@ -44,6 +44,69 @@ class FirestoreWebGuard {
     }
   }
 
+  static bool isClientTerminatedError(Object e) {
+    final msg = e.toString().toLowerCase();
+    if (msg.contains('already been terminated') ||
+        msg.contains('client has already been terminated')) {
+      return true;
+    }
+    if (e is FirebaseException &&
+        e.code == 'failed-precondition' &&
+        msg.contains('terminated')) {
+      return true;
+    }
+    return false;
+  }
+
+  /// Leituras/gravações pontuais (Calendar, settings): **nunca** `terminate()`.
+  static Future<T> runFirestoreOpSafe<T>(
+    Future<T> Function() fn, {
+    int maxAttempts = 5,
+  }) async {
+    for (var attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        return await fn();
+      } catch (e, st) {
+        if (isClientTerminatedError(e)) {
+          Error.throwWithStackTrace(e, st);
+        }
+        final retry = attempt < maxAttempts - 1 &&
+            (isInternalAssertionError(e) ||
+                (e is FirebaseException &&
+                    const {
+                      'unavailable',
+                      'deadline-exceeded',
+                      'aborted',
+                      'resource-exhausted',
+                    }.contains(e.code)));
+        if (!retry) {
+          Error.throwWithStackTrace(e, st);
+        }
+        if (kIsWeb) {
+          try {
+            await FirebaseFirestore.instance.enableNetwork();
+          } catch (_) {}
+        }
+        await Future<void>.delayed(Duration(milliseconds: 180 * (attempt + 1)));
+      }
+    }
+    throw StateError('runFirestoreOpSafe: exhausted attempts');
+  }
+
+  /// Antes de gravar (Calendar OAuth): alinha Auth token sem desligar Firestore.
+  static Future<void> prepareForPublishWrite() async {
+    if (!kIsWeb) return;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        await user.getIdToken(false);
+      } catch (_) {}
+    }
+    try {
+      await FirebaseFirestore.instance.enableNetwork();
+    } catch (_) {}
+  }
+
   /// Antes do popup Google: reduz corrida com listeners públicos (landing/divulgação).
   static Future<void> prepareBeforeWebSignIn() async {
     if (!kIsWeb) return;
@@ -92,11 +155,15 @@ class FirestoreWebGuard {
   }
 
   /// Executa [fn]; em erro recuperável do Firestore Web, recupera e tenta de novo (1x).
+  /// Não chama `terminate()` se o cliente já foi encerrado (evita loop fatal).
   static Future<T> runWithWebRecovery<T>(Future<T> Function() fn) async {
     try {
       return await fn();
     } catch (e, st) {
       if (!kIsWeb || !isRecoverableFirestoreWebError(e)) {
+        Error.throwWithStackTrace(e, st);
+      }
+      if (isClientTerminatedError(e)) {
         Error.throwWithStackTrace(e, st);
       }
       debugPrint('FirestoreWebGuard: recuperando sessão Web após erro…');

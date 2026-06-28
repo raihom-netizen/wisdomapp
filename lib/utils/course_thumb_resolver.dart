@@ -50,7 +50,8 @@ class CourseThumbResolver {
   }
 
   static bool hasVisualThumb(Map<String, dynamic> data) =>
-      CourseMediaUrlResolver.hasResolvableImage(data);
+      CourseMediaUrlResolver.hasResolvableImage(data) ||
+      videoIdFromData(data) != null;
 
   static bool isDicaPhoto(Map<String, dynamic> data) {
     if ((data['type'] ?? 'curso').toString() != 'dica') return false;

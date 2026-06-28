@@ -34,7 +34,10 @@ class AuthService {
   GoogleSignIn _googleSignInInstance() {
     _googleSignInLazy ??= GoogleSignIn(
       scopes: const ['email', 'profile'],
+      // Web client ID (tipo 3) — obrigatório no Android para idToken Firebase.
       serverClientId: kIsWeb ? null : _googleServerClientId,
+      // Conta nativa no app (picker Google), não browser externo.
+      forceCodeForRefreshToken: false,
     );
     return _googleSignInLazy!;
   }

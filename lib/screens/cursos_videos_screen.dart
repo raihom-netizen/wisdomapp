@@ -1,19 +1,20 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/wisdom_courses_module_config.dart';
 import '../theme/app_colors.dart';
-import '../services/course_videos_expiry_cleanup_service.dart';
+import '../services/course_videos_cache_service.dart';
 import '../utils/course_video_validity.dart';
 import '../utils/course_content_link_helper.dart';
 import '../utils/course_thumb_resolver.dart';
 import '../utils/youtube_url_helper.dart';
 import '../utils/course_media_url_resolver.dart';
 import '../widgets/course_media_preview.dart';
-import '../widgets/course_video/course_video_watch_screen.dart';
+import '../widgets/course_video/course_module_media_panel.dart';
 
 BoxFit _courseThumbFit(Map<String, dynamic> data) {
   final type = (data['type'] ?? 'curso').toString();
@@ -38,27 +39,66 @@ class CursosVideosScreen extends StatefulWidget {
   State<CursosVideosScreen> createState() => _CursosVideosScreenState();
 }
 
-class _CursosVideosScreenState extends State<CursosVideosScreen> {
+class _CursosVideosScreenState extends State<CursosVideosScreen>
+    with AutomaticKeepAliveClientMixin {
   int _tabIndex = 0;
   int _retryGen = 0;
-  bool _expiryCleanupScheduled = false;
+  Map<String, dynamic>? _activeCurso;
+  Map<String, dynamic>? _activeDica;
+  final _cache = CourseVideosCacheService.instance;
+  String _cacheFingerprint = '';
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
-    if (!_expiryCleanupScheduled) {
-      _expiryCleanupScheduled = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        unawaited(CourseVideosExpiryCleanupService.purgeExpired());
-      });
-    }
+    _cache.addListener(_onCacheUpdate);
+    unawaited(_cache.ensureLoaded());
   }
+
+  @override
+  void dispose() {
+    _cache.removeListener(_onCacheUpdate);
+    super.dispose();
+  }
+
+  String _fingerprint() {
+    final ids = _cache.docs.map((d) => d.id).join(',');
+    return '$ids|${_cache.config.showTipsSection}|${_cache.refreshing}|${_cache.hasServerSync}';
+  }
+
+  void _onCacheUpdate() {
+    if (!mounted) return;
+    final fp = _fingerprint();
+
+    final published = _cache.docs.where((d) => _isPublished(d.data)).toList();
+    final cursos = _filterAndSort(published, 'curso');
+    final dicas = _filterAndSort(published, 'dica');
+    var changed = false;
+    if (_activeCurso == null && cursos.isNotEmpty) {
+      final d = cursos.first;
+      _activeCurso = {...d.data, 'id': d.id};
+      changed = true;
+    }
+    if (_activeDica == null && dicas.isNotEmpty) {
+      final d = dicas.first;
+      _activeDica = {...d.data, 'id': d.id};
+      changed = true;
+    }
+    if (!changed && fp == _cacheFingerprint) return;
+    _cacheFingerprint = fp;
+    setState(() {});
+  }
+
+  String _contentType(Map<String, dynamic> data) =>
+      (data['type'] ?? 'curso').toString().trim().toLowerCase();
 
   bool _isPublished(Map<String, dynamic> data) {
     if (!CourseVideoValidity.isStillValid(data)) return false;
     if (data['published'] == false) return false;
-    final type = (data['type'] ?? 'curso').toString();
-    if (type == 'curso') return _isPublishedCurso(data);
+    if (_contentType(data) == 'curso') return _isPublishedCurso(data);
     return _isPublishedDica(data);
   }
 
@@ -100,19 +140,19 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
 
   String? _thumbUrl(Map<String, dynamic> data) => CourseThumbResolver.resolveBest(data);
 
-  List<QueryDocumentSnapshot<Map<String, dynamic>>> _filterAndSort(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  List<CourseVideoDoc> _filterAndSort(
+    List<CourseVideoDoc> docs,
     String type,
   ) {
     final out = docs.where((d) {
-      final data = d.data();
+      final data = d.data;
       if (!_isPublished(data)) return false;
-      return (data['type'] ?? 'curso').toString() == type;
+      return _contentType(data) == type;
     }).toList();
 
     out.sort((a, b) {
-      final ta = a.data()['createdAt'];
-      final tb = b.data()['createdAt'];
+      final ta = a.data['createdAt'];
+      final tb = b.data['createdAt'];
       if (ta is Timestamp && tb is Timestamp) {
         return tb.compareTo(ta);
       }
@@ -121,102 +161,139 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
     return out;
   }
 
-  void _retryLoad() => setState(() => _retryGen++);
+  void _retryLoad() {
+    setState(() => _retryGen++);
+    unawaited(_cache.ensureLoaded(forceServer: true));
+  }
+
+  void _selectModuleContent(Map<String, dynamic> data, {required bool isDica}) {
+    setState(() {
+      if (isDica) {
+        _activeDica = data;
+      } else {
+        _activeCurso = data;
+      }
+    });
+    final sc = widget.shellScrollController;
+    if (sc != null && sc.hasClients) {
+      sc.animateTo(
+        0,
+        duration: const Duration(milliseconds: 380),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
+  Map<String, dynamic>? _panelData(
+    List<CourseVideoDoc> docs,
+    Map<String, dynamic>? active,
+  ) {
+    if (docs.isEmpty) return null;
+    if (active != null) {
+      final activeId = active['id']?.toString();
+      if (activeId != null && activeId.isNotEmpty) {
+        for (final d in docs) {
+          if (d.id == activeId) return active;
+        }
+      } else {
+        return active;
+      }
+    }
+    final first = docs.first;
+    return {...first.data, 'id': first.id};
+  }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     // ignore: unused_local_variable
     final _ = _retryGen;
 
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('app_config')
-          .doc('wisdom_courses_module')
-          .snapshots(),
-      builder: (context, cfgSnap) {
-        final cfg = cfgSnap.hasData
-            ? WisdomCoursesModuleConfig.fromMap(cfgSnap.data?.data())
-            : WisdomCoursesModuleConfig.defaults;
+    final cfg = _cache.config;
+    final allDocs = _cache.docs;
+    final published = allDocs.where((d) => _isPublished(d.data)).toList();
+    final cursos = _filterAndSort(published, 'curso');
+    final dicas = _filterAndSort(published, 'dica');
+    final syncing = _cache.showInitialLoading;
 
-        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance.collection('course_videos').snapshots(),
-          builder: (context, videosSnap) {
-            if (videosSnap.hasError) {
-              return _errorView(cfg, videosSnap.error);
-            }
-
-            final allDocs = videosSnap.data?.docs ?? const [];
-            final published = allDocs.where((d) => _isPublished(d.data())).toList();
-            final cursos = _filterAndSort(published, 'curso');
-            final dicas = _filterAndSort(published, 'dica');
-            final syncing = videosSnap.connectionState == ConnectionState.waiting &&
-                !videosSnap.hasData;
-
-            return Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFFF0F4FF), Color(0xFFF8FAFC), Color(0xFFEFFDF9)],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                ),
+    return RefreshIndicator(
+      onRefresh: () => _cache.ensureLoaded(forceServer: true),
+      child: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFFF0F4FF), Color(0xFFF8FAFC), Color(0xFFEFFDF9)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: ListView(
+          controller: widget.shellScrollController,
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics(),
+          ),
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 28),
+          children: [
+            _buildHero(cfg, syncing && !_cache.hasCachedData),
+            if (cfg.showTipsSection) ...[
+              const SizedBox(height: 16),
+              _ModernTabSelector(
+                index: _tabIndex,
+                cursosCount: cursos.length,
+                dicasCount: dicas.length,
+                onChanged: (i) => setState(() {
+                  _tabIndex = i;
+                  if (i == 1 && _activeDica == null && dicas.isNotEmpty) {
+                    final d = dicas.first;
+                    _activeDica = {...d.data, 'id': d.id};
+                  }
+                  if (i == 0 && _activeCurso == null && cursos.isNotEmpty) {
+                    final d = cursos.first;
+                    _activeCurso = {...d.data, 'id': d.id};
+                  }
+                }),
               ),
-              child: ListView(
-                controller: widget.shellScrollController,
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 28),
-                children: [
-                  _buildHero(cfg, syncing),
-                  if (cfg.showTipsSection) ...[
-                    const SizedBox(height: 16),
-                    _ModernTabSelector(
-                      index: _tabIndex,
-                      cursosCount: cursos.length,
-                      dicasCount: dicas.length,
-                      onChanged: (i) => setState(() => _tabIndex = i),
-                    ),
-                    const SizedBox(height: 14),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 280),
-                      child: _tabIndex == 0
-                          ? _buildSection(
-                              key: const ValueKey('cursos'),
-                              cfg: cfg,
-                              docs: cursos,
-                              syncing: syncing,
-                              accent: const Color(0xFF2563EB),
-                              accent2: const Color(0xFF1D4ED8),
-                              icon: Icons.school_rounded,
-                              label: 'Cursos',
-                            )
-                          : _buildSection(
-                              key: const ValueKey('dicas'),
-                              cfg: cfg,
-                              docs: dicas,
-                              syncing: syncing,
-                              accent: const Color(0xFFF59E0B),
-                              accent2: const Color(0xFFD97706),
-                              icon: Icons.lightbulb_rounded,
-                              label: 'Dicas',
-                            ),
-                    ),
-                  ] else ...[
-                    const SizedBox(height: 16),
-                    _sectionTitle(cfg.sectionTitle, AppColors.primary),
-                    const SizedBox(height: 10),
-                    _buildListBody(
-                      cfg: cfg,
-                      docs: cursos,
-                      allDocs: cursos,
-                      syncing: syncing,
-                      accent: AppColors.primary,
-                      accent2: AppColors.deepBlue,
-                    ),
-                  ],
-                ],
+              const SizedBox(height: 14),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 280),
+                layoutBuilder: (current, previous) => current ?? const SizedBox.shrink(),
+                child: _tabIndex == 0
+                    ? _buildSection(
+                        key: const ValueKey('cursos'),
+                        cfg: cfg,
+                        docs: cursos,
+                        syncing: syncing,
+                        accent: const Color(0xFF2563EB),
+                        accent2: const Color(0xFF1D4ED8),
+                        icon: Icons.school_rounded,
+                        label: 'Cursos',
+                      )
+                    : _buildSection(
+                        key: const ValueKey('dicas'),
+                        cfg: cfg,
+                        docs: dicas,
+                        syncing: syncing,
+                        accent: const Color(0xFFF59E0B),
+                        accent2: const Color(0xFFD97706),
+                        icon: Icons.lightbulb_rounded,
+                        label: 'Dicas',
+                      ),
               ),
-            );
-          },
-        );
-      },
+            ] else ...[
+              const SizedBox(height: 16),
+              _sectionTitle(cfg.sectionTitle, AppColors.primary),
+              const SizedBox(height: 10),
+              _buildListBody(
+                cfg: cfg,
+                docs: cursos,
+                allDocs: cursos,
+                syncing: syncing,
+                accent: AppColors.primary,
+                accent2: AppColors.deepBlue,
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -342,7 +419,7 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
   Widget _buildSection({
     required Key key,
     required WisdomCoursesModuleConfig cfg,
-    required List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    required List<CourseVideoDoc> docs,
     required bool syncing,
     required Color accent,
     required Color accent2,
@@ -350,24 +427,51 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
     required String label,
   }) {
     final isDicas = label == 'Dicas';
+    if (docs.isEmpty) {
+      return Column(
+        key: key,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _emptyState(
+            cfg,
+            syncing,
+            accent,
+            emptyHint: isDicas
+                ? 'Nenhuma dica publicada no momento. Volte em breve!'
+                : null,
+          ),
+        ],
+      );
+    }
+    final related = docs.map((d) => {...d.data, 'id': d.id}).toList();
+    final panelData = _panelData(docs, isDicas ? _activeDica : _activeCurso)!;
     return Column(
       key: key,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (docs.isNotEmpty) ...[
-          _FeaturedVideoHighlight(
-            data: {...docs.first.data(), 'id': docs.first.id},
-            videoId: _videoId(docs.first.data()),
-            thumbUrl: _thumbUrl(docs.first.data()),
-            accent: accent,
-            accent2: accent2,
-            badge: 'DESTAQUE · $label',
-            onTap: () => _openContent(
-              context,
-              {...docs.first.data(), 'id': docs.first.id},
-              related: docs.map((d) => {...d.data(), 'id': d.id}).toList(),
+          if (courseShowModulePanel(panelData))
+            RepaintBoundary(
+              child: CourseModuleMediaPanel(
+                key: ValueKey('panel-${panelData['id']}'),
+                data: panelData,
+                accent: accent,
+                accent2: accent2,
+                badge: 'DESTAQUE · $label',
+                related: related,
+                onSelectRelated: (item) => _selectModuleContent(item, isDica: isDicas),
+              ),
+            )
+          else
+            _FeaturedVideoHighlight(
+              data: panelData,
+              videoId: _videoId(panelData),
+              thumbUrl: _thumbUrl(panelData),
+              accent: accent,
+              accent2: accent2,
+              badge: 'DESTAQUE · $label',
+              onTap: () => _selectModuleContent(panelData, isDica: isDicas),
             ),
-          ),
           if (docs.length > 1) ...[
             const SizedBox(height: 14),
             _sectionTitle('Mais $label', accent),
@@ -402,22 +506,13 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
     BuildContext context,
     Map<String, dynamic> data, {
     List<Map<String, dynamic>> related = const [],
+    required bool isDica,
   }) async {
+    if (courseShowModulePanel(data)) {
+      _selectModuleContent(data, isDica: isDica);
+      return;
+    }
     final type = (data['type'] ?? 'curso').toString();
-    if (CourseMediaUrlResolver.collectVideoEntries(data).isNotEmpty ||
-        _mp4Url(data) != null) {
-      await openCourseVideoFromData(context, data: data, related: related);
-      return;
-    }
-    final videoId = _videoId(data);
-    if (videoId != null) {
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => CourseVideoWatchScreen(data: data, related: related),
-        ),
-      );
-      return;
-    }
     final link = _externalLink(data);
     if (link != null && CourseContentLinkHelper.isValidHttpUrl(link)) {
       final uri = Uri.parse(link.startsWith('http') ? link : 'https://$link');
@@ -427,67 +522,14 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
       return;
     }
     if (type == 'dica') {
-      await _showDicaDetail(context, data);
+      _selectModuleContent(data, isDica: true);
     }
-  }
-
-  Future<void> _showDicaDetail(BuildContext context, Map<String, dynamic> data) async {
-    final body = (data['bodyText'] ?? data['description'] ?? '').toString();
-    final hasGallery = CourseMediaUrlResolver.hasResolvableImage(data);
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.75,
-        minChildSize: 0.45,
-        maxChildSize: 0.95,
-        builder: (_, scroll) => Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-          ),
-          child: ListView(
-            controller: scroll,
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                (data['title'] ?? 'Dica').toString(),
-                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20, height: 1.25),
-              ),
-              if (hasGallery) ...[
-                const SizedBox(height: 14),
-                CoursePhotoGallery(data: data, height: 280),
-              ],
-              if (body.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                Text(
-                  body,
-                  style: TextStyle(fontSize: 15, height: 1.55, color: Colors.grey.shade800),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   Widget _buildDicasGrid({
     required WisdomCoursesModuleConfig cfg,
-    required List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
-    required List<QueryDocumentSnapshot<Map<String, dynamic>>> allDocs,
+    required List<CourseVideoDoc> docs,
+    required List<CourseVideoDoc> allDocs,
     required bool syncing,
     required Color accent,
     required Color accent2,
@@ -510,15 +552,22 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
           ),
           itemCount: docs.length,
           itemBuilder: (context, i) {
-            final data = docs[i].data();
-            final related = allDocs.map((d) => {...d.data(), 'id': d.id}).toList();
+            final data = docs[i].data;
+            final related = allDocs.map((d) => {...d.data, 'id': d.id}).toList();
             return _DicaGridCard(
               data: {...data, 'id': docs[i].id},
               videoId: _videoId(data),
               thumbUrl: _thumbUrl(data),
               accent: accent,
               accent2: accent2,
-              onTap: () => _openContent(context, {...data, 'id': docs[i].id}, related: related),
+              selected: (_activeDica?['id'] ?? (allDocs.isNotEmpty ? allDocs.first.id : '')) ==
+                  docs[i].id,
+              onTap: () => _openContent(
+                context,
+                {...data, 'id': docs[i].id},
+                related: related,
+                isDica: true,
+              ),
             );
           },
         );
@@ -528,8 +577,8 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
 
   Widget _buildListBody({
     required WisdomCoursesModuleConfig cfg,
-    required List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
-    required List<QueryDocumentSnapshot<Map<String, dynamic>>> allDocs,
+    required List<CourseVideoDoc> docs,
+    required List<CourseVideoDoc> allDocs,
     required bool syncing,
     required Color accent,
     required Color accent2,
@@ -542,22 +591,29 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
       children: [
         for (final doc in docs)
           _ModernVideoCard(
-            data: {...doc.data(), 'id': doc.id},
-            videoId: _videoId(doc.data()),
-            thumbUrl: _thumbUrl(doc.data()),
+            data: {...doc.data, 'id': doc.id},
+            videoId: _videoId(doc.data),
+            thumbUrl: _thumbUrl(doc.data),
             accent: accent,
             accent2: accent2,
+            selected: (_activeCurso?['id'] ?? (allDocs.isNotEmpty ? allDocs.first.id : '')) == doc.id,
             onTap: () => _openContent(
               context,
-              {...doc.data(), 'id': doc.id},
-              related: allDocs.map((d) => {...d.data(), 'id': d.id}).toList(),
+              {...doc.data, 'id': doc.id},
+              related: allDocs.map((d) => {...d.data, 'id': d.id}).toList(),
+              isDica: false,
             ),
           ),
       ],
     );
   }
 
-  Widget _emptyState(WisdomCoursesModuleConfig cfg, bool syncing, Color accent) {
+  Widget _emptyState(
+    WisdomCoursesModuleConfig cfg,
+    bool syncing,
+    Color accent, {
+    String? emptyHint,
+  }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
       decoration: BoxDecoration(
@@ -584,7 +640,7 @@ class _CursosVideosScreenState extends State<CursosVideosScreen> {
           ),
           const SizedBox(height: 16),
           Text(
-            syncing ? 'A carregar conteúdo…' : cfg.emptyMessage,
+            syncing ? 'A carregar conteúdo…' : (emptyHint ?? cfg.emptyMessage),
             textAlign: TextAlign.center,
             style: TextStyle(
               color: Colors.grey.shade800,
@@ -775,7 +831,6 @@ class _FeaturedVideoHighlight extends StatelessWidget {
     final preview = body.isNotEmpty ? body : description;
     final thumbFit = _courseThumbFit(data);
     final isVideo = CourseThumbResolver.isVideoContent(data);
-    final hasThumb = CourseThumbResolver.hasVisualThumb(data);
 
     return Material(
       color: Colors.transparent,
@@ -785,16 +840,13 @@ class _FeaturedVideoHighlight extends StatelessWidget {
         child: Ink(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(22),
-            gradient: LinearGradient(
-              colors: [accent, accent2],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+            color: Colors.white,
+            border: Border.all(color: accent.withValues(alpha: 0.14)),
             boxShadow: [
               BoxShadow(
-                color: accent.withValues(alpha: 0.35),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
+                color: accent.withValues(alpha: 0.12),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
               ),
             ],
           ),
@@ -808,32 +860,13 @@ class _FeaturedVideoHighlight extends StatelessWidget {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      if (hasThumb)
-                        CourseMediaThumbnail.fromData(
-                          data,
-                          fit: thumbFit,
-                          fallback: _coverPlaceholder(accent),
-                          showPlayButton: isVideo,
-                          playIconSize: 64,
-                        )
-                      else
-                        _coverPlaceholder(accent),
-                      if (!hasThumb && isVideo)
-                        Center(
-                          child: Icon(
-                            Icons.play_circle_fill_rounded,
-                            color: Colors.white.withValues(alpha: 0.95),
-                            size: 64,
-                          ),
-                        ),
-                      if (!hasThumb && !isVideo)
-                        Center(
-                          child: Icon(
-                            Icons.article_rounded,
-                            color: Colors.white.withValues(alpha: 0.85),
-                            size: 52,
-                          ),
-                        ),
+                      CourseMediaThumbnail.fromData(
+                        data,
+                        fit: thumbFit,
+                        fallback: _coverPlaceholder(accent),
+                        showPlayButton: isVideo,
+                        playIconSize: kIsWeb ? 52 : 64,
+                      ),
                       Positioned(
                         left: 12,
                         top: 12,
@@ -867,8 +900,8 @@ class _FeaturedVideoHighlight extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: Colors.grey.shade900,
                         fontWeight: FontWeight.w900,
                         fontSize: 17,
                         height: 1.25,
@@ -881,7 +914,7 @@ class _FeaturedVideoHighlight extends StatelessWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.9),
+                          color: Colors.grey.shade700,
                           height: 1.35,
                           fontWeight: FontWeight.w500,
                         ),
@@ -915,6 +948,7 @@ class _ModernVideoCard extends StatelessWidget {
     required this.accent,
     required this.accent2,
     required this.onTap,
+    this.selected = false,
   });
 
   final Map<String, dynamic> data;
@@ -923,6 +957,7 @@ class _ModernVideoCard extends StatelessWidget {
   final Color accent;
   final Color accent2;
   final VoidCallback onTap;
+  final bool selected;
 
   String? _localMp4() {
     final u = (data['mp4Url'] ?? '').toString().trim();
@@ -962,7 +997,10 @@ class _ModernVideoCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: accent.withValues(alpha: 0.12)),
+        border: Border.all(
+          color: selected ? accent : accent.withValues(alpha: 0.12),
+          width: selected ? 2.2 : 1,
+        ),
         boxShadow: [
           BoxShadow(
             color: accent.withValues(alpha: 0.1),
@@ -995,9 +1033,16 @@ class _ModernVideoCard extends StatelessWidget {
                           fallback: _coverFallback(type, accent, accent2),
                           showPlayButton: isVideo,
                         )
+                      else if (isVideo)
+                        CourseMediaThumbnail.fromData(
+                          data,
+                          fit: BoxFit.cover,
+                          fallback: _coverFallback(type, accent, accent2),
+                          showPlayButton: true,
+                        )
                       else
                         _coverFallback(type, accent, accent2),
-                      if (!hasThumb)
+                      if (!hasThumb && !isVideo)
                         Center(
                           child: Container(
                             padding: const EdgeInsets.all(4),
@@ -1105,6 +1150,7 @@ class _DicaGridCard extends StatelessWidget {
     required this.accent,
     required this.accent2,
     required this.onTap,
+    this.selected = false,
   });
 
   final Map<String, dynamic> data;
@@ -1113,6 +1159,7 @@ class _DicaGridCard extends StatelessWidget {
   final Color accent;
   final Color accent2;
   final VoidCallback onTap;
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
@@ -1136,7 +1183,10 @@ class _DicaGridCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: accent.withValues(alpha: 0.15)),
+            border: Border.all(
+              color: selected ? accent : accent.withValues(alpha: 0.15),
+              width: selected ? 2.2 : 1,
+            ),
             boxShadow: [
               BoxShadow(
                 color: accent.withValues(alpha: 0.1),

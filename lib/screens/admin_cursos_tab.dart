@@ -15,6 +15,7 @@ import '../services/course_media_storage_cleanup.dart';
 import '../theme/app_colors.dart';
 import '../utils/course_content_link_helper.dart';
 import '../utils/course_media_url_resolver.dart';
+import '../utils/admin_course_firestore_bridge.dart';
 import '../utils/firestore_retry.dart';
 import '../utils/firestore_web_guard.dart';
 import '../services/course_videos_expiry_cleanup_service.dart';
@@ -61,7 +62,6 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
   bool _savingVideo = false;
   bool _savingConfig = false;
   bool _configLoaded = false;
-  int _retryGen = 0;
   int _gridTab = 0;
   String _dateFilter = 'recent';
   bool _selectionMode = false;
@@ -72,11 +72,28 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
   bool _validityPermanent = true;
   DateTime? _expiresAtDate;
   bool _expiryCleanupScheduled = false;
+  Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>>? _courseVideosFuture;
 
   @override
   void initState() {
     super.initState();
     _scheduleExpiryCleanup();
+    _reloadCourseVideos();
+  }
+
+  void _reloadCourseVideos() {
+    setState(() {
+      _courseVideosFuture = _fetchCourseVideos();
+    });
+  }
+
+  Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> _fetchCourseVideos() async {
+    return _courseFirestoreOp(() async {
+      final snap = await FirebaseFirestore.instance
+          .collection('course_videos')
+          .get(const GetOptions(source: Source.server));
+      return snap.docs;
+    });
   }
 
   void _scheduleExpiryCleanup() {
@@ -453,17 +470,13 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
             data: snap.data(),
           );
         }
-        final batch = FirebaseFirestore.instance.batch();
-        for (final id in ids) {
-          batch.delete(
-              FirebaseFirestore.instance.collection('course_videos').doc(id));
-        }
-        await batch.commit();
       });
+      await AdminCourseFirestoreBridge.deleteCourseVideos(ids);
       setState(() {
         _selectedIds.clear();
         _selectionMode = false;
       });
+      _reloadCourseVideos();
       _snack('$n conteúdo(s) removido(s).');
     } catch (e) {
       _snack('Erro ao excluir: $e');
@@ -482,14 +495,11 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
         emptyMessage: _emptyMessageCtrl.text.trim(),
         showTipsSection: _showTipsSection,
       );
-      await _courseFirestoreOp(() => FirebaseFirestore.instance
-          .collection('app_config')
-          .doc(_configDoc)
-          .set({
+      await AdminCourseFirestoreBridge.saveWisdomCoursesModuleConfig({
         ...cfg.toFirestore(),
         'updatedAt': FieldValue.serverTimestamp(),
         'updatedByEmail': email,
-      }, SetOptions(merge: true)));
+      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Configuração do módulo Cursos salva.')),
@@ -620,7 +630,11 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
           'updatedAt': FieldValue.serverTimestamp(),
         });
 
-        await _courseFirestoreOp(() => docRef.set(docPayload));
+        await AdminCourseFirestoreBridge.upsertCourseVideo(
+          docId: docRef.id,
+          data: docPayload,
+          create: true,
+        );
       } else {
         final linkRaw = _youtubeCtrl.text.trim();
         String? linkUrl;
@@ -644,8 +658,9 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
             : (imageUrl != null && linkUrl != null)
                 ? 'image_link'
                 : (imageUrl != null ? 'image' : 'link');
-        await _courseFirestoreOp(() => docRef.set(
-              CourseMediaUrlResolver.finalizeImageFields({
+        await AdminCourseFirestoreBridge.upsertCourseVideo(
+          docId: docRef.id,
+          data: CourseMediaUrlResolver.finalizeImageFields({
                 'title': title,
                 'description': desc,
                 'bodyText': body,
@@ -669,7 +684,8 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                 'createdAt': FieldValue.serverTimestamp(),
                 'updatedAt': FieldValue.serverTimestamp(),
               }),
-            ));
+          create: true,
+        );
       }
 
       _titleCtrl.clear();
@@ -682,6 +698,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
         _validityPermanent = true;
         _expiresAtDate = null;
       });
+      _reloadCourseVideos();
       _snack('Conteúdo publicado — já aparece no módulo Cursos.');
     } catch (e) {
       _snack('Erro ao publicar: ${_formatPublishError(e)}');
@@ -902,10 +919,12 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
         if (imageUrl != null && imageUrl.isNotEmpty) patch['coverUrl'] = imageUrl;
       }
 
-      await _courseFirestoreOp(() => FirebaseFirestore.instance
-          .collection('course_videos')
-          .doc(docId)
-          .set(patch, SetOptions(merge: true)));
+      await AdminCourseFirestoreBridge.upsertCourseVideo(
+        docId: docId,
+        data: patch,
+        create: false,
+      );
+      _reloadCourseVideos();
       _snack('Alterações salvas.');
       return true;
     } catch (e) {
@@ -915,13 +934,15 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
   }
 
   Future<void> _togglePublished(String docId, bool value) async {
-    await _courseFirestoreOp(() => FirebaseFirestore.instance
-        .collection('course_videos')
-        .doc(docId)
-        .set({
-      'published': value,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true)));
+    await AdminCourseFirestoreBridge.upsertCourseVideo(
+      docId: docId,
+      data: {
+        'published': value,
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      create: false,
+    );
+    _reloadCourseVideos();
   }
 
   Future<void> _deleteVideo(String docId, {bool skipConfirm = false}) async {
@@ -954,10 +975,8 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
         docId,
         data: snap.data(),
       );
-      await _courseFirestoreOp(() => FirebaseFirestore.instance
-          .collection('course_videos')
-          .doc(docId)
-          .delete());
+      await AdminCourseFirestoreBridge.deleteCourseVideos([docId]);
+      _reloadCourseVideos();
       _snack('Conteúdo excluído.');
     } catch (e) {
       _snack('Erro ao excluir: $e');
@@ -1452,15 +1471,12 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
 
   @override
   Widget build(BuildContext context) {
-    // ignore: unused_local_variable
-    final _ = _retryGen;
-
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance.collection('app_config').doc(_configDoc).snapshots(),
       builder: (context, cfgSnap) {
         _hydrateConfig(cfgSnap.data?.data());
-        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance.collection('course_videos').snapshots(),
+        return FutureBuilder<List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
+          future: _courseVideosFuture,
           builder: (context, videosSnap) {
             if (videosSnap.hasError) {
               return ListView(
@@ -1469,7 +1485,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                   Text('Erro: ${videosSnap.error}', style: const TextStyle(color: Colors.red)),
                   const SizedBox(height: 12),
                   FilledButton.icon(
-                    onPressed: () => setState(() => _retryGen++),
+                    onPressed: _reloadCourseVideos,
                     icon: const Icon(Icons.refresh_rounded),
                     label: const Text('Tentar novamente'),
                   ),
@@ -1477,9 +1493,9 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
               );
             }
 
-            final docs = _filterDocs(_sortDocs(videosSnap.data?.docs ?? const []));
-            final allCount = _sortDocs(videosSnap.data?.docs ?? const []).length;
-            final dicasCount = _sortDocs(videosSnap.data?.docs ?? const [])
+            final docs = _filterDocs(_sortDocs(videosSnap.data ?? const []));
+            final allCount = _sortDocs(videosSnap.data ?? const []).length;
+            final dicasCount = _sortDocs(videosSnap.data ?? const [])
                 .where((d) => (d.data()['type'] ?? '').toString() == 'dica')
                 .length;
             final cursosCount = allCount - dicasCount;

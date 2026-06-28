@@ -4,7 +4,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../constants/google_oauth_config.dart';
 import 'google_calendar_oauth_platform.dart';
+import 'google_calendar_oauth_bridge.dart';
 import 'google_calendar_token_store.dart';
 
 /// Resultado OAuth Google Calendar.
@@ -103,6 +105,19 @@ class GoogleCalendarAuthHelper {
     String? preferredEmail,
   }) async {
     await clearCache();
+    if (kIsWeb) {
+      final server = await GoogleCalendarOAuthBridge.refreshAccessToken();
+      if (server != null && server.accessToken.isNotEmpty) {
+        await cacheToken(
+          server.accessToken,
+          email: server.email ?? preferredEmail,
+        );
+        return GoogleCalendarAuthResult(
+          accessToken: server.accessToken,
+          email: server.email ?? preferredEmail,
+        );
+      }
+    }
     final silent = await ensureToken(
       preferredEmail: preferredEmail,
       interactive: false,
@@ -200,10 +215,15 @@ class GoogleCalendarAuthHelper {
 
   static String _friendlyError(Object e) {
     final raw = e.toString();
+    if (raw.contains('redirect_uri_mismatch')) {
+      return 'Erro Google OAuth (redirect_uri_mismatch). '
+          'No Google Cloud Console, cliente Web ${GoogleOAuthConfig.webClientId}, '
+          'adicione o redirect: ${GoogleOAuthConfig.oauthRedirectUri}';
+    }
     if (raw.contains('origin_mismatch')) {
       return 'Configure no Google Cloud Console (cliente OAuth Web): '
-          'Origem JS: ${Uri.base.origin} · '
-          'Redirect: ${Uri.base.origin}/google_calendar_oauth.html';
+          'Origem JS: ${GoogleOAuthConfig.primaryOrigin} · '
+          'Redirect: ${GoogleOAuthConfig.oauthRedirectUri}';
     }
     if (raw.contains('popup_closed') || raw.contains('cancelled')) return '';
     if (raw.contains('access_denied') || raw.contains('permission')) {
@@ -226,6 +246,7 @@ class GoogleCalendarAuthHelper {
 
   static Future<void> signOutCalendarSession() async {
     await clearCache();
+    await GoogleCalendarOAuthBridge.disconnectServerSession();
     await GoogleCalendarOAuthPlatform.signOutCalendarSession();
   }
 

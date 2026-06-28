@@ -113,7 +113,15 @@ class VersionCheckService {
       if (data == null) return;
 
       final forceVal = data['forceUpdate'];
-      if (!_isAdminForcedUpdate(forceVal)) return;
+      if (!_isAdminForcedUpdate(forceVal)) {
+        if (forceUpdateRequired || pendingUpdateVersion != null) {
+          forceUpdateRequired = false;
+          pendingUpdateVersion = null;
+          apkDownloadUrl = null;
+          forceUpdateNotifier.value = !forceUpdateNotifier.value;
+        }
+        return;
+      }
 
       final serverVersion = data[_field]?.toString().trim();
       final serverBuild = _parsePositiveInt(data['buildNumber']);

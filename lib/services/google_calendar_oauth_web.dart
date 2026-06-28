@@ -1,33 +1,44 @@
+import 'dart:async';
 import 'dart:convert';
 
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:html' as html;
 
-import 'package:http/http.dart' as http;
-
 import '../constants/google_oauth_config.dart';
 import 'google_calendar_auth_helper.dart';
+import 'google_calendar_oauth_bridge.dart';
 import 'google_calendar_token_store.dart';
 
-/// OAuth 2.0 implícito na Web — redirecionamento (sem GIS/popup; evita origin_mismatch).
+/// OAuth 2.0 Authorization Code na Web — refresh_token no servidor (Cloud Function).
 class GoogleCalendarOAuthPlatform {
   GoogleCalendarOAuthPlatform._();
 
-  static const _oauthStorageKey = 'wisdomapp_gcal_oauth';
+  static const _codeStorageKey = 'wisdomapp_gcal_auth_code';
   static const _enableUidKey = 'wisdomapp_gcal_enable_uid';
-  static const _calendarScope = GoogleOAuthConfig.calendarScope;
 
   static Future<GoogleCalendarAuthResult> ensureToken({
     required String? preferredEmail,
     required bool interactive,
     bool forceAccountPicker = false,
   }) async {
-    final stored = _readStoredToken();
-    if (stored != null) {
-      final email = preferredEmail ?? await _fetchEmail(stored.token);
+    final cached = GoogleCalendarTokenStore.cachedTokenIfValid();
+    if (cached != null) {
       return GoogleCalendarAuthResult(
-        accessToken: stored.token,
-        email: email,
+        accessToken: cached,
+        email: preferredEmail ?? await GoogleCalendarTokenStore.storedEmail(),
+      );
+    }
+
+    final server = await GoogleCalendarOAuthBridge.refreshAccessToken();
+    if (server != null) {
+      await GoogleCalendarTokenStore.save(
+        server.accessToken,
+        email: server.email ?? preferredEmail,
+        expiresAt: server.expiresAt,
+      );
+      return GoogleCalendarAuthResult(
+        accessToken: server.accessToken,
+        email: server.email ?? preferredEmail,
       );
     }
 
@@ -52,11 +63,10 @@ class GoogleCalendarOAuthPlatform {
     bool selectAccount = false,
     bool promptNone = false,
   }) {
-    final returnPath =
-        '${html.window.location.pathname}${html.window.location.search}';
+    final returnUrl = html.window.location.href;
     final params = <String, String>{
       'start': '1',
-      'return': returnPath.isEmpty ? '/' : returnPath,
+      'return': returnUrl,
     };
     final email = preferredEmail?.trim();
     if (email != null && email.isNotEmpty) params['email'] = email;
@@ -67,43 +77,61 @@ class GoogleCalendarOAuthPlatform {
     if (selectAccount) params['select_account'] = '1';
     if (promptNone) params['prompt'] = 'none';
 
-    final qs = params.entries
-        .map((e) =>
-            '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}')
-        .join('&');
-    html.window.location.assign('/google_calendar_oauth.html?$qs');
+    html.window.location.assign(GoogleOAuthConfig.buildOAuthStartUrl(params));
   }
 
-  /// Lê token gravado por [google_calendar_oauth.html] após redirect do Google.
+  /// Lê authorization code após redirect e troca no servidor.
   static Future<bool> consumeWebOAuthReturn() async {
-    final raw = html.window.localStorage[_oauthStorageKey];
-    if (raw == null || raw.isEmpty) return false;
+    if (await _consumeHashPayload()) return true;
+    return _consumeSessionCode();
+  }
 
+  static Future<bool> _consumeHashPayload() async {
+    final hash = html.window.location.hash;
+    if (!hash.contains('gcal_payload=')) return false;
     try {
-      final map = jsonDecode(raw) as Map<String, dynamic>;
-      final token = (map['access_token'] ?? '').toString();
-      final expiresAt = map['expires_at'];
-      if (token.isEmpty) return false;
+      final idx = hash.indexOf('gcal_payload=');
+      var payload = hash.substring(idx + 'gcal_payload='.length);
+      final amp = payload.indexOf('&');
+      if (amp >= 0) payload = payload.substring(0, amp);
+      final decoded = Uri.decodeComponent(payload);
+      final map = jsonDecode(decoded) as Map<String, dynamic>;
+      final code = (map['authorization_code'] ?? '').toString().trim();
+      _stripHashFromUrl();
+      if (code.isEmpty) return false;
+      return _exchangeCodeAndCache(code);
+    } catch (_) {
+      return false;
+    }
+  }
 
-      if (expiresAt is num) {
-        if (DateTime.now().millisecondsSinceEpoch >= expiresAt.toInt()) {
-          html.window.localStorage.remove(_oauthStorageKey);
-          return false;
-        }
-      }
+  static Future<bool> _consumeSessionCode() async {
+    final code = html.window.sessionStorage[_codeStorageKey];
+    if (code == null || code.trim().isEmpty) return false;
+    html.window.sessionStorage.remove(_codeStorageKey);
+    return _exchangeCodeAndCache(code.trim());
+  }
 
-      final scope = (map['scope'] ?? '').toString();
-      if (scope.isNotEmpty && !scope.contains(_calendarScope)) {
-        return false;
-      }
+  static Future<bool> _exchangeCodeAndCache(String code) async {
+    try {
+      final server = await GoogleCalendarOAuthBridge.exchangeAuthorizationCode(code);
+      if (server == null || server.accessToken.isEmpty) return false;
 
-      final email = await _fetchEmail(token);
-      await GoogleCalendarTokenStore.save(token, email: email);
-      html.window.localStorage.remove(_oauthStorageKey);
+      await GoogleCalendarTokenStore.save(
+        server.accessToken,
+        email: server.email,
+        expiresAt: server.expiresAt,
+      );
       return true;
     } catch (_) {
       return false;
     }
+  }
+
+  static void _stripHashFromUrl() {
+    final path = html.window.location.pathname;
+    final search = html.window.location.search;
+    html.window.history.replaceState(null, '', '$path$search');
   }
 
   static String? pendingEnableUserDocId() {
@@ -116,42 +144,8 @@ class GoogleCalendarOAuthPlatform {
     html.window.sessionStorage.remove(_enableUidKey);
   }
 
-  static ({String token, DateTime until})? _readStoredToken() {
-    final raw = html.window.localStorage[_oauthStorageKey];
-    if (raw != null && raw.isNotEmpty) {
-      try {
-        final map = jsonDecode(raw) as Map<String, dynamic>;
-        final token = (map['access_token'] ?? '').toString();
-        final expiresAt = map['expires_at'];
-        if (token.isNotEmpty && expiresAt is num) {
-          final until =
-              DateTime.fromMillisecondsSinceEpoch(expiresAt.toInt());
-          if (DateTime.now().isBefore(until)) {
-            return (token: token, until: until);
-          }
-        }
-      } catch (_) {}
-    }
-    return null;
-  }
-
-  static Future<String?> _fetchEmail(String token) async {
-    try {
-      final res = await http.get(
-        Uri.parse('https://www.googleapis.com/oauth2/v3/userinfo'),
-        headers: {'Authorization': 'Bearer $token'},
-      );
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        final body = jsonDecode(res.body) as Map<String, dynamic>;
-        final email = (body['email'] ?? '').toString().trim();
-        if (email.isNotEmpty) return email;
-      }
-    } catch (_) {}
-    return null;
-  }
-
   static Future<void> signOutCalendarSession() async {
-    html.window.localStorage.remove(_oauthStorageKey);
+    html.window.sessionStorage.remove(_codeStorageKey);
     html.window.sessionStorage.remove(_enableUidKey);
   }
 
