@@ -225,8 +225,6 @@ workflows:
         script: keychain add-certificates
       - name: Aplicar perfis ao projeto Xcode
         script: xcode-project use-profiles
-      - name: Resolver APP_STORE_APPLE_ID (bundle com.wisdomapp)
-        script: bash scripts/codemagic_ios_resolve_app_store_apple_id.sh
       - name: Forçar iOS deployment target 15.5 (ML Kit)
         script: |
           set -e

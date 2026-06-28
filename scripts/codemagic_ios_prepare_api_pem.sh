@@ -47,8 +47,8 @@ fi
 _norm_api() {
   _secret_to_text_file "${APP_STORE_CONNECT_PRIVATE_KEY:-}" /tmp/_asc_raw.pem
   if [ ! -s /tmp/_asc_raw.pem ]; then
-    echo "ERRO: APP_STORE_CONNECT_PRIVATE_KEY vazio apos normalizacao."
-    exit 1
+    echo "AVISO: APP_STORE_CONNECT_PRIVATE_KEY ausente — integração Codemagic será usada nos comandos app-store-connect."
+    return 0
   fi
 
   if _looks_like_pem_api /tmp/_asc_raw.pem; then
@@ -65,4 +65,6 @@ _norm_api() {
 }
 
 _norm_api
-echo "OK: /tmp/_asc_ok.pem ($(wc -c < /tmp/_asc_ok.pem | tr -d ' ') bytes)"
+if [ -f /tmp/_asc_ok.pem ] && _looks_like_pem_api /tmp/_asc_ok.pem; then
+  echo "OK: /tmp/_asc_ok.pem ($(wc -c < /tmp/_asc_ok.pem | tr -d ' ') bytes)"
+fi
