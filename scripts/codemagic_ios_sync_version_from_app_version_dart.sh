@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# iOS CI: usa o MESMO buildNumber do repo (web/Android/iOS alinhados).
-# Bloqueia 90189 se buildNumber <= último upload ASC — exige bump_build.ps1 + push antes.
+# iOS CI: CFBundleVersion = iosBuildNumber (ou buildNumber se iguais). Web/Android ficam no buildNumber.
 set -euo pipefail
 
 ROOT="${CM_BUILD_DIR:-${FCI_BUILD_DIR:-$(pwd)}}"
@@ -13,6 +12,10 @@ PUB="$ROOT/pubspec.yaml"
 
 BUILD_NAME="$(grep "static const String current" "$VER_FILE" | head -1 | sed "s/.*= '\([^']*\)'.*/\1/" | tr -d ' ')"
 BN="$(grep "static const int buildNumber" "$VER_FILE" | head -1 | sed 's/.*= \([0-9]*\).*/\1/')"
+IOS_BN="$(grep "static const int iosBuildNumber" "$VER_FILE" | head -1 | sed 's/.*= \([0-9]*\).*/\1/' || true)"
+if [[ -z "$IOS_BN" || "$IOS_BN" == "$BN" ]]; then
+  IOS_BN="$BN"
+fi
 
 case "$BUILD_NAME" in
   *.*.*) PUB_MARK="$BUILD_NAME" ;;
@@ -23,6 +26,12 @@ esac
 case "$BN" in
   ''|*[!0-9]*)
     echo "ERRO: buildNumber invalido em app_version.dart"
+    exit 1
+    ;;
+esac
+case "$IOS_BN" in
+  ''|*[!0-9]*)
+    echo "ERRO: iosBuildNumber invalido em app_version.dart"
     exit 1
     ;;
 esac
@@ -46,30 +55,26 @@ fi
 BLOCK="$LATEST"
 if [[ "$FLOOR" -gt "$BLOCK" ]]; then BLOCK="$FLOOR"; fi
 
-if [[ "$BLOCK" -gt 0 && "$BN" -le "$BLOCK" ]]; then
+if [[ "$BLOCK" -gt 0 && "$IOS_BN" -le "$BLOCK" ]]; then
   NEED=$(( BLOCK + 1 ))
   echo ""
-  echo "ERRO 90189 (evitado): buildNumber no repo = $BN, mas App Store Connect/floor = $BLOCK."
+  echo "ERRO 90189 (evitado): iosBuildNumber = $IOS_BN, mas App Store Connect/floor = $BLOCK."
   echo "       CFBundleVersion precisa ser >= $NEED."
-  echo ""
-  echo "       Web, Android e iOS usam o MESMO numero — alinhe antes do build:"
-  echo "         .\\scripts\\bump_build.ps1"
-  echo "         git add lib/constants/app_version.dart pubspec.yaml android/app/build.gradle web/version.json"
-  echo "         git commit && git push"
-  echo "       Depois: Start new build (nao Retry so em Publishing)."
+  echo "       Suba iosBuildNumber em app_version.dart (web/Android podem ficar em $BN)."
   echo ""
   exit 1
 fi
 
-sed -i.bak "s/^version: .*/version: ${PUB_MARK}+${BN}/" "$PUB" && rm -f "$PUB.bak"
+# pubspec permanece com buildNumber (web/Android); IPA usa --build-number abaixo.
 if ! grep -q "+${BN}" "$PUB"; then
-  echo "ERRO: build +${BN} nao aplicado em pubspec.yaml"
+  echo "ERRO: pubspec deve manter +${BN} (web/Android); encontrado:"
+  grep "^version:" "$PUB" || true
   exit 1
 fi
 
 printf '%s' "$PUB_MARK" > /tmp/cm_ios_build_name
-printf '%s' "$BN" > /tmp/cm_ios_build_number
+printf '%s' "$IOS_BN" > /tmp/cm_ios_build_number
 
-echo "OK: CFBundleVersion=$BN (marketing $BUILD_NAME) — alinhado web/Android/iOS"
+echo "OK: CFBundleVersion iOS=$IOS_BN (marketing $BUILD_NAME) | web/Android build=$BN"
 echo "    ASC ultimo=$LATEST floor=$FLOOR"
 grep "^version:" "$PUB"

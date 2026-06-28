@@ -102,6 +102,10 @@
 	<string>Usamos Face ID ou Touch ID para desbloquear o app com segurança, se você ativar essa opção nas configurações.</string>
 	<key>NSUserNotificationsUsageDescription</key>
 	<string>O WISDOMAPP envia lembretes de escalas, compromissos, audiências e folgas no horário que você configurou.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>O WISDOMAPP sincroniza compromissos com o Calendário do iPhone quando você ativar essa opção na Agenda.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>O WISDOMAPP lê e grava compromissos no Calendário do iPhone para manter sua agenda alinhada.</string>
 	<!-- Apple 90683: SDKs podem referenciar Core Location; o app não rastreia GPS em segundo plano -->
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>O WISDOMAPP não usa sua localização em segundo plano. A permissão só se aplica se você abrir um endereço em mapas externos (quando disponível) ou se uma biblioteca do sistema solicitar acesso pontual.</string>

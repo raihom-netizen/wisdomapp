@@ -1,7 +1,6 @@
 # Codemagic CI/CD — WISDOMAPP (somente iOS iPhone)
 # Versão marketing: lib/constants/app_version.dart → AppVersion.current
-# CFBundleVersion (anti 90189): usa o MESMO buildNumber do repo (web/Android/iOS).
-#   Se ASC/floor >= buildNumber → falha; rode scripts/bump_build.ps1 + push antes do build.
+# CFBundleVersion iOS: AppVersion.iosBuildNumber (pode > buildNumber web/Android).
 #   NÃO use «Retry» só no passo Publishing (reutiliza o mesmo .ipa → erro 90189).
 # Disparo: push em main/codemagic-* (triggering abaixo) ou API/scripts/Fix-CodemagicIosCompleto.ps1
 # UI: se wisdomapp estiver Archived, rode Fix-CodemagicIos.bat (registra app novo + inicia build via API)
@@ -237,7 +236,13 @@ workflows:
       - name: Versão iOS (= web/Android, anti 90189)
         script: bash scripts/codemagic_ios_sync_version_from_app_version_dart.sh
       - name: Build iOS IPA (instalável)
-        script: flutter build ipa --release --no-tree-shake-icons
+        script: |
+          set -e
+          IOS_BN="$(tr -d '\r\n[:space:]' < /tmp/cm_ios_build_number)"
+          IOS_NAME="$(tr -d '\r\n[:space:]' < /tmp/cm_ios_build_name)"
+          flutter build ipa --release --no-tree-shake-icons \
+            --build-number="$IOS_BN" \
+            --build-name="$IOS_NAME"
       - name: Renomear IPA para WISDOMAPP (nome pubspec legado controle_total_premium)
         script: |
           set -e
