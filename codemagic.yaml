@@ -1,5 +1,8 @@
 # Codemagic CI/CD — WISDOMAPP (somente iOS iPhone)
 # Versão marketing: lib/constants/app_version.dart → AppVersion.current
+# CFBundleVersion (anti 90189): usa o MESMO buildNumber do repo (web/Android/iOS).
+#   Se ASC/floor >= buildNumber → falha; rode scripts/bump_build.ps1 + push antes do build.
+#   NÃO use «Retry» só no passo Publishing (reutiliza o mesmo .ipa → erro 90189).
 # Disparo: push em main/codemagic-* (triggering abaixo) ou API/scripts/Fix-CodemagicIosCompleto.ps1
 # UI: se wisdomapp estiver Archived, rode Fix-CodemagicIos.bat (registra app novo + inicia build via API)
 #
@@ -30,6 +33,8 @@ workflows:
       cocoapods: default
       vars:
         BUNDLE_ID: "com.wisdomapp"
+        # Opcional: ID numérico do app na ASC (Informações gerais). Se vazio, resolve via API pelo bundle.
+        APP_STORE_APPLE_ID: ""
         APP_STORE_CONNECT_KEY_IDENTIFIER: "4UMWWALR3U"
         APP_STORE_CONNECT_ISSUER_ID: "77a1debb-f68b-418d-9fe3-af0f37b40585"
         FIREBASE_STORAGE_BUCKET: "wisdomapp-b9e98.firebasestorage.app"
@@ -39,6 +44,8 @@ workflows:
     scripts:
       - name: Get Flutter packages
         script: flutter pub get
+      - name: Validar versão alinhada (web / Android / iOS)
+        script: bash scripts/sync_app_version_from_dart.sh --validate
       - name: Keychain para code signing
         script: keychain initialize
       - name: Ativar Sign In with Apple no App ID (API Apple)
@@ -230,20 +237,8 @@ workflows:
           if [ -f ios/Flutter/AppFrameworkInfo.plist ]; then
             sed -i.bak -e "s/<string>13.0<\/string>/<string>15.5<\/string>/g" -e "s/<string>14.0<\/string>/<string>15.5<\/string>/g" ios/Flutter/AppFrameworkInfo.plist && rm -f ios/Flutter/AppFrameworkInfo.plist.bak
           fi
-      - name: Versão iOS (mesmo marketing + build Android/web)
-        script: |
-          set -e
-          VER=$(grep "static const String current" lib/constants/app_version.dart | head -1 | sed "s/.*= '\([^']*\)'.*/\1/" | tr -d ' ')
-          BUILD=$(grep "static const int buildNumber" lib/constants/app_version.dart | head -1 | sed 's/.*= \([0-9]*\).*/\1/')
-          if [ -z "$VER" ] || [ -z "$BUILD" ]; then echo "ERROR: AppVersion.current/buildNumber nao encontrado"; exit 1; fi
-          case "$VER" in
-            *.*.*) ;;
-            *.*) VER="${VER}.0" ;;
-            *) VER="${VER}.0.0" ;;
-          esac
-          sed -i.bak "s/^version: .*/version: ${VER}+${BUILD}/" pubspec.yaml && rm -f pubspec.yaml.bak
-          echo "Versão alinhada Android/web: $VER+$BUILD"
-          grep "^version:" pubspec.yaml
+      - name: Versão iOS (= web/Android, anti 90189)
+        script: bash scripts/codemagic_ios_sync_version_from_app_version_dart.sh
       - name: Build iOS IPA (instalável)
         script: flutter build ipa --release --no-tree-shake-icons
       - name: Renomear IPA para WISDOMAPP (nome pubspec legado controle_total_premium)
@@ -298,9 +293,16 @@ workflows:
           else
             echo "Defina firebase_ipa_upload (FIREBASE_SERVICE_ACCOUNT_JSON) para subir IPA ao site."
           fi
+      - name: Validar IPA antes do TestFlight (90189 / binário inválido)
+        script: bash scripts/codemagic_ios_validate_ipa_before_upload.sh build/ios/ipa/WISDOMAPP.ipa
+      - name: Gate anti-90189 antes do Publishing
+        script: bash scripts/codemagic_ios_pre_publish_90189_gate.sh
+      - name: Actualizar floor ASC (próximo build)
+        script: bash scripts/codemagic_ios_stamp_asc_floor.sh
     artifacts:
       - build/ios/ipa/WISDOMAPP.ipa
       - build/ios/ipa/*.ipa
+      - ios/asc_build_number_floor.txt
     publishing:
       app_store_connect:
         auth: integration

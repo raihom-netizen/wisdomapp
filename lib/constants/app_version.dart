@@ -8,10 +8,16 @@
 /// No painel Admin > Versão no servidor, use **"Subir versão e forçar atualização"** quando quiser obrigar
 /// web, Android e iOS a atualizar.
 ///
-/// **Release interno (web / Android / iOS alinhados):**
-/// - [current] = marketing (ex.: 10.01), igual para todos.
-/// - [buildNumber] = número do `+` no pubspec (10.01.0+**1**). Sobe a cada build; checagem de atualização usa isto quando o servidor envia `buildNumber`.
-/// - [versionCode] = mesmo valor que `versionCode` no `android/app/build.gradle` (ex.: 1), referência Play Console / conferência.
+/// **Release interno (web / Android / iOS alinhados — mesmo build sempre):**
+/// - [current] = marketing (ex.: 10.04), igual para todos.
+/// - [buildNumber] = número do `+` no pubspec (10.04.0+**16**). Igual em web/version.json e CFBundleVersion iOS.
+/// - [versionCode] = mesmo valor que `versionCode` no `android/app/build.gradle`.
+///
+/// **Subir build (todas as plataformas juntas):**
+///   .\scripts\bump_build.ps1
+/// **Sincronizar arquivos após editar manualmente:**
+///   .\scripts\sync_app_version.ps1
+/// **Deploy:** .\deploy.ps1 (já chama sync antes de web + AAB + CodeMagic).
 class AppVersion {
   AppVersion._();
 
@@ -19,10 +25,10 @@ class AppVersion {
   static const String current = '10.04';
 
   /// Build do pubspec (`10.04.0+12` → **12**). Atualizar junto com pubspec em cada release.
-  static const int buildNumber = 16;
+  static const int buildNumber = 17;
 
   /// Mesmo inteiro que `versionCode` no Android (Play). Atualizar junto com build.gradle em cada release.
-  static const int versionCode = 16;
+  static const int versionCode = 17;
 
   /// Identificador único do release: marketing + build (mesmo deploy em todas as plataformas).
   static String get releaseTag => '$current+$buildNumber';
