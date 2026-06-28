@@ -11,6 +11,7 @@ import '../services/finance_advanced_settings_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/premium_upgrade.dart';
 import '../widgets/finance_bank_brand_thumb.dart';
+import '../widgets/finance_delete_account_dialog.dart';
 
 /// Cadastro de contas corrente, poupança e cartões.
 class FinanceAccountsScreen extends StatelessWidget {
@@ -1274,28 +1275,33 @@ class _AccountTile extends StatelessWidget {
                 tooltip: 'Excluir',
                 icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFDC2626)),
                 onPressed: () async {
-                  final ok = await showDialog<bool>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Excluir conta?'),
-                      content: const Text('Lançamentos antigos podem continuar com esta conta no histórico; novos não poderão usá-la.'),
-                      actions: [
-                        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-                        FilledButton(
-                          onPressed: () => Navigator.pop(ctx, true),
-                          style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
-                          child: const Text('Excluir'),
-                        ),
-                      ],
-                    ),
+                  final service = FinanceAccountsService();
+                  final linked = await service.countLinkedTransactions(uid, account.id);
+                  if (!context.mounted) return;
+                  final ok = await showConfirmDeleteFinanceAccountDialog(
+                    context,
+                    account: account,
+                    linkedTransactionsCount: linked,
                   );
-                  if (ok == true) {
-                    try {
-                      await FinanceAccountsService().deleteAccount(uid, account.id);
-                    } catch (e) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro: $e'), backgroundColor: AppColors.error));
-                      }
+                  if (ok != true) return;
+                  try {
+                    final removed = await service.deleteAccount(uid, account.id);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            removed > 0
+                                ? 'Banco excluído e $removed lançamento(s) removido(s).'
+                                : 'Banco excluído.',
+                          ),
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Erro: $e'), backgroundColor: AppColors.error),
+                      );
                     }
                   }
                 },

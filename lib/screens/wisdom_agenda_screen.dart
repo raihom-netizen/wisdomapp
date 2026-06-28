@@ -128,7 +128,15 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
         _focusedDay,
         userDocId: _userDocId,
       );
-      final byDay = GoogleCalendarSyncService.groupEventsByDay(events);
+      await GoogleCalendarSyncService.syncBidirectional(
+        userDocId: _userDocId,
+        googleEvents: events,
+      );
+      final freshEvents = await GoogleCalendarSyncService.fetchEventsForMonth(
+        _focusedDay,
+        userDocId: _userDocId,
+      );
+      final byDay = GoogleCalendarSyncService.groupEventsByDay(freshEvents);
       if (mounted) {
         setState(() {
           _googleEventsByDay = byDay;
@@ -408,7 +416,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
         Padding(
           padding: const EdgeInsets.only(top: 6, bottom: 4, left: 4),
           child: Text(
-            'Filtra somente a lista de lançamentos do mês e do dia selecionado.',
+            'Filtra o resumo do dia e o resumo do mês (financeiro ou particular).',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
@@ -665,26 +673,38 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
           );
         }
       } else if (existing != null) {
-        final msg = await CompromissoReminderService.update(
+        final res = await CompromissoReminderService.update(
           userDocId: _userDocId,
           doc: existing,
           result: result,
         );
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+          final gcal = _googleEnabled
+              ? (res.googleSynced
+                  ? ' Sincronizado com Google Calendar.'
+                  : ' Não foi possível sincronizar com Google Calendar — verifique a conexão.')
+              : '';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${res.message}$gcal')),
+          );
         }
       } else {
-        await CompromissoReminderService.create(
+        final res = await CompromissoReminderService.create(
           userDocId: _userDocId,
           result: result,
         );
         if (context.mounted) {
+          final count = res.created;
+          final base = count > 1
+              ? '$count compromissos gravados.'
+              : 'Compromisso salvo.';
+          final gcal = _googleEnabled
+              ? (res.googleSynced
+                  ? ' Sincronizado(s) com Google Calendar.'
+                  : ' Salvo localmente; Google Calendar não sincronizou todos — verifique a conexão.')
+              : '';
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Compromisso salvo. Sincroniza com Google Calendar se ativo em Configurações.',
-              ),
-            ),
+            SnackBar(content: Text('$base$gcal')),
           );
         }
       }
@@ -2446,6 +2466,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     List<QueryDocumentSnapshot<Map<String, dynamic>>> items, {
     List<AgendaFinancePendingItem> incomePending = const [],
     List<AgendaFinancePendingItem> expensePending = const [],
+    List<GoogleCalendarEventItem> googleOnly = const [],
   }) {
     if (_selectedDay == null) return const SizedBox.shrink();
     final day = _selectedDay!;
@@ -2519,7 +2540,10 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                 for (final item in expensePending)
                   _resumoFinancePendingLinha(item),
               ],
-            ] else if (items.isEmpty && expensePending.isEmpty && incomePending.isEmpty)
+            ] else if (items.isEmpty &&
+                googleOnly.isEmpty &&
+                expensePending.isEmpty &&
+                incomePending.isEmpty)
               Text(
                 'Nenhum compromisso particular neste dia.',
                 style: TextStyle(
@@ -2601,6 +2625,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                   ),
                 );
               }),
+              ...googleOnly.map(_resumoGoogleEventLinha),
             ],
             const SizedBox(height: 4),
             FilledButton.icon(
@@ -2617,6 +2642,95 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _resumoGoogleEventLinha(GoogleCalendarEventItem event) {
+    const color = GoogleCalendarSyncService.googleEventColor;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 5,
+            height: 42,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(4),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.35),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        event.title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
+                          color: Color(0xFF1A237E),
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text(
+                        'GOOGLE',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                          color: color,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (event.horarioLabel.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    event.horarioLabel,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ],
+                if (event.notes.trim().isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    event.notes.trim(),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade700,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2729,8 +2843,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               AgendaModernUI.sectionHeader(
-                title: 'Financeiros do mês',
-                subtitle: '${monthItems.length} lançamento${monthItems.length == 1 ? '' : 's'} · $tituloMes',
+                title: 'Resumo do mês',
+                subtitle:
+                    'Financeiro · ${monthItems.length} lançamento${monthItems.length == 1 ? '' : 's'} · $tituloMes',
                 icon: Icons.payments_outlined,
                 color: const Color(0xFFF97316),
               ),
@@ -2796,9 +2911,10 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             AgendaModernUI.sectionHeader(
-              title: 'Particulares do mês',
-              subtitle: '$total item${total == 1 ? '' : 'ns'} · $tituloMes'
-                  '${googleMonth.isNotEmpty ? ' · inclui Google Calendar' : ''}',
+              title: 'Resumo do mês',
+              subtitle:
+                  'Particular · $total item${total == 1 ? '' : 'ns'} · $tituloMes'
+                  '${googleMonth.isNotEmpty ? ' · Google Calendar' : ''}',
               icon: Icons.event_available_rounded,
               color: _corCompromisso,
             ),
@@ -3111,95 +3227,6 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     );
   }
 
-  Widget _buildCompromissosGrid(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> items,
-    List<GoogleCalendarEventItem> googleOnly, {
-    List<AgendaFinancePendingItem> incomePending = const [],
-    List<AgendaFinancePendingItem> expensePending = const [],
-  }) {
-    final financeCount = incomePending.length + expensePending.length;
-    final particularCount = items.length + googleOnly.length;
-
-    if (_mesAba == _AgendaMesAba.financeiro) {
-      if (financeCount == 0) return const SizedBox.shrink();
-      var cardIndex = 0;
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          AgendaFinancePendingDayBand(
-            isIncome: true,
-            count: incomePending.length,
-            total: sumAgendaFinancePendingAmount(incomePending),
-          ),
-          AgendaFinancePendingDayBand(
-            isIncome: false,
-            count: expensePending.length,
-            total: sumAgendaFinancePendingAmount(expensePending),
-          ),
-          AgendaModernUI.sectionHeader(
-            title: 'Financeiros do dia',
-            subtitle: '$financeCount lançamento${financeCount == 1 ? '' : 's'}',
-            icon: Icons.payments_outlined,
-            color: const Color(0xFFF97316),
-          ),
-          ...incomePending.map((item) {
-            final idx = cardIndex++;
-            return AgendaFinancePendingItemCard(
-              item: item,
-              index: idx,
-              onEdit: () => _editFinancePending(item),
-              onDelete: () => _deleteFinancePending(item),
-            );
-          }),
-          ...expensePending.map((item) {
-            final idx = cardIndex++;
-            return AgendaFinancePendingItemCard(
-              item: item,
-              index: idx,
-              onEdit: () => _editFinancePending(item),
-              onDelete: () => _deleteFinancePending(item),
-            );
-          }),
-        ],
-      );
-    }
-
-    if (particularCount == 0) return const SizedBox.shrink();
-
-    var cardIndex = 0;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        AgendaModernUI.sectionHeader(
-          title: 'Particulares do dia',
-          subtitle: '$particularCount item${particularCount == 1 ? '' : 'ns'}'
-              '${googleOnly.isNotEmpty ? ' · Google Calendar' : ''}',
-          icon: Icons.event_available_rounded,
-          color: _corCompromisso,
-        ),
-        ...items.map((doc) {
-          final idx = cardIndex++;
-          return AgendaModernFadeIn(
-            index: idx,
-            child: AgendaOpenItemCard(
-              doc: doc,
-              isAudiencia: false,
-              profile: widget.profile,
-              onEdit: () => _openCompromissoForm(
-                context: context,
-                existing: doc,
-              ),
-              onDelete: () => _confirmDelete(doc),
-            ),
-          );
-        }),
-        ...googleOnly.asMap().entries.map(
-              (e) => _buildGoogleEventCard(e.value, cardIndex + e.key),
-            ),
-      ],
-    );
-  }
-
   Map<DateTime, List<AgendaFinancePendingItem>> _mergeFinanceByDay(
     List<AgendaFinancePendingItem> income,
     List<AgendaFinancePendingItem> expense,
@@ -3492,23 +3519,18 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                         docs,
                         financeByDay: financeByDay,
                       ),
+                      const SizedBox(height: 12),
+                      _buildModernMesAbas(isNarrow: isNarrow),
                       if (_selectedDay != null) ...[
                         const SizedBox(height: 12),
                         _buildRodapeTotalDia(
                           selectedItems,
                           incomePending: selectedIncomePending,
                           expensePending: selectedExpensePending,
-                        ),
-                        const SizedBox(height: 12),
-                        _buildCompromissosGrid(
-                          selectedItems,
-                          googleOnly,
-                          incomePending: selectedIncomePending,
-                          expensePending: selectedExpensePending,
+                          googleOnly: googleOnly,
                         ),
                       ],
                       const SizedBox(height: 12),
-                      _buildModernMesAbas(isNarrow: isNarrow),
                       _buildMesGridModerno(docs, financeByDay),
                       const SizedBox(height: 8),
                       if (_googleEnabled)

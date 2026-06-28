@@ -14,6 +14,7 @@ import '../widgets/brl_amount_text_field.dart';
 import '../widgets/goal_52_weeks_summary_panel.dart';
 import '../widgets/goal_finance_account_field.dart';
 import '../widgets/registrar_deposito_dialog.dart';
+import 'sheet_voltar_controls.dart';
 
 /// Exporta PDF depósitos × semanas (painel Início, módulo ou grade) — com preview.
 Future<void> exportFiftyTwoWeeksGoalPdf({
@@ -562,40 +563,35 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          sheetWideVoltarButton(
+            context,
+            label: 'Voltar às semanas',
+            onPressed: _backToWeekSelection,
+          ),
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               gradient: LinearGradient(colors: gradient),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                IconButton(
-                  onPressed: _backToWeekSelection,
-                  icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-                  tooltip: 'Voltar às semanas',
+                const Text(
+                  'Registrar depósito',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 16,
+                  ),
                 ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Registrar depósito',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 16,
-                        ),
-                      ),
-                      Text(
-                        '${_selectedWeeks.length} semana(s) - ${CurrencyFormats.formatBRL(selectedTotal)}',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.9),
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
+                const SizedBox(height: 4),
+                Text(
+                  '${_selectedWeeks.length} semana(s) - ${CurrencyFormats.formatBRL(selectedTotal)}',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
                   ),
                 ),
               ],
@@ -664,6 +660,7 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
           ),
+          sheetWideVoltarButton(context, footer: true),
         ],
       ),
     );
@@ -724,6 +721,7 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
+                previewSheetTopBar(context),
                 Expanded(
                   child: _depositFormPage(
                     schedule: schedule,
@@ -759,8 +757,10 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
                             borderRadius: BorderRadius.circular(2),
                           ),
                         ),
+                        previewSheetTopBar(context),
+                        sheetWideVoltarButton(context),
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(18, 14, 8, 8),
+                          padding: const EdgeInsets.fromLTRB(18, 8, 8, 8),
                           child: Row(
                             children: [
                               Container(
@@ -818,10 +818,6 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
                                     onPressed: _pdfLoading ? null : _exportPdf,
                                   ),
                                 ),
-                              IconButton(
-                                onPressed: () => Navigator.pop(context),
-                                icon: const Icon(Icons.close_rounded),
-                              ),
                             ],
                           ),
                         ),
@@ -948,6 +944,7 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
                       ),
                     ),
                   ],
+                  SliverToBoxAdapter(child: sheetWideVoltarButton(context, footer: true)),
                   SliverToBoxAdapter(child: SizedBox(height: bottomPad)),
                 ],
               ),

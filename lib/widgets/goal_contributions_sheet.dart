@@ -11,6 +11,7 @@ import '../theme/app_colors.dart';
 import '../utils/date_picker_a11y.dart';
 import '../utils/premium_upgrade.dart';
 import 'brl_amount_text_field.dart';
+import 'sheet_voltar_controls.dart';
 
 /// Sheet «Ver / Editar lançamentos» — compartilhado entre Início e módulo Objetivo.
 Future<void> showGoalContributionsSheet({
@@ -52,7 +53,8 @@ Future<void> showGoalContributionsSheet({
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            _sheetTopBar(ctx),
+            previewSheetTopBar(ctx),
+            sheetWideVoltarButton(ctx),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
               child: Row(
@@ -91,23 +93,30 @@ Future<void> showGoalContributionsSheet({
                   }
                   final docs = snap.data?.docs ?? [];
                   if (docs.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.inbox_rounded, size: 64, color: Colors.grey.shade400),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Nenhum depósito ainda',
-                            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+                    return ListView(
+                      controller: scrollController,
+                      padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+                      children: [
+                        Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.inbox_rounded, size: 64, color: Colors.grey.shade400),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Nenhum depósito ainda',
+                                style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Use "Depositar" no card da meta.',
+                                style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Use "Depositar" no card da meta.',
-                            style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
-                          ),
-                        ],
-                      ),
+                        ),
+                        sheetWideVoltarButton(context, footer: true),
+                      ],
                     );
                   }
                   return StreamBuilder<List<FinanceAccount>>(
@@ -118,9 +127,12 @@ Future<void> showGoalContributionsSheet({
                       return ListView.builder(
                         controller: scrollController,
                         cacheExtent: 400,
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                        itemCount: docs.length,
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                        itemCount: docs.length + 1,
                         itemBuilder: (context, i) {
+                          if (i == docs.length) {
+                            return sheetWideVoltarButton(context, footer: true);
+                          }
                           final doc = docs[i];
                           final d = doc.data();
                           final amount = (d['amount'] ?? 0).toDouble();
@@ -251,46 +263,6 @@ Future<void> showGoalContributionsSheet({
           ],
         ),
       ),
-    ),
-  );
-}
-
-Widget _sheetTopBar(BuildContext ctx) {
-  return Padding(
-    padding: const EdgeInsets.fromLTRB(8, 12, 8, 4),
-    child: Row(
-      children: [
-        Material(
-          color: AppColors.primary.withValues(alpha: 0.08),
-          shape: const CircleBorder(),
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: () => Navigator.of(ctx).pop(),
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Icon(Icons.arrow_back_rounded, color: AppColors.primary, size: 22),
-            ),
-          ),
-        ),
-        const SizedBox(width: 6),
-        TextButton(
-          onPressed: () => Navigator.of(ctx).pop(),
-          child: const Text('Voltar', style: TextStyle(fontWeight: FontWeight.w800)),
-        ),
-        const Spacer(),
-        Material(
-          color: Colors.grey.shade100,
-          shape: const CircleBorder(),
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: () => Navigator.of(ctx).pop(),
-            child: const Padding(
-              padding: EdgeInsets.all(8),
-              child: Icon(Icons.close_rounded, size: 22, color: Color(0xFF1A237E)),
-            ),
-          ),
-        ),
-      ],
     ),
   );
 }

@@ -3322,6 +3322,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
           initialRangeFrom: _from,
           initialRangeTo: _to,
           semContaNoPainelFinanceiro: semContaNoPainel,
+          initialSourceAccountId: _financeAccountFilterId,
         ),
       ),
     );
@@ -3559,8 +3560,8 @@ class _FinanceScreenState extends State<FinanceScreen> {
                   onPressed: widget.profile.hasActiveLicense
                       ? () => _openBulkAssignFromStrip(context, semContaNoPainel: semContaCount)
                       : () => mostrarAvisoSeLicencaInativa(context, widget.profile),
-                  icon: const Icon(Icons.link_rounded, size: 18),
-                  label: const Text('Atribuir em massa'),
+                  icon: const Icon(Icons.swap_horiz_rounded, size: 18),
+                  label: const Text('Migrar lançamentos'),
                 ),
               ],
             ),

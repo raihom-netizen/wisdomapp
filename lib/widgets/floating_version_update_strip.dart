@@ -1,21 +1,38 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 
-import '../constants/app_version.dart';
 import '../services/version_check_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_update_launcher.dart';
 
-/// Faixa flutuante compacta (todas as abas / tela inicial escolhida): promo de atualização estilo premium.
+/// Faixa flutuante compacta: aviso de nova versão com link (Play Store / TestFlight / recarga web).
+/// Só aparece quando o admin grava `forceUpdate: true` no servidor.
 class FloatingVersionUpdateStrip extends StatelessWidget {
   const FloatingVersionUpdateStrip({super.key});
+
+  String _subtitle(String? serverVersion) {
+    final v = serverVersion?.trim();
+    final label = (v != null && v.isNotEmpty) ? v : 'nova';
+    if (kIsWeb) return 'Versão $label no servidor · toque para recarregar';
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      return 'Versão $label · toque para abrir o TestFlight';
+    }
+    return 'Versão $label · toque para abrir a Play Store';
+  }
+
+  String _actionLabel() {
+    if (kIsWeb) return 'Atualizar';
+    if (defaultTargetPlatform == TargetPlatform.iOS) return 'TestFlight';
+    return 'Play Store';
+  }
 
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<bool>(
       valueListenable: VersionCheckService.forceUpdateNotifier,
       builder: (context, _, __) {
-        if (VersionCheckService.pendingUpdateVersion == null) {
+        final serverVersion = VersionCheckService.pendingUpdateVersion;
+        if (serverVersion == null) {
           return const SizedBox.shrink();
         }
         final bottomInset = MediaQuery.paddingOf(context).bottom;
@@ -58,7 +75,7 @@ class FloatingVersionUpdateStrip extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             const Text(
-                              'Nova versão',
+                              'Nova versão disponível',
                               style: TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.w900,
@@ -67,13 +84,13 @@ class FloatingVersionUpdateStrip extends StatelessWidget {
                               ),
                             ),
                             Text(
-                              AppVersion.internalLabel,
+                              _subtitle(serverVersion),
                               style: TextStyle(
                                 color: Colors.white.withValues(alpha: 0.88),
                                 fontSize: 10,
                                 fontWeight: FontWeight.w600,
                               ),
-                              maxLines: 1,
+                              maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
                           ],
@@ -100,7 +117,7 @@ class FloatingVersionUpdateStrip extends StatelessWidget {
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
                         child: Text(
-                          kIsWeb ? 'Atualizar' : 'Abrir',
+                          _actionLabel(),
                           style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
                         ),
                       ),

@@ -4574,8 +4574,8 @@ class _AdminScreenState extends State<AdminScreen> {
           SnackBar(
             content: Text(
               forceUpdate
-                  ? 'Release ${AppVersion.releaseTag} gravado. Usuários em build antigo serão obrigados a atualizar.'
-                  : 'Aviso de atualização obrigatória desativado (forceUpdate: false).',
+                  ? 'Release ${AppVersion.releaseTag} gravado. Usuários em build antigo verão aviso com link para atualizar.'
+                  : 'Aviso de nova versão desativado (forceUpdate: false).',
             ),
             backgroundColor: AppColors.success,
           ),
@@ -4602,7 +4602,7 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
-  /// Card no Resumo: botão para gravar versão atual no Firestore com forceUpdate (obriga usuários a atualizar).
+  /// Card no Resumo: gravar versão no Firestore e avisar usuários (faixa com link Play / TestFlight).
   Widget _buildForceUpdateCard() {
     return Container(
       decoration: BoxDecoration(
@@ -4642,9 +4642,9 @@ class _AdminScreenState extends State<AdminScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Gravar release ${AppVersion.releaseTag} (${AppVersion.internalLabel}) e avisar todos os usuários em build antigo (app e web). '
+                            'Gravar release ${AppVersion.releaseTag} (${AppVersion.internalLabel}) e avisar usuários em build antigo (faixa com link — Play Store no Android, TestFlight no iPhone). '
                             'O deploy publica o site mas não dispara aviso — só este botão. '
-                            'Usuários já na versão atual não veem nada. Para cancelar avisos futuros, defina `forceUpdate`: false no Firestore.',
+                            'Usuários já na versão atual não veem nada. Para cancelar avisos, use "Desativar aviso".',
                             style: TextStyle(
                                 fontSize: 13, color: Colors.grey.shade700),
                           ),
@@ -4690,7 +4690,7 @@ class _AdminScreenState extends State<AdminScreen> {
                         : const Icon(Icons.cloud_upload_rounded, size: 20),
                     label: Text(_pushingVersion
                         ? 'Gravando...'
-                        : 'Subir versão e forçar atualização'),
+                        : 'Subir versão e avisar usuários'),
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       padding: const EdgeInsets.symmetric(
@@ -4713,7 +4713,7 @@ class _AdminScreenState extends State<AdminScreen> {
                         : const Icon(Icons.notifications_off_outlined, size: 18),
                     label: Text(_clearingForceUpdate
                         ? 'Desativando...'
-                        : 'Desativar aviso obrigatório'),
+                        : 'Desativar aviso de versão'),
                   ),
                 ),
                 const SizedBox(height: 12),

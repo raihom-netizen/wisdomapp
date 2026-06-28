@@ -745,8 +745,103 @@ class GoogleCalendarSyncService {
     return n;
   }
 
+  static const _googleImportColorHex = '#4285F4';
+
+  /// Google Calendar → Agenda: cria reminders locais para eventos ainda não vinculados.
+  static Future<int> importExternalGoogleEvents({
+    required String userDocId,
+    required List<GoogleCalendarEventItem> events,
+  }) async {
+    if (userDocId.isEmpty || !await isEnabled(userDocId)) return 0;
+
+    var imported = 0;
+    for (final event in events) {
+      if (event.isLikelyReadOnlyGoogleEvent) continue;
+      if (!isOnOrAfterSyncMin(event.day)) continue;
+
+      final eventId = event.id.trim();
+      if (eventId.isEmpty) continue;
+
+      try {
+        final linked = await FirestoreWebGuard.runFirestoreOpSafe(
+          () => FirebaseFirestore.instance
+              .collection('users')
+              .doc(userDocId)
+              .collection('reminders')
+              .where('googleEventId', isEqualTo: eventId)
+              .limit(1)
+              .get(),
+        );
+        if (linked.docs.isNotEmpty) continue;
+
+        final day = _dayKey(event.day);
+        final start = event.timeStart.trim().isEmpty ? '09:00' : event.timeStart.trim();
+        final end = event.timeEnd.trim().isEmpty
+            ? _defaultEndFromStart(start)
+            : event.timeEnd.trim();
+
+        final ref = FirebaseFirestore.instance
+            .collection('users')
+            .doc(userDocId)
+            .collection('reminders')
+            .doc();
+
+        await FirestoreWebGuard.runFirestoreOpSafe(() async {
+          await ref.set({
+            'type': 'compromisso',
+            'agendaKind': 'compromisso_particular',
+            'title': event.title.trim().isEmpty ? 'Evento Google' : event.title.trim(),
+            'notes': event.notes.trim(),
+            'date': Timestamp.fromDate(day),
+            'time': start,
+            'endTime': end,
+            'colorHex': _googleImportColorHex,
+            'status': 'EM_ABERTO',
+            'done': false,
+            'googleEventId': eventId,
+            'googleSyncedAt': FieldValue.serverTimestamp(),
+            'source': 'google_calendar_import',
+            'createdAt': FieldValue.serverTimestamp(),
+            'agendaLoginDaySyncAt': FieldValue.serverTimestamp(),
+          });
+        });
+
+        imported++;
+      } catch (e) {
+        debugPrint('importExternalGoogleEvents $eventId: $e');
+      }
+    }
+    return imported;
+  }
+
+  static String _defaultEndFromStart(String startHHmm) {
+    final parts = startHHmm.split(':');
+    final h = int.tryParse(parts.first) ?? 9;
+    final m = int.tryParse(parts.length > 1 ? parts[1] : '0') ?? 0;
+    final end = DateTime(2000, 1, 1, h, m).add(const Duration(hours: 1));
+    return '${end.hour.toString().padLeft(2, '0')}:${end.minute.toString().padLeft(2, '0')}';
+  }
+
+  /// Sincronização bidirecional: envia locais pendentes + importa novos do Google.
+  static Future<({int pushed, int pulled})> syncBidirectional({
+    required String userDocId,
+    required List<GoogleCalendarEventItem> googleEvents,
+  }) async {
+    if (userDocId.isEmpty || !await isEnabled(userDocId)) {
+      return (pushed: 0, pulled: 0);
+    }
+    await warmUpIfEnabled(userDocId);
+    final pushed = await syncAllLocalReminders(userDocId: userDocId);
+    final pulled = await importExternalGoogleEvents(
+      userDocId: userDocId,
+      events: googleEvents,
+    );
+    return (pushed: pushed, pulled: pulled);
+  }
+
   /// Cria/atualiza evento no Google Calendar e grava `googleEventId` no reminder.
-  static Future<void> syncReminderToGoogle({
+  /// Retorna `true` se o Google confirmou o evento.
+  static Future<bool> syncReminderToGoogle({
     required String userDocId,
     required String reminderDocId,
     required String title,
@@ -755,9 +850,9 @@ class GoogleCalendarSyncService {
     required String timeHHmm,
     required String endTimeHHmm,
   }) async {
-    if (userDocId.isEmpty || reminderDocId.isEmpty) return;
-    if (!await isEnabled(userDocId)) return;
-    if (!isOnOrAfterSyncMin(date)) return;
+    if (userDocId.isEmpty || reminderDocId.isEmpty) return false;
+    if (!await isEnabled(userDocId)) return false;
+    if (!isOnOrAfterSyncMin(date)) return false;
 
     final payload = _eventPayload(
       title: title,
@@ -772,7 +867,15 @@ class GoogleCalendarSyncService {
         .doc(userDocId)
         .collection('reminders')
         .doc(reminderDocId);
-    final existing = await ref.get();
+
+    DocumentSnapshot<Map<String, dynamic>> existing;
+    try {
+      existing = await FirestoreWebGuard.runFirestoreOpSafe(() => ref.get());
+    } catch (e) {
+      debugPrint('syncReminderToGoogle read reminder: $e');
+      return false;
+    }
+
     final oldEventId = (existing.data()?['googleEventId'] ?? '').toString().trim();
 
     final uri = oldEventId.isNotEmpty
@@ -806,17 +909,25 @@ class GoogleCalendarSyncService {
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
       debugPrint('syncReminderToGoogle HTTP ${res.statusCode}: ${res.body}');
-      return;
+      return false;
     }
 
-    final decoded = jsonDecode(res.body) as Map<String, dynamic>;
-    final eventId = (decoded['id'] ?? '').toString();
-    if (eventId.isEmpty) return;
+    try {
+      final decoded = jsonDecode(res.body) as Map<String, dynamic>;
+      final eventId = (decoded['id'] ?? '').toString();
+      if (eventId.isEmpty) return false;
 
-    await ref.set({
-      'googleEventId': eventId,
-      'googleSyncedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+      await FirestoreWebGuard.runFirestoreOpSafe(() async {
+        await ref.set({
+          'googleEventId': eventId,
+          'googleSyncedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      });
+      return true;
+    } catch (e) {
+      debugPrint('syncReminderToGoogle persist googleEventId: $e');
+      return false;
+    }
   }
 
   static Map<String, dynamic> _eventPayload({

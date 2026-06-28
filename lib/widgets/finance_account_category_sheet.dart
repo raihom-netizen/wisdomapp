@@ -81,8 +81,8 @@ class FinanceAccountCategorySheet extends StatefulWidget {
 }
 
 class _FinanceAccountCategorySheetState extends State<FinanceAccountCategorySheet> {
-  /// 0 = todos (despesas + receitas), 1 = despesas, 2 = receitas — padrão despesas como antes.
-  int _tab = 1;
+  /// 0 = todos (despesas + receitas), 1 = despesas, 2 = receitas — padrão «Todos» em todas as contas.
+  int _tab = 0;
   bool _gridSelectionMode = false;
   final Set<String> _gridSelectedIds = {};
   bool _gridDeleting = false;
@@ -109,6 +109,11 @@ class _FinanceAccountCategorySheetState extends State<FinanceAccountCategoryShee
         oldWidget.to != widget.to ||
         oldWidget.statusFilter != widget.statusFilter ||
         oldWidget.account?.id != widget.account?.id) {
+      if (oldWidget.account?.id != widget.account?.id) {
+        _tab = 0;
+        _gridSelectionMode = false;
+        _gridSelectedIds.clear();
+      }
       unawaited(_reloadPeriodDocs());
     }
   }
@@ -323,7 +328,7 @@ class _FinanceAccountCategorySheetState extends State<FinanceAccountCategoryShee
                         ),
                         const SizedBox(height: 16),
                         if (raw.isNotEmpty) ...[
-                          _previewStrip(raw),
+                          _previewStrip(_docsForGrid(raw)),
                           const SizedBox(height: 16),
                         ],
                         SegmentedButton<int>(
@@ -353,21 +358,32 @@ class _FinanceAccountCategorySheetState extends State<FinanceAccountCategoryShee
                         ),
                         const SizedBox(height: 16),
                         if (_tab == 0) ...[
-                          _CategoryPanel(
-                            type: 'expense',
-                            profile: widget.profile,
-                            aggregates: expenseByCat,
-                            accent: AppColors.financeDespesa,
-                            consolidated: widget.account == null,
-                          ),
-                          const SizedBox(height: 16),
-                          _CategoryPanel(
-                            type: 'income',
-                            profile: widget.profile,
-                            aggregates: incomeByCat,
-                            accent: AppColors.financeReceita,
-                            consolidated: widget.account == null,
-                          ),
+                          if (expenseByCat.isNotEmpty) ...[
+                            _CategoryPanel(
+                              type: 'expense',
+                              profile: widget.profile,
+                              aggregates: expenseByCat,
+                              accent: AppColors.financeDespesa,
+                              consolidated: widget.account == null,
+                            ),
+                            if (incomeByCat.isNotEmpty) const SizedBox(height: 16),
+                          ],
+                          if (incomeByCat.isNotEmpty)
+                            _CategoryPanel(
+                              type: 'income',
+                              profile: widget.profile,
+                              aggregates: incomeByCat,
+                              accent: AppColors.financeReceita,
+                              consolidated: widget.account == null,
+                            )
+                          else if (expenseByCat.isEmpty)
+                            _CategoryPanel(
+                              type: 'expense',
+                              profile: widget.profile,
+                              aggregates: expenseByCat,
+                              accent: AppColors.financeDespesa,
+                              consolidated: widget.account == null,
+                            ),
                         ] else if (_tab == 1)
                           _CategoryPanel(
                             type: 'expense',

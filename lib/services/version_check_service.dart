@@ -7,7 +7,7 @@ import 'version_check_web_stub.dart'
 /// Checagem de versão no start: só avisa usuários quando o admin grava
 /// `forceUpdate: true` em Firestore (`app_config/version`) pelo painel Admin.
 /// Deploy web publica `version.json` mas **não** dispara aviso sozinho.
-/// Mobile: marca [pendingUpdateVersion] para banner/diálogo ou tela bloqueante.
+/// Mobile: marca [pendingUpdateVersion] para faixa/banner com link (Play / TestFlight).
 class VersionCheckService {
   VersionCheckService._();
 
@@ -41,8 +41,7 @@ class VersionCheckService {
     return defaultTestFlightPublicUrl;
   }
 
-  /// Quando true, o app bloqueia e exibe tela de atualização obrigatória.
-  /// Só fica true se o admin gravou `forceUpdate: true` no Firestore.
+  /// Legado: aviso nunca bloqueia o app (só faixa com link). Mantido para compatibilidade.
   static bool forceUpdateRequired = false;
 
   static final ValueNotifier<bool> forceUpdateNotifier = ValueNotifier<bool>(false);
@@ -65,11 +64,10 @@ class VersionCheckService {
     return playStoreAppUrl;
   }
 
-  static void _onNewVersionFound(String serverVersion, {required bool forceBlock}) {
+  static void _onNewVersionFound(String serverVersion) {
     pendingUpdateVersion = serverVersion;
-    // Web: nunca bloqueia a árvore inteira nem recarrega sozinho — só faixa/banner.
-    // Evita tela preta e loop de reload ao alternar abas ou com cache antigo.
-    forceUpdateRequired = forceBlock && !kIsWeb;
+    // Nunca bloqueia Android/iOS — só exibe faixa com link (Play Store / TestFlight).
+    forceUpdateRequired = false;
     forceUpdateNotifier.value = true;
   }
 
@@ -148,7 +146,7 @@ class VersionCheckService {
 
       final label =
           serverVersion != null && serverVersion.isNotEmpty ? serverVersion : AppVersion.current;
-      _onNewVersionFound(label, forceBlock: true);
+      _onNewVersionFound(label);
     } catch (_) {}
   }
 

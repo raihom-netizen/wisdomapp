@@ -68,6 +68,8 @@ import '../utils/agenda_reminder_module_scope.dart';
 import '../utils/finance_category_grouping.dart';
 import '../widgets/finance_category_pie_panel.dart';
 import '../widgets/registrar_aporte_dialog.dart';
+import '../widgets/goal_contributions_sheet.dart';
+import '../widgets/sheet_voltar_controls.dart';
 import 'novo_lancamento_page.dart';
 import '../models/smart_input_pop_result.dart';
 import '../services/finance_opening_balance_service.dart';
@@ -2004,7 +2006,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                       child: Text(
-                        kIsWeb ? 'Atualizar' : 'Abrir',
+                        kIsWeb
+                            ? 'Atualizar'
+                            : isIosMobile
+                                ? 'TestFlight'
+                                : 'Play Store',
                         style: const TextStyle(
                             fontWeight: FontWeight.w900, fontSize: 12),
                       ),
@@ -6807,272 +6813,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       BuildContext context,
       QueryDocumentSnapshot<Map<String, dynamic>> goalDoc,
       String goalTitle) async {
-    final contribRef = goalDoc.reference.collection('contributions');
-    if (!context.mounted) return;
-    await showModalBottomSheet<void>(
+    await showGoalContributionsSheet(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.5,
-        minChildSize: 0.25,
-        maxChildSize: 0.9,
-        expand: false,
-        builder: (ctx, scrollController) => Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: Column(
-            children: [
-              const SizedBox(height: 8),
-              Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(2))),
-              // Topo do preview: «Voltar» (esquerda) + X (direita).
-              _previewTopBar(ctx),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-                child: Row(
-                  children: [
-                    Icon(Icons.list_alt_rounded,
-                        color: AppColors.primary, size: 28),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Lançamentos · $goalTitle',
-                        style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF1A237E)),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              Expanded(
-                child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                  stream:
-                      contribRef.orderBy('date', descending: true).snapshots(),
-                  builder: (context, snap) {
-                    if (snap.hasError) {
-                      return Center(
-                          child: Text('Erro: ${snap.error}',
-                              style: TextStyle(color: Colors.grey.shade700)));
-                    }
-                    if (snap.connectionState == ConnectionState.waiting &&
-                        !snap.hasData) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    final docs = snap.data?.docs ?? [];
-                    if (docs.isEmpty) {
-                      return Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.inbox_rounded,
-                                size: 64, color: Colors.grey.shade400),
-                            const SizedBox(height: 16),
-                            Text('Nenhum aporte ainda',
-                                style: TextStyle(
-                                    fontSize: 16, color: Colors.grey.shade600)),
-                            const SizedBox(height: 8),
-                            Text('Use "Fazer aporte" no card da meta.',
-                                style: TextStyle(
-                                    fontSize: 13, color: Colors.grey.shade500)),
-                          ],
-                        ),
-                      );
-                    }
-                    return ListView.builder(
-                      controller: scrollController,
-                      cacheExtent: 400,
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                      itemCount: docs.length,
-                      itemBuilder: (context, i) {
-                        final doc = docs[i];
-                        final d = doc.data();
-                        final amount = (d['amount'] ?? 0).toDouble();
-                        final dateTs = d['date'] as Timestamp?;
-                        final date = dateTs?.toDate() ?? DateTime.now();
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14)),
-                          color: AppColors.primary.withOpacity(0.06),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 8),
-                            leading: CircleAvatar(
-                              backgroundColor:
-                                  AppColors.primary.withOpacity(0.15),
-                              child: Icon(Icons.savings_rounded,
-                                  color: AppColors.primary, size: 22),
-                            ),
-                            title: Text(
-                              CurrencyFormats.formatBRL(amount),
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w700, fontSize: 16),
-                            ),
-                            subtitle: Text(
-                                DateFormat('dd/MM/yyyy').format(date),
-                                style: TextStyle(
-                                    fontSize: 12, color: Colors.grey.shade600)),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: Icon(Icons.edit_rounded,
-                                      size: 22, color: Colors.grey.shade700),
-                                  onPressed: () => _editarAporteDashboard(
-                                      ctx, doc, goalTitle),
-                                ),
-                                IconButton(
-                                  icon: Icon(Icons.delete_outline_rounded,
-                                      size: 22, color: AppColors.error),
-                                  onPressed: () => _excluirAporteDashboard(
-                                      ctx, doc, goalTitle),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+      goalDoc: goalDoc,
+      goalTitle: goalTitle,
+      uid: _userFsId,
+      profile: widget.profile,
     );
-  }
-
-  Future<void> _editarAporteDashboard(
-      BuildContext context,
-      QueryDocumentSnapshot<Map<String, dynamic>> contribDoc,
-      String goalTitle) async {
-    final d = contribDoc.data();
-    final amountCtrl = TextEditingController(
-      text: CurrencyFormats.formatBRLInput((d['amount'] ?? 0) as num),
-    );
-    DateTime date = (d['date'] as Timestamp?)?.toDate() ?? DateTime.now();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => AlertDialog(
-          title: const Text('Editar aporte'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                BrlAmountTextField(
-                  controller: amountCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Valor (R\$)',
-                    prefixText: 'R\$ ',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  title: const Text('Data do aporte'),
-                  subtitle: Text(DateFormat('dd/MM/yyyy').format(date)),
-                  trailing: TextButton(
-                    onPressed: () async {
-                      final picked = await showDatePicker(
-                        context: ctx,
-                        initialDate: date,
-                        firstDate: DateTime(2000),
-                        lastDate: DateTime.now(),
-                      );
-                      if (picked != null) setState(() => date = picked);
-                    },
-                    child: const Text('Alterar'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancelar')),
-            FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Salvar')),
-          ],
-        ),
-      ),
-    );
-    if (ok != true) return;
-    final amount = CurrencyFormats.parseBRLInput(amountCtrl.text) ?? 0;
-    if (amount <= 0) {
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Informe um valor maior que zero.')));
-      return;
-    }
-    try {
-      await contribDoc.reference.update({
-        'amount': amount,
-        'date': Timestamp.fromDate(date),
-      });
-      if (mounted)
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Aporte atualizado!')));
-    } catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Erro: ${e.toString().split('\n').first}')));
-    }
-  }
-
-  Future<void> _excluirAporteDashboard(
-      BuildContext context,
-      QueryDocumentSnapshot<Map<String, dynamic>> contribDoc,
-      String goalTitle) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Excluir aporte'),
-        content: const Text(
-            'Deseja realmente excluir este lançamento? O valor será descontado do progresso da meta.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancelar')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Excluir'),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true) return;
-    try {
-      await contribDoc.reference.delete();
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Lançamento excluído.')));
-    } catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content:
-                Text('Erro ao excluir: ${e.toString().split('\n').first}')));
-    }
   }
 
   Widget _goalPlaceholder() {
@@ -10528,66 +10275,4 @@ class _DashboardPendingListSheetContentState
 /// total iPhone / iOS / Android / Web, sem depender de botão físico) +
 /// atalho **«Fechar» (X)** à direita. Reutilizado em todos os sheets do
 /// Painel Inicial e nos widgets internos como `_DashboardPendingListSheetContent`.
-Widget buildPreviewTopBar(BuildContext ctx) {
-  return Padding(
-    padding: const EdgeInsets.fromLTRB(8, 12, 8, 4),
-    child: Row(
-      children: [
-        Material(
-          color: AppColors.primary.withValues(alpha: 0.08),
-          shape: const CircleBorder(),
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: () => Navigator.of(ctx).pop(),
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Icon(
-                Icons.arrow_back_rounded,
-                color: AppColors.primary,
-                size: 22,
-                semanticLabel: 'Voltar',
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 6),
-        TextButton(
-          onPressed: () => Navigator.of(ctx).pop(),
-          style: TextButton.styleFrom(
-            minimumSize: const Size(44, 44),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-            foregroundColor: AppColors.primary,
-          ),
-          child: const Text(
-            'Voltar',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.2,
-            ),
-          ),
-        ),
-        const Spacer(),
-        Material(
-          color: Colors.grey.shade100,
-          shape: const CircleBorder(),
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: () => Navigator.of(ctx).pop(),
-            child: const Padding(
-              padding: EdgeInsets.all(8),
-              child: Icon(
-                Icons.close_rounded,
-                size: 22,
-                color: Color(0xFF1A237E),
-                semanticLabel: 'Fechar',
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 4),
-      ],
-    ),
-  );
-}
+Widget buildPreviewTopBar(BuildContext ctx) => previewSheetTopBar(ctx);

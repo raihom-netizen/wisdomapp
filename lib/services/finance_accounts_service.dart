@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart' as fa;
 import '../models/finance_account.dart';
 import '../utils/firestore_user_doc_id.dart';
 import 'finance_advanced_settings_service.dart';
+import '../utils/finance_transactions_hub.dart';
 
 class FinanceAccountsService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -163,9 +164,88 @@ class FinanceAccountsService {
     await _col(uid).doc(accountId).update(data);
   }
 
-  Future<void> deleteAccount(String uid, String accountId) async {
+  CollectionReference<Map<String, dynamic>> _txCol(String uid) => _db
+      .collection('users')
+      .doc(firestoreUserDocIdForAppShell(uid))
+      .collection('transactions');
+
+  /// Lançamentos com [financeAccountId] ou [paidFromFinanceAccountId] + pares de transferência.
+  Future<int> countLinkedTransactions(String uid, String accountId) async {
+    final ids = await _collectLinkedTransactionIds(uid, accountId);
+    return ids.length;
+  }
+
+  Future<void> _forEachTxByField(
+    String uid,
+    String field,
+    String value,
+    void Function(String docId) onId,
+  ) async {
+    QueryDocumentSnapshot<Map<String, dynamic>>? last;
+    while (true) {
+      Query<Map<String, dynamic>> q =
+          _txCol(uid).where(field, isEqualTo: value).limit(500);
+      if (last != null) q = q.startAfterDocument(last);
+      final snap = await q.get();
+      if (snap.docs.isEmpty) break;
+      for (final doc in snap.docs) {
+        onId(doc.id);
+      }
+      last = snap.docs.last;
+      if (snap.docs.length < 500) break;
+    }
+  }
+
+  Future<Set<String>> _collectLinkedTransactionIds(String uid, String accountId) async {
+    final ids = <String>{};
+    await _forEachTxByField(uid, 'financeAccountId', accountId, ids.add);
+    await _forEachTxByField(uid, 'paidFromFinanceAccountId', accountId, ids.add);
+
+    final pairIds = <String>{};
+    final idList = ids.toList();
+    for (var i = 0; i < idList.length; i += 25) {
+      final chunk = idList.sublist(i, i + 25 > idList.length ? idList.length : i + 25);
+      final snaps = await Future.wait(chunk.map((id) => _txCol(uid).doc(id).get()));
+      for (final snap in snaps) {
+        final pair = (snap.data()?['transferPairId'] ?? '').toString().trim();
+        if (pair.isNotEmpty) pairIds.add(pair);
+      }
+    }
+    for (final pairId in pairIds) {
+      final pairSnap =
+          await _txCol(uid).where('transferPairId', isEqualTo: pairId).get();
+      for (final doc in pairSnap.docs) {
+        ids.add(doc.id);
+      }
+    }
+    return ids;
+  }
+
+  Future<void> _deleteTransactionsByIds(String uid, Set<String> ids) async {
+    if (ids.isEmpty) return;
+    final col = _txCol(uid);
+    var batch = _db.batch();
+    var n = 0;
+    for (final id in ids) {
+      batch.delete(col.doc(id));
+      n++;
+      if (n >= 450) {
+        await batch.commit();
+        batch = _db.batch();
+        n = 0;
+      }
+    }
+    if (n > 0) await batch.commit();
+  }
+
+  /// Remove a conta e **todos** os lançamentos vinculados (inclui transferências relacionadas).
+  Future<int> deleteAccount(String uid, String accountId) async {
+    final linkedIds = await _collectLinkedTransactionIds(uid, accountId);
+    await _deleteTransactionsByIds(uid, linkedIds);
     await _col(uid).doc(accountId).delete();
     await FinanceAdvancedSettingsService().clearDefaultFinanceAccountIfMatches(uid, accountId);
+    FinanceTransactionsHub.notifyMutated(uid: firestoreUserDocIdForAppShell(uid));
+    return linkedIds.length;
   }
 
   /// Persiste a ordem exibida (campo [FinanceAccount.sortOrder]).

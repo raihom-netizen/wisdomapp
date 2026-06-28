@@ -9,6 +9,7 @@ import '../utils/premium_upgrade.dart';
 import '../utils/date_picker_a11y.dart';
 import 'goal_finance_account_field.dart';
 import 'brl_amount_text_field.dart';
+import 'sheet_voltar_controls.dart';
 
 /// Abre o diálogo «Registrar depósito» (meta clássica ou complemento).
 Future<bool> showRegistrarDepositoDialog({
@@ -209,6 +210,10 @@ class _RegistrarDepositoDialogContentState
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            sheetWideVoltarButton(
+              context,
+              onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+            ),
             if (widget.weekNumbers != null && widget.weekNumbers!.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
@@ -272,7 +277,7 @@ class _RegistrarDepositoDialogContentState
       actions: [
         TextButton(
           onPressed: _saving ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Cancelar'),
+          child: const Text('Voltar'),
         ),
         FilledButton(
           onPressed: _saving ? null : _salvar,

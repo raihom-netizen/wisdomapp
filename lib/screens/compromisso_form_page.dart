@@ -15,7 +15,9 @@ import '../widgets/agenda_form_footer_actions.dart';
 import '../widgets/fast_text_field.dart';
 import '../utils/keyboard_form_scaffold.dart';
 import '../widgets/commitment_description_picker.dart';
+import '../widgets/compromisso_schedule_personalize_sheet.dart';
 import '../widgets/multi_date_month_picker_dialog.dart';
+import '../utils/compromisso_schedule_dates.dart';
 import '../utils/premium_upgrade.dart';
 
 /// Resultado ao salvar compromisso (novo ou edição).
@@ -32,14 +34,20 @@ class CompromissoFormResult {
     this.notificationDeliveryMode,
     this.repeatYearly = false,
     this.yearlyRepeatWeekdays,
-  });
+    List<DateTime>? targetDates,
+  }) : targetDates = CompromissoScheduleDates.uniqueSorted(
+          targetDates ?? [date],
+        );
 
   final String title;
   final String notes;
+  /// Primeiro dia da seleção (compatibilidade / exibição).
   final DateTime date;
   final TimeOfDay time;
   final TimeOfDay endTime;
   final String colorHex;
+  /// Todos os dias onde o compromisso será gravado (1 = único).
+  final List<DateTime> targetDates;
   /// Aniversário, casamento, etc. — relança automaticamente todo ano em Escalas.
   final bool repeatYearly;
   /// Ex.: [DateTime.wednesday, DateTime.thursday] — todas as quas/quis do ano.
@@ -98,6 +106,7 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
   late TimeOfDay _endTime;
   late String _colorHex;
   bool _repeatYearly = false;
+  late List<DateTime> _selectedDates;
 
   static TimeOfDay _addOneHour(TimeOfDay t) {
     final m = t.hour * 60 + t.minute + 60;
@@ -132,6 +141,9 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
       _repeatYearly = data['repeatYearly'] == true ||
           data['isYearlyRepeatTemplate'] == true ||
           (data['yearlyRepeatTemplateId'] ?? '').toString().trim().isNotEmpty;
+      _selectedDates = [
+        DateTime(_date.year, _date.month, _date.day),
+      ];
     } else if (widget.googleEventSeed != null) {
       final g = widget.googleEventSeed!;
       _titleCtrl = TextEditingController(text: g.title);
@@ -144,6 +156,9 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
           ? _addOneHour(_time)
           : _parseHHmm(g.timeEnd, _addOneHour(_time));
       _colorHex = '#4285F4';
+      _selectedDates = [
+        DateTime(_date.year, _date.month, _date.day),
+      ];
     } else {
       _titleCtrl = TextEditingController();
       _notesCtrl = TextEditingController();
@@ -154,6 +169,9 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
       _time = const TimeOfDay(hour: 9, minute: 0);
       _endTime = const TimeOfDay(hour: 10, minute: 0);
       _colorHex = kAgendaCompromissoDefaultColor;
+      _selectedDates = [
+        DateTime(_date.year, _date.month, _date.day),
+      ];
     }
   }
 
@@ -287,19 +305,59 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
     );
   }
 
+  bool get _multiDateMode => !widget.isEdit;
+
+  String get _dateFieldLabel {
+    if (!_multiDateMode || _selectedDates.length <= 1) {
+      return DateFormat("dd/MM (EEE)", 'pt_BR').format(_date);
+    }
+    return '${_selectedDates.length} dias';
+  }
+
   Future<void> _pickDate() async {
-    final picked = await pickSingleDateWithHolidayCalendar(
+    if (!_multiDateMode) {
+      final picked = await pickSingleDateWithHolidayCalendar(
+        context: context,
+        initialDate: _date,
+        firstDate: DateTime(2020),
+        lastDate: DateTime(2100),
+      );
+      if (picked != null) {
+        setState(() {
+          _date = picked;
+          _selectedDates = [DateTime(picked.year, picked.month, picked.day)];
+          if (_repeatYearly) _applyYearlyNotesLine();
+        });
+      }
+      return;
+    }
+
+    final picked = await showMultiDateMonthPickerDialog(
       context: context,
-      initialDate: _date,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2100),
+      month: _date,
+      initialSelected: _selectedDates,
     );
-    if (picked != null) {
+    if (picked != null && picked.isNotEmpty) {
       setState(() {
-        _date = picked;
+        _selectedDates = CompromissoScheduleDates.uniqueSorted(picked);
+        _date = _selectedDates.first;
         if (_repeatYearly) _applyYearlyNotesLine();
       });
     }
+  }
+
+  Future<void> _openPersonalizeDates() async {
+    final merged = await showCompromissoSchedulePersonalizeSheet(
+      context: context,
+      referenceMonth: _date,
+      initialSelected: _selectedDates,
+    );
+    if (merged == null || merged.isEmpty || !mounted) return;
+    setState(() {
+      _selectedDates = CompromissoScheduleDates.uniqueSorted(merged);
+      _date = _selectedDates.first;
+      if (_repeatYearly) _applyYearlyNotesLine();
+    });
   }
 
   void _applyYearlyNotesLine() {
@@ -436,6 +494,16 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
       );
       return;
     }
+    if (_repeatYearly && _selectedDates.length > 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Repetir todo ano só funciona com um único dia. Desmarque dias extras ou desative a repetição.',
+          ),
+        ),
+      );
+      return;
+    }
     Navigator.of(context).pop(
       CompromissoFormResult(
         title: title,
@@ -449,6 +517,7 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
         notificationDeliveryMode: null,
         repeatYearly: _repeatYearly,
         yearlyRepeatWeekdays: null,
+        targetDates: _selectedDates,
       ),
     );
   }
@@ -548,7 +617,7 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
                     child: _compactPickerTile(
                       icon: Icons.calendar_today_rounded,
                       label: 'DATA',
-                      value: DateFormat("dd/MM (EEE)", 'pt_BR').format(_date),
+                      value: _dateFieldLabel,
                       onTap: _pickDate,
                     ),
                   ),
@@ -574,6 +643,51 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
                   ),
                 ],
               ),
+              if (_multiDateMode) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _openPersonalizeDates,
+                        icon: const Icon(Icons.tune_rounded, size: 18),
+                        label: const Text(
+                          'Personalizar',
+                          style: TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                        ),
+                      ),
+                    ),
+                    if (_selectedDates.length > 1) ...[
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: () => setState(() {
+                          final d = _selectedDates.first;
+                          _selectedDates = [DateTime(d.year, d.month, d.day)];
+                          _date = _selectedDates.first;
+                        }),
+                        child: const Text('1 dia'),
+                      ),
+                    ],
+                  ],
+                ),
+                if (_selectedDates.length > 1)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      _selectedDatesSummary(),
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade700,
+                        height: 1.25,
+                      ),
+                    ),
+                  ),
+              ],
               const SizedBox(height: 10),
               _buildColorCard(pickedFill, onPicked),
               const SizedBox(height: 10),
@@ -610,6 +724,16 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
       ),
       ),
     );
+  }
+
+  String _selectedDatesSummary() {
+    if (_selectedDates.length <= 1) return '';
+    final fmt = DateFormat('dd/MM');
+    final shown = _selectedDates.take(8).map(fmt.format).join(', ');
+    if (_selectedDates.length > 8) {
+      return '$shown … (+${_selectedDates.length - 8})';
+    }
+    return shown;
   }
 
   Widget _buildHeader(String title) {
@@ -737,7 +861,9 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
       ),
       child: SwitchListTile(
         value: _repeatYearly,
-        onChanged: (v) {
+        onChanged: _selectedDates.length > 1
+            ? null
+            : (v) {
           setState(() {
             _repeatYearly = v;
             if (v) {

@@ -34,7 +34,6 @@ import 'services/user_profile_startup_cache.dart';
 import 'utils/firestore_user_doc_id.dart';
 import 'services/session_restore_service.dart';
 import 'screens/downloads_screen.dart';
-import 'screens/force_update_screen.dart';
 import 'screens/payment_status_screen.dart';
 import 'screens/escolha_plano_page.dart';
 import 'screens/privacidade_screen.dart';
@@ -959,9 +958,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   @override
   Widget build(BuildContext context) {
-    if (VersionCheckService.forceUpdateRequired) {
-      return const ForceUpdateScreen();
-    }
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {

@@ -19,17 +19,22 @@ class CompromissoReminderService {
   static CollectionReference<Map<String, dynamic>> _reminders(String uid) =>
       FirebaseFirestore.instance.collection('users').doc(uid).collection('reminders');
 
-  static Future<String?> create({
+  static Future<({String docId, bool googleSynced, int created})> create({
     required String userDocId,
     required CompromissoFormResult result,
   }) async {
+    final days = result.targetDates;
+    if (days.length > 1) {
+      return createMany(userDocId: userDocId, result: result, dates: days);
+    }
+
     final timeStr =
         '${result.time.hour.toString().padLeft(2, '0')}:${result.time.minute.toString().padLeft(2, '0')}';
     final endTimeStr =
         '${result.endTime.hour.toString().padLeft(2, '0')}:${result.endTime.minute.toString().padLeft(2, '0')}';
 
     if (result.repeatYearly) {
-      return YearlyCommitmentRepeatService.createWithYearlyRepeat(
+      final id = await YearlyCommitmentRepeatService.createWithYearlyRepeat(
         userDocId: userDocId,
         title: result.title,
         notes: result.notes,
@@ -39,6 +44,7 @@ class CompromissoReminderService {
         colorHex: result.colorHex,
         yearlyRepeatWeekdays: result.yearlyRepeatWeekdays,
       );
+      return (docId: id, googleSynced: false, created: 1);
     }
 
     final docRef = await _reminders(userDocId).add({
@@ -74,17 +80,104 @@ class CompromissoReminderService {
       newTimeHHmm: timeStr,
     ));
 
-    unawaited(GoogleCalendarSyncService.syncReminderToGoogle(
-      userDocId: userDocId,
-      reminderDocId: docRef.id,
-      title: result.title,
-      notes: result.notes,
-      date: result.date,
-      timeHHmm: timeStr,
-      endTimeHHmm: endTimeStr,
-    ));
+    var googleSynced = false;
+    if (await GoogleCalendarSyncService.isEnabled(userDocId)) {
+      await GoogleCalendarSyncService.warmUpIfEnabled(userDocId);
+      googleSynced = await GoogleCalendarSyncService.syncReminderToGoogle(
+        userDocId: userDocId,
+        reminderDocId: docRef.id,
+        title: result.title,
+        notes: result.notes,
+        date: result.date,
+        timeHHmm: timeStr,
+        endTimeHHmm: endTimeStr,
+      );
+    }
 
-    return docRef.id;
+    return (docId: docRef.id, googleSynced: googleSynced, created: 1);
+  }
+
+  /// Vários dias com o mesmo título/horário (não usa repetição anual).
+  static Future<({String docId, bool googleSynced, int created})> createMany({
+    required String userDocId,
+    required CompromissoFormResult result,
+    required List<DateTime> dates,
+  }) async {
+    if (userDocId.isEmpty || dates.isEmpty) {
+      return (docId: '', googleSynced: false, created: 0);
+    }
+
+    final timeStr =
+        '${result.time.hour.toString().padLeft(2, '0')}:${result.time.minute.toString().padLeft(2, '0')}';
+    final endTimeStr =
+        '${result.endTime.hour.toString().padLeft(2, '0')}:${result.endTime.minute.toString().padLeft(2, '0')}';
+
+    var created = 0;
+    var synced = 0;
+    String? firstId;
+    final gcalEnabled = await GoogleCalendarSyncService.isEnabled(userDocId);
+    if (gcalEnabled) {
+      await GoogleCalendarSyncService.warmUpIfEnabled(userDocId);
+    }
+
+    for (final rawDay in dates) {
+      final day = DateTime(rawDay.year, rawDay.month, rawDay.day);
+      final docRef = await _reminders(userDocId).add({
+        'type': 'compromisso',
+        'title': result.title,
+        'notes': result.notes,
+        'date': Timestamp.fromDate(day),
+        'time': timeStr,
+        'endTime': endTimeStr,
+        'colorHex': result.colorHex,
+        'status': 'EM_ABERTO',
+        'done': false,
+        'createdAt': FieldValue.serverTimestamp(),
+        'agendaLoginDaySyncAt': FieldValue.serverTimestamp(),
+        'batchGroupTitle': result.title,
+      });
+
+      firstId ??= docRef.id;
+
+      await AgendaScaleMirrorService.upsert(
+        userDocId: userDocId,
+        agendaId: docRef.id,
+        type: AgendaMirrorType.compromisso,
+        label: result.title,
+        date: day,
+        startHHmm: timeStr,
+        endHHmm: endTimeStr,
+        colorHex: result.colorHex,
+        notes: result.notes,
+      );
+
+      unawaited(AgendaNotificationRescheduleHelper.afterReminderSave(
+        userDocId: userDocId,
+        reminderRef: docRef,
+        newDate: day,
+        newTimeHHmm: timeStr,
+      ));
+
+      if (gcalEnabled) {
+        final ok = await GoogleCalendarSyncService.syncReminderToGoogle(
+          userDocId: userDocId,
+          reminderDocId: docRef.id,
+          title: result.title,
+          notes: result.notes,
+          date: day,
+          timeHHmm: timeStr,
+          endTimeHHmm: endTimeStr,
+        );
+        if (ok) synced++;
+      }
+      created++;
+    }
+
+    return (
+      docId: firstId ?? '',
+      googleSynced: synced > 0 && synced == created,
+      created: created,
+    );
   }
 
   /// Salva edição de evento que existe só no Google (ou já vinculado por [googleEventId]).
@@ -192,7 +285,7 @@ class CompromissoReminderService {
     );
   }
 
-  static Future<String> update({
+  static Future<({String message, bool googleSynced})> update({
     required String userDocId,
     required QueryDocumentSnapshot<Map<String, dynamic>> doc,
     required CompromissoFormResult result,
@@ -208,17 +301,21 @@ class CompromissoReminderService {
     final endTimeStr =
         '${result.endTime.hour.toString().padLeft(2, '0')}:${result.endTime.minute.toString().padLeft(2, '0')}';
 
-    unawaited(GoogleCalendarSyncService.syncReminderToGoogle(
-      userDocId: userDocId,
-      reminderDocId: doc.id,
-      title: result.title,
-      notes: result.notes,
-      date: result.date,
-      timeHHmm: timeStr,
-      endTimeHHmm: endTimeStr,
-    ));
+    var googleSynced = false;
+    if (await GoogleCalendarSyncService.isEnabled(userDocId)) {
+      await GoogleCalendarSyncService.warmUpIfEnabled(userDocId);
+      googleSynced = await GoogleCalendarSyncService.syncReminderToGoogle(
+        userDocId: userDocId,
+        reminderDocId: doc.id,
+        title: result.title,
+        notes: result.notes,
+        date: result.date,
+        timeHHmm: timeStr,
+        endTimeHHmm: endTimeStr,
+      );
+    }
 
-    return msg;
+    return (message: msg, googleSynced: googleSynced);
   }
 
   static Future<void> deleteOne({

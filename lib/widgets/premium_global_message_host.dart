@@ -1,9 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
-import '../constants/app_version.dart';
 import '../constants/promo_site_urls.dart';
 import '../services/in_app_floating_message_service.dart';
 import '../services/version_check_service.dart';
@@ -80,7 +77,6 @@ class PremiumGlobalMessageHost extends StatefulWidget {
 class PremiumGlobalMessageHostState extends State<PremiumGlobalMessageHost> {
   bool _dialogOpen = false;
   String? _maintenanceDismissedFp;
-  String? _versionDismissedThisSession;
   DateTime? _lastPumpAt;
 
   @override
@@ -148,12 +144,7 @@ class PremiumGlobalMessageHostState extends State<PremiumGlobalMessageHost> {
       }
     }
 
-    // 2) Nova versão
-    final pendingVersion = VersionCheckService.pendingUpdateVersion;
-    if (pendingVersion != null && pendingVersion != _versionDismissedThisSession) {
-      await _showVersionDialog(ctx);
-      return;
-    }
+    // 2) Nova versão — só faixa no painel (Play / TestFlight); sem diálogo bloqueante.
 
     // 3) In-app (resumo / push)
     final floating = InAppFloatingMessageService.notifier.value;
@@ -334,63 +325,6 @@ class PremiumGlobalMessageHostState extends State<PremiumGlobalMessageHost> {
     });
     _dialogOpen = false;
     if (mounted) _schedulePump();
-  }
-
-  Future<void> _showVersionDialog(BuildContext ctx) async {
-    _dialogOpen = true;
-    final server = VersionCheckService.pendingUpdateVersion ?? '';
-    final sub = kIsWeb
-        ? 'Sua versão: v${AppVersion.current} · Servidor: v$server'
-        : defaultTargetPlatform == TargetPlatform.iOS
-            ? 'Sua versão: ${AppVersion.internalLabel} · Loja: build $server'
-            : 'Sua versão: ${AppVersion.internalLabel} · Loja: v$server';
-    final body = kIsWeb
-        ? 'Há uma versão mais recente no servidor. Recarregue a página para aplicar as melhorias e correções.'
-        : 'Uma nova versão está disponível na loja. Atualize para ter as últimas melhorias e correções.';
-
-    final isIos = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
-    final primaryLabel = kIsWeb
-        ? 'Recarregar página'
-        : isIos
-            ? 'Abrir TestFlight'
-            : 'Atualizar na Play Store';
-
-    void popDialog() {
-      if (!ctx.mounted) return;
-      final nav = Navigator.of(ctx, rootNavigator: true);
-      if (nav.canPop()) nav.pop();
-    }
-
-    try {
-      await showPremiumCenterMessageDialog<void>(
-        context: ctx,
-        headerIcon: Icons.rocket_launch_rounded,
-        title: 'Nova versão disponível',
-        subtitle: sub,
-        bodyText: body,
-        laterLabel: 'Ver depois',
-        primaryButton: FilledButton.icon(
-          onPressed: () async {
-            await launchControleTotalAppUpdate(ctx);
-            popDialog();
-          },
-          icon: Icon(kIsWeb ? Icons.refresh_rounded : Icons.shopping_bag_rounded, color: Colors.white),
-          label: Text(primaryLabel, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-          style: FilledButton.styleFrom(
-            backgroundColor: AppColors.success,
-            foregroundColor: Colors.white,
-            minimumSize: const Size(double.infinity, 52),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          ),
-        ),
-        barrierDismissible: true,
-      );
-    } finally {
-      _versionDismissedThisSession = server;
-      VersionCheckService.clearPendingUpdate();
-      _dialogOpen = false;
-      if (mounted) _schedulePump();
-    }
   }
 
   Future<void> _showFloatingDialog(BuildContext ctx, InAppFloatingPayload payload) async {

@@ -29,8 +29,7 @@ Future<List<DateTime>?> showMultiDateMonthPickerDialog({
   final y = month.year;
   final m = month.month;
   final initialKeys = <String>{
-    for (final d in (initialSelected ?? []))
-      if (d.year == y && d.month == m) _keyD(_normD(d)),
+    for (final d in (initialSelected ?? [])) _keyD(_normD(d)),
   };
 
   final firstM = firstMonthAllowed != null
