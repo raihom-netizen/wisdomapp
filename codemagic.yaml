@@ -33,8 +33,7 @@ workflows:
       cocoapods: default
       vars:
         BUNDLE_ID: "com.wisdomapp"
-        # Opcional: ID numérico do app na ASC (Informações gerais). Se vazio, resolve via API pelo bundle.
-        APP_STORE_APPLE_ID: ""
+        # APP_STORE_APPLE_ID: resolvido em runtime (scripts/codemagic_ios_resolve_app_store_apple_id.sh)
         APP_STORE_CONNECT_KEY_IDENTIFIER: "4UMWWALR3U"
         APP_STORE_CONNECT_ISSUER_ID: "77a1debb-f68b-418d-9fe3-af0f37b40585"
         FIREBASE_STORAGE_BUCKET: "wisdomapp-b9e98.firebasestorage.app"
@@ -228,6 +227,8 @@ workflows:
         script: keychain add-certificates
       - name: Aplicar perfis ao projeto Xcode
         script: xcode-project use-profiles
+      - name: Resolver APP_STORE_APPLE_ID (bundle com.wisdomapp)
+        script: bash scripts/codemagic_ios_resolve_app_store_apple_id.sh
       - name: Forçar iOS deployment target 15.5 (ML Kit)
         script: |
           set -e
