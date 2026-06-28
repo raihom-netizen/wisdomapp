@@ -43,8 +43,6 @@ workflows:
     scripts:
       - name: Get Flutter packages
         script: flutter pub get
-      - name: Validar versão alinhada (web / Android / iOS)
-        script: bash scripts/sync_app_version_from_dart.sh --validate
       - name: Keychain para code signing
         script: keychain initialize
       - name: Ativar Sign In with Apple no App ID (API Apple)

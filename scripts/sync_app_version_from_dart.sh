@@ -41,14 +41,14 @@ EXPECTED_PUB="${PUB_MARK}+${BUILD}"
 TAG="${CURRENT}+${BUILD}"
 
 _check() {
-  local ok=1
+  local aligned=1
   if [[ -f "$PUB" ]]; then
     local line bn
     line="$(grep '^version:' "$PUB" | head -1 | sed 's/^version:[[:space:]]*//;s/[[:space:]]*$//')"
     bn="${line##*+}"
     if [[ "$line" != "$EXPECTED_PUB" ]]; then
       echo "DESALINHADO pubspec: $line (esperado $EXPECTED_PUB)"
-      ok=0
+      aligned=0
     fi
   fi
   if [[ -f "$GRADLE" ]]; then
@@ -57,7 +57,7 @@ _check() {
     gvn="$(grep 'versionName' "$GRADLE" | head -1 | sed 's/.*"\([^"]*\)".*/\1/')"
     if [[ "$gvc" != "$VC" || "$gvn" != "$CURRENT" ]]; then
       echo "DESALINHADO build.gradle: versionCode=$gvc versionName=$gvn (esperado $VC / $CURRENT)"
-      ok=0
+      aligned=0
     fi
   fi
   if [[ -f "$WEB_VJ" ]]; then
@@ -71,10 +71,13 @@ sys.exit(0 if ok else 1)
 PY
     then
       echo "DESALINHADO web/version.json (esperado $TAG)"
-      ok=0
+      aligned=0
     fi
   fi
-  return $ok
+  if [[ "$aligned" -eq 1 ]]; then
+    return 0
+  fi
+  return 1
 }
 
 if [[ "$VALIDATE_ONLY" -eq 1 ]]; then
