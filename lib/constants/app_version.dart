@@ -13,6 +13,8 @@
 /// - [buildNumber] = número do `+` no pubspec (10.04.0+**16**). Igual em web/version.json e CFBundleVersion iOS.
 /// - [versionCode] = mesmo valor que `versionCode` no `android/app/build.gradle`.
 ///
+/// **Subir build iOS só (TestFlight à frente de web/Android):**
+///   .\scripts\bump_ios_build.ps1
 /// **Subir build (todas as plataformas juntas):**
 ///   .\scripts\bump_build.ps1
 /// **Sincronizar arquivos após editar manualmente:**
@@ -28,7 +30,7 @@ class AppVersion {
   static const int buildNumber = 21;
 
   /// CFBundleVersion iOS (App Store / TestFlight). Pode ficar à frente de [buildNumber] (hotfix só Apple).
-  static const int iosBuildNumber = 22;
+  static const int iosBuildNumber = 23;
 
   /// Mesmo inteiro que `versionCode` no Android (Play). Atualizar junto com build.gradle em cada release.
   static const int versionCode = 21;

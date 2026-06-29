@@ -53,16 +53,20 @@ else
 fi
 
 BLOCK="$LATEST"
-if [[ "$FLOOR" -gt "$BLOCK" ]]; then BLOCK="$FLOOR"; fi
+if [[ "$FLOOR" -gt "$BLOCK" && "$LATEST" -le 0 ]]; then
+  BLOCK="$FLOOR"
+fi
 
 if [[ "$BLOCK" -gt 0 && "$IOS_BN" -le "$BLOCK" ]]; then
-  NEED=$(( BLOCK + 1 ))
+  OLD="$IOS_BN"
+  IOS_BN=$(( BLOCK + 1 ))
   echo ""
-  echo "ERRO 90189 (evitado): iosBuildNumber = $IOS_BN, mas App Store Connect/floor = $BLOCK."
-  echo "       CFBundleVersion precisa ser >= $NEED."
-  echo "       Suba iosBuildNumber em app_version.dart (web/Android podem ficar em $BN)."
+  echo "AVISO 90189 (auto-correção): iosBuildNumber $OLD <= ASC/floor $BLOCK."
+  echo "       CFBundleVersion ajustado automaticamente para $IOS_BN (web/Android=$BN)."
   echo ""
-  exit 1
+  if grep -q "iosBuildNumber" "$VER_FILE"; then
+    sed -i.bak "s/iosBuildNumber = [0-9]*/iosBuildNumber = $IOS_BN/" "$VER_FILE" && rm -f "$VER_FILE.bak"
+  fi
 fi
 
 # pubspec permanece com buildNumber (web/Android); IPA usa --build-number abaixo.

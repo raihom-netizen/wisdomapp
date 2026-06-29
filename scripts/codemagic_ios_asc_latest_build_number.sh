@@ -99,8 +99,9 @@ case "$FLOOR" in
   ''|*[!0-9]*) FLOOR=0 ;;
 esac
 
-if [[ "$FLOOR" -gt "$LATEST" ]]; then
-  echo "ASC: usando floor do repo ($FLOOR) > API ($LATEST)" >&2
+# Floor do repo só quando a API ASC não responde (evita floor prematuro > ASC real).
+if [[ "$LATEST" -le 0 && "$FLOOR" -gt 0 ]]; then
+  echo "ASC: API indisponível — fallback floor repo=$FLOOR" >&2
   LATEST="$FLOOR"
 fi
 

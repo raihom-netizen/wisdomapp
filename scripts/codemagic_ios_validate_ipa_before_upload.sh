@@ -97,18 +97,20 @@ if [[ -n "$IPA_BUILD" ]]; then
     case "$LATEST_ASC" in
       ''|*[!0-9]*) LATEST_ASC=0 ;;
     esac
-    FLOOR_ASC=0
-    if FLOOR_ASC="$(bash "$ROOT/scripts/codemagic_ios_read_asc_floor.sh" 2>/dev/null)"; then
-      case "$FLOOR_ASC" in
-        ''|*[!0-9]*) FLOOR_ASC=0 ;;
-      esac
-    fi
     BLOCK=0
     if [[ "$LATEST_ASC" -gt 0 && "$IPA_BUILD" -le "$LATEST_ASC" ]]; then
       BLOCK=1
-    elif [[ "$FLOOR_ASC" -gt 0 && "$IPA_BUILD" -le "$FLOOR_ASC" ]]; then
-      BLOCK=1
-      LATEST_ASC="$FLOOR_ASC"
+    elif [[ "$LATEST_ASC" -le 0 ]]; then
+      FLOOR_ASC=0
+      if FLOOR_ASC="$(bash "$ROOT/scripts/codemagic_ios_read_asc_floor.sh" 2>/dev/null)"; then
+        case "$FLOOR_ASC" in
+          ''|*[!0-9]*) FLOOR_ASC=0 ;;
+        esac
+      fi
+      if [[ "$FLOOR_ASC" -gt 0 && "$IPA_BUILD" -le "$FLOOR_ASC" ]]; then
+        BLOCK=1
+        LATEST_ASC="$FLOOR_ASC"
+      fi
     fi
     if [[ "$BLOCK" -eq 1 ]]; then
       echo ""

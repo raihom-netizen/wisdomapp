@@ -233,7 +233,7 @@ workflows:
           if [ -f ios/Flutter/AppFrameworkInfo.plist ]; then
             sed -i.bak -e "s/<string>13.0<\/string>/<string>15.5<\/string>/g" -e "s/<string>14.0<\/string>/<string>15.5<\/string>/g" ios/Flutter/AppFrameworkInfo.plist && rm -f ios/Flutter/AppFrameworkInfo.plist.bak
           fi
-      - name: Versão iOS (= web/Android, anti 90189)
+      - name: Versão iOS (auto-bump anti 90189; web/Android inalterados)
         script: bash scripts/codemagic_ios_sync_version_from_app_version_dart.sh
       - name: Build iOS IPA (instalável)
         script: |
@@ -299,8 +299,6 @@ workflows:
         script: bash scripts/codemagic_ios_validate_ipa_before_upload.sh build/ios/ipa/WISDOMAPP.ipa
       - name: Gate anti-90189 antes do Publishing
         script: bash scripts/codemagic_ios_pre_publish_90189_gate.sh
-      - name: Actualizar floor ASC (próximo build)
-        script: bash scripts/codemagic_ios_stamp_asc_floor.sh
     artifacts:
       - build/ios/ipa/WISDOMAPP.ipa
       - build/ios/ipa/*.ipa

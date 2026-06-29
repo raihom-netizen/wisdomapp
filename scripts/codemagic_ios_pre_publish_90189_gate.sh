@@ -24,6 +24,7 @@ fi
 
 if [[ -n "$BN" && "$LATEST" -gt 0 && "$BN" -le "$LATEST" ]]; then
   echo "ERRO: CFBundleVersion planeado ($BN) ≤ ASC ($LATEST). Abortar upload."
+  echo "       (Reinicie workflow completo — o passo Versão iOS deve auto-corrigir.)"
   exit 1
 fi
 
