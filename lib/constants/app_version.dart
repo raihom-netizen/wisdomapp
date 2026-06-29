@@ -27,8 +27,8 @@ class AppVersion {
   /// Build do pubspec (`10.04.0+12` → **12**). Web + Android; iOS usa [iosBuildNumber] quando maior.
   static const int buildNumber = 21;
 
-  /// CFBundleVersion iOS (App Store / TestFlight). Igual a [buildNumber] quando todas as plataformas estão alinhadas.
-  static const int iosBuildNumber = 21;
+  /// CFBundleVersion iOS (App Store / TestFlight). Pode ficar à frente de [buildNumber] (hotfix só Apple).
+  static const int iosBuildNumber = 22;
 
   /// Mesmo inteiro que `versionCode` no Android (Play). Atualizar junto com build.gradle em cada release.
   static const int versionCode = 21;
