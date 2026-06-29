@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:async' show unawaited;
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
@@ -387,7 +388,7 @@ class _LoginScreenState extends State<LoginScreen> {
         if (signedEmail.isNotEmpty) {
           await LoginPreferences.setLastLoginIdentifier(signedEmail);
         }
-        if (!kIsWeb) await enableBiometricAfterSuccessfulNativeLogin();
+        if (!kIsWeb) unawaited(enableBiometricAfterSuccessfulNativeLogin());
         PushNotificationService().salvarTokenNoBanco().catchError((_) {});
         VersionCheckService.checkAndReloadIfNeeded().catchError((_) {});
         _goToRootAfterAuth();
@@ -412,7 +413,7 @@ class _LoginScreenState extends State<LoginScreen> {
             await LoginPreferences.setLastLoginIdentifier(signedEmail);
           }
           await LoginPreferences.setLastOAuthProvider('google');
-          if (!kIsWeb) await enableBiometricAfterSuccessfulNativeLogin();
+          if (!kIsWeb) unawaited(enableBiometricAfterSuccessfulNativeLogin());
           PushNotificationService().salvarTokenNoBanco().catchError((_) {});
           VersionCheckService.checkAndReloadIfNeeded().catchError((_) {});
           _goToRootAfterAuth();
@@ -430,7 +431,7 @@ class _LoginScreenState extends State<LoginScreen> {
           await LoginPreferences.setLastLoginIdentifier(signedEmail);
         }
         await LoginPreferences.setLastOAuthProvider('google');
-        if (!kIsWeb) await enableBiometricAfterSuccessfulNativeLogin();
+        if (!kIsWeb) unawaited(enableBiometricAfterSuccessfulNativeLogin());
         PushNotificationService().salvarTokenNoBanco().catchError((_) {});
         VersionCheckService.checkAndReloadIfNeeded().catchError((_) {});
         _goToRootAfterAuth();
@@ -461,7 +462,7 @@ class _LoginScreenState extends State<LoginScreen> {
           await LoginPreferences.setLastLoginIdentifier(signedEmail);
         }
         await LoginPreferences.setLastOAuthProvider('apple');
-        if (!kIsWeb) await enableBiometricAfterSuccessfulNativeLogin();
+        if (!kIsWeb) unawaited(enableBiometricAfterSuccessfulNativeLogin());
         PushNotificationService().salvarTokenNoBanco().catchError((_) {});
         VersionCheckService.checkAndReloadIfNeeded().catchError((_) {});
         _goToRootAfterAuth();

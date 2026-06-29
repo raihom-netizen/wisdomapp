@@ -870,7 +870,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         if (mounted) setState(() {});
         return;
       }
-      if (ticks == 3 && !_silentRestoreStarted) {
+      if (ticks == 1 && !_silentRestoreStarted) {
         _silentRestoreStarted = true;
         final restored = await SessionRestoreService.tryRestoreIfNeeded();
         if (restored != null && mounted) {
@@ -1125,6 +1125,7 @@ class _DelegateAccessGateState extends State<_DelegateAccessGate>
     // Reabertura: mostra o painel na hora se já houve login neste aparelho.
     if (uid != null && mounted) {
       setState(() => _shellReady = true);
+      unawaited(AppSessionCache.markShellReady(uid));
     }
 
     if (uid != null && AppSessionCache.isShellReadyForSync(uid)) {

@@ -93,7 +93,9 @@ import '../services/relatorio_service.dart';
 import '../constants/date_time_formats.dart';
 import 'report_preview_screen.dart';
 import 'compromisso_form_page.dart';
+import 'audiencia_form_page.dart';
 import '../services/agenda_reminder_edit_service.dart';
+import '../services/audiencia_reminder_service.dart';
 import 'finance_screen.dart' show FinanceInsightSheet, FinanceInsightScope;
 import '../utils/pdf_financeiro_super_extrato.dart';
 import '../utils/finance_fatura_transaction_sort.dart';
@@ -2851,14 +2853,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  /// Abre edição de compromisso (ou legado audiência) a partir do painel da página inicial.
+  /// Abre edição de compromisso ou audiência a partir do painel da página inicial.
   Future<void> _showEditReminderFromDashboard(BuildContext context,
       QueryDocumentSnapshot<Map<String, dynamic>> doc, bool isAudiencia) async {
     if (!widget.profile.hasActiveLicense) {
       mostrarAvisoSeLicencaInativa(context, widget.profile);
       return;
     }
-    await _showEditCompromissoSheet(context, doc);
+    if (isAudiencia) {
+      await _showEditAudienciaSheet(context, doc);
+    } else {
+      await _showEditCompromissoSheet(context, doc);
+    }
+  }
+
+  Future<void> _showEditAudienciaSheet(BuildContext context,
+      QueryDocumentSnapshot<Map<String, dynamic>> doc) async {
+    final result = await Navigator.of(context).push<AudienciaFormResult?>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => AudienciaFormPage(
+          profile: widget.profile,
+          hasActiveLicense: widget.profile.hasActiveLicense,
+          existingDoc: doc,
+        ),
+      ),
+    );
+    if (result == null || !context.mounted) return;
+
+    try {
+      final msg = await AudienciaReminderService.update(
+        userDocId: _userFsId,
+        doc: doc,
+        result: result,
+      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content:
+              Text('Erro ao atualizar: ${e.toString().split('\n').first}'),
+        ));
+      }
+    }
   }
 
   /// Edição completa (mesma tela da Agenda): cor, fim, lembretes, som, etc.
@@ -3703,7 +3742,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       hideAmount: _hideSensitiveBalances,
                       onTap: () => _openDashboardFinanceInsight(
                         context,
-                        scope: FinanceInsightScope.income,
+                        scope: FinanceInsightScope.balance,
                         rangeStart: rangeStart,
                         rangeEnd: rangeEnd,
                         openingBalanceHint: saldoAnterior,
@@ -3717,12 +3756,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       value: despesasVal,
                       labelAndValueColor: AppColors.saldoNegative,
                       hint: despesasPendentesCount > 0
-                          ? '$despesasPendentesCount pendente(s) · Toque para gráficos'
-                          : 'Toque para gráficos',
+                          ? '$despesasPendentesCount pendente(s) · Toque para lançamentos'
+                          : 'Toque para lançamentos',
                       hideAmount: _hideSensitiveBalances,
                       onTap: () => _openDashboardFinanceInsight(
                         context,
-                        scope: FinanceInsightScope.expense,
+                        scope: FinanceInsightScope.balance,
                         rangeStart: rangeStart,
                         rangeEnd: rangeEnd,
                         openingBalanceHint: saldoAnterior,

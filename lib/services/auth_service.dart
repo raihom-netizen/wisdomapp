@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
@@ -14,6 +15,7 @@ import 'push_notification_service.dart';
 import 'offline_credentials_store.dart';
 import 'login_preferences.dart';
 import '../models/user_profile.dart';
+import '../services/user_profile_startup_cache.dart';
 import '../utils/firestore_retry.dart';
 import '../utils/firestore_web_guard.dart';
 
@@ -307,7 +309,7 @@ class AuthService {
         idToken: googleAuth.idToken,
       );
       final userCred = await _auth.signInWithCredential(credential);
-      await _ensureUserProfile(userCred.user);
+      await _ensureUserProfileAfterInteractiveSignIn(userCred.user);
       return userCred;
     } catch (e) {
       rethrow;
@@ -329,7 +331,7 @@ class AuthService {
         idToken: googleAuth.idToken,
       );
       final userCred = await _auth.signInWithCredential(credential);
-      await _ensureUserProfile(userCred.user);
+      await _ensureUserProfileAfterInteractiveSignIn(userCred.user);
       return userCred;
     } catch (_) {
       return null;
@@ -401,7 +403,7 @@ class AuthService {
           }
         }
       }
-      await _ensureUserProfile(userCred.user);
+      await _ensureUserProfileAfterInteractiveSignIn(userCred.user);
       return userCred;
     } on SignInWithAppleAuthorizationException catch (e) {
       if (e.code == AuthorizationErrorCode.canceled) return null;
@@ -514,6 +516,40 @@ class AuthService {
         }
       }
     } catch (_) {}
+  }
+
+  /// Após login interativo: não bloqueia o painel no Android/iOS (perfil em cache ou background).
+  Future<void> _ensureUserProfileAfterInteractiveSignIn(User? user) async {
+    if (user == null) return;
+    if (kIsWeb) {
+      await _ensureUserProfile(user);
+      return;
+    }
+
+    final cachedProfile = UserProfileStartupCache.getSync(user.uid);
+    if (cachedProfile != null && cachedProfile.email.trim().isNotEmpty) {
+      unawaited(_ensureUserProfile(user));
+      return;
+    }
+
+    try {
+      final ref = _db.collection('users').doc(user.uid);
+      final cached = await ref.get(const GetOptions(source: Source.cache));
+      if (cached.exists) {
+        final email =
+            (cached.data()?['email'] ?? '').toString().trim().toLowerCase();
+        if (email.isNotEmpty) {
+          unawaited(_ensureUserProfile(user));
+          return;
+        }
+      }
+    } catch (_) {}
+
+    try {
+      await _ensureUserProfile(user).timeout(const Duration(milliseconds: 700));
+    } catch (_) {
+      unawaited(_ensureUserProfile(user));
+    }
   }
 
   /// Exige e-mail para identificar todos os usuários. Não cria perfil sem e-mail.

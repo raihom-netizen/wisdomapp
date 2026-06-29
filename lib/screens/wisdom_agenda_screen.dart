@@ -6,9 +6,11 @@ import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import '../models/user_profile.dart';
+import '../screens/audiencia_form_page.dart';
 import '../screens/compromisso_form_page.dart';
 import '../constants/currency_formats.dart';
 import '../models/finance_account.dart';
+import '../services/audiencia_reminder_service.dart';
 import '../services/compromisso_reminder_service.dart';
 import '../services/finance_accounts_service.dart';
 import '../services/fixed_expense_preferences_service.dart';
@@ -897,6 +899,78 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     }
   }
 
+  Future<void> _openAudienciaForm({
+    required BuildContext context,
+    DateTime? initialDate,
+    QueryDocumentSnapshot<Map<String, dynamic>>? existing,
+  }) async {
+    if (!widget.profile.hasActiveLicense) {
+      mostrarAvisoSeLicencaInativa(context, widget.profile);
+      return;
+    }
+    final result = await Navigator.of(context).push<AudienciaFormResult?>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => AudienciaFormPage(
+          profile: widget.profile,
+          hasActiveLicense: widget.profile.hasActiveLicense,
+          existingDoc: existing,
+          initialDate: initialDate,
+        ),
+      ),
+    );
+    if (result == null || !context.mounted) return;
+
+    try {
+      if (existing != null) {
+        final msg = await AudienciaReminderService.update(
+          userDocId: _userDocId,
+          doc: existing,
+          result: result,
+        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        }
+      } else {
+        await AudienciaReminderService.create(
+          userDocId: _userDocId,
+          result: result,
+        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Audiência salva.')),
+          );
+        }
+      }
+      if (mounted) {
+        setState(() => _selectedDay = _dayKey(result.date));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Erro ao gravar: ${e.toString().split('\n').first}',
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _openAgendaReminderByDoc({
+    required BuildContext context,
+    required QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  }) async {
+    final isAud =
+        (doc.data()['type'] ?? 'compromisso').toString() == 'audiencia';
+    if (isAud) {
+      await _openAudienciaForm(context: context, existing: doc);
+    } else {
+      await _openAgendaReminderByDoc(context: context, doc: doc);
+    }
+  }
+
   /// Abre formulário direto na data (sem segundo seletor).
   Future<void> _adicionarNaData(DateTime day) async {
     if (!widget.profile.hasActiveLicense) {
@@ -904,7 +978,46 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
       return;
     }
     setState(() => _selectedDay = _dayKey(day));
-    await _openCompromissoForm(context: context, initialDate: day);
+    if (!mounted) return;
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'O que deseja adicionar?',
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                leading: const Icon(Icons.event_rounded, color: AppColors.primary),
+                title: const Text('Compromisso particular'),
+                onTap: () => Navigator.pop(ctx, 'compromisso'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.gavel_rounded, color: Color(0xFF1A237E)),
+                title: const Text('Audiência'),
+                onTap: () => Navigator.pop(ctx, 'audiencia'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted || choice == null) return;
+    if (choice == 'audiencia') {
+      await _openAudienciaForm(context: context, initialDate: day);
+    } else {
+      await _openCompromissoForm(context: context, initialDate: day);
+    }
   }
 
   Future<QueryDocumentSnapshot<Map<String, dynamic>>?> _selecionarCompromisso(
@@ -1124,7 +1237,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     if (onlyLocal) {
       final doc = await _selecionarCompromisso(context, items);
       if (doc == null || !mounted) return;
-      await _openCompromissoForm(context: context, existing: doc);
+      await _openAgendaReminderByDoc(context: context, doc: doc);
       return;
     }
     if (onlyFinance) {
@@ -1188,7 +1301,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     if (choice == 'compromisso') {
       final doc = await _selecionarCompromisso(context, items);
       if (doc == null || !mounted) return;
-      await _openCompromissoForm(context: context, existing: doc);
+      await _openAgendaReminderByDoc(context: context, doc: doc);
     } else if (choice == 'google') {
       final event = await _selecionarGoogleEvent(context, googleEvents);
       if (event == null || !mounted) return;
@@ -1890,9 +2003,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                             borderRadius: BorderRadius.circular(12),
                             onTap: () async {
                               Navigator.pop(ctx);
-                              await _openCompromissoForm(
+                              await _openAgendaReminderByDoc(
                                 context: context,
-                                existing: doc,
+                                doc: doc,
                               );
                             },
                             child: Padding(
@@ -3021,7 +3134,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
               onPressed: () => _adicionarNaData(day),
               icon: const Icon(Icons.add_rounded, size: 20),
               label: const Text(
-                'Adicionar compromisso',
+                'Adicionar compromisso ou audiência',
                 style: TextStyle(fontWeight: FontWeight.w800),
               ),
               style: FilledButton.styleFrom(
@@ -3311,6 +3424,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
               final id = (row['id'] ?? '').toString();
               final doc = docsById[id];
               if (doc == null) return const SizedBox.shrink();
+              final isAud =
+                  (doc.data()['type'] ?? 'compromisso').toString() == 'audiencia';
               final idx = cardIndex++;
               final date = CompromissoReminderService.dateFromDoc(row);
               return Column(
@@ -3332,11 +3447,11 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                     index: idx,
                     child: AgendaOpenItemCard(
                       doc: doc,
-                      isAudiencia: false,
+                      isAudiencia: isAud,
                       profile: widget.profile,
-                      onEdit: () => _openCompromissoForm(
+                      onEdit: () => _openAgendaReminderByDoc(
                         context: context,
-                        existing: doc,
+                        doc: doc,
                       ),
                       onDelete: () => _confirmDelete(doc),
                     ),

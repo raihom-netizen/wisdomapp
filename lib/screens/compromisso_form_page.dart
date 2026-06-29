@@ -14,6 +14,7 @@ import '../services/yearly_commitment_repeat_service.dart';
 import '../widgets/agenda_form_footer_actions.dart';
 import '../widgets/fast_text_field.dart';
 import '../utils/keyboard_form_scaffold.dart';
+import '../widgets/agenda_form_validation_alert.dart';
 import '../widgets/commitment_description_picker.dart';
 import '../widgets/compromisso_schedule_personalize_sheet.dart';
 import '../widgets/multi_date_month_picker_dialog.dart';
@@ -482,28 +483,18 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
     }
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     if (!widget.hasActiveLicense) {
       mostrarAvisoSeLicencaInativa(context, widget.profile);
       return;
     }
     final title = _titleCtrl.text.trim();
-    if (title.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Informe o título do compromisso.')),
-      );
-      return;
-    }
-    if (_repeatYearly && _selectedDates.length > 1) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Repetir todo ano só funciona com um único dia. Desmarque dias extras ou desative a repetição.',
-          ),
-        ),
-      );
-      return;
-    }
+    final canSave = await validateCompromissoFormOrShowAlert(
+      context,
+      title: title,
+      repeatYearlyConflict: _repeatYearly && _selectedDates.length > 1,
+    );
+    if (!canSave || !mounted) return;
     Navigator.of(context).pop(
       CompromissoFormResult(
         title: title,

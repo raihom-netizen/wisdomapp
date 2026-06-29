@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../constants/app_verse.dart';
 import '../utils/url_launcher_helper.dart';
 import '../utils/pwa_install_helper.dart';
+import '../services/app_session_cache.dart';
 import '../services/auth_service.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, kIsWeb;
@@ -139,16 +140,20 @@ class _LandingScreenState extends State<LandingScreen>
   }
 
   Future<void> _finishExpressLogin(String provider) async {
-    await _persistOAuthHints(provider);
-    PushNotificationService().salvarTokenNoBanco().catchError((_) {});
-    VersionCheckService.checkAndReloadIfNeeded().catchError((_) {});
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      unawaited(AppSessionCache.markShellReady(uid));
+    }
     if (!mounted) return;
     if (_webFromIosAppLicense) {
       Navigator.of(context)
           .pushNamedAndRemoveUntil('/escolha-plano', (route) => false);
-      return;
+    } else {
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
     }
-    Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+    unawaited(_persistOAuthHints(provider));
+    PushNotificationService().salvarTokenNoBanco().catchError((_) {});
+    VersionCheckService.checkAndReloadIfNeeded().catchError((_) {});
   }
 
   Future<void> _openExpressLoginFromFaixa() async {

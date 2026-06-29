@@ -4,7 +4,6 @@ import 'package:flutter/material.dart' hide showDatePicker;
 import '../widgets/fast_text_field.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fa;
-import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../models/user_profile.dart';
 import '../models/financial_goal.dart';
@@ -13,7 +12,6 @@ import '../constants/finance_tips.dart';
 import '../constants/currency_formats.dart';
 import '../utils/premium_upgrade.dart';
 import '../widgets/create_financial_goal_dialog.dart';
-import '../widgets/app_pie_chart.dart';
 import '../widgets/registrar_deposito_dialog.dart';
 import '../widgets/goal_contributions_sheet.dart';
 import '../utils/date_picker_a11y.dart';
@@ -27,6 +25,7 @@ import '../utils/goal_objective_visuals.dart';
 import '../widgets/fifty_two_weeks_schedule_sheet.dart';
 import '../widgets/goal_52_weeks_objective_card.dart';
 import '../widgets/goal_finance_account_field.dart';
+import '../widgets/goal_form_validation_alert.dart';
 
 /// Categorias de metas (estrutura base Premium).
 final List<GoalCategory> kGoalCategories = GoalCategory.values.toList();
@@ -335,7 +334,15 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                 _metaDialogCancel(onPressed: () => Navigator.pop(ctx, false)),
                 _metaDialogGradientButton(
                   label: 'Salvar alterações',
-                  onPressed: () => Navigator.pop(ctx, true),
+                  onPressed: () async {
+                    final canSave = await validateGoalFormOrShowAlert(
+                      ctx,
+                      title: titleCtrl.text,
+                      targetText: targetCtrl.text,
+                      financeAccountId: financeAccountId,
+                    );
+                    if (canSave && ctx.mounted) Navigator.pop(ctx, true);
+                  },
                 ),
               ],
             ),
@@ -348,20 +355,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
       if (ok != true) return;
       final title = titleCtrl.text.trim();
       final target = CurrencyFormats.parseBRLInput(targetCtrl.text) ?? 0;
-      if (title.isEmpty) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Informe o nome da meta.')));
-        return;
-      }
-      if (target <= 0) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Informe o valor alvo.')));
-        return;
-      }
-      if (financeAccountId == null || financeAccountId!.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Selecione ou cadastre a conta onde o dinheiro será guardado.')),
-          );
-        }
+      if (title.isEmpty || target <= 0 || (financeAccountId ?? '').trim().isEmpty) {
         return;
       }
       try {
@@ -762,37 +756,6 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
     );
   }
 
-  /// Barra de progresso com gradiente e altura confortável para leitura.
-  Widget _buildGoalProgressTrack(double progress, Color accentEnd) {
-    final p = progress.clamp(0.0, 1.0);
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(999),
-      child: SizedBox(
-        height: 14,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            ColoredBox(color: Colors.grey.shade100),
-            FractionallySizedBox(
-              alignment: Alignment.centerLeft,
-              widthFactor: p,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppColors.accent,
-                      accentEnd,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   static const LinearGradient _metaCtaGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
@@ -1082,447 +1045,14 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
     );
   }
 
-  /// Cor do indicador de progresso: verde = no prazo, amarelo = risco, vermelho = atrasado.
-  Color _progressColor(GoalProjection proj, double progress, DateTime? dueDate) {
-    if (progress >= 1) return AppColors.success;
-    if (dueDate == null) return AppColors.primary;
-    if (!proj.isOnTrack && proj.monthsAheadOrBehind != null && proj.monthsAheadOrBehind! > 0) {
-      return AppColors.error;
-    }
-    if (proj.daysRemaining <= 90 && progress < 0.5) return Colors.orange;
-    return AppColors.success;
-  }
-
-  Widget _goalStatPill({
-    required IconData icon,
-    required String label,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 15, color: color),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: color),
-          ),
-        ],
-      ),
-    );
-  }
-
-
   Widget _buildGoalCard(BuildContext context, QueryDocumentSnapshot<Map<String, dynamic>> goalDoc) {
-    final data = goalDoc.data();
-    final is52Weeks = FiftyTwoWeeksPlan.is52WeeksGoal(data);
-
-    if (is52Weeks) {
-      return Goal52WeeksObjectiveCard(
-        goalDoc: goalDoc,
-        uid: widget.uid,
-        profile: widget.profile,
-        margin: const EdgeInsets.only(bottom: 20),
-        onEditGoal: () => _editarMeta(context, goalDoc),
-        onDeleteGoal: () => _excluirMeta(context, goalDoc),
-      );
-    }
-
-    final isCompact = MediaQuery.sizeOf(context).width < 400;
-    final title = (data['title'] ?? 'Meta').toString();
-    final target = (data['targetAmount'] ?? 0).toDouble();
-    final dueTs = data['dueDate'] as Timestamp?;
-    final category = GoalCategory.fromId(data['category'] as String?);
-    GoalPriority priority = GoalPriority.media;
-    try {
-      priority = GoalPriority.values.firstWhere((e) => e.name == (data['priority'] ?? ''));
-    } catch (_) {}
-    final interestRate = (data['interestRateMonthly'] ?? 0).toDouble();
-
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: goalDoc.reference.collection('contributions').orderBy('date', descending: false).snapshots(),
-      builder: (context, contribSnap) {
-            double contribSum = 0;
-            final contribDocs = contribSnap.data?.docs ?? [];
-            final contribByMonth = <String, double>{};
-            for (final d in contribDocs) {
-              final amount = (d.data()['amount'] ?? 0).toDouble();
-              contribSum += amount;
-              final date = (d.data()['date'] as Timestamp?)?.toDate();
-              if (date != null) {
-                final key = '${date.year}-${date.month.toString().padLeft(2, '0')}';
-                contribByMonth[key] = (contribByMonth[key] ?? 0) + amount;
-              }
-            }
-            final current = contribSum;
-            final progress = target > 0 ? (current / target).clamp(0.0, 1.0) : 0.0;
-            final faltam = (target - current).clamp(0.0, double.infinity);
-            final due = dueTs?.toDate();
-
-            final proj = computeGoalProjection(
-              target: target,
-              current: current,
-              dueDate: due,
-              contribByMonth: contribByMonth,
-              monthlyInterestRate: interestRate,
-            );
-            final dicaMeta = proj.statusMessage;
-            final progressColor = _progressColor(proj, progress, due);
-
-            final sortedMonths = contribByMonth.keys.toList()..sort();
-            double cumul = 0;
-            final lineSpots = <FlSpot>[];
-            for (int i = 0; i < sortedMonths.length; i++) {
-              cumul += contribByMonth[sortedMonths[i]] ?? 0;
-              lineSpots.add(FlSpot(i.toDouble(), cumul));
-            }
-            if (lineSpots.isEmpty) lineSpots.add(const FlSpot(0, 0));
-
-            final progressSize = isCompact ? 52.0 : 64.0;
-            return Container(
-              margin: const EdgeInsets.only(bottom: 20),
-              padding: EdgeInsets.all(isCompact ? 14 : 20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.white.withOpacity(0.9)),
-                boxShadow: [
-                  BoxShadow(color: AppColors.primary.withOpacity(0.07), blurRadius: 22, offset: const Offset(0, 8)),
-                  BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 14, offset: const Offset(0, 4)),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: progressSize,
-                        height: progressSize,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            SizedBox(
-                              width: progressSize,
-                              height: progressSize,
-                              child: CircularProgressIndicator(
-                                value: progress,
-                                strokeWidth: isCompact ? 6.5 : 7.5,
-                                strokeCap: StrokeCap.round,
-                                backgroundColor: Colors.grey.shade100,
-                                valueColor: AlwaysStoppedAnimation<Color>(progressColor),
-                              ),
-                            ),
-                            Text(
-                              '${(progress * 100).round()}%',
-                              style: TextStyle(fontSize: isCompact ? 12 : 14, fontWeight: FontWeight.w900, color: progressColor),
-                            ),
-                          ],
-                        ),
-                      ),
-                      SizedBox(width: isCompact ? 10 : 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    title,
-                                    style: TextStyle(fontSize: isCompact ? 16 : 18, fontWeight: FontWeight.w800, color: const Color(0xFF1A237E)),
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 3,
-                                    softWrap: true,
-                                  ),
-                                ),
-                                PopupMenuButton<String>(
-                                  icon: Icon(Icons.more_vert_rounded, color: Colors.grey.shade600, size: isCompact ? 20 : 24),
-                                  padding: EdgeInsets.zero,
-                                  onSelected: (v) async {
-                                    if (v == 'edit') await _editarMeta(context, goalDoc);
-                                    if (v == 'delete') await _excluirMeta(context, goalDoc);
-                                  },
-                                  itemBuilder: (_) => [
-                                    const PopupMenuItem(value: 'edit', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.edit_rounded, size: 20), title: Text('Editar meta'))),
-                                    const PopupMenuItem(value: 'delete', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.delete_outline_rounded, size: 20, color: Colors.red), title: Text('Excluir meta', style: TextStyle(color: Colors.red)))),
-                                  ],
-                                ),
-                              ],
-                            ),
-                            Row(
-                              children: [
-                                Flexible(
-                                  child: Text(category.label, style: TextStyle(fontSize: 12, color: Colors.grey.shade600), overflow: TextOverflow.ellipsis),
-                                ),
-                                if (priority == GoalPriority.alta) ...[
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(color: AppColors.error.withOpacity(0.15), borderRadius: BorderRadius.circular(6)),
-                                    child: Text(priority.label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.error)),
-                                  ),
-                                ],
-                              ],
-                            ),
-                            if (dueTs != null)
-                              Row(
-                                children: [
-                                  Icon(Icons.calendar_today_rounded, size: 12, color: Colors.grey.shade600),
-                                  const SizedBox(width: 4),
-                                  Flexible(
-                                    child: Text(
-                                      'Prazo: ${DateFormat('dd/MM/yyyy').format(dueTs.toDate())}',
-                                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            if (interestRate > 0)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 2),
-                                child: Text(
-                                  'Rendimento: ${interestRate.toStringAsFixed(1)}%/mês',
-                                  style: TextStyle(fontSize: 11, color: AppColors.accent, fontWeight: FontWeight.w600),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: isCompact ? 12 : 16),
-                  _buildGoalProgressTrack(progress, progressColor),
-                  const SizedBox(height: 12),
-                  if (isCompact)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            '${CurrencyFormats.formatBRLTight(current)} de ${CurrencyFormats.formatBRLTight(target)}',
-                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                            maxLines: 1,
-                          ),
-                        ),
-                        if (faltam > 0) ...[
-                          const SizedBox(height: 4),
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              'Faltam ${CurrencyFormats.formatBRLTight(faltam)}',
-                              style: TextStyle(fontSize: 13, color: Colors.orange.shade700, fontWeight: FontWeight.w600),
-                              maxLines: 1,
-                            ),
-                          ),
-                        ],
-                      ],
-                    )
-                  else
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            '${CurrencyFormats.formatBRLTight(current)} de ${CurrencyFormats.formatBRLTight(target)}',
-                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                            maxLines: 1,
-                          ),
-                        ),
-                        if (faltam > 0) ...[
-                          const SizedBox(height: 4),
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              'Faltam ${CurrencyFormats.formatBRLTight(faltam)}',
-                              style: TextStyle(fontSize: 13, color: Colors.orange.shade700, fontWeight: FontWeight.w600),
-                              maxLines: 1,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  if (dicaMeta.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: progressColor.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: progressColor.withOpacity(0.3)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (proj.daysRemaining > 0)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 4),
-                              child: Text(
-                                '${proj.daysRemaining} dias restantes',
-                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: progressColor),
-                              ),
-                            ),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(Icons.insights_rounded, size: 18, color: progressColor),
-                              const SizedBox(width: 8),
-                              Expanded(child: Text(dicaMeta, style: TextStyle(fontSize: 12, color: Colors.grey.shade800))),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  if (lineSpots.length > 1) ...[
-                    const SizedBox(height: 20),
-                    const Text('Evolução do alcance', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.grey)),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      height: 120,
-                      child: LineChart(
-                        LineChartData(
-                          gridData: FlGridData(show: true, drawVerticalLine: false, getDrawingHorizontalLine: (v) => FlLine(color: Colors.grey.shade200, strokeWidth: 1)),
-                          titlesData: FlTitlesData(
-                            leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 40, getTitlesWidget: (v, meta) => Text('R\$${v.toInt()}', style: TextStyle(fontSize: 10, color: Colors.grey.shade600)))),
-                            bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 24, getTitlesWidget: (v, meta) {
-                              if (v.toInt() >= 0 && v.toInt() < sortedMonths.length) {
-                                final m = sortedMonths[v.toInt()].split('-');
-                                return Text('${m[1]}/${m[0].substring(2)}', style: TextStyle(fontSize: 10, color: Colors.grey.shade600));
-                              }
-                              return const SizedBox.shrink();
-                            })),
-                            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                          ),
-                          borderData: FlBorderData(show: false),
-                          minX: 0,
-                          maxX: (lineSpots.length - 1).toDouble().clamp(0.0, double.infinity),
-                          minY: 0,
-                          maxY: lineSpots.isEmpty ? 1.0 : (lineSpots.map((e) => e.y).reduce((a, b) => a > b ? a : b) * 1.1).clamp(1.0, double.infinity),
-                          lineBarsData: [
-                            LineChartBarData(
-                              spots: lineSpots,
-                              isCurved: true,
-                              color: AppColors.primary,
-                              barWidth: 3,
-                              isStrokeCapRound: true,
-                              dotData: const FlDotData(show: true),
-                              belowBarData: BarAreaData(show: true, color: AppColors.primary.withOpacity(0.15)),
-                            ),
-                          ],
-                        ),
-                        duration: const Duration(milliseconds: 250),
-                      ),
-                    ),
-                  ],
-                  if (target > 0) ...[
-                    const SizedBox(height: 14),
-                    AppPieChart(
-                      title: 'Evolução dos depósitos',
-                      segments: [
-                        (
-                          label: 'Depositado',
-                          value: current.clamp(0, double.infinity),
-                          color: progressColor,
-                        ),
-                        (
-                          label: 'Faltam',
-                          value: faltam,
-                          color: Colors.grey.shade300,
-                        ),
-                      ],
-                    ),
-                  ],
-                  SizedBox(height: isCompact ? 12 : 16),
-                  if (isCompact)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        FilledButton.icon(
-                          onPressed: () => _registrarDeposito(context, goalDoc),
-                          icon: const Icon(Icons.savings_rounded, size: 20),
-                          label: const Text('Depositar'),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                            elevation: 1,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            minimumSize: const Size(0, 50),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        FilledButton.icon(
-                          onPressed: () => _verEditarLancamentos(context, goalDoc, title),
-                          icon: const Icon(Icons.list_alt_rounded, size: 20),
-                          label: const Text('Ver / Editar lançamentos'),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: AppColors.accent,
-                            foregroundColor: Colors.white,
-                            elevation: 1,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            minimumSize: const Size(0, 50),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          ),
-                        ),
-                      ],
-                    )
-                  else
-                    Row(
-                      children: [
-                        Expanded(
-                          child: FilledButton.icon(
-                            onPressed: () => _registrarDeposito(context, goalDoc),
-                            icon: const Icon(Icons.savings_rounded, size: 20),
-                            label: const Text('Depositar'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: Colors.white,
-                              elevation: 1,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              minimumSize: const Size(0, 50),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: FilledButton.icon(
-                            onPressed: () => _verEditarLancamentos(context, goalDoc, title),
-                            icon: const Icon(Icons.list_alt_rounded, size: 18),
-                            label: const Text('Lançamentos'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: AppColors.accent,
-                              foregroundColor: Colors.white,
-                              elevation: 1,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              minimumSize: const Size(0, 50),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                ],
-              ),
-            );
-      },
+    return Goal52WeeksObjectiveCard(
+      goalDoc: goalDoc,
+      uid: widget.uid,
+      profile: widget.profile,
+      margin: const EdgeInsets.only(bottom: 20),
+      onEditGoal: () => _editarMeta(context, goalDoc),
+      onDeleteGoal: () => _excluirMeta(context, goalDoc),
     );
   }
 }

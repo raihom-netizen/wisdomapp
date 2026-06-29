@@ -19,6 +19,9 @@ $new = $old + $Increment
 
 $raw = $raw -replace "buildNumber\s*=\s*\d+", "buildNumber = $new"
 $raw = $raw -replace "versionCode\s*=\s*\d+", "versionCode = $new"
+if ($raw -match "iosBuildNumber\s*=\s*\d+") {
+  $raw = $raw -replace "iosBuildNumber\s*=\s*\d+", "iosBuildNumber = $new"
+}
 $utf8NoBom = New-Object System.Text.UTF8Encoding $false
 [System.IO.File]::WriteAllText($vf, $raw, $utf8NoBom)
 

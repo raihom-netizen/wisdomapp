@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../models/user_profile.dart';
+import '../services/app_session_cache.dart';
 import '../services/firestore_service.dart';
+import '../services/user_profile_startup_cache.dart';
 import '../widgets/admin_guard.dart';
 import 'admin_screen.dart';
 import 'landing_screen.dart';
@@ -23,6 +27,11 @@ class AdminRouteGate extends StatelessWidget {
 
         if (snapshot.connectionState == ConnectionState.waiting &&
             user == null) {
+          final cachedUid = AppSessionCache.cachedUidSync();
+          if (cachedUid != null &&
+              AppSessionCache.isShellReadyForSync(cachedUid)) {
+            return _AdminScreenHost(uid: cachedUid);
+          }
           return const Scaffold(
             body: SafeArea(
               child: Center(child: CircularProgressIndicator()),
@@ -40,17 +49,32 @@ class AdminRouteGate extends StatelessWidget {
   }
 }
 
-class _AdminScreenHost extends StatelessWidget {
+class _AdminScreenHost extends StatefulWidget {
   final String uid;
 
   const _AdminScreenHost({required this.uid});
 
   @override
+  State<_AdminScreenHost> createState() => _AdminScreenHostState();
+}
+
+class _AdminScreenHostState extends State<_AdminScreenHost> {
+  @override
+  void initState() {
+    super.initState();
+    unawaited(UserProfileStartupCache.prefetch(widget.uid));
+    unawaited(AppSessionCache.markShellReady(widget.uid));
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final uid = widget.uid;
+    final cached = UserProfileStartupCache.getSync(uid);
+
     return StreamBuilder<UserProfile>(
       stream: FirestoreService().watchProfile(uid),
       builder: (context, snap) {
-        if (snap.hasError) {
+        if (snap.hasError && cached == null) {
           return Scaffold(
             body: SafeArea(
               child: Center(
@@ -65,17 +89,27 @@ class _AdminScreenHost extends StatelessWidget {
             ),
           );
         }
-        if (!snap.hasData) {
+
+        final profile = snap.data ?? cached;
+        if (profile == null) {
           return const Scaffold(
             body: SafeArea(
               child: Center(child: CircularProgressIndicator()),
             ),
           );
         }
-        if (!snap.data!.canAccessAdminPanel) {
+
+        if (snap.hasData) {
+          unawaited(UserProfileStartupCache.save(uid, snap.data!));
+        }
+
+        if (!profile.canAccessAdminPanel) {
           return AdminGuard.restrictedAccess(context);
         }
-        return AdminScreen(uid: uid, profile: snap.data!);
+
+        return RepaintBoundary(
+          child: AdminScreen(uid: uid, profile: profile),
+        );
       },
     );
   }

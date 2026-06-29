@@ -16,6 +16,7 @@ import '../utils/firestore_user_doc_id.dart';
 import '../utils/goal_objective_visuals.dart';
 import '../utils/premium_upgrade.dart';
 import '../widgets/brl_amount_text_field.dart';
+import '../widgets/goal_form_validation_alert.dart';
 import '../widgets/goal_finance_account_field.dart';
 import '../widgets/fast_text_field.dart';
 
@@ -371,7 +372,15 @@ Future<void> showCreateFinancialGoalDialog(
                   child: const Text('Cancelar'),
                 ),
                 FilledButton(
-                  onPressed: () => Navigator.pop(ctx, true),
+                  onPressed: () async {
+                    final ok = await validateGoalFormOrShowAlert(
+                      ctx,
+                      title: titleCtrl.text,
+                      targetText: targetCtrl.text,
+                      financeAccountId: financeAccountId,
+                    );
+                    if (ok && ctx.mounted) Navigator.pop(ctx, true);
+                  },
                   child: const Text('Criar meta'),
                 ),
               ],
@@ -386,30 +395,7 @@ Future<void> showCreateFinancialGoalDialog(
     if (ok != true) return;
     final title = titleCtrl.text.trim();
     final target = CurrencyFormats.parseBRLInput(targetCtrl.text) ?? 0;
-    if (title.isEmpty) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Informe o nome da meta.')),
-        );
-      }
-      return;
-    }
-    if (target <= 0) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Informe o valor alvo.')),
-        );
-      }
-      return;
-    }
-    if (financeAccountId == null || financeAccountId!.isEmpty) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Selecione ou cadastre a conta onde o dinheiro será guardado.'),
-          ),
-        );
-      }
+    if (title.isEmpty || target <= 0 || (financeAccountId ?? '').trim().isEmpty) {
       return;
     }
 

@@ -469,7 +469,7 @@ class _HomeFinanceOverviewPanelState extends State<HomeFinanceOverviewPanel> {
                                   hint: 'Ver e editar',
                                   onTap: () => _openFinanceInsight(
                                     context: context,
-                                    scope: FinanceInsightScope.income,
+                                    scope: FinanceInsightScope.balance,
                                     start: start,
                                     end: end,
                                     openingBalanceHint: saldoAbertura,
@@ -486,7 +486,7 @@ class _HomeFinanceOverviewPanelState extends State<HomeFinanceOverviewPanel> {
                                   hint: 'Ver e editar',
                                   onTap: () => _openFinanceInsight(
                                     context: context,
-                                    scope: FinanceInsightScope.expense,
+                                    scope: FinanceInsightScope.balance,
                                     start: start,
                                     end: end,
                                     openingBalanceHint: saldoAbertura,

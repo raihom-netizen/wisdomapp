@@ -29,6 +29,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/pwa_install_helper.dart';
 import '../utils/firestore_user_doc_id.dart';
+import '../utils/shell_lazy_module_policy.dart';
 import '../pwa_install/install_card.dart';
 import '../theme/app_colors.dart';
 import '../services/push_notification_service.dart';
@@ -73,8 +74,6 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   /// Módulos já instanciados no [IndexedStack] — materialização preguiçosa (evita 10 árvores de uma vez).
   final Set<int> _materializedModuleIndices = {0};
 
-  /// Mantém no máximo 2 módulos vivos (atual + anterior) — libera streams/memória ao trocar de aba.
-  static const int _kMaxRetainedMaterializedModules = 2;
   String _lastShellAuthEffectiveUid = '';
   String? _telemetryPingScheduledForUid;
   static const int _kShellModuleCount = 10;
@@ -103,9 +102,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   static const double _mobileBreakpoint = 600;
 
-  /// Mantém o breakpoint retrato/paisagem estável enquanto o IME anima (shortestSide oscila).
+  /// Lado mais curto estável — IME não alterna layout mobile/desktop a cada frame.
   double _peakShortestSide = 0;
   Orientation? _orientationForPeak;
+  bool _preferSingleActiveModule = true;
 
   /// Rodapé com 5 atalhos: em telas mais estreitas que isto, rótulos abreviados (ícones iguais).
   static const double _footerUltraNarrowWidth = 392;
@@ -468,6 +468,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     } else if (s > _peakShortestSide) {
       _peakShortestSide = s;
     }
+    _preferSingleActiveModule = ShellLazyModulePolicy.preferSingleActiveModule(
+      shortestSideDp: _peakShortestSide > 0 ? _peakShortestSide : s,
+      mobileBreakpoint: _mobileBreakpoint,
+    );
   }
 
   /// Cordex: verifica PIX pendente no MP (resolve PIX não atualizar licença no iPhone).
@@ -530,41 +534,49 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     });
   }
 
-  /// Descarta módulos antigos do IndexedStack — só mantém atual + anterior (menos streams/Firestore).
+  /// Descarta módulos antigos — mobile: só o ativo; desktop: LRU máx. 2.
   void _retainMaterializedModules(int currentIdx, int previousIdx) {
-    final keep = {currentIdx, previousIdx};
-    _materializedModuleIndices.removeWhere((idx) => !keep.contains(idx));
-    _materializedModuleIndices.add(currentIdx);
+    ShellLazyModulePolicy.evictStaleModuleIndices(
+      materialized: _materializedModuleIndices,
+      activeIndex: currentIdx,
+      previousIndex: previousIdx,
+      singleActiveModule: _preferSingleActiveModule,
+    );
   }
 
   void _setModuleIndex(int i, {VoidCallback? alsoInSetState}) {
     if (!mounted || i < 0 || i >= _kShellModuleCount) return;
     final prev = _idx;
-    final needsMaterialize = !_materializedModuleIndices.contains(i);
+    if (prev == i && _materializedModuleIndices.contains(i)) {
+      alsoInSetState?.call();
+      return;
+    }
+
+    // Fase 1: destaque imediato no rodapé (sem montar o módulo pesado no mesmo frame).
     setState(() {
       _idx = i;
       alsoInSetState?.call();
-      _materializedModuleIndices.add(i);
-      if (prev != i) {
-        _retainMaterializedModules(i, prev);
-      } else if (needsMaterialize &&
-          _materializedModuleIndices.length >
-              _kMaxRetainedMaterializedModules) {
-        _retainMaterializedModules(i, prev);
-      }
     });
-    if (prev != i) {
+
+    if (prev == i) {
+      setState(() => _materializedModuleIndices.add(i));
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _idx != i) return;
+      setState(() {
+        _materializedModuleIndices.add(i);
+        _retainMaterializedModules(i, prev);
+      });
+      for (final idx in [prev, i]) {
+        final c = _shellModuleScrollControllers[idx];
+        if (c.hasClients) c.jumpTo(0);
+      }
       if (i == 9 && _userDocId.isNotEmpty) {
         unawaited(UserSettingsDocsCache.prefetch(_userDocId));
       }
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        for (final idx in [prev, i]) {
-          final c = _shellModuleScrollControllers[idx];
-          if (c.hasClients) c.jumpTo(0);
-        }
-      });
-    }
+    });
   }
 
   void _onMenuSelected(int i) {
@@ -876,6 +888,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   }
 
   Widget _moduleIndexedStack(UserProfile profile) {
+    if (_preferSingleActiveModule) {
+      return _moduleSingleActive(profile);
+    }
     return IndexedStack(
       index: _idx,
       sizing: StackFit.expand,
@@ -891,6 +906,18 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           child: _moduleForIndex(i, profile),
         );
       }),
+    );
+  }
+
+  /// Mobile: um módulo por vez — sem listeners paralelos dos outros módulos.
+  Widget _moduleSingleActive(UserProfile profile) {
+    final i = _idx;
+    if (!_materializedModuleIndices.contains(i)) {
+      return const _ShellModuleBootPlaceholder();
+    }
+    return KeyedSubtree(
+      key: ValueKey<String>('${_userDocId}_mod_$i'),
+      child: _moduleForIndex(i, profile, forceModuleActive: true),
     );
   }
 

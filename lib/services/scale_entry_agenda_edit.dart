@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 
 import '../models/scale_entry.dart';
 import '../models/user_profile.dart';
+import '../screens/audiencia_form_page.dart';
 import '../screens/compromisso_form_page.dart';
 import '../theme/app_colors.dart';
 import '../utils/scale_entry_sei_ocorrencia.dart';
 import '../widgets/lancamento_expresso_plantao_sheet.dart';
 import 'agenda_reminder_edit_service.dart';
+import 'audiencia_reminder_service.dart';
 import 'express_compromisso_agenda_sync.dart';
 
 /// Abre [CompromissoFormPage] / compromisso expresso em tela cheia.
@@ -70,8 +72,29 @@ class ScaleEntryAgendaEdit {
         return null;
       }
       final reminderDoc = q.docs.first;
+      final isAudiencia =
+          (reminderDoc.data()['type'] ?? 'compromisso').toString() == 'audiencia';
 
       final nav = Navigator.of(context, rootNavigator: true);
+
+      if (isAudiencia) {
+        final audResult = await nav.push<AudienciaFormResult?>(
+          MaterialPageRoute(
+            fullscreenDialog: true,
+            builder: (_) => AudienciaFormPage(
+              profile: profile,
+              hasActiveLicense: profile.hasActiveLicense,
+              existingDoc: reminderDoc,
+            ),
+          ),
+        );
+        if (audResult == null || !context.mounted) return null;
+        return AudienciaReminderService.update(
+          userDocId: userDocId,
+          doc: reminderDoc,
+          result: audResult,
+        );
+      }
 
       final result = await nav.push<CompromissoFormResult?>(
         MaterialPageRoute(

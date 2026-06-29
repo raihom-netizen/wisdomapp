@@ -543,6 +543,10 @@ class _FinanceScreenState extends State<FinanceScreen> {
     final raw = FinanceShellNavigation.pendingAccountId.value;
     if (raw == null || !mounted) return;
     FinanceShellNavigation.pendingAccountId.value = null;
+    setState(() {
+      _typeFilter = 'all';
+      _gridListTypeFilter = 'all';
+    });
     _applyFinanceAccountFilter(raw.isEmpty ? null : raw);
   }
 
@@ -5324,7 +5328,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                   color: AppColors.financeReceita,
                   icon: Icons.arrow_downward,
                   onTap: () => _openFinanceInsightSheet(
-                    scope: FinanceInsightScope.income,
+                    scope: FinanceInsightScope.balance,
                     initialFrom: _from,
                     initialTo: _to,
                   ),
@@ -5335,7 +5339,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                   color: AppColors.financeDespesa,
                   icon: Icons.arrow_upward,
                   onTap: () => _openFinanceInsightSheet(
-                    scope: FinanceInsightScope.expense,
+                    scope: FinanceInsightScope.balance,
                     initialFrom: _from,
                     initialTo: _to,
                   ),
@@ -7182,7 +7186,7 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet> {
   String get _title => switch (_scope) {
         FinanceInsightScope.income => 'Receitas do período',
         FinanceInsightScope.expense => 'Despesas do período',
-        FinanceInsightScope.balance => 'Saldo do período',
+        FinanceInsightScope.balance => 'Lançamentos do período',
       };
 
   Color get _accentColor => switch (_scope) {
@@ -7516,9 +7520,9 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
+                  _scopeChip('Todos', FinanceInsightScope.balance, AppColors.primary),
                   _scopeChip('Receitas', FinanceInsightScope.income, AppColors.financeReceita),
                   _scopeChip('Despesas', FinanceInsightScope.expense, AppColors.financeDespesa),
-                  _scopeChip('Saldo', FinanceInsightScope.balance, AppColors.primary),
                 ],
               ),
               const SizedBox(height: 8),

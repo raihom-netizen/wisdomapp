@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../widgets/fast_text_field.dart';
@@ -44,6 +44,7 @@ import 'locations_screen.dart';
 import 'edit_location_screen.dart';
 import '../widgets/multi_date_month_picker_dialog.dart';
 import '../widgets/scale_month_closure_sheet.dart';
+import '../widgets/scales/scale_bulk_clear_sheet.dart';
 import '../utils/uppercase_text_input_formatter.dart';
 import '../shared/utils/holiday_helper.dart';
 import '../utils/firestore_user_doc_id.dart';
@@ -68,7 +69,7 @@ double _scalesScreenFontSize(BuildContext context, double desktop) {
   return math.max(11.0, desktop * 0.92);
 }
 
-// Cores por tipo (Calendário e cards): Noturno=Índigo, Diurno/Extra=Laranja, Compromisso=Teal
+// Cores por tipo (CalendÃ¡rio e cards): Noturno=Ãndigo, Diurno/Extra=Laranja, Compromisso=Teal
 const Color _corNoturno = Color(0xFF3F51B5);
 const Color _corDiurno = Color(0xFFFF9800);
 const Color _corCompromisso = Color(0xFF12B5A5);
@@ -76,12 +77,12 @@ const String _hexNoturno = '3F51B5';
 const String _hexDiurno = 'FF9800';
 const String _hexCompromisso = '12B5A5';
 
-/// CTA para Configurações → Plantões (plantões recorrentes). Mesmo fluxo que o antigo «pré-cadastro».
+/// CTA para ConfiguraÃ§Ãµes â†’ PlantÃµes (plantÃµes recorrentes). Mesmo fluxo que o antigo Â«prÃ©-cadastroÂ».
 const String _kListaPlantoesRecorrentesCta =
-    'Lista de plantões recorrentes – cadastre aqui…';
+    'Lista de plantÃµes recorrentes â€“ cadastre aquiâ€¦';
 
-/// Entra no resumo Estado/Município/Particular: financeiro via lista de plantões recorrentes **ou** vínculo salvo na escala
-/// (ex.: lançamento expresso sem plantão em Configurações → Plantões).
+/// Entra no resumo Estado/MunicÃ­pio/Particular: financeiro via lista de plantÃµes recorrentes **ou** vÃ­nculo salvo na escala
+/// (ex.: lanÃ§amento expresso sem plantÃ£o em ConfiguraÃ§Ãµes â†’ PlantÃµes).
 bool _entryInResumoFinanceiro(ScaleEntry e, List<ShiftLocation> locations) {
   if (e.isCompromisso) return false;
   if (e.temFinanceiroHabilitadoNoPainel) return true;
@@ -94,7 +95,7 @@ Color _corPorTipo(ScaleEntry e) {
   return e.hoursNight >= e.hoursDay ? _corNoturno : _corDiurno;
 }
 
-/// Resolve employerType para um plantão: usa campo salvo ou match por label/abbreviation com locations (igual ao painel).
+/// Resolve employerType para um plantÃ£o: usa campo salvo ou match por label/abbreviation com locations (igual ao painel).
 String _employerTypeForEntry(ScaleEntry e, List<ShiftLocation> locations) {
   if (e.employerType != null && e.employerType!.isNotEmpty)
     return e.employerType!;
@@ -113,7 +114,7 @@ String _employerTypeForEntry(ScaleEntry e, List<ShiftLocation> locations) {
   return 'private';
 }
 
-/// Mesmo padrão visual do lançamento expresso ([lancamento_expresso_plantao_sheet] `_buildVinculoChips`).
+/// Mesmo padrÃ£o visual do lanÃ§amento expresso ([lancamento_expresso_plantao_sheet] `_buildVinculoChips`).
 Widget _buildVinculoChip(
     BuildContext ctx,
     void Function(VoidCallback) setModalState,
@@ -197,7 +198,7 @@ List<Color> _magicRegimeGradient(String r) {
   }
 }
 
-/// Tipo de geração / CTAs do “botão mágico” — gradiente + ícone em cápsula.
+/// Tipo de geraÃ§Ã£o / CTAs do â€œbotÃ£o mÃ¡gicoâ€ â€” gradiente + Ã­cone em cÃ¡psula.
 Widget _magicGradientChoice({
   required bool selected,
   required String label,
@@ -356,7 +357,7 @@ Widget _magicRegimePill({
   );
 }
 
-/// CTA largura total — gradiente (lista de plantões recorrentes / ações principais).
+/// CTA largura total â€” gradiente (lista de plantÃµes recorrentes / aÃ§Ãµes principais).
 Widget _magicFullWidthCta({
   required VoidCallback? onPressed,
   required IconData icon,
@@ -419,7 +420,7 @@ Widget _magicFullWidthCta({
   );
 }
 
-/// Secundário premium (personalizado / expediente) — contorno colorido + preenchimento suave.
+/// SecundÃ¡rio premium (personalizado / expediente) â€” contorno colorido + preenchimento suave.
 Widget _magicSecondaryCta({
   required VoidCallback? onPressed,
   required IconData icon,
@@ -490,19 +491,19 @@ class ScalesScreen extends StatefulWidget {
   final String uid;
   final UserProfile profile;
 
-  /// Quando a Calculadora pede "Configurar plantão", o shell passa a data inicial aqui para abrir o formulário ao exibir Escalas.
+  /// Quando a Calculadora pede "Configurar plantÃ£o", o shell passa a data inicial aqui para abrir o formulÃ¡rio ao exibir Escalas.
   final DateTime? initialOpenConfigurarPlantao;
 
-  /// Chamado após abrir o formulário para o shell limpar o pending.
+  /// Chamado apÃ³s abrir o formulÃ¡rio para o shell limpar o pending.
   final VoidCallback? onConsumedConfigurarPlantao;
 
-  /// Chamado ao tocar em "Voltar" na página principal do módulo (volta para a tela inicial / painel principal).
+  /// Chamado ao tocar em "Voltar" na pÃ¡gina principal do mÃ³dulo (volta para a tela inicial / painel principal).
   final void Function(int index)? onNavigateTo;
 
-  /// Quando dentro do [HomeShell]: scroll volta ao topo ao mudar de módulo.
+  /// Quando dentro do [HomeShell]: scroll volta ao topo ao mudar de mÃ³dulo.
   final ScrollController? shellScrollController;
 
-  /// No [HomeShell]: false quando outro módulo está ativo — pausa listener Firestore.
+  /// No [HomeShell]: false quando outro mÃ³dulo estÃ¡ ativo â€” pausa listener Firestore.
   final bool isShellVisible;
 
   const ScalesScreen({
@@ -582,7 +583,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
   CollectionReference<Map<String, dynamic>> get _locationsRef =>
       _scalesRef.collection('users').doc(_userDocId).collection('locations');
 
-  /// Igual ao painel inicial: ordinários viram "já tirado" após o dia civil; com financeiro ativo usa só [paid].
+  /// Igual ao painel inicial: ordinÃ¡rios viram "jÃ¡ tirado" apÃ³s o dia civil; com financeiro ativo usa sÃ³ [paid].
   bool _jaTiradoOrdinarioDisplay(ScaleEntry e) =>
       e.effectiveJaTiradoParaExibicao(DateTime.now());
 
@@ -710,8 +711,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
     _lastEntriesFingerprint = fp;
     _allEntries = next;
     if (widget.isShellVisible && mounted) setState(() {});
-    // Notificações locais: só ao criar/editar data-hora (AgendaNotificationRescheduleHelper),
-    // nunca a cada snapshot do calendário (paid/valor/etc. disparava GET pesado e travava).
+    // NotificaÃ§Ãµes locais: sÃ³ ao criar/editar data-hora (AgendaNotificationRescheduleHelper),
+    // nunca a cada snapshot do calendÃ¡rio (paid/valor/etc. disparava GET pesado e travava).
   }
 
   Future<void> _loadLocations() async {
@@ -761,8 +762,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
         setState(() {
           _frentes = [
             const FrenteServico(
-                id: '0', name: 'Ordinário', colorHex: '#2D5BFF'),
-            const FrenteServico(id: '1', name: 'Reforço', colorHex: '#12B5A5'),
+                id: '0', name: 'OrdinÃ¡rio', colorHex: '#2D5BFF'),
+            const FrenteServico(id: '1', name: 'ReforÃ§o', colorHex: '#12B5A5'),
             const FrenteServico(id: '2', name: 'Extra', colorHex: '#FFB648'),
           ];
         });
@@ -781,7 +782,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     return TimeOfDay(hour: h.clamp(0, 23), minute: m.clamp(0, 59));
   }
 
-  /// Retorna o [DateTime] em que o turno termina (fim do plantão ou dia seguinte se noturno).
+  /// Retorna o [DateTime] em que o turno termina (fim do plantÃ£o ou dia seguinte se noturno).
   DateTime _fimDoTurno(ScaleEntry e) {
     final startT = _parseTime(e.start);
     final endT = _parseTime(e.end);
@@ -795,7 +796,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     return endDt;
   }
 
-  /// True se o turno já terminou (ou já passou para o dia seguinte), permitindo confirmar conclusão.
+  /// True se o turno jÃ¡ terminou (ou jÃ¡ passou para o dia seguinte), permitindo confirmar conclusÃ£o.
   bool _turnoJaTerminou(ScaleEntry e) {
     return DateTime.now().isAfter(_fimDoTurno(e)) ||
         DateTime.now().isAtSameMomentAs(_fimDoTurno(e));
@@ -825,15 +826,15 @@ class _ScalesScreenState extends State<ScalesScreen> {
     };
   }
 
-  // Métodos de Ação (Add, Edit, Move, Duplicate, Clean)
-  // ... (Mantendo a lógica interna para focar no visual)
+  // MÃ©todos de AÃ§Ã£o (Add, Edit, Move, Duplicate, Clean)
+  // ... (Mantendo a lÃ³gica interna para focar no visual)
 
   @override
   Widget build(BuildContext context) {
     if (!widget.isShellVisible) {
       return const ColoredBox(color: Color(0xFFF4F7FA));
     }
-    // Quando o atalho "Incluir plantão" (ou Calculadora) pede, abre o formulário Configurar Plantão
+    // Quando o atalho "Incluir plantÃ£o" (ou Calculadora) pede, abre o formulÃ¡rio Configurar PlantÃ£o
     final dateToOpen = widget.initialOpenConfigurarPlantao;
     if (dateToOpen != null && _lastHandledConfigurarPlantaoDate != dateToOpen) {
       _lastHandledConfigurarPlantaoDate = dateToOpen;
@@ -923,7 +924,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           isVeryNarrow: isVeryNarrow,
                         ),
                         SizedBox(height: isNarrow ? (isVeryNarrow ? 5 : 7) : 12),
-                        // Calendário: altura mínima alta no mobile para a grade ficar bem visível ao abrir o módulo
+                        // CalendÃ¡rio: altura mÃ­nima alta no mobile para a grade ficar bem visÃ­vel ao abrir o mÃ³dulo
                         ConstrainedBox(
                           constraints: BoxConstraints(
                             minHeight: isNarrow
@@ -937,10 +938,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           ),
                         ),
                         SizedBox(height: sectionGap),
-                        // «Resumo de horas no mês» (Já tirou / Previsão / Teto): pedido do
-                        // usuário — fica logo após o card do calendário + resumo feriados, e
-                        // antes do Controle Estado · Município · Particular (não no rodapé do
-                        // gráfico Diurno x Noturno).
+                        // Â«Resumo de horas no mÃªsÂ» (JÃ¡ tirou / PrevisÃ£o / Teto): pedido do
+                        // usuÃ¡rio â€” fica logo apÃ³s o card do calendÃ¡rio + resumo feriados, e
+                        // antes do Controle Estado Â· MunicÃ­pio Â· Particular (nÃ£o no rodapÃ© do
+                        // grÃ¡fico Diurno x Noturno).
                         _buildAlertaTeto192Rodape(),
                         SizedBox(height: sectionGap),
                         _buildResumoPorVinculo(isNarrow: isNarrow),
@@ -955,7 +956,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           periodEnd: DateTime(
                               _focusedDay.year, _focusedDay.month + 1, 0),
                           periodLabel:
-                              'Mês do calendário: ${DateFormat('MM/yyyy').format(_focusedDay)}',
+                              'MÃªs do calendÃ¡rio: ${DateFormat('MM/yyyy').format(_focusedDay)}',
                           allowEditPeriodFromSource: true,
                         ),
                         SizedBox(height: sectionGap),
@@ -975,10 +976,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
 
   Widget _buildTopBar(BuildContext context,
       {bool isNarrow = false, bool isVeryNarrow = false}) {
-    // Padrão Clean Premium: faixa com ações; voltar e título do módulo ficam na barra do [HomeShell].
+    // PadrÃ£o Clean Premium: faixa com aÃ§Ãµes; voltar e tÃ­tulo do mÃ³dulo ficam na barra do [HomeShell].
     final embeddedInShell = widget.onNavigateTo != null;
     final title = Text(
-      'Escalas • Compromissos • Serviços',
+      'Escalas â€¢ Compromissos â€¢ ServiÃ§os',
       style: TextStyle(
         fontWeight: FontWeight.w800,
         fontSize: isNarrow ? (isVeryNarrow ? 14.5 : 16) : 19,
@@ -1034,7 +1035,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                   ),
                   SizedBox(height: isVeryNarrow ? 6 : 8),
                 ],
-                // Em telas muito estreitas (ex.: iPhone) os ícones podem rolar horizontalmente
+                // Em telas muito estreitas (ex.: iPhone) os Ã­cones podem rolar horizontalmente
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
@@ -1047,7 +1048,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                               ? _gerarPdfEscalas()
                               : mostrarAvisoSeLicencaInativa(
                                   context, widget.profile),
-                          tooltip: 'Exportar mês em PDF'),
+                          tooltip: 'Exportar mÃªs em PDF'),
                       const SizedBox(width: 6),
                       _topIconButton(
                           Icons.auto_awesome_rounded,
@@ -1056,7 +1057,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                               ? _gerarEscalaAutomatica(context)
                               : mostrarAvisoSeLicencaInativa(
                                   context, widget.profile),
-                          tooltip: 'Criar escalas automáticas'),
+                          tooltip: 'Criar escalas automÃ¡ticas'),
                       _topIconButton(Icons.calendar_month_rounded, Colors.white,
                           _irParaDataEspecifica,
                           tooltip: 'Ir para data'),
@@ -1087,7 +1088,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                     () => widget.profile.hasActiveLicense
                         ? _gerarPdfEscalas()
                         : mostrarAvisoSeLicencaInativa(context, widget.profile),
-                    tooltip: 'Exportar mês em PDF'),
+                    tooltip: 'Exportar mÃªs em PDF'),
                 const SizedBox(width: 8),
                 _topIconButton(
                     Icons.auto_awesome_rounded,
@@ -1095,7 +1096,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                     () => widget.profile.hasActiveLicense
                         ? _gerarEscalaAutomatica(context)
                         : mostrarAvisoSeLicencaInativa(context, widget.profile),
-                    tooltip: 'Criar escalas automáticas'),
+                    tooltip: 'Criar escalas automÃ¡ticas'),
                 _topIconButton(Icons.calendar_month_rounded, Colors.white,
                     _irParaDataEspecifica,
                     tooltip: 'Ir para data'),
@@ -1131,7 +1132,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
   }
 
   Widget _buildHeaderDashboard({bool isNarrow = false}) {
-    // Valores do mês no calendário (inclui hoje e futuros com `paid` false); `paid` só controla “já recebido” na UI.
+    // Valores do mÃªs no calendÃ¡rio (inclui hoje e futuros com `paid` false); `paid` sÃ³ controla â€œjÃ¡ recebidoâ€ na UI.
     final entriesMes = _allEntries.where((e) => !e.isCompromisso).toList();
     final totalMonth = entriesMes.fold<double>(0, (s, e) => s + e.totalValue);
     final totalCount = entriesMes.length;
@@ -1140,15 +1141,15 @@ class _ScalesScreenState extends State<ScalesScreen> {
       return Column(
         children: [
           _dashboardCard(
-            'GANHOS DO MÊS',
+            'GANHOS DO MÃŠS',
             CurrencyFormats.formatBRL(totalMonth),
             Icons.account_balance_wallet_rounded,
             Colors.green,
           ),
           const SizedBox(height: 16),
           _dashboardCard(
-            'PLANTÕES',
-            '$totalCount no mês',
+            'PLANTÃ•ES',
+            '$totalCount no mÃªs',
             Icons.event_available_rounded,
             AppColors.primary,
           ),
@@ -1160,7 +1161,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
       children: [
         Expanded(
           child: _dashboardCard(
-            'GANHOS DO MÊS',
+            'GANHOS DO MÃŠS',
             CurrencyFormats.formatBRL(totalMonth),
             Icons.account_balance_wallet_rounded,
             Colors.green,
@@ -1169,8 +1170,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
         const SizedBox(width: 16),
         Expanded(
           child: _dashboardCard(
-            'PLANTÕES',
-            '$totalCount no mês',
+            'PLANTÃ•ES',
+            '$totalCount no mÃªs',
             Icons.event_available_rounded,
             AppColors.primary,
           ),
@@ -1230,7 +1231,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     );
   }
 
-  /// Gráfico de barras: ganhos por semana do mês (padrão Gemini).
+  /// GrÃ¡fico de barras: ganhos por semana do mÃªs (padrÃ£o Gemini).
   Widget _buildWeeklyChart({bool isNarrow = false}) {
     final monthStart = DateTime(_focusedDay.year, _focusedDay.month, 1);
     final monthEnd = DateTime(_focusedDay.year, _focusedDay.month + 1, 0);
@@ -1365,20 +1366,20 @@ class _ScalesScreenState extends State<ScalesScreen> {
     );
   }
 
-  /// CTA lista de plantões recorrentes (substitui o banner «1 toque»); abre Configurações → Plantões.
-  /// Mesmo padrão visual dos CTAs premium da folha «Incluir plantão» (gradiente roxo + tipografia maior).
+  /// CTA lista de plantÃµes recorrentes (substitui o banner Â«1 toqueÂ»); abre ConfiguraÃ§Ãµes â†’ PlantÃµes.
+  /// Mesmo padrÃ£o visual dos CTAs premium da folha Â«Incluir plantÃ£oÂ» (gradiente roxo + tipografia maior).
   Widget _buildCtaListaPlantoesRecorrentes({
     bool isNarrow = false,
     bool isVeryNarrow = false,
   }) {
-    // **Destaque maior** a pedido do usuário: título do CTA «Lista de plantões
-    // recorrentes» com fonte +2 pt em relação ao padrão anterior, peso máximo
+    // **Destaque maior** a pedido do usuÃ¡rio: tÃ­tulo do CTA Â«Lista de plantÃµes
+    // recorrentesÂ» com fonte +2 pt em relaÃ§Ã£o ao padrÃ£o anterior, peso mÃ¡ximo
     // (w900) e mais letter-spacing, para diferenciar visualmente do restante.
     //
-    // **Sem comprometer o calendário inicial**: o `vPad` foi reduzido em ~2 px
-    // (12→10 / 13→11 / 15→13) para compensar exatamente o ganho de altura da
-    // tipografia. Assim o calendário continua aparecendo na mesma posição em
-    // iPhone SE / Android pequenos, com o módulo Escalas idêntico ao anterior.
+    // **Sem comprometer o calendÃ¡rio inicial**: o `vPad` foi reduzido em ~2 px
+    // (12â†’10 / 13â†’11 / 15â†’13) para compensar exatamente o ganho de altura da
+    // tipografia. Assim o calendÃ¡rio continua aparecendo na mesma posiÃ§Ã£o em
+    // iPhone SE / Android pequenos, com o mÃ³dulo Escalas idÃªntico ao anterior.
     final titleFs = _scalesScreenFontSize(
       context,
       isVeryNarrow ? 16.5 : (isNarrow ? 17.5 : 18.0),
@@ -1449,7 +1450,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          'Lista de plantões recorrentes',
+                          'Lista de plantÃµes recorrentes',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -1469,7 +1470,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Cadastre aqui…',
+                          'Cadastre aquiâ€¦',
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.88),
                             fontWeight: FontWeight.w600,
@@ -1495,7 +1496,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     );
   }
 
-  /// Gráfico pizza: valores diurnos realizados, noturnos realizados, previsão diurno/noturno a tirar.
+  /// GrÃ¡fico pizza: valores diurnos realizados, noturnos realizados, previsÃ£o diurno/noturno a tirar.
   Widget _buildPieChartDiurnoNoturno({bool isNarrow = false}) {
     double diurnoReal = 0, noturnoReal = 0, diurnoPrev = 0, noturnoPrev = 0;
     for (final e in _allEntries) {
@@ -1527,7 +1528,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
             Icon(Icons.pie_chart_outline_rounded,
                 color: GeminiTheme.textMuted, size: 32),
             const SizedBox(width: 12),
-            Text('Sem dados para o gráfico',
+            Text('Sem dados para o grÃ¡fico',
                 style:
                     TextStyle(color: GeminiTheme.textMuted, fontSize: fsCorpo)),
           ],
@@ -1579,7 +1580,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     if (sections.isEmpty) {
       return const SizedBox.shrink();
     }
-    // Com zoom/texto grande, legenda ao lado do gráfico ficava estreita e quebrava valores.
+    // Com zoom/texto grande, legenda ao lado do grÃ¡fico ficava estreita e quebrava valores.
     final textScaleFactor = MediaQuery.textScalerOf(context).scale(14) / 14.0;
     final stackChartLegend = isNarrow || textScaleFactor > 1.06;
     final legendColumn = Column(
@@ -1677,7 +1678,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Banco de Horas: 05h às 22h (diurno); 22h01 às 05h (noturno). Padrão GO: o dia civil encerra à meia-noite; até 23:59 no calendário; após 00:00 do dia seguinte (e na virada do mês, após 00:00 do dia 1º) no mês seguinte.',
+                    'Banco de Horas: 05h Ã s 22h (diurno); 22h01 Ã s 05h (noturno). PadrÃ£o GO: o dia civil encerra Ã  meia-noite; atÃ© 23:59 no calendÃ¡rio; apÃ³s 00:00 do dia seguinte (e na virada do mÃªs, apÃ³s 00:00 do dia 1Âº) no mÃªs seguinte.',
                     style: TextStyle(
                         fontSize: fsInfo, color: Colors.amber.shade900),
                   ),
@@ -1698,7 +1699,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     return '${arred.toStringAsFixed(1)} h';
   }
 
-  /// Quadro destacado: diferença entre teto e previsão (verde = margem; vermelho = excedeu).
+  /// Quadro destacado: diferenÃ§a entre teto e previsÃ£o (verde = margem; vermelho = excedeu).
   ({String title, String value, Color bg, Color fg}) _scaleTetoMargemMetric(
     double tetoHoras,
     double horasPrevisao,
@@ -1732,7 +1733,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     );
   }
 
-  /// Pílula premium para métricas do teto (Já tirou / Previsão / Teto / Margem).
+  /// PÃ­lula premium para mÃ©tricas do teto (JÃ¡ tirou / PrevisÃ£o / Teto / Margem).
   Widget _scaleTetoMetricPill(
     BuildContext context, {
     required String title,
@@ -1792,11 +1793,11 @@ class _ScalesScreenState extends State<ScalesScreen> {
     );
   }
 
-  /// Alerta no rodapé do gráfico Diurno x Noturno: horas já feitas e previsão no mês do calendário (só com valor financeiro; teto configurável).
-  /// Usa o mês exibido no calendário (_focusedDay) para contabilizar e exibir o nome do mês na observação.
+  /// Alerta no rodapÃ© do grÃ¡fico Diurno x Noturno: horas jÃ¡ feitas e previsÃ£o no mÃªs do calendÃ¡rio (sÃ³ com valor financeiro; teto configurÃ¡vel).
+  /// Usa o mÃªs exibido no calendÃ¡rio (_focusedDay) para contabilizar e exibir o nome do mÃªs na observaÃ§Ã£o.
   Widget _buildAlertaTeto192Rodape() {
     final hoje = DateTime.now();
-    // Mês do calendário em cima: quando o usuário está em março, contabiliza março
+    // MÃªs do calendÃ¡rio em cima: quando o usuÃ¡rio estÃ¡ em marÃ§o, contabiliza marÃ§o
     final monthStart = DateTime(_focusedDay.year, _focusedDay.month, 1);
     final monthEnd =
         DateTime(_focusedDay.year, _focusedDay.month + 1, 0, 23, 59, 59);
@@ -1832,11 +1833,11 @@ class _ScalesScreenState extends State<ScalesScreen> {
         final prevStr = '${horasPrevisao.toStringAsFixed(1)} h';
         final tetoStr = '$tetoInt h';
         final tituloAlerta = passouTeto
-            ? 'Atenção: previsão acima do teto'
-            : 'Resumo de horas no mês';
+            ? 'AtenÃ§Ã£o: previsÃ£o acima do teto'
+            : 'Resumo de horas no mÃªs';
         final rodapeAlerta = passouTeto
-            ? 'Revise escalas ou ajuste o teto em Configurações > Horas extras.'
-            : 'Plantões com valor no mês de $nomeMes (só entram horas com valor financeiro).';
+            ? 'Revise escalas ou ajuste o teto em ConfiguraÃ§Ãµes > Horas extras.'
+            : 'PlantÃµes com valor no mÃªs de $nomeMes (sÃ³ entram horas com valor financeiro).';
         final fsTitulo = _scalesScreenFontSize(context, 15);
         return Container(
               padding: const EdgeInsets.all(14),
@@ -1920,7 +1921,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                     children: [
                       _scaleTetoMetricPill(
                         context,
-                        title: 'Já tirou',
+                        title: 'JÃ¡ tirou',
                         value: jaStr,
                         background: passouTeto
                             ? Colors.white.withValues(alpha: 0.92)
@@ -1929,7 +1930,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                       ),
                       _scaleTetoMetricPill(
                         context,
-                        title: 'Previsão no mês',
+                        title: 'PrevisÃ£o no mÃªs',
                         value: prevStr,
                         background: passouTeto
                             ? Colors.deepOrange.shade50
@@ -2019,14 +2020,14 @@ class _ScalesScreenState extends State<ScalesScreen> {
     );
   }
 
-  /// Resumo por vínculo (Estado / Município / Particular); após o «Resumo de horas no mês» e antes do Resumo do mês detalhado.
-  /// Pré-cadastro com financeiro **ou** entrada com vínculo + valor na escala (ex.: lançamento expresso).
-  /// Particular: apenas serviços explicitamente marcados como Particular (employerType == 'private').
+  /// Resumo por vÃ­nculo (Estado / MunicÃ­pio / Particular); apÃ³s o Â«Resumo de horas no mÃªsÂ» e antes do Resumo do mÃªs detalhado.
+  /// PrÃ©-cadastro com financeiro **ou** entrada com vÃ­nculo + valor na escala (ex.: lanÃ§amento expresso).
+  /// Particular: apenas serviÃ§os explicitamente marcados como Particular (employerType == 'private').
   Widget _buildResumoPorVinculo({bool isNarrow = false}) {
     const types = ['state', 'municipality', 'private'];
     const labels = {
       'state': 'Estado',
-      'municipality': 'Município',
+      'municipality': 'MunicÃ­pio',
       'private': 'Particular'
     };
     final fsSec = _scalesScreenFontSize(context, 16);
@@ -2041,7 +2042,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     for (final t in types) byType[t] = [];
     for (final e in _allEntries) {
       if (!_entryInResumoFinanceiro(e, _locations)) continue;
-      // Particular: só entra se estiver explicitamente marcado como particular (não por inferência).
+      // Particular: sÃ³ entra se estiver explicitamente marcado como particular (nÃ£o por inferÃªncia).
       if (e.employerType != null && e.employerType! == 'private') {
         byType['private']!.add(e);
         continue;
@@ -2050,7 +2051,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
       if (t == 'state' || t == 'municipality') {
         byType[t]!.add(e);
       }
-      // Entradas inferidas como 'private' (sem tipo salvo, sem match) não entram em nenhum card.
+      // Entradas inferidas como 'private' (sem tipo salvo, sem match) nÃ£o entram em nenhum card.
     }
     final hojeResumoVinculo = DateTime.now();
     Widget cardVinculo(String typeKey, String label, List<ScaleEntry> entries,
@@ -2144,7 +2145,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'Super premium · financeiro ativo',
+                              'Super premium Â· financeiro ativo',
                               style: TextStyle(
                                 fontSize: fsTiny,
                                 fontWeight: FontWeight.w700,
@@ -2164,7 +2165,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          '${realizados.length} real. · ${CurrencyFormats.formatBRL(valReal)}',
+                          '${realizados.length} real. Â· ${CurrencyFormats.formatBRL(valReal)}',
                           style: TextStyle(
                               fontSize: fsRow,
                               fontWeight: FontWeight.w700,
@@ -2184,7 +2185,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          '${pendentes.length} pend. · ${CurrencyFormats.formatBRL(valPend)}',
+                          '${pendentes.length} pend. Â· ${CurrencyFormats.formatBRL(valPend)}',
                           style: TextStyle(
                               fontSize: fsRow,
                               fontWeight: FontWeight.w700,
@@ -2286,7 +2287,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                 color: GeminiTheme.primary, size: 22),
             const SizedBox(width: 8),
             Text(
-              'Controle Estado · Município · Particular',
+              'Controle Estado Â· MunicÃ­pio Â· Particular',
               style: TextStyle(
                   fontSize: fsSec,
                   fontWeight: FontWeight.w800,
@@ -2296,7 +2297,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
         ),
         const SizedBox(height: 6),
         Text(
-          'Apenas plantões ligados à lista de plantões recorrentes com financeiro ativo · mês do calendário: ${DateFormat('MM/yyyy').format(_focusedDay)}',
+          'Apenas plantÃµes ligados Ã  lista de plantÃµes recorrentes com financeiro ativo Â· mÃªs do calendÃ¡rio: ${DateFormat('MM/yyyy').format(_focusedDay)}',
           style: TextStyle(
               fontSize: fsCap, color: Colors.grey.shade700, height: 1.25),
         ),
@@ -2307,7 +2308,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
         cardVinculo(
             'municipality', labels['municipality']!, byType['municipality']!,
             onTap: () => _abrirListaServicos(context, byType['municipality']!,
-                'Município (financeiro ativo)')),
+                'MunicÃ­pio (financeiro ativo)')),
         cardVinculo('private', labels['private']!, byType['private']!,
             onTap: () => _abrirListaServicos(
                 context, byType['private']!, 'Particular (financeiro ativo)')),
@@ -2398,7 +2399,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    'Estado + Município + Particular',
+                                    'Estado + MunicÃ­pio + Particular',
                                     style: TextStyle(
                                       fontSize: fsRow,
                                       fontWeight: FontWeight.w900,
@@ -2414,7 +2415,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'Soma só dos vínculos com financeiro ativo no mês visível acima.',
+                          'Soma sÃ³ dos vÃ­nculos com financeiro ativo no mÃªs visÃ­vel acima.',
                           style: TextStyle(
                               fontSize: fsHint,
                               color: AppColors.textSecondary,
@@ -2441,7 +2442,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                     onTap: () => _abrirListaServicos(
                                         context,
                                         totReal,
-                                        'Total realizados (todos os vínculos)'),
+                                        'Total realizados (todos os vÃ­nculos)'),
                                     child: Padding(
                                       padding: const EdgeInsets.symmetric(
                                           vertical: 6, horizontal: 4),
@@ -2470,7 +2471,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                             ),
                                           ),
                                           Text(
-                                              '${totReal.length} plantão(ões) · toque p/ ver',
+                                              '${totReal.length} plantÃ£o(Ãµes) Â· toque p/ ver',
                                               style: TextStyle(
                                                   fontSize: fsTiny,
                                                   color: AppColors.textMuted)),
@@ -2493,7 +2494,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                     onTap: () => _abrirListaServicos(
                                         context,
                                         totPend,
-                                        'Total pendentes (todos os vínculos)'),
+                                        'Total pendentes (todos os vÃ­nculos)'),
                                     child: Padding(
                                       padding: const EdgeInsets.symmetric(
                                           vertical: 6, horizontal: 4),
@@ -2523,7 +2524,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                             ),
                                           ),
                                           Text(
-                                              '${totPend.length} plantão(ões) · toque p/ ver',
+                                              '${totPend.length} plantÃ£o(Ãµes) Â· toque p/ ver',
                                               style: TextStyle(
                                                   fontSize: fsTiny,
                                                   color: AppColors.textMuted)),
@@ -2559,7 +2560,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               Text(
-                                'VALOR TOTAL DO MÊS',
+                                'VALOR TOTAL DO MÃŠS',
                                 style: TextStyle(
                                   fontSize: fsTiny,
                                   fontWeight: FontWeight.w900,
@@ -2569,7 +2570,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Projeção (realizados + pendentes)',
+                                'ProjeÃ§Ã£o (realizados + pendentes)',
                                 style: TextStyle(
                                     fontSize: fsSub,
                                     fontWeight: FontWeight.w800,
@@ -2612,7 +2613,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     final cardPad = isNarrow
         ? (isVeryNarrow ? 12.0 : 14.0)
         : 26.0;
-    // Topo mais justo: mês/ano do calendário encosta melhor na borda superior do card branco.
+    // Topo mais justo: mÃªs/ano do calendÃ¡rio encosta melhor na borda superior do card branco.
     final cardTopPad = isNarrow
         ? (isVeryNarrow ? 5.0 : 6.0)
         : 18.0;
@@ -2639,7 +2640,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
           padding: EdgeInsets.fromLTRB(cardPad, cardTopPad, cardPad, cardPad),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            // Em mobile, centraliza o bloco do calendário no card ampliado (estilo full screen)
+            // Em mobile, centraliza o bloco do calendÃ¡rio no card ampliado (estilo full screen)
             mainAxisAlignment:
                 isNarrow ? MainAxisAlignment.center : MainAxisAlignment.start,
             children: [
@@ -2750,7 +2751,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                 const SizedBox(height: 12),
                 if (feriados.isEmpty)
                   Text(
-                    'Sem feriados nacionais neste mês.',
+                    'Sem feriados nacionais neste mÃªs.',
                     style: TextStyle(
                       fontSize: fsCorpo,
                       color: AppColors.textSecondary,
@@ -2783,7 +2784,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           ),
                         ),
                         child: Text(
-                          '$data · ${f.name}$extra',
+                          '$data Â· ${f.name}$extra',
                           style: TextStyle(
                             fontSize: fsCorpo,
                             color: AppColors.textPrimary,
@@ -2819,7 +2820,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
 
   String _autoViradaMarker(String sourceId) => '[AUTO_VIRADA_MES:$sourceId]';
   String _autoViradaNote(String sourceId) =>
-      'Lançamento automático (virada de mês) ${_autoViradaMarker(sourceId)}';
+      'LanÃ§amento automÃ¡tico (virada de mÃªs) ${_autoViradaMarker(sourceId)}';
 
   String _timeToHHmm(DateTime dt) =>
       '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
@@ -2850,10 +2851,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
       DateTime.utc(carryDate.year, carryDate.month, carryDate.day, 12, 0, 0),
     );
 
-    // Remove qualquer lançamento automático antigo desse plantão-fonte (query indexada por sourceId).
+    // Remove qualquer lanÃ§amento automÃ¡tico antigo desse plantÃ£o-fonte (query indexada por sourceId).
     await _removeAutoLancamentoBySourceId(sourceId);
 
-    // Só cria lançamento automático quando há financeiro ativo + virada de mês.
+    // SÃ³ cria lanÃ§amento automÃ¡tico quando hÃ¡ financeiro ativo + virada de mÃªs.
     if (!financeiroAtivo ||
         isCompromisso ||
         !_isLastDayOfMonth(sourceDate) ||
@@ -2915,7 +2916,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     for (final doc in bySource.docs) {
       await _scales.doc(doc.id).delete();
     }
-    // Compatibilidade com lançamentos antigos (antes do campo indexado).
+    // Compatibilidade com lanÃ§amentos antigos (antes do campo indexado).
     final note = _autoViradaNote(sourceId);
     final legacy = await _scales.where('notes', isEqualTo: note).get();
     for (final doc in legacy.docs) {
@@ -2965,8 +2966,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
     return (ate2359: ate2359, de0007: de0007, temSplit: temSplit);
   }
 
-  /// Rodapé do calendário: total do dia selecionado + **resumo do dia** com data, horário,
-  /// SEI/processos (espelho da Agenda) e observações, para 1 ou mais lançamentos.
+  /// RodapÃ© do calendÃ¡rio: total do dia selecionado + **resumo do dia** com data, horÃ¡rio,
+  /// SEI/processos (espelho da Agenda) e observaÃ§Ãµes, para 1 ou mais lanÃ§amentos.
   Widget _buildRodapeTotalDia() {
     final day = _selectedDay!;
     final dayStart = DateTime(day.year, day.month, day.day);
@@ -3142,7 +3143,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                       Row(
                         children: [
                           Expanded(
-                            child: Text('Até 23:59 (padrão GO)',
+                            child: Text('AtÃ© 23:59 (padrÃ£o GO)',
                                 style: TextStyle(
                                     fontSize: fs12,
                                     fontWeight: FontWeight.w600,
@@ -3161,7 +3162,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                       Row(
                         children: [
                           Expanded(
-                            child: Text('00h às 07h (próx. dia)',
+                            child: Text('00h Ã s 07h (prÃ³x. dia)',
                                 style: TextStyle(
                                     fontSize: fs12,
                                     fontWeight: FontWeight.w600,
@@ -3202,8 +3203,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
                             Expanded(
                               child: Text(
                                 _isLastDayOfMonth(day) && split.de0007 > 0
-                                    ? 'O valor referente ao horário 00h00 às 07h ficará para o próximo mês.'
-                                    : 'Banco de Horas: 05h às 22h (diurno); 22h01 às 05h (noturno).',
+                                    ? 'O valor referente ao horÃ¡rio 00h00 Ã s 07h ficarÃ¡ para o prÃ³ximo mÃªs.'
+                                    : 'Banco de Horas: 05h Ã s 22h (diurno); 22h01 Ã s 05h (noturno).',
                                 style: TextStyle(
                                     fontSize: fs11,
                                     color: _isLastDayOfMonth(day) &&
@@ -3253,7 +3254,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     );
   }
 
-  /// Número do dia nas células do calendário: permanece dentro do quadrado (células estreitas / fonte maior).
+  /// NÃºmero do dia nas cÃ©lulas do calendÃ¡rio: permanece dentro do quadrado (cÃ©lulas estreitas / fonte maior).
   Widget _dialNumberInCell({
     required String text,
     required TextStyle style,
@@ -3297,9 +3298,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
 
   Widget _buildCalendar({bool isNarrow = false}) {
     final rawScale = MediaQuery.textScalerOf(context).scale(1.0);
-    // Acessibilidade: acompanha fonte maior sem quebrar cabeçalho/grade em Android e iPhone.
+    // Acessibilidade: acompanha fonte maior sem quebrar cabeÃ§alho/grade em Android e iPhone.
     final calendarScale = rawScale.clamp(1.0, 1.30);
-    // Evita MediaQuery.of: animação do teclado (viewInsets) não deve rebuildar o calendário inteiro.
+    // Evita MediaQuery.of: animaÃ§Ã£o do teclado (viewInsets) nÃ£o deve rebuildar o calendÃ¡rio inteiro.
     final view = View.maybeOf(context);
     final media = view != null
         ? MediaQueryData.fromView(view)
@@ -3321,8 +3322,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
       return AppColors.vividShift(raw);
     }
 
-    /// Realce 3D premium do "hoje": halo colorido + sombra de elevação + brilho interno.
-    /// Visível mesmo quando o dia tem plantão (borda + sombra nas 4 direções).
+    /// Realce 3D premium do "hoje": halo colorido + sombra de elevaÃ§Ã£o + brilho interno.
+    /// VisÃ­vel mesmo quando o dia tem plantÃ£o (borda + sombra nas 4 direÃ§Ãµes).
     List<BoxShadow> todaySoftLift(Color accent) {
       return [
         // Halo externo grande (anel colorido difuso ao redor do dia)
@@ -3332,7 +3333,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
           offset: const Offset(0, 0),
           spreadRadius: 1.5,
         ),
-        // Reforço do halo na cor do plantão (segunda camada)
+        // ReforÃ§o do halo na cor do plantÃ£o (segunda camada)
         BoxShadow(
           color: accent.withValues(alpha: 0.55),
           blurRadius: 18,
@@ -3345,7 +3346,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
           blurRadius: 10,
           offset: const Offset(0, 5),
         ),
-        // Brilho interno superior (fica acima como um destaque metálico)
+        // Brilho interno superior (fica acima como um destaque metÃ¡lico)
         BoxShadow(
           color: Colors.white.withValues(alpha: 0.6),
           blurRadius: 4,
@@ -3355,7 +3356,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
       ];
     }
 
-    /// Pequeno selo "HOJE" sobre o dia atual para garantir destaque mesmo com plantão colorido.
+    /// Pequeno selo "HOJE" sobre o dia atual para garantir destaque mesmo com plantÃ£o colorido.
     Widget todayBadge() {
       return Positioned(
         top: -4,
@@ -3398,21 +3399,21 @@ class _ScalesScreenState extends State<ScalesScreen> {
       datesWithShifts.add(d);
     }
 
-    /// Célula "hoje sem plantão" (e/ou feriado): aparência consistente independente
-    /// de estar selecionado ou não. Evita o bug em que ao clicar em outro dia o "hoje"
-    /// caía em decoração genérica e perdia a forma (mobile/web/iOS).
+    /// CÃ©lula "hoje sem plantÃ£o" (e/ou feriado): aparÃªncia consistente independente
+    /// de estar selecionado ou nÃ£o. Evita o bug em que ao clicar em outro dia o "hoje"
+    /// caÃ­a em decoraÃ§Ã£o genÃ©rica e perdia a forma (mobile/web/iOS).
     ///
-    /// **Padrão visual a pedido do usuário**: fundo **branco**, borda **azul** e
-    /// texto «Hoje» dentro da célula (em vez do badge externo «HOJE»). Mantém o
+    /// **PadrÃ£o visual a pedido do usuÃ¡rio**: fundo **branco**, borda **azul** e
+    /// texto Â«HojeÂ» dentro da cÃ©lula (em vez do badge externo Â«HOJEÂ»). MantÃ©m o
     /// destaque do dia atual sem o gradiente colorido pesado.
     ///
-    /// **Importante (responsividade iOS/Android/Web):** quando o usuário adiciona
-    /// um plantão neste dia, o `todayBuilder` automaticamente troca para
-    /// [calendarShiftDayCell] (com a cor do plantão), preservando a forma — esta
-    /// célula só aparece em dias **sem plantão**. As fontes ficam dimensionadas
-    /// para caber no slot do `table_calendar` (rowHeight padrão 52 px −
+    /// **Importante (responsividade iOS/Android/Web):** quando o usuÃ¡rio adiciona
+    /// um plantÃ£o neste dia, o `todayBuilder` automaticamente troca para
+    /// [calendarShiftDayCell] (com a cor do plantÃ£o), preservando a forma â€” esta
+    /// cÃ©lula sÃ³ aparece em dias **sem plantÃ£o**. As fontes ficam dimensionadas
+    /// para caber no slot do `table_calendar` (rowHeight padrÃ£o 52 px âˆ’
     /// `cellMargin` vertical 12 px em narrow) e usam `FittedBox.scaleDown` como
-    /// rede de segurança em iPhones pequenos / Android com fonte grande.
+    /// rede de seguranÃ§a em iPhones pequenos / Android com fonte grande.
     Widget todayCellNoShifts(BuildContext context, DateTime day,
         {required bool isHol}) {
       final fsNumber = (isNarrow ? 16.0 : 15.0);
@@ -3476,12 +3477,12 @@ class _ScalesScreenState extends State<ScalesScreen> {
       );
     }
 
-    /// Célula com plantão(ões): usada no [defaultBuilder] e no [todayBuilder].
+    /// CÃ©lula com plantÃ£o(Ãµes): usada no [defaultBuilder] e no [todayBuilder].
     ///
-    /// **Importante (table_calendar):** quando "hoje" não está selecionado, o pacote
+    /// **Importante (table_calendar):** quando "hoje" nÃ£o estÃ¡ selecionado, o pacote
     /// usa [todayBuilder] *antes* de [defaultBuilder]. Se [todayBuilder] devolver
-    /// `null` em um dia com plantões, cai no `todayDecoration` genérico e some a cor
-    /// do usuário — por isso reutilizamos o mesmo desenho aqui e em [todayBuilder].
+    /// `null` em um dia com plantÃµes, cai no `todayDecoration` genÃ©rico e some a cor
+    /// do usuÃ¡rio â€” por isso reutilizamos o mesmo desenho aqui e em [todayBuilder].
     Widget calendarShiftDayCell(BuildContext context, DateTime day) {
       final d = DateTime(day.year, day.month, day.day);
       final events = eventLoader[d] ?? [];
@@ -3607,7 +3608,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
         focusedDay: _focusedDay,
         calendarFormat: CalendarFormat.month,
         availableCalendarFormats: const {
-          CalendarFormat.month: 'Mês',
+          CalendarFormat.month: 'MÃªs',
         },
         daysOfWeekHeight: isNarrow ? 30 : 28,
         daysOfWeekStyle: DaysOfWeekStyle(
@@ -3622,12 +3623,12 @@ class _ScalesScreenState extends State<ScalesScreen> {
             color: Colors.red.shade700,
           ),
         ),
-        // Só gestos horizontais (trocar mês); scroll vertical fica com o SingleChildScrollView da tela — evita travar ao rolar até o calendário
+        // SÃ³ gestos horizontais (trocar mÃªs); scroll vertical fica com o SingleChildScrollView da tela â€” evita travar ao rolar atÃ© o calendÃ¡rio
         availableGestures: AvailableGestures.horizontalSwipe,
         selectedDayPredicate: (day) => _isSameDay(_selectedDay, day),
 
-        /// Feriados nacionais: mesma cor dos fins de semana (vermelho). Só quando o dia
-        /// não tem plantão — se tiver, o `defaultBuilder` colorido tem prioridade visual.
+        /// Feriados nacionais: mesma cor dos fins de semana (vermelho). SÃ³ quando o dia
+        /// nÃ£o tem plantÃ£o â€” se tiver, o `defaultBuilder` colorido tem prioridade visual.
         holidayPredicate: (day) {
           final d = DateTime(day.year, day.month, day.day);
           return isHolidayDay(day) && !datesWithShifts.contains(d);
@@ -3689,7 +3690,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
               color: const Color(0xFF0B1F4B),
               fontWeight: FontWeight.w900,
               fontSize: isNarrow ? 26 : 24),
-          // Seleção: só indicador discreto (ponto), sem preencher a célula de azul — evita confundir com plantões coloridos
+          // SeleÃ§Ã£o: sÃ³ indicador discreto (ponto), sem preencher a cÃ©lula de azul â€” evita confundir com plantÃµes coloridos
           selectedDecoration: BoxDecoration(
             color: Colors.transparent,
             borderRadius: BorderRadius.circular(10),
@@ -3735,7 +3736,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
             setState(() => _selectedDay = null);
             return;
           }
-          // Dia limpo: tela de inclusão (pré-cadastro + expressos + botão mágico).
+          // Dia limpo: tela de inclusÃ£o (prÃ©-cadastro + expressos + botÃ£o mÃ¡gico).
           if (entries.isEmpty) {
             _abrirSelecaoPlantao(
               context,
@@ -3745,16 +3746,16 @@ class _ScalesScreenState extends State<ScalesScreen> {
             );
             return;
           }
-          // Dia já preenchido: menu editar / trocar / limpar + botão mágico.
+          // Dia jÃ¡ preenchido: menu editar / trocar / limpar + botÃ£o mÃ¡gico.
           _mostrarMenuDiaCalendario(context, selected);
         },
         eventLoader: (day) =>
             eventLoader[DateTime(day.year, day.month, day.day)] ?? [],
         calendarBuilders: CalendarBuilders(
-          /// "Hoje" sempre tem o MESMO desenho — selecionado ou não.
-          /// - Com plantões: usa [calendarShiftDayCell] (mantém a cor do usuário).
-          /// - Sem plantões: usa [todayCellNoShifts] (forte, gradiente + halo + selo HOJE).
-          /// Nunca retornar `null` aqui: evita cair no `todayDecoration` genérico e
+          /// "Hoje" sempre tem o MESMO desenho â€” selecionado ou nÃ£o.
+          /// - Com plantÃµes: usa [calendarShiftDayCell] (mantÃ©m a cor do usuÃ¡rio).
+          /// - Sem plantÃµes: usa [todayCellNoShifts] (forte, gradiente + halo + selo HOJE).
+          /// Nunca retornar `null` aqui: evita cair no `todayDecoration` genÃ©rico e
           /// "desconfigurar" o dia de hoje ao tocar em outra data (iOS/Android/Web).
           todayBuilder: (context, day, focusedDay) {
             final d = DateTime(day.year, day.month, day.day);
@@ -3785,13 +3786,13 @@ class _ScalesScreenState extends State<ScalesScreen> {
               ),
             );
           },
-          // Dia selecionado: apenas um ponto indicador (não preenche de azul); célula colorida só quando tem plantão/compromisso
-          // Só desenha seleção no dia realmente selecionado — evita marcação fantasma em outro dia (ex.: 25 ao clicar em 26)
+          // Dia selecionado: apenas um ponto indicador (nÃ£o preenche de azul); cÃ©lula colorida sÃ³ quando tem plantÃ£o/compromisso
+          // SÃ³ desenha seleÃ§Ã£o no dia realmente selecionado â€” evita marcaÃ§Ã£o fantasma em outro dia (ex.: 25 ao clicar em 26)
           selectedBuilder: (context, day, focusedDay) {
             final d = DateTime(day.year, day.month, day.day);
             if (!_isSameDay(_selectedDay, d)) return null;
             final hasShifts = datesWithShifts.contains(d);
-            // Com plantões: usa o mesmo visual do defaultBuilder (célula colorida), sem azul de seleção
+            // Com plantÃµes: usa o mesmo visual do defaultBuilder (cÃ©lula colorida), sem azul de seleÃ§Ã£o
             if (hasShifts) {
               final isTodayCell = _isSameDay(DateTime.now(), d);
               final isHol = isHolidayDay(day);
@@ -3927,11 +3928,11 @@ class _ScalesScreenState extends State<ScalesScreen> {
                 ],
               );
             }
-            // Sem plantões: só número do dia + ponto indicador de seleção (nunca azul)
+            // Sem plantÃµes: sÃ³ nÃºmero do dia + ponto indicador de seleÃ§Ã£o (nunca azul)
             final isToday = _isSameDay(DateTime.now(), d);
             final isHol = isHolidayDay(day);
-            // Hoje selecionado e sem plantão: usa exatamente a mesma célula do
-            // [todayBuilder]. Assim hoje fica IDÊNTICO selecionado ou não — não
+            // Hoje selecionado e sem plantÃ£o: usa exatamente a mesma cÃ©lula do
+            // [todayBuilder]. Assim hoje fica IDÃŠNTICO selecionado ou nÃ£o â€” nÃ£o
             // "desconfigura" ao tocar em outra data.
             if (isToday) {
               return todayCellNoShifts(context, day, isHol: isHol);
@@ -3988,7 +3989,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
           },
         ),
         onPageChanged: (focused) {
-          // Atualiza após o frame para não travar durante a animação do calendário
+          // Atualiza apÃ³s o frame para nÃ£o travar durante a animaÃ§Ã£o do calendÃ¡rio
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted) return;
             setState(() => _focusedDay = focused);
@@ -3999,10 +4000,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
     );
   }
 
-  /// Bloco "Resumo do dia" (dia selecionado + lista + botão Adicionar). Não usado na árvore atual:
-  /// o resumo do dia ficou apenas no segundo toque no calendário (menu do dia). Botões de ação
-  /// estão na CTA «lista de plantões recorrentes», acima do calendário; abaixo do calendário
-  /// (e feriados) vem o «Resumo de horas no mês», depois Controle Estado · Município · Particular.
+  /// Bloco "Resumo do dia" (dia selecionado + lista + botÃ£o Adicionar). NÃ£o usado na Ã¡rvore atual:
+  /// o resumo do dia ficou apenas no segundo toque no calendÃ¡rio (menu do dia). BotÃµes de aÃ§Ã£o
+  /// estÃ£o na CTA Â«lista de plantÃµes recorrentesÂ», acima do calendÃ¡rio; abaixo do calendÃ¡rio
+  /// (e feriados) vem o Â«Resumo de horas no mÃªsÂ», depois Controle Estado Â· MunicÃ­pio Â· Particular.
   Widget _buildDailyShifts() {
     final day = _selectedDay ?? DateTime.now();
     final dayStart = DateTime(day.year, day.month, day.day);
@@ -4051,7 +4052,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
           child: FilledButton.icon(
             onPressed: () => _addScale(context, initialDate: day),
             icon: const Icon(Icons.add_rounded),
-            label: const Text('ADICIONAR PLANTÃO',
+            label: const Text('ADICIONAR PLANTÃƒO',
                 style:
                     TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1)),
             style: FilledButton.styleFrom(
@@ -4083,7 +4084,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                 size: 48, color: Colors.grey.shade300),
             const SizedBox(height: 12),
             Text(
-              'Nenhum plantão agendado',
+              'Nenhum plantÃ£o agendado',
               style: TextStyle(
                   color: Colors.grey.shade500, fontWeight: FontWeight.w600),
             ),
@@ -4093,13 +4094,13 @@ class _ScalesScreenState extends State<ScalesScreen> {
     );
   }
 
-  /// Mês/ano iguais ao mês do calendário (ex.: MARÇO/2026).
+  /// MÃªs/ano iguais ao mÃªs do calendÃ¡rio (ex.: MARÃ‡O/2026).
   String _mesAnoResumoCalendario() {
     final m = DateFormat('MMMM', 'pt_BR').format(_focusedDay).trim();
     return '${m.toUpperCase()}/${_focusedDay.year}';
   }
 
-  /// Contagens só em quantidade (valores ficam no resumo Estado/Município/Particular acima).
+  /// Contagens sÃ³ em quantidade (valores ficam no resumo Estado/MunicÃ­pio/Particular acima).
   ({
     int plantoesEscalasCompromissos,
     int extrasEstado,
@@ -4170,8 +4171,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
     );
   }
 
-  /// Resumo do mês detalhado: acompanha a navegação do calendário. Lista todos os serviços (com e sem valor).
-  /// Permite remover um serviço diretamente da lista. Último campo da tela (abaixo de ADICIONAR e lista de plantões recorrentes).
+  /// Resumo do mÃªs detalhado: acompanha a navegaÃ§Ã£o do calendÃ¡rio. Lista todos os serviÃ§os (com e sem valor).
+  /// Permite remover um serviÃ§o diretamente da lista. Ãšltimo campo da tela (abaixo de ADICIONAR e lista de plantÃµes recorrentes).
   Widget _buildResumoMesDetalhado({bool isNarrow = false}) {
     final monthName = DateFormat('MMMM yyyy', 'pt_BR').format(_focusedDay);
     final mesAnoCal = _mesAnoResumoCalendario();
@@ -4206,7 +4207,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                     color: AppColors.primary, size: 24),
                 const SizedBox(width: 10),
                 Text(
-                  'Resumo do mês detalhado',
+                  'Resumo do mÃªs detalhado',
                   style: TextStyle(
                       fontSize: fs18,
                       fontWeight: FontWeight.w800,
@@ -4224,10 +4225,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
                   letterSpacing: 0.5),
             ),
             const SizedBox(height: 14),
-            _linhaResumoMesSoQuantidade('PLANTÕES ESCALAS / COMPROMISSOS',
+            _linhaResumoMesSoQuantidade('PLANTÃ•ES ESCALAS / COMPROMISSOS',
                 z.plantoesEscalasCompromissos),
             _linhaResumoMesSoQuantidade('EXTRAS ESTADO', z.extrasEstado),
-            _linhaResumoMesSoQuantidade('EXTRAS MUNICÍPIO', z.extrasMunicipio),
+            _linhaResumoMesSoQuantidade('EXTRAS MUNICÃPIO', z.extrasMunicipio),
             _linhaResumoMesSoQuantidade('PARTICULARES', z.particulares),
             const Divider(height: 20),
             Row(
@@ -4235,7 +4236,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    'TOTAL SERVIÇOS NO MÊS:',
+                    'TOTAL SERVIÃ‡OS NO MÃŠS:',
                     style: TextStyle(
                         fontSize: fs14,
                         fontWeight: FontWeight.w900,
@@ -4243,7 +4244,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                   ),
                 ),
                 Text(
-                  '${z.total} SERVIÇOS',
+                  '${z.total} SERVIÃ‡OS',
                   style: TextStyle(
                       fontSize: fs15,
                       fontWeight: FontWeight.w900,
@@ -4258,7 +4259,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                   Icon(Icons.inbox_rounded,
                       size: 40, color: Colors.grey.shade400),
                   const SizedBox(height: 8),
-                  Text('Nenhum serviço em $mesAnoCal',
+                  Text('Nenhum serviÃ§o em $mesAnoCal',
                       style: TextStyle(
                           color: Colors.grey.shade500, fontSize: fs14)),
                 ],
@@ -4298,7 +4299,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Resumo do mês detalhado',
+                          'Resumo do mÃªs detalhado',
                           style: TextStyle(
                               fontSize: fs18,
                               fontWeight: FontWeight.w800,
@@ -4353,16 +4354,16 @@ class _ScalesScreenState extends State<ScalesScreen> {
           ),
           const SizedBox(height: 14),
           Text(
-            'Somente quantidades (valores em Estado / Município / Particular acima).',
+            'Somente quantidades (valores em Estado / MunicÃ­pio / Particular acima).',
             style: TextStyle(
                 fontSize: fs12, color: Colors.grey.shade700, height: 1.35),
           ),
           const SizedBox(height: 12),
-          _linhaResumoMesSoQuantidade('PLANTÕES ESCALAS / COMPROMISSOS',
+          _linhaResumoMesSoQuantidade('PLANTÃ•ES ESCALAS / COMPROMISSOS',
               counts.plantoesEscalasCompromissos),
           _linhaResumoMesSoQuantidade('EXTRAS ESTADO', counts.extrasEstado),
           _linhaResumoMesSoQuantidade(
-              'EXTRAS MUNICÍPIO', counts.extrasMunicipio),
+              'EXTRAS MUNICÃPIO', counts.extrasMunicipio),
           _linhaResumoMesSoQuantidade('PARTICULARES', counts.particulares),
           const Divider(height: 22),
           Row(
@@ -4370,7 +4371,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
             children: [
               Expanded(
                 child: Text(
-                  'TOTAL SERVIÇOS NO MÊS:',
+                  'TOTAL SERVIÃ‡OS NO MÃŠS:',
                   style: TextStyle(
                       fontSize: fs14,
                       fontWeight: FontWeight.w900,
@@ -4378,7 +4379,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                 ),
               ),
               Text(
-                '${counts.total} SERVIÇOS',
+                '${counts.total} SERVIÃ‡OS',
                 style: TextStyle(
                     fontSize: fs15,
                     fontWeight: FontWeight.w900,
@@ -4388,7 +4389,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
           ),
           const SizedBox(height: 16),
           Text(
-            'Lista do mês: editar (nº escala e observações), remover.',
+            'Lista do mÃªs: editar (nÂº escala e observaÃ§Ãµes), remover.',
             style: TextStyle(
                 fontSize: 12, color: Colors.grey.shade600, height: 1.3),
           ),
@@ -4399,12 +4400,12 @@ class _ScalesScreenState extends State<ScalesScreen> {
     );
   }
 
-  /// Converte entradas do resumo do mês para o formato do relatório PDF (horas antes do valor).
+  /// Converte entradas do resumo do mÃªs para o formato do relatÃ³rio PDF (horas antes do valor).
   List<Map<String, dynamic>> _resumoMesToEscalasMap(
       List<ScaleEntry> entries, ScaleRates rates, DateTime hojeRef,
       {bool goiasPerServiceDay = false}) {
     return entries.map((e) {
-      // Escalas sem valor (compromisso ou totalValue 0): exibir R$ 0,00 em vez de símbolo no PDF.
+      // Escalas sem valor (compromisso ou totalValue 0): exibir R$ 0,00 em vez de sÃ­mbolo no PDF.
       final valorStr = (e.isCompromisso || e.totalValue == 0)
           ? 'R\$ 0,00'
           : CurrencyFormats.formatBRL(e.totalValue);
@@ -4412,14 +4413,14 @@ class _ScalesScreenState extends State<ScalesScreen> {
       final statusStr = dataPlantao.isAfter(hojeRef)
           ? 'A confirmar'
           : (e.effectiveJaTiradoParaExibicao(hojeRef)
-              ? 'Já tirado'
+              ? 'JÃ¡ tirado'
               : 'A tirar');
       final (hd, hn) = _hoursDayNightForPdfEntry(e, rates,
           goiasPerServiceDay: goiasPerServiceDay);
       return {
         'data': DateFormat('dd/MM/yyyy', 'pt_BR').format(e.date),
         'numeroEscala': e.scaleNumber ?? '',
-        'compromisso': e.label ?? 'Plantão',
+        'compromisso': e.label ?? 'PlantÃ£o',
         'valor': valorStr,
         'status': statusStr,
         'observacao': e.notes ?? '',
@@ -4450,7 +4451,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 14),
-                  Text('A gerar o PDF…'),
+                  Text('A gerar o PDFâ€¦'),
                 ],
               ),
             ),
@@ -4487,7 +4488,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
         escalas: escalas,
         totalRecebido: totalRecebido,
         totalPendente: totalPendente,
-        reportTitle: 'Resumo do mês detalhado — Banco de horas',
+        reportTitle: 'Resumo do mÃªs detalhado â€” Banco de horas',
         suggestedFilename: filename,
         resumoBancoHoras: resumoPdf,
       );
@@ -4513,13 +4514,13 @@ class _ScalesScreenState extends State<ScalesScreen> {
     }
   }
 
-  /// Rótulo para badge na listagem detalhada: Compromisso, vínculo com financeiro ou plantão geral.
+  /// RÃ³tulo para badge na listagem detalhada: Compromisso, vÃ­nculo com financeiro ou plantÃ£o geral.
   String _badgeCategoriaResumoMes(ScaleEntry e) {
     if (e.isCompromisso && !scaleEntryIsPlantaoParaEdicaoRapida(e)) {
       return 'Compromisso';
     }
     if (e.isCompromisso && scaleEntryIsPlantaoParaEdicaoRapida(e)) {
-      return 'Plantão';
+      return 'PlantÃ£o';
     }
     if (_entryInResumoFinanceiro(e, _locations)) {
       final t = _employerTypeForEntry(e, _locations);
@@ -4527,14 +4528,14 @@ class _ScalesScreenState extends State<ScalesScreen> {
         case 'state':
           return 'Estado';
         case 'municipality':
-          return 'Município';
+          return 'MunicÃ­pio';
         case 'private':
           return 'Particular';
         default:
           return 'Financeiro';
       }
     }
-    return 'Plantão';
+    return 'PlantÃ£o';
   }
 
   ({Color bg, Color fg}) _badgeCoresCategoria(String cat) {
@@ -4549,7 +4550,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
           bg: const Color(0xFF1A237E).withOpacity(0.12),
           fg: const Color(0xFF1A237E)
         );
-      case 'Município':
+      case 'MunicÃ­pio':
         return (
           bg: const Color(0xFF0D9488).withOpacity(0.14),
           fg: const Color(0xFF0F766E)
@@ -4564,7 +4565,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     }
   }
 
-  /// Linha de Editar/Excluir: ícones (telas muito estreitas) ou botões com rótulo.
+  /// Linha de Editar/Excluir: Ã­cones (telas muito estreitas) ou botÃµes com rÃ³tulo.
   Widget _buildResumoItemEditDeleteRow(ScaleEntry e,
       {required bool soIconesBotoes}) {
     if (soIconesBotoes) {
@@ -4651,7 +4652,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     );
   }
 
-  /// Observações na grid: «Veja mais» (200 chars) + olho (preview editável).
+  /// ObservaÃ§Ãµes na grid: Â«Veja maisÂ» (200 chars) + olho (preview editÃ¡vel).
   Widget _scaleNotesGridBlock(
     ScaleEntry e, {
     double fontSize = 13,
@@ -4701,7 +4702,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
         setState(() {});
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Observações atualizadas.'),
+            content: Text('ObservaÃ§Ãµes atualizadas.'),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -4723,18 +4724,18 @@ class _ScalesScreenState extends State<ScalesScreen> {
     }
   }
 
-  /// Cartão "Resumo do mês" — evita flex 50/50 + horiz. scroll a cortar ações (web / Android / iOS estreito).
+  /// CartÃ£o "Resumo do mÃªs" â€” evita flex 50/50 + horiz. scroll a cortar aÃ§Ãµes (web / Android / iOS estreito).
   Widget _buildResumoMesDetalhadoItem(ScaleEntry e) {
     final jaOrd = _jaTiradoOrdinarioDisplay(e);
-    final statusStr = jaOrd ? 'Já tirado' : 'A tirar';
+    final statusStr = jaOrd ? 'JÃ¡ tirado' : 'A tirar';
     final statusColor = jaOrd ? AppColors.success : AppColors.financePendente;
     final cat = _badgeCategoriaResumoMes(e);
     final catColors = _badgeCoresCategoria(cat);
     final accent = (e.colorHex != null && e.colorHex!.isNotEmpty)
         ? e.color
         : _corPorTipo(e);
-    final title = (e.label ?? 'Plantão').trim();
-    // Data do serviço no rodapé do card: mesmo peso/tamanho do nome da frente (título).
+    final title = (e.label ?? 'PlantÃ£o').trim();
+    // Data do serviÃ§o no rodapÃ© do card: mesmo peso/tamanho do nome da frente (tÃ­tulo).
     final resumoDataServicoStyle = TextStyle(
       fontSize: 15,
       fontWeight: FontWeight.w800,
@@ -4745,10 +4746,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
     final mesCurto = DateFormat('MMM', 'pt_BR').format(e.date).toUpperCase();
     final resumoLinhas = scaleEntryResumoNumberLines(e);
 
-    // Pílula «Valor» (Super Premium) — sempre presente; quando o plantão
-    // não tem financeiro, mostra **R$ 0,00** em cinza neutro para deixar
-    // claro ao usuário. Responsiva: usa `FittedBox` para não estourar em
-    // telemóveis estreitos (iPhone SE/Android pequeno) e na web reduzida.
+    // PÃ­lula Â«ValorÂ» (Super Premium) â€” sempre presente; quando o plantÃ£o
+    // nÃ£o tem financeiro, mostra **R$ 0,00** em cinza neutro para deixar
+    // claro ao usuÃ¡rio. Responsiva: usa `FittedBox` para nÃ£o estourar em
+    // telemÃ³veis estreitos (iPhone SE/Android pequeno) e na web reduzida.
     final temValor = e.totalValue > 0;
     final valorBgColor = temValor
         ? AppColors.success.withValues(alpha: 0.10)
@@ -4841,7 +4842,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  jaOrd ? 'Já tirado' : 'A tirar',
+                  jaOrd ? 'JÃ¡ tirado' : 'A tirar',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
@@ -4853,7 +4854,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            title.isEmpty ? 'Plantão' : title,
+            title.isEmpty ? 'PlantÃ£o' : title,
             style: const TextStyle(
               fontWeight: FontWeight.w800,
               fontSize: 15,
@@ -4901,7 +4902,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
               ),
             ),
           _scaleNotesGridBlock(e),
-          // Linha do «Valor» — aparece em ambos os layouts (empilhado e wide),
+          // Linha do Â«ValorÂ» â€” aparece em ambos os layouts (empilhado e wide),
           // garantindo paridade total entre iOS / Android / Web.
           const SizedBox(height: 8),
           Align(
@@ -4977,7 +4978,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     return LayoutBuilder(
       builder: (context, cardConstraints) {
         final w = cardConstraints.maxWidth;
-        // Empilhar data/ações: web mobile e telemóveis; ícones só se for muito estreito
+        // Empilhar data/aÃ§Ãµes: web mobile e telemÃ³veis; Ã­cones sÃ³ se for muito estreito
         final empilhado = w < 520;
         final soIconesBotoes = w < 380;
 
@@ -5110,7 +5111,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     );
   }
 
-  /// Editar no resumo/lista: audiência/compromisso Agenda → formulário completo; plantão → nº escala.
+  /// Editar no resumo/lista: audiÃªncia/compromisso Agenda â†’ formulÃ¡rio completo; plantÃ£o â†’ nÂº escala.
   Future<void> _editarItemNaEscalas(BuildContext context, ScaleEntry e) async {
     if (!widget.profile.hasActiveLicense) {
       mostrarAvisoSeLicencaInativa(context, widget.profile);
@@ -5143,7 +5144,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Nº escala e observações atualizados.'),
+            content: Text('NÂº escala e observaÃ§Ãµes atualizados.'),
           ),
         );
       }
@@ -5159,7 +5160,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     }
   }
 
-  /// Remove da Escalas e sincroniza módulos ligados (Agenda ou Produtividade).
+  /// Remove da Escalas e sincroniza mÃ³dulos ligados (Agenda ou Produtividade).
   Future<void> _syncDeleteScaleEntry(
     ScaleEntry e, {
     BuildContext? dialogContext,
@@ -5215,17 +5216,17 @@ class _ScalesScreenState extends State<ScalesScreen> {
     final isFolgaProd =
         ProdutividadeScaleMirrorService.isProdutividadeFolgaEntry(e);
     final label = isFolgaProd
-        ? 'Folga · Produtividade'
-        : (e.label ?? 'Plantão');
+        ? 'Folga Â· Produtividade'
+        : (e.label ?? 'PlantÃ£o');
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(isFolgaProd ? 'Remover folga?' : 'Remover serviço?'),
+        title: Text(isFolgaProd ? 'Remover folga?' : 'Remover serviÃ§o?'),
         content: Text(
           isFolgaProd
               ? 'Remover a folga de Produtividade do dia ${DateFormat('dd/MM/yyyy', 'pt_BR').format(e.date)}? '
-                  'As ocorrências voltam a ficar disponíveis para marcar outra data.'
-              : 'Remover "$label" do dia ${DateFormat('dd/MM/yyyy', 'pt_BR').format(e.date)}? Esta ação não pode ser desfeita.',
+                  'As ocorrÃªncias voltam a ficar disponÃ­veis para marcar outra data.'
+              : 'Remover "$label" do dia ${DateFormat('dd/MM/yyyy', 'pt_BR').format(e.date)}? Esta aÃ§Ã£o nÃ£o pode ser desfeita.',
         ),
         actions: [
           TextButton(
@@ -5245,7 +5246,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('${e.label ?? "Serviço"} removido.'),
+              content: Text('${e.label ?? "ServiÃ§o"} removido.'),
               backgroundColor: Colors.green),
         );
         return true;
@@ -5254,12 +5255,12 @@ class _ScalesScreenState extends State<ScalesScreen> {
     return false;
   }
 
-  /// Abre sheet com lista de serviços (realizados ou pendentes) com edição e remoção, igual ao painel.
-  /// Barra superior padrão dos previews/sheets do módulo Escalas — pedido
-  /// do usuário: cada preview tem **«Voltar»** à esquerda (paridade total
-  /// iPhone / iOS / Android / Web) + atalho **«X»** à direita.
+  /// Abre sheet com lista de serviÃ§os (realizados ou pendentes) com ediÃ§Ã£o e remoÃ§Ã£o, igual ao painel.
+  /// Barra superior padrÃ£o dos previews/sheets do mÃ³dulo Escalas â€” pedido
+  /// do usuÃ¡rio: cada preview tem **Â«VoltarÂ»** Ã  esquerda (paridade total
+  /// iPhone / iOS / Android / Web) + atalho **Â«XÂ»** Ã  direita.
   /// Mesmo visual usado nos previews do Painel Inicial e nos demais
-  /// módulos (Audiências, Compromissos, Produtividade).
+  /// mÃ³dulos (AudiÃªncias, Compromissos, Produtividade).
   Widget _scalesPreviewTopBar(BuildContext ctx) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 12, 8, 4),
@@ -5329,7 +5330,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     if (entries.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('Nenhum serviço em $titulo.'),
+            content: Text('Nenhum serviÃ§o em $titulo.'),
             behavior: SnackBarBehavior.floating),
       );
       return;
@@ -5352,9 +5353,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
           builder: (_, scrollController) => Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Topo: «Voltar» (esquerda) + atalho «Fechar» (direita).
-              // Mesmo padrão dos previews do Painel Inicial e dos demais
-              // módulos — mantém paridade total iPhone / Android / Web.
+              // Topo: Â«VoltarÂ» (esquerda) + atalho Â«FecharÂ» (direita).
+              // Mesmo padrÃ£o dos previews do Painel Inicial e dos demais
+              // mÃ³dulos â€” mantÃ©m paridade total iPhone / Android / Web.
               _scalesPreviewTopBar(ctx),
               Padding(
                 padding:
@@ -5393,9 +5394,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
   Widget _buildResumoMesDetalhadoItemComRemoverCallback(ScaleEntry e,
       {VoidCallback? onRemoved}) {
     final valorStr =
-        e.isCompromisso ? '—' : CurrencyFormats.formatBRL(e.totalValue);
+        e.isCompromisso ? 'â€”' : CurrencyFormats.formatBRL(e.totalValue);
     final jaOrd = _jaTiradoOrdinarioDisplay(e);
-    final statusStr = jaOrd ? 'Já tirado' : 'A tirar';
+    final statusStr = jaOrd ? 'JÃ¡ tirado' : 'A tirar';
     final statusColor = jaOrd ? Colors.green : Colors.orange.shade700;
     final cat = _badgeCategoriaResumoMes(e);
     final catColors = _badgeCoresCategoria(cat);
@@ -5432,7 +5433,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    e.label ?? 'Plantão',
+                    e.label ?? 'PlantÃ£o',
                     style: const TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 15,
@@ -5461,7 +5462,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                         decoration: BoxDecoration(
                             color: statusColor.withOpacity(0.14),
                             borderRadius: BorderRadius.circular(8)),
-                        child: Text(jaOrd ? 'Já tirado' : 'A tirar',
+                        child: Text(jaOrd ? 'JÃ¡ tirado' : 'A tirar',
                             style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w800,
@@ -5474,7 +5475,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${DateFormat('dd/MM/yyyy', 'pt_BR').format(e.date)} · das ${e.start} às ${e.end}',
+                        '${DateFormat('dd/MM/yyyy', 'pt_BR').format(e.date)} Â· das ${e.start} Ã s ${e.end}',
                         style: TextStyle(
                             fontSize: 12,
                             color: Colors.grey.shade700,
@@ -5490,7 +5491,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Nº escala: ${(e.scaleNumber ?? '').trim().isEmpty ? '' : e.scaleNumber!.trim()}',
+                    'NÂº escala: ${(e.scaleNumber ?? '').trim().isEmpty ? '' : e.scaleNumber!.trim()}',
                     style: TextStyle(
                         fontSize: 12,
                         color: (e.scaleNumber ?? '').trim().isEmpty
@@ -5531,7 +5532,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                     await _confirmarRemoverServicoResumo(context, e);
                 if (deleted && context.mounted) onRemoved?.call();
               },
-              tooltip: 'Remover serviço',
+              tooltip: 'Remover serviÃ§o',
               style: IconButton.styleFrom(
                 backgroundColor: Colors.red.shade50,
                 minimumSize: const Size(40, 40),
@@ -5544,7 +5545,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     );
   }
 
-  /// Card colorido no estilo Premium: borda esquerda pela cor do tipo, valor e status já tirado/não tirado.
+  /// Card colorido no estilo Premium: borda esquerda pela cor do tipo, valor e status jÃ¡ tirado/nÃ£o tirado.
   Widget _buildShiftCardPremium(ScaleEntry e) {
     final jaOrd = _jaTiradoOrdinarioDisplay(e);
     final horas = e.hoursDay + e.hoursNight;
@@ -5584,7 +5585,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    e.label ?? 'Plantão',
+                    e.label ?? 'PlantÃ£o',
                     style: TextStyle(
                         fontWeight: FontWeight.w900,
                         fontSize: fsTitle,
@@ -5657,7 +5658,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                             ),
                           ),
                           child: Text(
-                            jaOrd ? 'Já tirado' : 'A tirar',
+                            jaOrd ? 'JÃ¡ tirado' : 'A tirar',
                             style: TextStyle(
                               fontSize: fsBadge,
                               fontWeight: FontWeight.w900,
@@ -5705,8 +5706,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
     );
   }
 
-  /// Menu ao clicar no dia: botão mágico (período), expresso, incluir, trocar, limpar + resumo.
-  /// Quando há mais de um plantão/compromisso, o usuário pode selecionar um para Limpar ou Trocar apenas esse.
+  /// Menu ao clicar no dia: botÃ£o mÃ¡gico (perÃ­odo), expresso, incluir, trocar, limpar + resumo.
+  /// Quando hÃ¡ mais de um plantÃ£o/compromisso, o usuÃ¡rio pode selecionar um para Limpar ou Trocar apenas esse.
   void _mostrarMenuDiaCalendario(BuildContext context, DateTime day) {
     final dayStart = DateTime(day.year, day.month, day.day);
     final entries = _allEntries
@@ -5875,7 +5876,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                             ultraCompact: isUltraCompact,
                             compact: isCompact,
                             icon: Icons.edit_note_rounded,
-                            label: 'Editar compromisso/plantão',
+                            label: 'Editar compromisso/plantÃ£o',
                             color: const Color(0xFF6366F1),
                             iconGradient: const [
                               Color(0xFF6366F1),
@@ -5907,7 +5908,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                             ultraCompact: isUltraCompact,
                             compact: isCompact,
                             icon: Icons.add_circle_rounded,
-                            label: 'Incluir plantão',
+                            label: 'Incluir plantÃ£o',
                             color: const Color(0xFF10B981),
                             iconGradient: const [
                               Color(0xFF10B981),
@@ -5929,7 +5930,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                             ultraCompact: isUltraCompact,
                             compact: isCompact,
                             icon: Icons.compare_arrows_rounded,
-                            label: 'Trocar plantão',
+                            label: 'Trocar plantÃ£o',
                             color: const Color(0xFF0EA5E9),
                             iconGradient: const [
                               Color(0xFF0EA5E9),
@@ -5966,7 +5967,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                     context, widget.profile);
                                 return;
                               }
-                              // Não fecha o menu do dia: «Voltar» no mágico volta aos botões.
+                              // NÃ£o fecha o menu do dia: Â«VoltarÂ» no mÃ¡gico volta aos botÃµes.
                               unawaited(_gerarEscalaAutomatica(
                                 ctx,
                                 initialDay: dayStart,
@@ -5979,7 +5980,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                             ultraCompact: isUltraCompact,
                             compact: isCompact,
                             icon: Icons.bolt_rounded,
-                            label: 'Plantão expresso',
+                            label: 'PlantÃ£o expresso',
                             color: const Color(0xFFF97316),
                             iconGradient: const [
                               Color(0xFFFB923C),
@@ -6057,7 +6058,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                 }
                               }
                               final lbl = sel != null
-                                  ? 'Limpar plantão selecionado'
+                                  ? 'Limpar plantÃ£o selecionado'
                                   : 'Limpar dia';
                               return _menuActionButton(
                                 ctx2,
@@ -6104,7 +6105,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                   ],
                                 ),
                               ),
-                      // Resumo do dia (cores por frente + valores); toque para selecionar quando há mais de um
+                      // Resumo do dia (cores por frente + valores); toque para selecionar quando hÃ¡ mais de um
                       if (entries.isNotEmpty) ...[
                         const SizedBox(height: 24),
                         const Divider(height: 1),
@@ -6149,7 +6150,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           Padding(
                             padding: const EdgeInsets.only(top: 6),
                             child: Text(
-                              'Toque em um plantão para selecionar e usar Limpar ou Trocar nele.',
+                              'Toque em um plantÃ£o para selecionar e usar Limpar ou Trocar nele.',
                               style: TextStyle(
                                   fontSize: fsResumoHint,
                                   color: Colors.grey.shade600,
@@ -6164,7 +6165,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                   ? e.color
                                   : _corPorTipo(e);
                           final valorStr = e.isCompromisso
-                              ? '—'
+                              ? 'â€”'
                               : CurrencyFormats.formatBRL(e.totalValue);
                           final horas = e.hoursDay + e.hoursNight;
                           final subtitulo = e.isCompromisso
@@ -6304,7 +6305,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                         mainAxisAlignment:
                                             MainAxisAlignment.spaceBetween,
                                         children: [
-                                          Text('Até 23:59 (padrão GO)',
+                                          Text('AtÃ© 23:59 (padrÃ£o GO)',
                                               style: TextStyle(
                                                   fontSize: 12,
                                                   fontWeight: FontWeight.w700,
@@ -6323,7 +6324,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                         mainAxisAlignment:
                                             MainAxisAlignment.spaceBetween,
                                         children: [
-                                          Text('00h às 07h (próx. dia)',
+                                          Text('00h Ã s 07h (prÃ³x. dia)',
                                               style: TextStyle(
                                                   fontSize: 12,
                                                   fontWeight: FontWeight.w700,
@@ -6359,7 +6360,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                               const SizedBox(width: 8),
                                               Expanded(
                                                 child: Text(
-                                                  'O valor referente ao horário 00h00 às 07h ficará para o próximo mês.',
+                                                  'O valor referente ao horÃ¡rio 00h00 Ã s 07h ficarÃ¡ para o prÃ³ximo mÃªs.',
                                                   style: TextStyle(
                                                       fontSize: 11,
                                                       color: Colors
@@ -6372,7 +6373,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                       ] else ...[
                                         const SizedBox(height: 6),
                                         Text(
-                                          'Banco de Horas: 05h às 22h (diurno); 22h01 às 05h (noturno).',
+                                          'Banco de Horas: 05h Ã s 22h (diurno); 22h01 Ã s 05h (noturno).',
                                           style: TextStyle(
                                               fontSize: 10,
                                               color: Colors.grey.shade600),
@@ -6422,7 +6423,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     });
   }
 
-  /// Botão especial do calendário — mesmo shell premium dos demais CTAs do menu (largura total).
+  /// BotÃ£o especial do calendÃ¡rio â€” mesmo shell premium dos demais CTAs do menu (largura total).
   Widget _menuMagicCalendarioCta(
     BuildContext context, {
     required VoidCallback onTap,
@@ -6495,7 +6496,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
               ),
             ),
             child: Text(
-              'BOTÃO MÁGICO',
+              'BOTÃƒO MÃGICO',
               textAlign: align,
               style: TextStyle(
                 fontSize: badgeFs,
@@ -6507,7 +6508,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
           ),
           SizedBox(height: ultraCompact ? 5 : 6),
           Text(
-            'Período automático',
+            'PerÃ­odo automÃ¡tico',
             textAlign: align,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -6521,7 +6522,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
           ),
           const SizedBox(height: 3),
           Text(
-            'Ordinárias · extras · compromissos',
+            'OrdinÃ¡rias Â· extras Â· compromissos',
             textAlign: align,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -6606,7 +6607,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     );
   }
 
-  /// Cartão de ação do menu do dia — compacto, sombra suave e gradiente (alinhado ao premium Financeiro).
+  /// CartÃ£o de aÃ§Ã£o do menu do dia â€” compacto, sombra suave e gradiente (alinhado ao premium Financeiro).
   Widget _menuActionButton(BuildContext context,
       {required IconData icon,
       required String label,
@@ -6720,8 +6721,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
       builder: (_) => AlertDialog(
         title: const Text('Limpar dia?'),
         content: Text(
-            'Remover todos os lançamentos do dia ${DateFormat('dd/MM').format(day)}? '
-            'Se houver folga de Produtividade, as ocorrências voltam a ficar disponíveis para marcar outra data.'),
+            'Remover todos os lanÃ§amentos do dia ${DateFormat('dd/MM').format(day)}? '
+            'Se houver folga de Produtividade, as ocorrÃªncias voltam a ficar disponÃ­veis para marcar outra data.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(_, false),
@@ -6752,22 +6753,22 @@ class _ScalesScreenState extends State<ScalesScreen> {
     }
   }
 
-  /// Remove apenas o plantão/compromisso selecionado (usado quando o usuário escolhe um item no resumo do dia).
+  /// Remove apenas o plantÃ£o/compromisso selecionado (usado quando o usuÃ¡rio escolhe um item no resumo do dia).
   Future<void> _limparPlantao(BuildContext context, ScaleEntry entry) async {
     if (entry.id == null) return;
     final isFolgaProd =
         ProdutividadeScaleMirrorService.isProdutividadeFolgaEntry(entry);
     final label = isFolgaProd
-        ? 'Folga · Produtividade'
-        : (entry.label ?? (entry.isCompromisso ? 'Compromisso' : 'Plantão'));
+        ? 'Folga Â· Produtividade'
+        : (entry.label ?? (entry.isCompromisso ? 'Compromisso' : 'PlantÃ£o'));
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text(isFolgaProd ? 'Remover folga?' : 'Limpar plantão?'),
+        title: Text(isFolgaProd ? 'Remover folga?' : 'Limpar plantÃ£o?'),
         content: Text(
           isFolgaProd
               ? 'Remover a folga de Produtividade do dia ${DateFormat('dd/MM').format(entry.date)}? '
-                  'As ocorrências voltam a ficar disponíveis.'
+                  'As ocorrÃªncias voltam a ficar disponÃ­veis.'
               : 'Remover apenas "$label" do dia ${DateFormat('dd/MM').format(entry.date)}?',
         ),
         actions: [
@@ -6788,8 +6789,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(isFolgaProd
-              ? 'Folga removida. Ocorrências liberadas.'
-              : 'Plantão removido.'),
+              ? 'Folga removida. OcorrÃªncias liberadas.'
+              : 'PlantÃ£o removido.'),
         ),
       );
       setState(() {});
@@ -6806,7 +6807,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
       if (mounted) {
         ScaffoldMessenger.of(this.context).showSnackBar(
           const SnackBar(
-              content: Text('Não há plantão/compromisso neste dia.')),
+              content: Text('NÃ£o hÃ¡ plantÃ£o/compromisso neste dia.')),
         );
       }
       return null;
@@ -6866,9 +6867,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
                   ),
                   title: Text(e.label?.trim().isNotEmpty == true
                       ? e.label!.trim()
-                      : 'Plantão'),
+                      : 'PlantÃ£o'),
                   subtitle: Text(
-                    '${DateFormat('dd/MM/yyyy', 'pt_BR').format(e.date)}\nDas ${e.start} às ${e.end}',
+                    '${DateFormat('dd/MM/yyyy', 'pt_BR').format(e.date)}\nDas ${e.start} Ã s ${e.end}',
                     style: TextStyle(
                       fontSize: _scalesScreenFontSize(ctx, 12),
                       height: 1.35,
@@ -6897,7 +6898,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     );
   }
 
-  /// Folga criada no módulo Produtividade — remover aqui libera as ocorrências.
+  /// Folga criada no mÃ³dulo Produtividade â€” remover aqui libera as ocorrÃªncias.
   Future<void> _dialogoEdicaoSomenteProdutividadeFolga(
     BuildContext context,
     ScaleEntry e,
@@ -6922,7 +6923,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
             const SizedBox(width: 10),
             const Expanded(
               child: Text(
-                'Folga · Produtividade',
+                'Folga Â· Produtividade',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
               ),
             ),
@@ -6935,8 +6936,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
             children: [
               Text(
                 'Data da folga: $dataStr\n\n'
-                'Este dia foi marcado no módulo Produtividade / Ocorrências. '
-                'A cor abaixo é a mesma exibida no calendário de Escalas.',
+                'Este dia foi marcado no mÃ³dulo Produtividade / OcorrÃªncias. '
+                'A cor abaixo Ã© a mesma exibida no calendÃ¡rio de Escalas.',
                 style: TextStyle(
                   fontSize: 14,
                   height: 1.38,
@@ -6959,7 +6960,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Cor no calendário: $cor',
+                      'Cor no calendÃ¡rio: $cor',
                       style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
@@ -6970,7 +6971,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                'Para remover: use «Remover folga» aqui ou «Limpar data da folga» em Produtividade › Ocorrências.',
+                'Para remover: use Â«Remover folgaÂ» aqui ou Â«Limpar data da folgaÂ» em Produtividade â€º OcorrÃªncias.',
                 style: TextStyle(
                   fontSize: 12,
                   height: 1.35,
@@ -6998,10 +6999,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Remover folga do calendário?'),
+        title: const Text('Remover folga do calendÃ¡rio?'),
         content: const Text(
-          'O dia será limpo no calendário de Escalas e as ocorrências vinculadas '
-          'voltam a ficar disponíveis para marcar folga noutra data.',
+          'O dia serÃ¡ limpo no calendÃ¡rio de Escalas e as ocorrÃªncias vinculadas '
+          'voltam a ficar disponÃ­veis para marcar folga noutra data.',
         ),
         actions: [
           TextButton(
@@ -7026,14 +7027,14 @@ class _ScalesScreenState extends State<ScalesScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Folga removida. Calendário limpo e ocorrências liberadas.',
+            'Folga removida. CalendÃ¡rio limpo e ocorrÃªncias liberadas.',
           ),
         ),
       );
     }
   }
 
-  /// Espelho da Agenda (`agenda_*`): formulário completo (Compromisso / Audiência).
+  /// Espelho da Agenda (`agenda_*`): formulÃ¡rio completo (Compromisso / AudiÃªncia).
   Future<void> _abrirEdicaoEspelhoAgenda(
     BuildContext context,
     ScaleEntry e,
@@ -7290,7 +7291,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                       const SizedBox(width: 8),
                       const Expanded(
                         child: Text(
-                          'Editar compromisso/plantão',
+                          'Editar compromisso/plantÃ£o',
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w900,
@@ -7310,7 +7311,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                         FocusManager.instance.primaryFocus?.unfocus(),
                     decoration: const InputDecoration(
                       labelText: 'Nome',
-                      hintText: 'NOME DO PLANTÃO/COMPROMISSO',
+                      hintText: 'NOME DO PLANTÃƒO/COMPROMISSO',
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -7370,9 +7371,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           FocusManager.instance.primaryFocus?.unfocus(),
                       inputFormatters: [UpperCaseTextFormatter()],
                       decoration: const InputDecoration(
-                        labelText: 'Nº Escala',
+                        labelText: 'NÂº Escala',
                         hintText: 'EX.: 123456',
-                        helperText: 'Plantão ou compromisso na escala',
+                        helperText: 'PlantÃ£o ou compromisso na escala',
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -7386,7 +7387,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           maxLen: null,
                         ),
                         icon: const Icon(Icons.content_paste_rounded, size: 18),
-                        label: const Text('Colar nº escala'),
+                        label: const Text('Colar nÂº escala'),
                         style: FilledButton.styleFrom(
                           minimumSize: const Size(0, 40),
                         ),
@@ -7396,8 +7397,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Text(
-                        'SEI e RAI deste item são editados em '
-                        'Audiências/Compromissos.',
+                        'SEI e RAI deste item sÃ£o editados em '
+                        'AudiÃªncias/Compromissos.',
                         style: TextStyle(
                           fontSize: 12.5,
                           color: AppColors.textSecondary,
@@ -7419,8 +7420,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
                     textCapitalization: TextCapitalization.characters,
                     inputFormatters: [UpperCaseTextFormatter()],
                     decoration: const InputDecoration(
-                      labelText: 'Observações',
-                      hintText: 'Detalhes do plantão/compromisso',
+                      labelText: 'ObservaÃ§Ãµes',
+                      hintText: 'Detalhes do plantÃ£o/compromisso',
                       border: OutlineInputBorder(),
                       alignLabelWithHint: true,
                     ),
@@ -7435,7 +7436,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                         maxLen: kScaleNotesMaxLength,
                       ),
                       icon: const Icon(Icons.content_paste_rounded, size: 18),
-                      label: const Text('Colar observação'),
+                      label: const Text('Colar observaÃ§Ã£o'),
                       style: FilledButton.styleFrom(
                         minimumSize: const Size(0, 40),
                       ),
@@ -7470,7 +7471,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                         const SizedBox(width: 10),
                         const Expanded(
                           child: Text(
-                            'Cor do lançamento',
+                            'Cor do lanÃ§amento',
                             style: TextStyle(fontWeight: FontWeight.w700),
                           ),
                         ),
@@ -7498,9 +7499,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
                       value: semFinanceiro,
                       onChanged: (v) => setModalState(() => semFinanceiro = v),
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Lançar como não financeiro'),
+                      title: const Text('LanÃ§ar como nÃ£o financeiro'),
                       subtitle: const Text(
-                          'Desativa cálculo de valor neste lançamento'),
+                          'Desativa cÃ¡lculo de valor neste lanÃ§amento'),
                     ),
                   const SizedBox(height: 14),
                   Row(
@@ -7540,7 +7541,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     final nome = nomeCtrl.text.trim().toUpperCase();
     if (nome.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Informe o nome do compromisso/plantão.')),
+        const SnackBar(content: Text('Informe o nome do compromisso/plantÃ£o.')),
       );
       return;
     }
@@ -7678,7 +7679,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('Compromisso/plantão atualizado com sucesso.')),
+              content: Text('Compromisso/plantÃ£o atualizado com sucesso.')),
         );
         setState(() {});
       }
@@ -7687,7 +7688,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content: Text(
-                  'Erro ao salvar edição: ${err.toString().split('\n').first}')),
+                  'Erro ao salvar ediÃ§Ã£o: ${err.toString().split('\n').first}')),
         );
       }
     }
@@ -7705,7 +7706,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     return null;
   }
 
-  /// Abre seleção: plantões pré-cadastrados (locations) ou criar novo.
+  /// Abre seleÃ§Ã£o: plantÃµes prÃ©-cadastrados (locations) ou criar novo.
   Future<void> _abrirSelecaoPlantao(BuildContext context, DateTime day,
       {bool trocar = false,
       List<ScaleEntry>? entriesExistentes,
@@ -7732,7 +7733,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
           onPeriodoAutomatico: trocar
               ? null
               : () {
-                  // Mantém [SelecaoPlantaoSheet]: voltar do mágico retorna aos botões do dia.
+                  // MantÃ©m [SelecaoPlantaoSheet]: voltar do mÃ¡gico retorna aos botÃµes do dia.
                   unawaited(_gerarEscalaAutomatica(ctx, initialDay: day));
                 },
         ),
@@ -7753,12 +7754,12 @@ class _ScalesScreenState extends State<ScalesScreen> {
     setState(() {});
   }
 
-  /// Abre Configurações → Plantões (lista de plantões recorrentes: editar/excluir/novo).
+  /// Abre ConfiguraÃ§Ãµes â†’ PlantÃµes (lista de plantÃµes recorrentes: editar/excluir/novo).
   void _preCadastrarPlantao(BuildContext context) async {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => LocationsScreen(uid: _userDocId)),
     );
-    // Recarrega lista em background para não travar a volta à tela
+    // Recarrega lista em background para nÃ£o travar a volta Ã  tela
     if (mounted) _loadLocations();
   }
 
@@ -7811,31 +7812,31 @@ class _ScalesScreenState extends State<ScalesScreen> {
             else if (e.isCompromisso)
               ListTile(
                 leading: const Icon(Icons.check_circle_outline),
-                title: const Text('Confirmar conclusão'),
+                title: const Text('Confirmar conclusÃ£o'),
                 subtitle: const Text('Marcar compromisso como realizado'),
                 onTap: () => _confirmarConclusao(ctx, e),
               )
             else if (podeConfirmarConclusao)
               ListTile(
                 leading: const Icon(Icons.check_circle_outline),
-                title: const Text('Confirmar conclusão'),
-                subtitle: const Text('Confirmar que o serviço foi realizado'),
+                title: const Text('Confirmar conclusÃ£o'),
+                subtitle: const Text('Confirmar que o serviÃ§o foi realizado'),
                 onTap: () => _confirmarConclusao(ctx, e),
               )
             else
               ListTile(
                 leading: Icon(Icons.lock_clock_rounded,
                     color: Colors.orange.shade700),
-                title: const Text('Confirmar conclusão'),
+                title: const Text('Confirmar conclusÃ£o'),
                 subtitle: Text(
-                    'Disponível após o fim do turno (${DateFormat('dd/MM').format(fimTurno)} às ${DateFormat('HH:mm').format(fimTurno)})'),
+                    'DisponÃ­vel apÃ³s o fim do turno (${DateFormat('dd/MM').format(fimTurno)} Ã s ${DateFormat('HH:mm').format(fimTurno)})'),
                 enabled: false,
               ),
             ListTile(
               leading: const Icon(Icons.edit_calendar_rounded),
-              title: const Text('Editar compromisso/plantão'),
+              title: const Text('Editar compromisso/plantÃ£o'),
               subtitle: const Text(
-                'Editar nome, data, horário, cor e observações',
+                'Editar nome, data, horÃ¡rio, cor e observaÃ§Ãµes',
               ),
               onTap: () async {
                 Navigator.pop(ctx);
@@ -7852,9 +7853,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
                 final confirm = await showDialog<bool>(
                   context: context,
                   builder: (_) => AlertDialog(
-                    title: const Text('Excluir plantão?'),
+                    title: const Text('Excluir plantÃ£o?'),
                     content: Text(
-                        '${e.label ?? 'Plantão'} em ${DateFormat('dd/MM').format(e.date)} será removido.'),
+                        '${e.label ?? 'PlantÃ£o'} em ${DateFormat('dd/MM').format(e.date)} serÃ¡ removido.'),
                     actions: [
                       TextButton(
                           onPressed: () => Navigator.pop(_, false),
@@ -7872,7 +7873,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                     await _syncDeleteScaleEntry(e, dialogContext: context);
                     if (mounted)
                       ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Plantão excluído.')));
+                          const SnackBar(content: Text('PlantÃ£o excluÃ­do.')));
                   } catch (err) {
                     if (mounted)
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -7888,15 +7889,15 @@ class _ScalesScreenState extends State<ScalesScreen> {
     );
   }
 
-  /// Diálogo de confirmação e gravação de "realizado" (paid).
+  /// DiÃ¡logo de confirmaÃ§Ã£o e gravaÃ§Ã£o de "realizado" (paid).
   Future<void> _confirmarConclusao(
       BuildContext sheetContext, ScaleEntry e) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Confirmar conclusão'),
+        title: const Text('Confirmar conclusÃ£o'),
         content: Text(
-          'Confirmar que o serviço "${e.label ?? 'Plantão'}" do dia ${DateFormat('dd/MM').format(e.date)} foi realizado?',
+          'Confirmar que o serviÃ§o "${e.label ?? 'PlantÃ£o'}" do dia ${DateFormat('dd/MM').format(e.date)} foi realizado?',
         ),
         actions: [
           TextButton(
@@ -7905,7 +7906,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
           FilledButton.icon(
             onPressed: () => Navigator.pop(_, true),
             icon: const Icon(Icons.check_circle_rounded, size: 20),
-            label: const Text('Sim, concluído'),
+            label: const Text('Sim, concluÃ­do'),
           ),
         ],
       ),
@@ -7916,7 +7917,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
       await _scales.doc(e.id).update({'paid': true});
       if (mounted)
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Serviço confirmado como realizado.')));
+            content: Text('ServiÃ§o confirmado como realizado.')));
       setState(() {});
     } catch (err) {
       if (mounted)
@@ -7933,17 +7934,13 @@ class _ScalesScreenState extends State<ScalesScreen> {
       useSafeArea: true,
       useRootNavigator: true,
       barrierColor: Colors.black54,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(26))),
-      builder: (ctx) => FractionallySizedBox(
-        heightFactor: 0.97,
-        child: _LimpezaSheetContent(
-          ref: ref,
-          onLimparSemana: () => _executarLimpeza(semana: ref),
-          onLimparMes: () => _executarLimpeza(mes: ref),
-          onLimparPeriodo: () => _showLimpezaPorPeriodoDialog(),
-          onRemoverUltimosLancamentos: _showRemoverUltimosLancamentosDialog,
-        ),
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => ScaleBulkClearSheet(
+        ref: ref,
+        onClearWeek: () => _executarLimpeza(semana: ref),
+        onClearMonth: () => _executarLimpeza(mes: ref),
+        onClearPeriod: _showLimpezaPorPeriodoDialog,
+        onClearRecentBatches: _showRemoverUltimosLancamentosDialog,
       ),
     );
   }
@@ -7955,7 +7952,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     if (lotes.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text(
-            'Nenhum lançamento recente encontrado no botão mágico nos últimos 3 dias.'),
+            'Nenhum lanÃ§amento recente encontrado no botÃ£o mÃ¡gico nos Ãºltimos 3 dias.'),
       ));
       return;
     }
@@ -7966,7 +7963,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setStateDialog) {
           return AlertDialog(
-            title: const Text('Remover últimos lançamentos'),
+            title: const Text('Remover Ãºltimos lanÃ§amentos'),
             content: SizedBox(
               width: 560,
               child: ConstrainedBox(
@@ -7979,7 +7976,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        'Selecione os lançamentos criados no botão mágico (somente últimos 3 dias).',
+                        'Selecione os lanÃ§amentos criados no botÃ£o mÃ¡gico (somente Ãºltimos 3 dias).',
                         style: TextStyle(
                           fontSize: 13,
                           color: Colors.grey.shade700,
@@ -7990,9 +7987,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
                         final checked = selecionados.contains(lote.batchId);
                         final principal = lote.previewNome.isNotEmpty
                             ? lote.previewNome
-                            : 'Lançamentos automáticos';
+                            : 'LanÃ§amentos automÃ¡ticos';
                         final subtitulo =
-                            '${DateFormat('dd/MM/yyyy HH:mm').format(lote.criadoEm)} · ${lote.quantidade} ${lote.quantidade == 1 ? 'lançamento' : 'lançamentos'}';
+                            '${DateFormat('dd/MM/yyyy HH:mm').format(lote.criadoEm)} Â· ${lote.quantidade} ${lote.quantidade == 1 ? 'lanÃ§amento' : 'lanÃ§amentos'}';
                         final diaFaixa = lote.diaInicio.year ==
                                     lote.diaFim.year &&
                                 lote.diaInicio.month == lote.diaFim.month &&
@@ -8060,7 +8057,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                           ),
                                           const SizedBox(height: 3),
                                           Text(
-                                            'Período dos itens: $diaFaixa',
+                                            'PerÃ­odo dos itens: $diaFaixa',
                                             style: TextStyle(
                                               fontSize: 12,
                                               color: Colors.grey.shade600,
@@ -8198,7 +8195,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
       if (docs.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('Nenhum lançamento encontrado para remover.')));
+              content: Text('Nenhum lanÃ§amento encontrado para remover.')));
         }
         return;
       }
@@ -8229,11 +8226,11 @@ class _ScalesScreenState extends State<ScalesScreen> {
         if (ficouPendente) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
               content: Text(
-                  'Alguns lançamentos ainda não foram removidos no servidor. Tente novamente.')));
+                  'Alguns lanÃ§amentos ainda nÃ£o foram removidos no servidor. Tente novamente.')));
         } else {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
               content: Text(
-                  '${docs.length} ${docs.length == 1 ? 'lançamento removido' : 'lançamentos removidos'} com sucesso no banco e no calendário.')));
+                  '${docs.length} ${docs.length == 1 ? 'lanÃ§amento removido' : 'lanÃ§amentos removidos'} com sucesso no banco e no calendÃ¡rio.')));
         }
         _refreshCalendarView();
       }
@@ -8241,12 +8238,12 @@ class _ScalesScreenState extends State<ScalesScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(
-                'Erro ao remover lançamentos: ${e.toString().split('\n').first}')));
+                'Erro ao remover lanÃ§amentos: ${e.toString().split('\n').first}')));
       }
     }
   }
 
-  /// Abre o dialog para escolher data inicial e final; antes de limpar pede confirmação.
+  /// Abre o dialog para escolher data inicial e final; antes de limpar pede confirmaÃ§Ã£o.
   void _showLimpezaPorPeriodoDialog() {
     DateTime dataInicial = DateTime(_focusedDay.year, _focusedDay.month, 1);
     DateTime dataFinal = DateTime(_focusedDay.year, _focusedDay.month + 1, 0);
@@ -8255,7 +8252,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setState) {
           return AlertDialog(
-            title: const Text('Limpar por período'),
+            title: const Text('Limpar por perÃ­odo'),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -8317,7 +8314,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                   if (fim.isBefore(inicio)) {
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                         content: Text(
-                            'Data final deve ser igual ou posterior à data inicial.')));
+                            'Data final deve ser igual ou posterior Ã  data inicial.')));
                     return;
                   }
                   Navigator.pop(ctx);
@@ -8326,7 +8323,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                     builder: (c) => AlertDialog(
                       title: const Text('Confirmar limpeza'),
                       content: Text(
-                        'Deseja realmente limpar o período de ${DateFormat('dd/MM/yyyy').format(inicio)} a ${DateFormat('dd/MM/yyyy').format(fim)}? Esta ação não pode ser desfeita.',
+                        'Deseja realmente limpar o perÃ­odo de ${DateFormat('dd/MM/yyyy').format(inicio)} a ${DateFormat('dd/MM/yyyy').format(fim)}? Esta aÃ§Ã£o nÃ£o pode ser desfeita.',
                       ),
                       actions: [
                         TextButton(
@@ -8336,7 +8333,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           style: FilledButton.styleFrom(
                               backgroundColor: Colors.red),
                           onPressed: () => Navigator.pop(c, true),
-                          child: const Text('Sim, limpar período'),
+                          child: const Text('Sim, limpar perÃ­odo'),
                         ),
                       ],
                     ),
@@ -8345,7 +8342,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                     await _executarLimpeza(
                         periodoInicio: inicio, periodoFim: fim);
                 },
-                child: const Text('Limpar período'),
+                child: const Text('Limpar perÃ­odo'),
               ),
             ],
           );
@@ -8412,7 +8409,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
       end = DateTime(dia.year, dia.month, dia.day, 23, 59, 59);
       msg = 'Dia ${DateFormat('dd/MM').format(dia)} removido.';
     } else if (semana != null) {
-      // Segunda-feira (weekday=1) como início da semana; evita datas negativas
+      // Segunda-feira (weekday=1) como inÃ­cio da semana; evita datas negativas
       start = DateTime(semana.year, semana.month, semana.day)
           .subtract(Duration(days: semana.weekday - 1));
       end = start.add(const Duration(days: 6));
@@ -8421,7 +8418,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     } else if (mes != null) {
       start = DateTime(mes.year, mes.month, 1);
       end = DateTime(mes.year, mes.month + 1, 0, 23, 59, 59);
-      msg = 'Mês removido.';
+      msg = 'MÃªs removido.';
     } else if (ano != null) {
       start = DateTime(ano.year, 1, 1);
       end = DateTime(ano.year, 12, 31, 23, 59, 59);
@@ -8431,7 +8428,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
           DateTime(periodoInicio.year, periodoInicio.month, periodoInicio.day);
       end = DateTime(
           periodoFim.year, periodoFim.month, periodoFim.day, 23, 59, 59);
-      msg = 'Período removido.';
+      msg = 'PerÃ­odo removido.';
     } else {
       return;
     }
@@ -8444,13 +8441,13 @@ class _ScalesScreenState extends State<ScalesScreen> {
       if (docs.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('Nenhum lançamento encontrado para remover.')));
+              content: Text('Nenhum lanÃ§amento encontrado para remover.')));
         }
         return;
       }
       final ids = docs.map((d) => d.id).toList();
       await _removeAutoLancamentosBySourceIds(ids);
-      // Remoção em lote (até 500 por batch) — mais rápido que um delete por vez
+      // RemoÃ§Ã£o em lote (atÃ© 500 por batch) â€” mais rÃ¡pido que um delete por vez
       const int batchLimit = 500;
       for (int i = 0; i < docs.length; i += batchLimit) {
         final batch = FirebaseFirestore.instance.batch();
@@ -8468,11 +8465,11 @@ class _ScalesScreenState extends State<ScalesScreen> {
         if (check.docs.isNotEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
               content: Text(
-                  'Ainda existem lançamentos no período no banco. Tente remover novamente.')));
+                  'Ainda existem lanÃ§amentos no perÃ­odo no banco. Tente remover novamente.')));
         } else {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
               content:
-                  Text('$msg Remoção concluída no banco e no calendário.')));
+                  Text('$msg RemoÃ§Ã£o concluÃ­da no banco e no calendÃ¡rio.')));
         }
         _refreshCalendarView();
       }
@@ -8517,16 +8514,16 @@ class _ScalesScreenState extends State<ScalesScreen> {
     DateTime? initialDay,
   }) async {
     if (!mounted) return;
-    // iPhone/Safari: precisa de delay para o gesture/context estabilizar; evita modal não abrir.
+    // iPhone/Safari: precisa de delay para o gesture/context estabilizar; evita modal nÃ£o abrir.
     await Future.delayed(const Duration(milliseconds: 150));
     if (!mounted) return;
     _showGeracaoAutomaticaDialog(context, initialDay: initialDay);
   }
 
-  /// Regimes de escala: ciclo em dias e quais dias do ciclo são trabalho (0 = 1º dia do ciclo a partir da data inicial).
-  /// Padrão 24xN: 1 dia de plantão (24h) + folga em horas convertida em dias corridos (N÷24). Ex.: 24x96 → 1+4=5 dias de ciclo.
-  /// [Expediente] usa os dias da semana escolhidos no diálogo (padrão seg–sex).
-  /// [RepeteCadaNdias] plantão exatamente a cada [repetirACadaDias] dias corridos a partir do dia inicial.
+  /// Regimes de escala: ciclo em dias e quais dias do ciclo sÃ£o trabalho (0 = 1Âº dia do ciclo a partir da data inicial).
+  /// PadrÃ£o 24xN: 1 dia de plantÃ£o (24h) + folga em horas convertida em dias corridos (NÃ·24). Ex.: 24x96 â†’ 1+4=5 dias de ciclo.
+  /// [Expediente] usa os dias da semana escolhidos no diÃ¡logo (padrÃ£o segâ€“sex).
+  /// [RepeteCadaNdias] plantÃ£o exatamente a cada [repetirACadaDias] dias corridos a partir do dia inicial.
   static ({int cycleDays, List<int> workDaysInCycle}) _regimePara(
     String regime, {
     int customTrabalho = 24,
@@ -8534,7 +8531,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     int repetirACadaDias = 7,
   }) {
     switch (regime) {
-      /// 16 h de plantão (horários do pré-cadastro escolhido) + 56 h de folga ≈ 2 dias corridos; ciclo 3 dias (1 trabalho + 2 folga).
+      /// 16 h de plantÃ£o (horÃ¡rios do prÃ©-cadastro escolhido) + 56 h de folga â‰ˆ 2 dias corridos; ciclo 3 dias (1 trabalho + 2 folga).
       case '16x56':
         return (cycleDays: 3, workDaysInCycle: [0]);
       case '12x36':
@@ -8555,7 +8552,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
         return (
           cycleDays: 7,
           workDaysInCycle: [0, 1, 2, 3, 4]
-        ); // ignorado: ver expedienteDiasSemana no loop de geração
+        ); // ignorado: ver expedienteDiasSemana no loop de geraÃ§Ã£o
       case 'RepeteCadaNdias':
         {
           final n = repetirACadaDias.clamp(2, 90);
@@ -8563,8 +8560,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
         }
       case 'Personalizado':
         {
-          // Horas totais do ciclo (trabalho + folga) → dias corridos do ciclo (ex.: 12+36=48h→2 dias;
-          // 12+48=60h→3 dias: 1 plantão + 2 folgas). Evita somar ceil(trab)+ceil(folga) e inflar o ciclo.
+          // Horas totais do ciclo (trabalho + folga) â†’ dias corridos do ciclo (ex.: 12+36=48hâ†’2 dias;
+          // 12+48=60hâ†’3 dias: 1 plantÃ£o + 2 folgas). Evita somar ceil(trab)+ceil(folga) e inflar o ciclo.
           final th = customTrabalho.clamp(1, 24 * 31);
           final fh = customFolga.clamp(0, 24 * 365);
           final cycleHours = th + fh;
@@ -8581,7 +8578,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     }
   }
 
-  /// Resumo curto dos dias (1=Seg … 7=Dom) para o botão de expediente.
+  /// Resumo curto dos dias (1=Seg â€¦ 7=Dom) para o botÃ£o de expediente.
   String _resumoDiasExpediente(Set<int> dias) {
     const names = {
       1: 'Seg',
@@ -8589,7 +8586,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
       3: 'Qua',
       4: 'Qui',
       5: 'Sex',
-      6: 'Sáb',
+      6: 'SÃ¡b',
       7: 'Dom'
     };
     final sorted = dias.toList()..sort();
@@ -8622,7 +8619,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     ShiftLocation? location,
     List<int>? diasDaSemana,
 
-    /// Regime Expediente: dias com plantão (DateTime.weekday 1–7). Se vazio, usa seg–sex.
+    /// Regime Expediente: dias com plantÃ£o (DateTime.weekday 1â€“7). Se vazio, usa segâ€“sex.
     List<int>? expedienteDiasSemana,
   }) async {
     final startNorm = DateTime(start.year, start.month, start.day);
@@ -8678,7 +8675,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
         if (!diasSet.contains(d.weekday)) continue;
       } else if (regime == 'Expediente') {
         if (!expedienteSet.contains(d.weekday)) continue;
-        // Expediente: pula feriado nacional em dia útil (seg-sex).
+        // Expediente: pula feriado nacional em dia Ãºtil (seg-sex).
         final isDiaUtil =
             d.weekday >= DateTime.monday && d.weekday <= DateTime.friday;
         if (isDiaUtil) {
@@ -8707,8 +8704,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
       double totalValue = 0;
       double hoursDay = 0, hoursNight = 0;
       double dayRate = 0, nightRate = 0;
-      // Calcular valor SOMENTE se pré-cadastro tiver financeiro ativado (Estado, Município ou Particular).
-      // Se financeiro não está ativado no pré-cadastro, tratar como compromisso (sem valor).
+      // Calcular valor SOMENTE se prÃ©-cadastro tiver financeiro ativado (Estado, MunicÃ­pio ou Particular).
+      // Se financeiro nÃ£o estÃ¡ ativado no prÃ©-cadastro, tratar como compromisso (sem valor).
       final financeiroAtivo = location != null && location!.financialEnabled;
       final considerarValor = !isCompromisso && financeiroAtivo;
       final isParticularValorFixo = considerarValor &&
@@ -8739,7 +8736,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
               rates.noturnoForWeekday(ScaleRates.weekdayToIndex(d.weekday));
         }
       }
-      // Armazenar como compromisso quando não há valor (compromisso explícito ou pré-cadastro sem financeiro)
+      // Armazenar como compromisso quando nÃ£o hÃ¡ valor (compromisso explÃ­cito ou prÃ©-cadastro sem financeiro)
       final isCompromissoEntry =
           isCompromisso || (location != null && !location!.financialEnabled);
       final hoje = DateTime(
@@ -8799,7 +8796,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
         ));
       }
     }
-    // Gravação em lote (até 500 por batch) — evita lentidão de um add por vez
+    // GravaÃ§Ã£o em lote (atÃ© 500 por batch) â€” evita lentidÃ£o de um add por vez
     const int batchLimit = 500;
     try {
       for (int i = 0; i < entriesWithRefs.length; i += batchLimit) {
@@ -8838,16 +8835,16 @@ class _ScalesScreenState extends State<ScalesScreen> {
         String msg;
         if (plantoes > 0 && compromissosAgenda > 0) {
           msg =
-              '$plantoes ${plantoes == 1 ? 'plantão' : 'plantões'} e $compromissosAgenda '
+              '$plantoes ${plantoes == 1 ? 'plantÃ£o' : 'plantÃµes'} e $compromissosAgenda '
               '${compromissosAgenda == 1 ? 'compromisso' : 'compromissos'} gerados '
               '(Escalas + Agenda + Painel).';
         } else if (compromissosAgenda > 0) {
           msg =
               '$compromissosAgenda ${compromissosAgenda == 1 ? 'compromisso' : 'compromissos'} gerados '
-              '(calendário Escalas, Agenda e Painel em aberto).';
+              '(calendÃ¡rio Escalas, Agenda e Painel em aberto).';
         } else {
           msg =
-              '$plantoes ${plantoes == 1 ? 'plantão' : 'plantões'} gerados.';
+              '$plantoes ${plantoes == 1 ? 'plantÃ£o' : 'plantÃµes'} gerados.';
         }
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
         setState(() {});
@@ -8859,7 +8856,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     }
   }
 
-  /// Diálogo: geração automática com regime, período e atalho para plantão.
+  /// DiÃ¡logo: geraÃ§Ã£o automÃ¡tica com regime, perÃ­odo e atalho para plantÃ£o.
   void _showGeracaoAutomaticaDialog(
     BuildContext context, {
     DateTime? initialDay,
@@ -8867,22 +8864,22 @@ class _ScalesScreenState extends State<ScalesScreen> {
     final ref = initialDay ?? _focusedDay;
     int ano = ref.year;
     bool habilitarFinanceiro =
-        false; // Não = compromisso; Sim = plantão/frente paga
+        false; // NÃ£o = compromisso; Sim = plantÃ£o/frente paga
     String tipoGeracao = 'Compromisso';
     String turno = 'Diurno';
     String regime = '24x72';
     int customTrabalho = 24, customFolga = 72;
-    String periodo = 'Intervalo'; // Apenas por período (data inicial e final)
-    // Dia inicial = dia tocado no calendário ou mês focado; evita alinhar ciclo 24x96 ao dia 1 sem querer.
+    String periodo = 'Intervalo'; // Apenas por perÃ­odo (data inicial e final)
+    // Dia inicial = dia tocado no calendÃ¡rio ou mÃªs focado; evita alinhar ciclo 24x96 ao dia 1 sem querer.
     DateTime? dataInicioPer = DateTime(ref.year, ref.month, ref.day);
     DateTime? dataFimPer = DateTime(ref.year, ref.month + 1, 0);
 
-    /// Regime "Repete a cada N dias" (plantões a cada N dias corridos a partir do dia inicial).
+    /// Regime "Repete a cada N dias" (plantÃµes a cada N dias corridos a partir do dia inicial).
     int repetirACadaDiasState = 8;
     final repetirNdiasCtrl = TextEditingController(text: '8');
     ShiftLocation? locSelecionada;
 
-    /// true = Compromisso (sem valor), não exige pré-cadastro; false = Plantão com valor (exige pré-cadastro).
+    /// true = Compromisso (sem valor), nÃ£o exige prÃ©-cadastro; false = PlantÃ£o com valor (exige prÃ©-cadastro).
     bool gerarComoCompromisso = false;
     final nomeCtrl = TextEditingController(text: '');
     final compromissoStartCtrl = TextEditingController(text: '08:00');
@@ -8896,7 +8893,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     /// Para regime "DiaSemana": dias selecionados (1=Segunda .. 7=Domingo).
     Set<int> diasDaSemanaSelecionados = {};
 
-    /// Expediente: dias com plantão (1=Segunda .. 7=Domingo). Padrão seg–sex.
+    /// Expediente: dias com plantÃ£o (1=Segunda .. 7=Domingo). PadrÃ£o segâ€“sex.
     Set<int> expedienteDiasSemana = {1, 2, 3, 4, 5};
     final diaSemanaStartCtrl = TextEditingController(text: '08:00');
     final diaSemanaEndCtrl = TextEditingController(text: '18:00');
@@ -8999,7 +8996,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                         color: Colors.amber.shade700, size: 28),
                                     const SizedBox(width: 10),
                                     const Expanded(
-                                      child: Text('Geração automática',
+                                      child: Text('GeraÃ§Ã£o automÃ¡tica',
                                           style: TextStyle(
                                               fontSize: 22,
                                               fontWeight: FontWeight.bold,
@@ -9009,8 +9006,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                    'Gere plantões com valor (lista de plantões recorrentes) ou compromissos sem valor financeiro. '
-                                    'Compromissos em série também entram no Painel (em aberto) e no módulo Agenda/Audiências.',
+                                    'Gere plantÃµes com valor (lista de plantÃµes recorrentes) ou compromissos sem valor financeiro. '
+                                    'Compromissos em sÃ©rie tambÃ©m entram no Painel (em aberto) e no mÃ³dulo Agenda/AudiÃªncias.',
                                     style: TextStyle(
                                         fontSize: 13,
                                         color: Colors.grey.shade700)),
@@ -9044,7 +9041,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                     Icon(Icons.category_rounded,
                                         size: 18, color: Color(0xFF4338CA)),
                                     SizedBox(width: 8),
-                                    Text('Tipo de geração',
+                                    Text('Tipo de geraÃ§Ã£o',
                                         style: TextStyle(
                                             fontWeight: FontWeight.w900,
                                             letterSpacing: 0.2)),
@@ -9058,7 +9055,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                         width: double.infinity,
                                         child: _magicGradientChoice(
                                           selected: !gerarComoCompromisso,
-                                          label: 'Plantão (lista de plantões recorrentes)',
+                                          label: 'PlantÃ£o (lista de plantÃµes recorrentes)',
                                           icon: Icons.bolt_rounded,
                                           onTap: () => setModalState(() =>
                                               gerarComoCompromisso = false),
@@ -9098,7 +9095,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                       Expanded(
                                         child: _magicGradientChoice(
                                           selected: !gerarComoCompromisso,
-                                          label: 'Plantão (lista de plantões recorrentes)',
+                                          label: 'PlantÃ£o (lista de plantÃµes recorrentes)',
                                           icon: Icons.bolt_rounded,
                                           onTap: () => setModalState(() =>
                                               gerarComoCompromisso = false),
@@ -9170,7 +9167,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                     Text(
                                       gerarComoCompromisso
                                           ? 'Compromisso'
-                                          : 'Plantão da lista de plantões recorrentes',
+                                          : 'PlantÃ£o da lista de plantÃµes recorrentes',
                                       style: const TextStyle(
                                           fontWeight: FontWeight.w900,
                                           letterSpacing: 0.2),
@@ -9180,7 +9177,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                 const SizedBox(height: 8),
                                 if (gerarComoCompromisso) ...[
                                   const Text(
-                                      'Compromisso particular: toque num ícone para preencher rápido — ou abra a lista completa.',
+                                      'Compromisso particular: toque num Ã­cone para preencher rÃ¡pido â€” ou abra a lista completa.',
                                       style: TextStyle(
                                           fontWeight: FontWeight.w600,
                                           fontSize: 13)),
@@ -9217,7 +9214,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                         child: FastTextField(
                                           controller: compromissoStartCtrl,
                                           decoration: InputDecoration(
-                                            labelText: 'Início',
+                                            labelText: 'InÃ­cio',
                                             hintText: '08:00',
                                             border: const OutlineInputBorder(),
                                             isDense: true,
@@ -9225,7 +9222,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                               icon: const Icon(
                                                   Icons.access_time_rounded,
                                                   size: 22),
-                                              tooltip: 'Abrir relógio (24h)',
+                                              tooltip: 'Abrir relÃ³gio (24h)',
                                               onPressed: () async {
                                                 final parts =
                                                     compromissoStartCtrl.text
@@ -9322,7 +9319,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                               icon: const Icon(
                                                   Icons.access_time_rounded,
                                                   size: 22),
-                                              tooltip: 'Abrir relógio (24h)',
+                                              tooltip: 'Abrir relÃ³gio (24h)',
                                               onPressed: () async {
                                                 final parts = compromissoEndCtrl
                                                     .text
@@ -9414,8 +9411,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                     controller: nomeCtrl,
                                     decoration: InputDecoration(
                                       labelText:
-                                          'Descrição — completa com horário',
-                                      hintText: 'EX: REUNIÃO, CULTO, FOLGA',
+                                          'DescriÃ§Ã£o â€” completa com horÃ¡rio',
+                                      hintText: 'EX: REUNIÃƒO, CULTO, FOLGA',
                                       border: const OutlineInputBorder(),
                                       isDense: true,
                                       suffixIcon: IconButton(
@@ -9494,7 +9491,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                     },
                                   ),
                                   const SizedBox(height: 8),
-                                  const Text('Cor no calendário',
+                                  const Text('Cor no calendÃ¡rio',
                                       style: TextStyle(
                                           fontWeight: FontWeight.w600,
                                           fontSize: 12)),
@@ -9542,7 +9539,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                     ),
                                   ),
                                 ] else ...[
-                                  const Text('Plantão (obrigatório para valor)',
+                                  const Text('PlantÃ£o (obrigatÃ³rio para valor)',
                                       style: TextStyle(
                                           fontWeight: FontWeight.w700)),
                                   const SizedBox(height: 6),
@@ -9580,8 +9577,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                       },
                                       icon: Icons.add_rounded,
                                       label: locSelecionada != null
-                                          ? '${locSelecionada!.name} (lista de plantões recorrentes)'
-                                          : 'Selecionar na lista de plantões recorrentes ou criar novo',
+                                          ? '${locSelecionada!.name} (lista de plantÃµes recorrentes)'
+                                          : 'Selecionar na lista de plantÃµes recorrentes ou criar novo',
                                       gradient: locSelecionada != null
                                           ? const [
                                               Color(0xFF059669),
@@ -9599,7 +9596,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                     Padding(
                                       padding: const EdgeInsets.only(top: 8),
                                       child: Text(
-                                          'Selecione um plantão acima para gerar com valor.',
+                                          'Selecione um plantÃ£o acima para gerar com valor.',
                                           style: TextStyle(
                                               fontSize: 12,
                                               color: Colors.orange.shade700,
@@ -9624,7 +9621,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                           const SizedBox(width: 10),
                                           Expanded(
                                             child: Text(
-                                              'Horário: ${locSelecionada!.startTime} às ${locSelecionada!.endTime}  (da lista de plantões recorrentes)',
+                                              'HorÃ¡rio: ${locSelecionada!.startTime} Ã s ${locSelecionada!.endTime}  (da lista de plantÃµes recorrentes)',
                                               style: const TextStyle(
                                                   fontSize: 13,
                                                   fontWeight: FontWeight.w600,
@@ -9815,7 +9812,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                                         regime ==
                                                                 'RepeteCadaNdias'
                                                             ? 'Repete a cada $repetirACadaDiasState dias'
-                                                            : 'Repete a cada … dias',
+                                                            : 'Repete a cada â€¦ dias',
                                                         style: const TextStyle(
                                                             color: Colors.white,
                                                             fontWeight:
@@ -9851,7 +9848,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                                   ),
                                                   const SizedBox(height: 4),
                                                   Text(
-                                                    'Plantão a cada N dias corridos a partir do dia inicial (ex.: 2, 3, 8…).',
+                                                    'PlantÃ£o a cada N dias corridos a partir do dia inicial (ex.: 2, 3, 8â€¦).',
                                                     style: TextStyle(
                                                         color: Colors.white
                                                             .withOpacity(0.9),
@@ -9996,11 +9993,11 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                     children: [1, 2, 3, 4, 5, 6, 7].map((w) {
                                       const labels = {
                                         1: 'Segunda',
-                                        2: 'Terça',
+                                        2: 'TerÃ§a',
                                         3: 'Quarta',
                                         4: 'Quinta',
                                         5: 'Sexta',
-                                        6: 'Sábado',
+                                        6: 'SÃ¡bado',
                                         7: 'Domingo'
                                       };
                                       final sel =
@@ -10023,13 +10020,13 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                     }).toList(),
                                   ),
                                   const SizedBox(height: 10),
-                                  const Text('Horário',
+                                  const Text('HorÃ¡rio',
                                       style: TextStyle(
                                           fontWeight: FontWeight.w700,
                                           fontSize: 13)),
                                   const SizedBox(height: 6),
                                   Text(
-                                      'Clique no relógio ou digite no formato 24h (ex: 08:00, 22:30)',
+                                      'Clique no relÃ³gio ou digite no formato 24h (ex: 08:00, 22:30)',
                                       style: TextStyle(
                                           fontSize: 11,
                                           color: Colors.grey.shade600)),
@@ -10040,7 +10037,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                         child: FastTextField(
                                           controller: diaSemanaStartCtrl,
                                           decoration: InputDecoration(
-                                            labelText: 'Hora início',
+                                            labelText: 'Hora inÃ­cio',
                                             hintText: '08:00',
                                             border: const OutlineInputBorder(),
                                             isDense: true,
@@ -10048,7 +10045,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                               icon: const Icon(
                                                   Icons.access_time_rounded,
                                                   size: 22),
-                                              tooltip: 'Abrir relógio (24h)',
+                                              tooltip: 'Abrir relÃ³gio (24h)',
                                               onPressed: () async {
                                                 final parts = diaSemanaStartCtrl
                                                     .text
@@ -10103,7 +10100,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                               icon: const Icon(
                                                   Icons.access_time_rounded,
                                                   size: 22),
-                                              tooltip: 'Abrir relógio (24h)',
+                                              tooltip: 'Abrir relÃ³gio (24h)',
                                               onPressed: () async {
                                                 final parts = diaSemanaEndCtrl
                                                     .text
@@ -10178,7 +10175,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                     Icon(Icons.date_range_rounded,
                                         size: 18, color: Color(0xFFD97706)),
                                     SizedBox(width: 8),
-                                    Text('Dia inicial e período',
+                                    Text('Dia inicial e perÃ­odo',
                                         style: TextStyle(
                                             fontWeight: FontWeight.w900,
                                             letterSpacing: 0.2)),
@@ -10187,23 +10184,23 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                 const SizedBox(height: 6),
                                 Text(
                                   regime == 'DiaSemana'
-                                      ? 'Serão gerados plantões apenas nos dias da semana marcados acima, entre a data inicial e a data final.'
+                                      ? 'SerÃ£o gerados plantÃµes apenas nos dias da semana marcados acima, entre a data inicial e a data final.'
                                       : regime == 'RepeteCadaNdias'
-                                          ? 'Plantão no dia inicial e depois a cada N dias corridos (ex.: N=8 → mesmo dia do mês “saltando” de 8 em 8 dias).'
+                                          ? 'PlantÃ£o no dia inicial e depois a cada N dias corridos (ex.: N=8 â†’ mesmo dia do mÃªs â€œsaltandoâ€ de 8 em 8 dias).'
                                           : regime == 'Expediente'
-                                              ? 'Expediente: plantões só nos dias marcados no diálogo (padrão seg–sex). Use “Dias: …” para folgar um dia da semana.'
+                                              ? 'Expediente: plantÃµes sÃ³ nos dias marcados no diÃ¡logo (padrÃ£o segâ€“sex). Use â€œDias: â€¦â€ para folgar um dia da semana.'
                                               : regime == 'Personalizado'
-                                                  ? 'Personalizado: informe horas de trabalho e horas de folga no ciclo (ex.: 12 + 48 = 60 h → ciclo de 3 dias: 1 plantão + 2 folgas). O ciclo em dias é (trabalho+folga)÷24 arredondado para cima; quantos dias seguidos de plantão depende das horas de trabalho.'
+                                                  ? 'Personalizado: informe horas de trabalho e horas de folga no ciclo (ex.: 12 + 48 = 60 h â†’ ciclo de 3 dias: 1 plantÃ£o + 2 folgas). O ciclo em dias Ã© (trabalho+folga)Ã·24 arredondado para cima; quantos dias seguidos de plantÃ£o depende das horas de trabalho.'
                                                   : regime == '16x56'
-                                                      ? '16x56: usa o início e o fim do horário do plantão que escolher na lista de plantões recorrentes (ou os horários do compromisso, se gerar sem valor). Ciclo de 3 dias corridos: 1 dia de plantão + 2 dias de folga; depois repete. O dia inicial é sempre o 1.º plantão.'
-                                                      : 'O dia inicial é sempre o 1º plantão. Regimes 24xN: 1 dia plantão + folga em horas ÷24 (ex.: 24x96 = ciclo 5 dias: plantão, 4 folga). 24x144 = ciclo 7; 24x192 = ciclo 9. Ex. 24x72 a partir de 24/02: 24/02, 28/02, 04/03…',
+                                                      ? '16x56: usa o inÃ­cio e o fim do horÃ¡rio do plantÃ£o que escolher na lista de plantÃµes recorrentes (ou os horÃ¡rios do compromisso, se gerar sem valor). Ciclo de 3 dias corridos: 1 dia de plantÃ£o + 2 dias de folga; depois repete. O dia inicial Ã© sempre o 1.Âº plantÃ£o.'
+                                                      : 'O dia inicial Ã© sempre o 1Âº plantÃ£o. Regimes 24xN: 1 dia plantÃ£o + folga em horas Ã·24 (ex.: 24x96 = ciclo 5 dias: plantÃ£o, 4 folga). 24x144 = ciclo 7; 24x192 = ciclo 9. Ex. 24x72 a partir de 24/02: 24/02, 28/02, 04/03â€¦',
                                   style: TextStyle(
                                       fontSize: 13,
                                       color: Colors.grey.shade700),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                    'Período máximo: 24 meses a partir do mês atual.',
+                                    'PerÃ­odo mÃ¡ximo: 24 meses a partir do mÃªs atual.',
                                     style: TextStyle(
                                         fontSize: 12,
                                         color: Colors.orange.shade700,
@@ -10216,7 +10213,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          Text('Dia em que seu plantão começa',
+                                          Text('Dia em que seu plantÃ£o comeÃ§a',
                                               style: TextStyle(
                                                   fontSize: 11,
                                                   fontWeight: FontWeight.w600,
@@ -10256,7 +10253,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          Text('Até quando gerar',
+                                          Text('AtÃ© quando gerar',
                                               style: TextStyle(
                                                   fontSize: 11,
                                                   fontWeight: FontWeight.w600,
@@ -10265,13 +10262,13 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                           OutlinedButton.icon(
                                             onPressed: () async {
                                               final agora = DateTime.now();
-                                              // Trava: sempre 24 meses a partir do mês atual (não além disso)
+                                              // Trava: sempre 24 meses a partir do mÃªs atual (nÃ£o alÃ©m disso)
                                               final limiteAPartirDoMesAtual =
                                                   DateTime(agora.year + 2,
                                                       agora.month, agora.day);
                                               final ini =
                                                   dataInicioPer ?? agora;
-                                              // Também não pode ser mais que 24 meses após a data inicial
+                                              // TambÃ©m nÃ£o pode ser mais que 24 meses apÃ³s a data inicial
                                               final limiteAPartirDoInicio =
                                                   DateTime(ini.year + 2,
                                                       ini.month, ini.day);
@@ -10316,8 +10313,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
                               icon: const Icon(Icons.auto_awesome_rounded),
                               label: Text((gerarComoCompromisso ||
                                       locSelecionada != null)
-                                  ? 'Gerar período'
-                                  : 'Selecione um plantão acima'),
+                                  ? 'Gerar perÃ­odo'
+                                  : 'Selecione um plantÃ£o acima'),
                               style: FilledButton.styleFrom(
                                 backgroundColor: (gerarComoCompromisso ||
                                         locSelecionada != null)
@@ -10369,7 +10366,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                         ScaffoldMessenger.of(context)
                                             .showSnackBar(const SnackBar(
                                           content: Text(
-                                              'Selecione um plantão da lista de plantões recorrentes para gerar com valor.'),
+                                              'Selecione um plantÃ£o da lista de plantÃµes recorrentes para gerar com valor.'),
                                           backgroundColor: Colors.orange,
                                         ));
                                         return;
@@ -10379,7 +10376,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                         ScaffoldMessenger.of(context)
                                             .showSnackBar(const SnackBar(
                                                 content:
-                                                    Text('Defina o período.')));
+                                                    Text('Defina o perÃ­odo.')));
                                         return;
                                       }
                                       if (regime == 'DiaSemana' &&
@@ -10406,7 +10403,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                           ScaffoldMessenger.of(context)
                                               .showSnackBar(const SnackBar(
                                             content: Text(
-                                                'Intervalo “a cada N dias”: use um número entre 2 e 90.'),
+                                                'Intervalo â€œa cada N diasâ€: use um nÃºmero entre 2 e 90.'),
                                             backgroundColor: Colors.orange,
                                           ));
                                           return;
@@ -10422,11 +10419,11 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                         ScaffoldMessenger.of(context)
                                             .showSnackBar(const SnackBar(
                                           content: Text(
-                                              'A data final deve ser igual ou posterior à data inicial.'),
+                                              'A data final deve ser igual ou posterior Ã  data inicial.'),
                                         ));
                                         return;
                                       }
-                                      // Trava 1: máximo 24 meses a partir da data inicial
+                                      // Trava 1: mÃ¡ximo 24 meses a partir da data inicial
                                       final limiteAPartirDoInicio = DateTime(
                                           iniNorm.year + 2,
                                           iniNorm.month,
@@ -10436,12 +10433,12 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                         ScaffoldMessenger.of(context)
                                             .showSnackBar(const SnackBar(
                                           content: Text(
-                                              'O período não pode ultrapassar 24 meses a partir da data inicial. Ajuste a data final.'),
+                                              'O perÃ­odo nÃ£o pode ultrapassar 24 meses a partir da data inicial. Ajuste a data final.'),
                                           backgroundColor: Colors.orange,
                                         ));
                                         return;
                                       }
-                                      // Trava 2: sempre 24 meses a partir do mês atual — não pode gerar além disso
+                                      // Trava 2: sempre 24 meses a partir do mÃªs atual â€” nÃ£o pode gerar alÃ©m disso
                                       final agora = DateTime.now();
                                       final limiteAPartirDoMesAtual = DateTime(
                                           agora.year + 2,
@@ -10452,7 +10449,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                         ScaffoldMessenger.of(context)
                                             .showSnackBar(SnackBar(
                                           content: Text(
-                                            'Período máximo: 24 meses a partir do mês atual. A data final não pode ultrapassar ${DateFormat('dd/MM/yyyy').format(limiteAPartirDoMesAtual)}.',
+                                            'PerÃ­odo mÃ¡ximo: 24 meses a partir do mÃªs atual. A data final nÃ£o pode ultrapassar ${DateFormat('dd/MM/yyyy').format(limiteAPartirDoMesAtual)}.',
                                           ),
                                           backgroundColor: Colors.orange,
                                         ));
@@ -10495,7 +10492,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                       final startStrGerar = startStrGerarRaw;
                                       final endStrGerar = endStrGerarRaw;
                                       Navigator.pop(ctx);
-                                      // Usar a cor do plantão pré-cadastrado quando houver um selecionado.
+                                      // Usar a cor do plantÃ£o prÃ©-cadastrado quando houver um selecionado.
                                       String colorParaGeracao =
                                           selectedColorHex.startsWith('#')
                                               ? selectedColorHex
@@ -10557,7 +10554,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content: Text(
-                  'Não foi possível abrir a geração automática. Tente novamente. ($e)')),
+                  'NÃ£o foi possÃ­vel abrir a geraÃ§Ã£o automÃ¡tica. Tente novamente. ($e)')),
         );
       }
     }
@@ -10571,7 +10568,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     diaSemanaEndCtrl.dispose();
   }
 
-  /// Abre sheet para escolher plantão pré-cadastrado ou criar novo; ao criar, salva em locations e retorna.
+  /// Abre sheet para escolher plantÃ£o prÃ©-cadastrado ou criar novo; ao criar, salva em locations e retorna.
   Future<ShiftLocation?> _abrirSelecaoPlantaoParaGeracao(
       BuildContext context) async {
     return showModalBottomSheet<ShiftLocation>(
@@ -10594,17 +10591,17 @@ class _ScalesScreenState extends State<ScalesScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text('Plantão para geração',
+                const Text('PlantÃ£o para geraÃ§Ã£o',
                     style:
                         TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 8),
                 Text(
-                    'Escolha um plantão da lista de plantões recorrentes ou crie um novo (será salvo no banco de plantões).',
+                    'Escolha um plantÃ£o da lista de plantÃµes recorrentes ou crie um novo (serÃ¡ salvo no banco de plantÃµes).',
                     style:
                         TextStyle(fontSize: 13, color: Colors.grey.shade700)),
                 const SizedBox(height: 20),
                 if (_locations.isNotEmpty) ...[
-                  const Text('Lista de plantões recorrentes',
+                  const Text('Lista de plantÃµes recorrentes',
                       style: TextStyle(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 8),
                   ..._locations.map((loc) => ListTile(
@@ -10646,7 +10643,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                     }
                   },
                   icon: const Icon(Icons.add_rounded),
-                  label: const Text('Criar novo plantão (salva no banco)'),
+                  label: const Text('Criar novo plantÃ£o (salva no banco)'),
                 ),
               ],
             ),
@@ -10805,7 +10802,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
       final msg = tipoGeracao == 'Compromisso'
           ? '$compromissosAgenda ${compromissosAgenda == 1 ? 'compromisso' : 'compromissos'} gerados para $ano '
               '(Escalas, Agenda e Painel em aberto).'
-          : '$total ${total == 1 ? 'lançamento' : 'lançamentos'} gerados para $ano.';
+          : '$total ${total == 1 ? 'lanÃ§amento' : 'lanÃ§amentos'} gerados para $ano.';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(msg)),
       );
@@ -10848,7 +10845,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     );
   }
 
-  /// Resumo do topo do PDF (mês detalhado / alinhado ao painel).
+  /// Resumo do topo do PDF (mÃªs detalhado / alinhado ao painel).
   ResumoBancoHorasPdf _resumoBancoHorasFromEntries(
       List<ScaleEntry> entries, DateTime hoje, ScaleRates rates,
       {bool goiasPerServiceDay = false}) {
@@ -10897,7 +10894,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     );
   }
 
-  /// Abre diálogo de filtro (data inicial/final, padrão Goiás) e gera PDF.
+  /// Abre diÃ¡logo de filtro (data inicial/final, padrÃ£o GoiÃ¡s) e gera PDF.
   Future<void> _gerarPdfEscalas() async {
     DateTime dataInicio = DateTime(_focusedDay.year, _focusedDay.month, 1);
     DateTime dataFim = DateTime(_focusedDay.year, _focusedDay.month + 1, 0);
@@ -10910,7 +10907,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
             children: [
               Icon(Icons.print_outlined, color: AppColors.primary),
               const SizedBox(width: 10),
-              const Text('Relatório de produtividade'),
+              const Text('RelatÃ³rio de produtividade'),
             ],
           ),
           content: SingleChildScrollView(
@@ -10918,7 +10915,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Escolha o período para ver sua produtividade:',
+                const Text('Escolha o perÃ­odo para ver sua produtividade:',
                     style: TextStyle(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 16),
                 Row(
@@ -10940,7 +10937,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                     ),
                     const Padding(
                         padding: EdgeInsets.symmetric(horizontal: 8),
-                        child: Text('até')),
+                        child: Text('atÃ©')),
                     Expanded(
                       child: OutlinedButton.icon(
                         onPressed: () async {
@@ -10962,10 +10959,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
                 CheckboxListTile(
                   value: usarPadraoGoias,
                   onChanged: (v) => setState(() => usarPadraoGoias = v ?? true),
-                  title: const Text('Usar padrão Estado de Goiás',
+                  title: const Text('Usar padrÃ£o Estado de GoiÃ¡s',
                       style: TextStyle(fontWeight: FontWeight.w600)),
                   subtitle: const Text(
-                      'O mês encerra à meia-noite (00:00 do dia seguinte): até 23:59 no último dia; o trecho após 00:00 do 1º entra no mês seguinte. Padrão particular: desmarque.',
+                      'O mÃªs encerra Ã  meia-noite (00:00 do dia seguinte): atÃ© 23:59 no Ãºltimo dia; o trecho apÃ³s 00:00 do 1Âº entra no mÃªs seguinte. PadrÃ£o particular: desmarque.',
                       style: TextStyle(fontSize: 12)),
                   controlAffinity: ListTileControlAffinity.leading,
                   contentPadding: EdgeInsets.zero,
@@ -11027,7 +11024,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
       final jaEff = e.effectiveJaTiradoParaExibicao(hojePdf);
       final statusServico = dataPlantao.isAfter(hojePdf)
           ? 'A confirmar'
-          : (jaEff ? 'Já tirado' : 'A tirar');
+          : (jaEff ? 'JÃ¡ tirado' : 'A tirar');
       final horasLinha = RelatorioService.formatHorasLinhaPdf(hdRow, hnRow);
       final horasCompacta =
           RelatorioService.formatHorasLinhaPdfCompact(hdRow, hnRow);
@@ -11116,7 +11113,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
       escalas.add({
         'data': DateFormat('dd/MM/yyyy').format(e.date),
         'numeroEscala': e.scaleNumber ?? '',
-        'compromisso': e.label ?? 'Plantão',
+        'compromisso': e.label ?? 'PlantÃ£o',
         'valor': valorStr,
         'status': statusServico,
         'horasLinha': horasLinha,
@@ -11131,7 +11128,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     String? notaProximoMes;
     if (usarPadraoGoias && (valorProximoMes > 0 || horasProximoMes > 0)) {
       notaProximoMes =
-          '${horasProximoMes.toStringAsFixed(1)} horas e ${CurrencyFormats.formatBRL(valorProximoMes)} serão pagos no mês seguinte conforme padrão do Estado de Goiás (valor após 23:59).';
+          '${horasProximoMes.toStringAsFixed(1)} horas e ${CurrencyFormats.formatBRL(valorProximoMes)} serÃ£o pagos no mÃªs seguinte conforme padrÃ£o do Estado de GoiÃ¡s (valor apÃ³s 23:59).';
     }
 
     final resumoPdf = ResumoBancoHorasPdf(
@@ -11157,7 +11154,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
         totalPendente: totalPendente,
         notaProximoMes: notaProximoMes,
         suggestedFilename: filenameBase,
-        reportTitle: 'Relatório Banco de Horas — Escalas',
+        reportTitle: 'RelatÃ³rio Banco de Horas â€” Escalas',
         resumoBancoHoras: resumoPdf,
       );
       if (!mounted) return;
@@ -11178,15 +11175,15 @@ class _ScalesScreenState extends State<ScalesScreen> {
     }
   }
 
-  /// Bottom sheet: Padrão GO (hora) / Personalizado (dia), dia + hora inicial/final, valor estimado, controle financeiro, salvar.
-  /// Data do plantão pode ser alterada (retroativa ou futura); ao salvar, grava na data escolhida e calcula valores pelo dia/horário.
+  /// Bottom sheet: PadrÃ£o GO (hora) / Personalizado (dia), dia + hora inicial/final, valor estimado, controle financeiro, salvar.
+  /// Data do plantÃ£o pode ser alterada (retroativa ou futura); ao salvar, grava na data escolhida e calcula valores pelo dia/horÃ¡rio.
   void _abrirFormularioEscala(BuildContext context, {DateTime? initialDate}) {
     DateTime dataEscala = initialDate ?? _selectedDay ?? _focusedDay;
     bool controleFinanceiroAtivo =
         true; // Ativar controle financeiro das horas (calcula e grava valor)
     String employerTypeConfig =
-        'state'; // Estado / Município / Particular — padrão Estado; só aparece quando financeiro ativo
-    String tipoCalculo = 'Padrão GO';
+        'state'; // Estado / MunicÃ­pio / Particular â€” padrÃ£o Estado; sÃ³ aparece quando financeiro ativo
+    String tipoCalculo = 'PadrÃ£o GO';
     bool isCompromisso = false;
     TimeOfDay horaInicial = const TimeOfDay(hour: 8, minute: 0);
     TimeOfDay horaFinal = const TimeOfDay(hour: 18, minute: 0);
@@ -11196,10 +11193,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
     String? estimateKey;
     String selectedColorHex = _hexDiurno;
 
-    /// Padrão do sistema: usuário deve buscar no pré-cadastro antes de salvar.
+    /// PadrÃ£o do sistema: usuÃ¡rio deve buscar no prÃ©-cadastro antes de salvar.
     bool selecionouPreCadastro = false;
 
-    /// Cor hex 6 chars (sem #) do pré-cadastro quando início é diurno; usada ao ajustar só o horário.
+    /// Cor hex 6 chars (sem #) do prÃ©-cadastro quando inÃ­cio Ã© diurno; usada ao ajustar sÃ³ o horÃ¡rio.
     String? preCadastroDiurnoHex6;
     void syncCorPorHorarioInicio() {
       final h = horaInicial.hour;
@@ -11213,9 +11210,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
       }
     }
 
-    // Nome já com horário (igual pré-cadastro): padrão Diurno 08:00–18:00
+    // Nome jÃ¡ com horÃ¡rio (igual prÃ©-cadastro): padrÃ£o Diurno 08:00â€“18:00
     final nomeCtrl = TextEditingController(
-        text: ShiftLocation.fullNameWithSchedule('PLANTÃO', '08:00', '18:00'));
+        text: ShiftLocation.fullNameWithSchedule('PLANTÃƒO', '08:00', '18:00'));
     final valorPersonalizadoCtrl = TextEditingController();
     Navigator.of(context, rootNavigator: true).push<void>(
       MaterialPageRoute<void>(
@@ -11238,7 +11235,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                 ),
               ),
               title: const Text(
-                'Configurar Plantão',
+                'Configurar PlantÃ£o',
                 style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.2),
               ),
               leading: IconButton(
@@ -11257,7 +11254,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                 if (ctx.mounted) setModalState(() => ratesCache = r);
               });
             }
-            // Valor estimado: Padrão GO com dia + hora inicial/final
+            // Valor estimado: PadrÃ£o GO com dia + hora inicial/final
             DateTime startDt = DateTime(dataEscala.year, dataEscala.month,
                 dataEscala.day, horaInicial.hour, horaInicial.minute);
             DateTime endDt = DateTime(dataEscala.year, dataEscala.month,
@@ -11270,7 +11267,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                 !isCompromisso &&
                 controleFinanceiroAtivo &&
                 (employerTypeConfig != 'private' ||
-                    tipoCalculo == 'Padrão GO')) {
+                    tipoCalculo == 'PadrÃ£o GO')) {
               estimateKey = estKey;
               ScaleRatesService()
                   .computeShiftForUid(
@@ -11301,7 +11298,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                     children: [
                       const SizedBox(height: 6),
                       const Text(
-                          'Plantão com valor: busque na lista de plantões recorrentes. Compromisso particular: marque a opção abaixo e salve.',
+                          'PlantÃ£o com valor: busque na lista de plantÃµes recorrentes. Compromisso particular: marque a opÃ§Ã£o abaixo e salve.',
                           style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
@@ -11314,7 +11311,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               Text(
-                                  'Nenhum plantão na lista de plantões recorrentes. Crie o primeiro para depois escolher aqui.',
+                                  'Nenhum plantÃ£o na lista de plantÃµes recorrentes. Crie o primeiro para depois escolher aqui.',
                                   style: TextStyle(
                                       fontSize: 13,
                                       color: Colors.grey.shade700)),
@@ -11332,7 +11329,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                 },
                                 icon: const Icon(Icons.add_rounded),
                                 label: const Text(
-                                    'Criar primeiro plantão na lista de plantões recorrentes'),
+                                    'Criar primeiro plantÃ£o na lista de plantÃµes recorrentes'),
                                 style: OutlinedButton.styleFrom(
                                   padding:
                                       const EdgeInsets.symmetric(vertical: 14),
@@ -11364,13 +11361,13 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                     controller: scrollController,
                                     padding: const EdgeInsets.all(20),
                                     children: [
-                                      const Text('Buscar na lista de plantões recorrentes',
+                                      const Text('Buscar na lista de plantÃµes recorrentes',
                                           style: TextStyle(
                                               fontSize: 18,
                                               fontWeight: FontWeight.w700)),
                                       const SizedBox(height: 8),
                                       Text(
-                                          'Escolha um plantão para preencher os dados automaticamente. Depois, basta marcar a data.',
+                                          'Escolha um plantÃ£o para preencher os dados automaticamente. Depois, basta marcar a data.',
                                           style: TextStyle(
                                               fontSize: 13,
                                               color: Colors.grey.shade600)),
@@ -11399,7 +11396,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                             ),
                                             title: Text(l.name),
                                             subtitle: Text(
-                                                '${ShiftLocation.employerTypeLabel(l.employerType)} · ${l.startTime} - ${l.endTime}'),
+                                                '${ShiftLocation.employerTypeLabel(l.employerType)} Â· ${l.startTime} - ${l.endTime}'),
                                             onTap: () => Navigator.pop(_, l),
                                           )),
                                     ],
@@ -11413,14 +11410,14 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                 employerTypeConfig = loc.employerType.name;
                                 controleFinanceiroAtivo = loc.financialEnabled;
                                 isCompromisso = !loc.financialEnabled;
-                                // Particular + valor fixo: reconhecer por paymentType.fixed OU baseValue > 0 (evita não calcular)
+                                // Particular + valor fixo: reconhecer por paymentType.fixed OU baseValue > 0 (evita nÃ£o calcular)
                                 final isParticularComValorFixo =
                                     loc.employerType == EmployerType.private &&
                                         (loc.paymentType == PaymentType.fixed ||
                                             loc.baseValue > 0);
                                 tipoCalculo = isParticularComValorFixo
                                     ? 'Personalizado'
-                                    : 'Padrão GO';
+                                    : 'PadrÃ£o GO';
                                 if (isParticularComValorFixo &&
                                     loc.baseValue > 0)
                                   valorPersonalizadoCtrl.text =
@@ -11456,7 +11453,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                               }
                             },
                             icon: const Icon(Icons.search_rounded, size: 20),
-                            label: const Text('Buscar na lista de plantões recorrentes'),
+                            label: const Text('Buscar na lista de plantÃµes recorrentes'),
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(
@@ -11469,7 +11466,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                         title:
                             const Text('Ativar controle financeiro das horas'),
                         subtitle: const Text(
-                            'Ative para calcular e registrar o valor (Estado/Município: Padrão GO; Particular: valor combinado).'),
+                            'Ative para calcular e registrar o valor (Estado/MunicÃ­pio: PadrÃ£o GO; Particular: valor combinado).'),
                         value: controleFinanceiroAtivo,
                         onChanged: (v) =>
                             setModalState(() => controleFinanceiroAtivo = v),
@@ -11478,10 +11475,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
                       ),
                       if (controleFinanceiroAtivo && !isCompromisso) ...[
                         const SizedBox(height: 12),
-                        const Text('Vínculo',
+                        const Text('VÃ­nculo',
                             style: TextStyle(fontWeight: FontWeight.w600)),
                         Text(
-                            'Estado/Município: Padrão GO. Particular: vigilantes/serviço privado — informe valor.',
+                            'Estado/MunicÃ­pio: PadrÃ£o GO. Particular: vigilantes/serviÃ§o privado â€” informe valor.',
                             style: TextStyle(
                                 fontSize: 11, color: Colors.grey.shade600)),
                         const SizedBox(height: 12),
@@ -11497,7 +11494,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                     Icons.account_balance_rounded,
                                     employerTypeConfig, () {
                               employerTypeConfig = 'state';
-                              tipoCalculo = 'Padrão GO';
+                              tipoCalculo = 'PadrÃ£o GO';
                             })),
                             const SizedBox(width: 8),
                             Expanded(
@@ -11505,12 +11502,12 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                     ctx,
                                     setModalState,
                                     'municipality',
-                                    'Município',
+                                    'MunicÃ­pio',
                                     AppColors.vinculoMunicipio,
                                     Icons.location_city_rounded,
                                     employerTypeConfig, () {
                               employerTypeConfig = 'municipality';
-                              tipoCalculo = 'Padrão GO';
+                              tipoCalculo = 'PadrÃ£o GO';
                             })),
                             const SizedBox(width: 8),
                             Expanded(
@@ -11532,19 +11529,19 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           !isCompromisso &&
                           employerTypeConfig == 'private') ...[
                         const SizedBox(height: 16),
-                        const Text('Tipo de Remuneração',
+                        const Text('Tipo de RemuneraÃ§Ã£o',
                             style: TextStyle(fontWeight: FontWeight.w600)),
                         const SizedBox(height: 8),
                         Row(
                           children: [
                             ChoiceChip(
-                              label: const Text('Padrão GO (Hora)'),
-                              selected: tipoCalculo == 'Padrão GO',
+                              label: const Text('PadrÃ£o GO (Hora)'),
+                              selected: tipoCalculo == 'PadrÃ£o GO',
                               onSelected: (_) => setModalState(
-                                  () => tipoCalculo = 'Padrão GO'),
+                                  () => tipoCalculo = 'PadrÃ£o GO'),
                               selectedColor: const Color(0xFF2962FF),
                               labelStyle: TextStyle(
-                                  color: tipoCalculo == 'Padrão GO'
+                                  color: tipoCalculo == 'PadrÃ£o GO'
                                       ? Colors.white
                                       : Colors.black87),
                             ),
@@ -11567,7 +11564,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           BrlAmountTextField(
                             controller: valorPersonalizadoCtrl,
                             decoration: InputDecoration(
-                              labelText: 'Valor total / diária (R\$)',
+                              labelText: 'Valor total / diÃ¡ria (R\$)',
                               hintText: '0,00',
                               filled: true,
                               fillColor: Colors.grey.shade50,
@@ -11603,7 +11600,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                       ),
                       if (isCompromisso) ...[
                         const SizedBox(height: 12),
-                        const Text('Horário do compromisso',
+                        const Text('HorÃ¡rio do compromisso',
                             style: TextStyle(fontWeight: FontWeight.w600)),
                         const SizedBox(height: 8),
                         Row(
@@ -11665,17 +11662,17 @@ class _ScalesScreenState extends State<ScalesScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                            'Nome será exibido com o horário (ex: FOLGA 08:00 ÀS 18:00). Edite o texto abaixo.',
+                            'Nome serÃ¡ exibido com o horÃ¡rio (ex: FOLGA 08:00 Ã€S 18:00). Edite o texto abaixo.',
                             style: TextStyle(
                                 fontSize: 11, color: Colors.grey.shade600)),
                       ],
                       if (!isCompromisso) ...[
                         const SizedBox(height: 16),
-                        const Text('Dia e horário do plantão',
+                        const Text('Dia e horÃ¡rio do plantÃ£o',
                             style: TextStyle(fontWeight: FontWeight.w700)),
                         const SizedBox(height: 4),
                         Text(
-                            'Toque na data para alterar (retroativa ou futura). O plantão será lançado na data escolhida.',
+                            'Toque na data para alterar (retroativa ou futura). O plantÃ£o serÃ¡ lanÃ§ado na data escolhida.',
                             style: TextStyle(
                                 fontSize: 12, color: Colors.grey.shade600)),
                         const SizedBox(height: 8),
@@ -11788,7 +11785,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           ],
                         ),
                         if ((employerTypeConfig != 'private' ||
-                                tipoCalculo == 'Padrão GO') &&
+                                tipoCalculo == 'PadrÃ£o GO') &&
                             estimateRes != null) ...[
                           const SizedBox(height: 12),
                           Container(
@@ -11822,12 +11819,12 @@ class _ScalesScreenState extends State<ScalesScreen> {
                         controller: nomeCtrl,
                         decoration: InputDecoration(
                           labelText: isCompromisso
-                              ? 'Nome (base) * — horário completa automaticamente'
+                              ? 'Nome (base) * â€” horÃ¡rio completa automaticamente'
                               : 'Nome do Compromisso / Escala *',
                           border: const OutlineInputBorder(),
                           hintText: isCompromisso
-                              ? 'EX: FOLGA, CULTO, REUNIÃO'
-                              : 'EX: PLANTÃO NOTURNO - GO',
+                              ? 'EX: FOLGA, CULTO, REUNIÃƒO'
+                              : 'EX: PLANTÃƒO NOTURNO - GO',
                         ),
                         textCapitalization: TextCapitalization.characters,
                         inputFormatters: [UpperCaseTextFormatter()],
@@ -11849,7 +11846,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                       ),
                       const SizedBox(height: 12),
                       const SizedBox(height: 14),
-                      const Text('Cor no calendário (identifique lugar/tipo)',
+                      const Text('Cor no calendÃ¡rio (identifique lugar/tipo)',
                           style: TextStyle(
                               fontWeight: FontWeight.w600, fontSize: 13)),
                       const SizedBox(height: 8),
@@ -11912,7 +11909,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  'Plantão será lançado em ${DateFormat('dd/MM/yyyy').format(dataEscala)}. Valor calculado conforme dia e horário.',
+                                  'PlantÃ£o serÃ¡ lanÃ§ado em ${DateFormat('dd/MM/yyyy').format(dataEscala)}. Valor calculado conforme dia e horÃ¡rio.',
                                   style: TextStyle(
                                       fontSize: 12,
                                       color: Colors.blue.shade900,
@@ -11927,14 +11924,14 @@ class _ScalesScreenState extends State<ScalesScreen> {
                         Padding(
                           padding: const EdgeInsets.only(bottom: 8),
                           child: Text(
-                              'Clique em "Buscar na lista de plantões recorrentes" e escolha um plantão para salvar com valor. Ou marque "Compromisso particular" para sem valor.',
+                              'Clique em "Buscar na lista de plantÃµes recorrentes" e escolha um plantÃ£o para salvar com valor. Ou marque "Compromisso particular" para sem valor.',
                               style: TextStyle(
                                   fontSize: 12, color: Colors.orange.shade700)),
                         ),
                       if (selecionouPreCadastro || isCompromisso) ...[
                         const SizedBox(height: 8),
                         Text(
-                          'Lembretes usam o padrão de Configurações → Notificações.',
+                          'Lembretes usam o padrÃ£o de ConfiguraÃ§Ãµes â†’ NotificaÃ§Ãµes.',
                           style: TextStyle(
                             fontSize: 11.5,
                             color: Colors.grey.shade600,
@@ -11969,8 +11966,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                   }
                                   if (faltando.isNotEmpty) {
                                     final texto = faltando.length == 1
-                                        ? 'Não foi possível salvar. Preencha: ${faltando.single} (obrigatório).'
-                                        : 'Não foi possível salvar. Campos obrigatórios: ${faltando.join(' e ')}.';
+                                        ? 'NÃ£o foi possÃ­vel salvar. Preencha: ${faltando.single} (obrigatÃ³rio).'
+                                        : 'NÃ£o foi possÃ­vel salvar. Campos obrigatÃ³rios: ${faltando.join(' e ')}.';
                                     ScaffoldMessenger.of(context).showSnackBar(
                                         SnackBar(content: Text(texto)));
                                     return;
@@ -11994,7 +11991,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                             valorPersonalizadoCtrl.text) ??
                                         0;
                                   } else {
-                                    // Padrão GO: usa dia + hora inicial/final selecionados
+                                    // PadrÃ£o GO: usa dia + hora inicial/final selecionados
                                     final startDt = DateTime(
                                         dataEscala.year,
                                         dataEscala.month,
@@ -12031,19 +12028,19 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                         ScaleRates.weekdayToIndex(
                                             dataEscala.weekday));
                                   }
-                                  // Cor escolhida na paleta (ou padrão por tipo)
+                                  // Cor escolhida na paleta (ou padrÃ£o por tipo)
                                   final colorHex =
                                       selectedColorHex.startsWith('#')
                                           ? selectedColorHex
                                           : '#$selectedColorHex';
-                                  // Lembretes: opcionalmente personalizados neste formulário (campo reminderLeads na escala).
-                                  // Plantão retroativo: data no passado = usuário esqueceu de lançar — marcar já realizado
+                                  // Lembretes: opcionalmente personalizados neste formulÃ¡rio (campo reminderLeads na escala).
+                                  // PlantÃ£o retroativo: data no passado = usuÃ¡rio esqueceu de lanÃ§ar â€” marcar jÃ¡ realizado
                                   final hoje = DateTime(DateTime.now().year,
                                       DateTime.now().month, DateTime.now().day);
                                   final isRetroativo =
                                       dataEscala.isBefore(hoje);
-                                  // Iniciais não são mais campo de entrada; manter apenas auto-geração
-                                  // para compatibilidade com dados antigos e notificações.
+                                  // Iniciais nÃ£o sÃ£o mais campo de entrada; manter apenas auto-geraÃ§Ã£o
+                                  // para compatibilidade com dados antigos e notificaÃ§Ãµes.
                                   final autoAbbrev =
                                       ShiftLocation.abbreviationFromName(
                                           nomeBase);
@@ -12116,7 +12113,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                       colorHex: colorHex,
                                       employerType: employerTypeConfig,
                                     );
-                                    // Gerar pré-cadastro: salva em locations para o usuário escolher em outras datas
+                                    // Gerar prÃ©-cadastro: salva em locations para o usuÃ¡rio escolher em outras datas
                                     final locHex = colorHex.startsWith('#')
                                         ? colorHex
                                         : '#$colorHex';
@@ -12135,7 +12132,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                                 valorPersonalizadoCtrl.text) ??
                                             0)
                                         : 0.0;
-                                    // Usar mesmas iniciais da escala para o pré-cadastro (frente de serviço)
+                                    // Usar mesmas iniciais da escala para o prÃ©-cadastro (frente de serviÃ§o)
                                     final locMap = <String, dynamic>{
                                       'name': nomeComHorario,
                                       'abbreviation': abbrevFinal.isNotEmpty
@@ -12180,7 +12177,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                       });
                                       _ensureScalesStreamBound();
                                     }
-                                    // Mostrar opção: Novo Plantão (voltar ao calendário) ou Finalizar (fechar e voltar ao calendário)
+                                    // Mostrar opÃ§Ã£o: Novo PlantÃ£o (voltar ao calendÃ¡rio) ou Finalizar (fechar e voltar ao calendÃ¡rio)
                                     if (ctx.mounted) {
                                       await showDialog<void>(
                                         context: ctx,
@@ -12192,11 +12189,11 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                                   color: AppColors.success,
                                                   size: 28),
                                               SizedBox(width: 12),
-                                              Text('Plantão salvo'),
+                                              Text('PlantÃ£o salvo'),
                                             ],
                                           ),
                                           content: const Text(
-                                            'Plantão salvo na agenda e lista de plantões recorrentes atualizada. Na próxima vez, clique na data e escolha este plantão.',
+                                            'PlantÃ£o salvo na agenda e lista de plantÃµes recorrentes atualizada. Na prÃ³xima vez, clique na data e escolha este plantÃ£o.',
                                             style: TextStyle(height: 1.4),
                                           ),
                                           actions: [
@@ -12206,7 +12203,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                                 if (ctx.mounted)
                                                   Navigator.pop(ctx);
                                               },
-                                              child: const Text('Novo Plantão'),
+                                              child: const Text('Novo PlantÃ£o'),
                                             ),
                                             FilledButton(
                                               onPressed: () {
@@ -12248,154 +12245,6 @@ class _ScalesScreenState extends State<ScalesScreen> {
   }
 }
 
-/// Conteúdo da sheet de limpeza: opções Semana, Mês e Por período. Dia: clicar na data e limpar.
-class _LimpezaSheetContent extends StatelessWidget {
-  final DateTime ref;
-  final VoidCallback onLimparSemana;
-  final VoidCallback onLimparMes;
-  final VoidCallback onLimparPeriodo;
-  final VoidCallback onRemoverUltimosLancamentos;
-
-  const _LimpezaSheetContent({
-    required this.ref,
-    required this.onLimparSemana,
-    required this.onLimparMes,
-    required this.onLimparPeriodo,
-    required this.onRemoverUltimosLancamentos,
-  });
-
-  Widget _opcao(BuildContext ctx, String titulo, String subtitulo,
-      IconData icon, VoidCallback onTap) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: Colors.red.shade50,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Icon(icon, color: Colors.red.shade700, size: 28),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(titulo,
-                          style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 16,
-                              color: Colors.red.shade800)),
-                      Text(subtitulo,
-                          style: TextStyle(
-                              fontSize: 12, color: Colors.grey.shade700)),
-                    ],
-                  ),
-                ),
-                Icon(Icons.chevron_right_rounded, color: Colors.red.shade700),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bodyTop = MediaQuery.paddingOf(context).top;
-    return SafeArea(
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
-        ),
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(20, bodyTop > 0 ? 8 : 16, 20, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 42,
-                  height: 5,
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                ),
-              ),
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text('Remover escalas',
-                        style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w900,
-                            color: Color(0xFF1A237E))),
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close_rounded),
-                    tooltip: 'Fechar',
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Para remover um dia, clique na data no calendário. Esta ação não pode ser desfeita.',
-                style: TextStyle(fontSize: 15, color: Colors.grey.shade700),
-              ),
-              const SizedBox(height: 20),
-              _opcao(
-                  context,
-                  'Semana',
-                  'Remover plantões da semana do dia ${DateFormat('dd/MM').format(ref)}',
-                  Icons.date_range_rounded, () {
-                Navigator.pop(context);
-                onLimparSemana();
-              }),
-              _opcao(
-                  context,
-                  'Mês',
-                  'Remover plantões de ${DateFormat('MMMM', 'pt_BR').format(ref)}/${ref.year}',
-                  Icons.calendar_month_rounded, () {
-                Navigator.pop(context);
-                onLimparMes();
-              }),
-              _opcao(
-                  context,
-                  'Por período',
-                  'Definir data inicial e data final para remover plantões',
-                  Icons.event_rounded, () {
-                Navigator.pop(context);
-                onLimparPeriodo();
-              }),
-              _opcao(
-                  context,
-                  'Remover últimos lançamentos',
-                  'Preview dos lotes criados pelo botão mágico (últimos 3 dias)',
-                  Icons.history_toggle_off_rounded, () {
-                Navigator.pop(context);
-                onRemoverUltimosLancamentos();
-              }),
-              const Spacer(),
-              FilledButton.tonal(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancelar'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _MagicBatchAccumulator {
   final String batchId;
   DateTime criadoEm;
@@ -12432,7 +12281,7 @@ class _MagicBatchPreview {
   });
 }
 
-/// Diálogo: escolher dias da semana do expediente (DateTime.weekday 1–7).
+/// DiÃ¡logo: escolher dias da semana do expediente (DateTime.weekday 1â€“7).
 class _ExpedienteDiasSemanaDialog extends StatefulWidget {
   final Set<int> initial;
 
@@ -12447,11 +12296,11 @@ class _ExpedienteDiasSemanaDialogState
     extends State<_ExpedienteDiasSemanaDialog> {
   static const List<(String label, int weekday)> _itens = [
     ('Segunda-feira', DateTime.monday),
-    ('Terça-feira', DateTime.tuesday),
+    ('TerÃ§a-feira', DateTime.tuesday),
     ('Quarta-feira', DateTime.wednesday),
     ('Quinta-feira', DateTime.thursday),
     ('Sexta-feira', DateTime.friday),
-    ('Sábado', DateTime.saturday),
+    ('SÃ¡bado', DateTime.saturday),
     ('Domingo', DateTime.sunday),
   ];
 
@@ -12478,7 +12327,7 @@ class _ExpedienteDiasSemanaDialogState
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Marque os dias em que há expediente. Se tiver folga em um dia da semana, desmarque esse dia.',
+              'Marque os dias em que hÃ¡ expediente. Se tiver folga em um dia da semana, desmarque esse dia.',
               style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
             ),
             const SizedBox(height: 12),
@@ -12528,7 +12377,7 @@ class _ExpedienteDiasSemanaDialogState
   }
 }
 
-/// Pintor para divisão diagonal na célula do calendário (2 frentes de serviço).
+/// Pintor para divisÃ£o diagonal na cÃ©lula do calendÃ¡rio (2 frentes de serviÃ§o).
 class _DiagonalSplitPainter extends CustomPainter {
   final Color colorTopLeft;
   final Color colorBottomRight;
@@ -12538,14 +12387,14 @@ class _DiagonalSplitPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Triângulo topo-esquerda: (0,0) -> (size.width,0) -> (0,size.height)
+    // TriÃ¢ngulo topo-esquerda: (0,0) -> (size.width,0) -> (0,size.height)
     final pathTopLeft = Path()
       ..moveTo(0, 0)
       ..lineTo(size.width, 0)
       ..lineTo(0, size.height)
       ..close();
     canvas.drawPath(pathTopLeft, Paint()..color = colorTopLeft);
-    // Triângulo base-direita: (size.width,0) -> (size.width,size.height) -> (0,size.height)
+    // TriÃ¢ngulo base-direita: (size.width,0) -> (size.width,size.height) -> (0,size.height)
     final pathBottomRight = Path()
       ..moveTo(size.width, 0)
       ..lineTo(size.width, size.height)
@@ -12558,7 +12407,7 @@ class _DiagonalSplitPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-/// Pintor para N plantões no mesmo dia: 2 = diagonal; 3+ = fatias angulares do centro (fracionamento).
+/// Pintor para N plantÃµes no mesmo dia: 2 = diagonal; 3+ = fatias angulares do centro (fracionamento).
 class _CalendarDayNPartsPainter extends CustomPainter {
   final List<Color> colors;
 
@@ -12591,7 +12440,7 @@ class _CalendarDayNPartsPainter extends CustomPainter {
     final cx = size.width / 2;
     final cy = size.height / 2;
     final n = colors.length;
-    const startAngle = -math.pi / 2; // topo (-90°)
+    const startAngle = -math.pi / 2; // topo (-90Â°)
     for (var i = 0; i < n; i++) {
       final angle1 = startAngle + (i * 2 * math.pi / n);
       final angle2 = startAngle + ((i + 1) * 2 * math.pi / n);
@@ -12609,7 +12458,7 @@ class _CalendarDayNPartsPainter extends CustomPainter {
     }
   }
 
-  /// Interseção do raio (centro cx,cy + ângulo) com a borda do retângulo [0,w]x[0,h].
+  /// InterseÃ§Ã£o do raio (centro cx,cy + Ã¢ngulo) com a borda do retÃ¢ngulo [0,w]x[0,h].
   Offset _rayRectIntersection(
       double cx, double cy, double angle, double w, double h) {
     final dx = math.cos(angle);
