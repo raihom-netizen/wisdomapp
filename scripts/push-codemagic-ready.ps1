@@ -73,8 +73,11 @@ try {
         }
     }
 
-    $pushTargets = @($target)
-    if ($versionBranch -and ($versionBranch -ne $target)) { $pushTargets += $versionBranch }
+    $pushTargets = @("main", $target)
+    if ($versionBranch -and ($versionBranch -ne $target) -and ($versionBranch -ne "main")) {
+        $pushTargets += $versionBranch
+    }
+    $pushTargets = $pushTargets | Select-Object -Unique
 
     foreach ($tb in $pushTargets) {
         Write-Host "  [Codemagic Git] Enviando HEAD -> origin/$tb ..." -ForegroundColor Gray
@@ -87,7 +90,7 @@ try {
     }
 
     Write-Host "  [Codemagic Git] OK - remoto: $($pushTargets -join ', ')." -ForegroundColor Green
-    Write-Host "  No CodeMagic: Start new build na branch '$versionBranch' ou '$target'." -ForegroundColor Cyan
+    Write-Host "  CodeMagic dispara automaticamente em push para main ou codemagic-*-ready." -ForegroundColor Cyan
 }
 finally {
     Pop-Location

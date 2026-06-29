@@ -13,7 +13,6 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'delegate_access_service.dart';
 import 'push_notification_service.dart';
 import 'offline_credentials_store.dart';
-import 'login_preferences.dart';
 import '../models/user_profile.dart';
 import '../services/user_profile_startup_cache.dart';
 import '../utils/firestore_retry.dart';
@@ -226,7 +225,7 @@ class AuthService {
         data['cpfMasked'] = maskCpf(cpfDigits);
         final userSnap = await ref.get();
         emailToUse ??= (userSnap.data()?['email'] ?? '').toString().trim().toLowerCase();
-        if (emailToUse != null && emailToUse.isNotEmpty) {
+        if (emailToUse.isNotEmpty) {
           await _db.collection('cpf_index').doc(cpfDigits).set({
             'uid': uid,
             'email': emailToUse,

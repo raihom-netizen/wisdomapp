@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
@@ -9,7 +8,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../utils/user_display_name.dart';
 import '../services/login_preferences.dart';
 import '../services/course_videos_cache_service.dart';
-import '../services/app_session_cache.dart';
 import '../services/account_switch_flow.dart';
 import '../services/delegate_access_service.dart';
 import '../services/auth_service.dart';
@@ -189,7 +187,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     try {
       await FirebaseFirestore.instance.waitForPendingWrites();
     } catch (_) {}
-    unawaited(PendingStorageUploadService.drainAll().catchError((_) {}));
+    unawaited(PendingStorageUploadService.drainAll().catchError((_) => 0));
     // Só limpa RAM; sem notificar telas inativas (evita recálculo em massa).
     ScaleRatesService().invalidateMemory(null, false);
   }
@@ -1134,9 +1132,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           .collection('settings')
           .doc('backup');
       final snap = await ref.get();
-      final data = Map<String, dynamic>.from(
-        (snap.data ?? <String, dynamic>{}) as Map,
-      );
+      final data = Map<String, dynamic>.from(snap.data() ?? <String, dynamic>{});
       final enabled = (data['enabled'] ?? false) as bool;
       if (!enabled) return;
       final frequency = (data['frequency'] ?? 'daily') as String;
@@ -1344,14 +1340,17 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         if (profile.hasActiveLicense && !_onboardingChecked) {
           _onboardingChecked = true;
           WidgetsBinding.instance.addPostFrameCallback((_) async {
+            if (!mounted) return;
+            final nav = Navigator.of(context);
             final shouldShow = await OnboardingScreen.shouldShow();
-            if (mounted && shouldShow) {
-              await Navigator.of(context).push<void>(
+            if (!mounted) return;
+            if (shouldShow) {
+              await nav.push<void>(
                 MaterialPageRoute(
                   builder: (_) => OnboardingScreen(
                     onComplete: () async {
                       await OnboardingScreen.markDone();
-                      if (context.mounted) Navigator.of(context).pop();
+                      nav.pop();
                     },
                   ),
                 ),
@@ -1361,7 +1360,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
             final prefs = await SharedPreferences.getInstance();
             if (!(prefs.getBool('welcome_first_shown') ?? false)) {
               prefs.setBool('welcome_first_shown', true);
-              if (!mounted) return;
+              if (!context.mounted) return;
               showDialog<void>(
                 context: context,
                 builder: (ctx) => AlertDialog(
@@ -2414,56 +2413,6 @@ class _FullscreenModuleWrapper extends StatelessWidget {
   }
 }
 
-/// Subtítulo no header quando a licença está vencida: mensagem em vermelho + link para renovar.
-class _LicenseExpiredSubtitle extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _LicenseExpiredSubtitle({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: RichText(
-        overflow: TextOverflow.ellipsis,
-        maxLines: 2,
-        text: TextSpan(
-          style: const TextStyle(
-            fontSize: 12,
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-            height: 1.3,
-          ),
-          children: [
-            const TextSpan(
-              text: 'Licença vencida. ',
-              style: TextStyle(
-                color: Color(0xFFFF6B6B),
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const TextSpan(
-              text:
-                  'Não fique sem usar o WISDOMAPP, renove agora sua licença ',
-            ),
-            TextSpan(
-              text: 'clicando aqui',
-              style: const TextStyle(
-                fontWeight: FontWeight.w800,
-                decoration: TextDecoration.underline,
-                decorationColor: Colors.white,
-              ),
-              recognizer: TapGestureRecognizer()..onTap = onTap,
-            ),
-            const TextSpan(text: '.'),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _PaymentSuccessBanner extends StatelessWidget {
   final UserProfile profile;
   final DateTime licenseExpiresAt;
@@ -2663,11 +2612,12 @@ class _LicenseBannerState extends State<_LicenseBanner> {
       final saved = prefs.getString(_prefsKey) ?? '';
       final current =
           '${widget.licenseExpiresAt.year}-${widget.licenseExpiresAt.month}-${widget.licenseExpiresAt.day}';
-      if (mounted)
+      if (mounted) {
         setState(() {
           _dismissed = saved == current;
           _loading = false;
         });
+      }
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }

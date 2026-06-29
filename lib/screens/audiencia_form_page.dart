@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart' hide showDatePicker;
@@ -10,7 +8,6 @@ import '../constants/color_palette.dart';
 import '../constants/field_text_limits.dart';
 import '../models/user_profile.dart';
 import '../services/agenda_scale_mirror_service.dart';
-import '../theme/app_colors.dart';
 import '../theme/gemini_theme.dart';
 import '../utils/keyboard_form_scaffold.dart';
 import '../utils/premium_upgrade.dart';
