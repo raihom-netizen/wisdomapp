@@ -13,6 +13,7 @@ import '../services/compromisso_reminder_service.dart';
 import '../services/finance_accounts_service.dart';
 import '../services/fixed_expense_preferences_service.dart';
 import '../services/fixed_income_preferences_service.dart';
+import '../services/apple_calendar_sync_service.dart';
 import '../services/google_calendar_sync_service.dart';
 import '../services/relatorio_service.dart';
 import 'report_preview_screen.dart';
@@ -30,7 +31,9 @@ import '../widgets/agenda_finance_pending_item_card.dart';
 import '../widgets/agenda_open_item_card.dart';
 import '../widgets/finance_transaction_edit_dialog.dart';
 import '../widgets/agenda_pdf_export_sheet.dart';
-import '../widgets/google_calendar_integration_toggle.dart';
+import '../widgets/external_calendar_integration_panel.dart';
+import '../widgets/agenda/agenda_bulk_clear_confirm_dialog.dart';
+import '../widgets/agenda/agenda_bulk_clear_toolbar.dart';
 import '../widgets/shell_keyboard_bottom_pad.dart';
 
 enum _AgendaMesAba { financeiro, particular }
@@ -63,12 +66,15 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
   Set<DateTime> _googleBusyDays = {};
+  Set<DateTime> _appleBusyDays = {};
   Map<DateTime, List<GoogleCalendarEventItem>> _googleEventsByDay = {};
+  Map<DateTime, List<AppleCalendarEventItem>> _appleEventsByDay = {};
   bool _googleSyncLoading = false;
   bool _googleEnabled = false;
   StreamSubscription<bool>? _googleEnabledSub;
   int _streamGeneration = 0;
   int _mesAbaIndex = 0;
+  bool _bulkClearLoading = false;
 
   _AgendaMesAba get _mesAba => _AgendaMesAba.values[_mesAbaIndex];
 
@@ -80,6 +86,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     _selectedDay = DateTime.now();
     unawaited(GoogleCalendarSyncService.completeWebOAuthReturnIfNeeded());
     unawaited(_bootstrapGoogleCalendar());
+    unawaited(_bootstrapAppleCalendar());
     _googleEnabledSub =
         GoogleCalendarSyncService.enabledStream(_userDocId).listen(
       (enabled) {
@@ -109,6 +116,35 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     if (_userDocId.isEmpty) return;
     await GoogleCalendarSyncService.warmUpIfEnabled(_userDocId);
     if (mounted) await _refreshGoogleDays();
+  }
+
+  Future<void> _bootstrapAppleCalendar() async {
+    if (_userDocId.isEmpty || !AppleCalendarSyncService.isPlatformSupported) {
+      return;
+    }
+    await AppleCalendarSyncService.warmUpIfEnabled(_userDocId);
+    if (mounted) await _refreshAppleDays();
+  }
+
+  Future<void> _refreshAppleDays() async {
+    if (_userDocId.isEmpty || !AppleCalendarSyncService.isPlatformSupported) {
+      return;
+    }
+    if (!await AppleCalendarSyncService.isEnabled(_userDocId)) {
+      if (mounted) setState(() => _appleBusyDays = {});
+      return;
+    }
+    final events = await AppleCalendarSyncService.fetchEventsForMonth(
+      _focusedDay,
+      userDocId: _userDocId,
+    );
+    final byDay = AppleCalendarSyncService.groupEventsByDay(events);
+    if (mounted) {
+      setState(() {
+        _appleEventsByDay = byDay;
+        _appleBusyDays = byDay.keys.toSet();
+      });
+    }
   }
 
   Future<void> _refreshGoogleDays() async {
@@ -172,6 +208,142 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
   }
 
   DateTime _dayKey(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  (DateTime, DateTime) _weekBounds(DateTime anchor) {
+    final d = _dayKey(anchor);
+    final start = d.subtract(Duration(days: d.weekday - 1));
+    final end = start.add(const Duration(days: 6));
+    return (start, end);
+  }
+
+  (DateTime, DateTime) _monthBounds(DateTime anchor) {
+    final start = DateTime(anchor.year, anchor.month, 1);
+    final end = DateTime(anchor.year, anchor.month + 1, 0);
+    return (start, end);
+  }
+
+  Future<void> _runBulkClear({
+    required DateTime start,
+    required DateTime end,
+    required String title,
+    required String periodLabel,
+    required Color accent,
+    required Color accent2,
+    IconData icon = Icons.delete_sweep_rounded,
+  }) async {
+    if (_userDocId.isEmpty || _bulkClearLoading || !mounted) return;
+
+    setState(() => _bulkClearLoading = true);
+    try {
+      final docs = await CompromissoReminderService.fetchCompromissosInRange(
+        userDocId: _userDocId,
+        start: start,
+        end: end,
+      );
+      if (!mounted) return;
+
+      final ok = await showAgendaBulkClearConfirm(
+        context,
+        title: title,
+        count: docs.length,
+        periodLabel: periodLabel,
+        accent: accent,
+        accent2: accent2,
+        icon: icon,
+      );
+      if (!ok || !mounted) return;
+
+      final removed = await CompromissoReminderService.clearCompromissosBulk(
+        userDocId: _userDocId,
+        docs: docs,
+      );
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            removed == 0
+                ? 'Nenhum compromisso removido.'
+                : '$removed compromisso${removed == 1 ? '' : 's'} removido${removed == 1 ? '' : 's'}.',
+          ),
+        ),
+      );
+      unawaited(_refreshGoogleDays());
+      setState(() => _streamGeneration++);
+    } finally {
+      if (mounted) setState(() => _bulkClearLoading = false);
+    }
+  }
+
+  Future<void> _onClearWeek() async {
+    final anchor = _selectedDay ?? _focusedDay;
+    final (start, end) = _weekBounds(anchor);
+    final fmt = DateFormat('dd/MM', 'pt_BR');
+    await _runBulkClear(
+      start: start,
+      end: end,
+      title: 'Limpar semana',
+      periodLabel: '${fmt.format(start)} — ${fmt.format(end)}',
+      accent: const Color(0xFF0EA5E9),
+      accent2: const Color(0xFF2563EB),
+      icon: Icons.view_week_rounded,
+    );
+  }
+
+  Future<void> _onClearMonth() async {
+    final (start, end) = _monthBounds(_focusedDay);
+    await _runBulkClear(
+      start: start,
+      end: end,
+      title: 'Limpar mês',
+      periodLabel: _focusedMonthTitle(),
+      accent: const Color(0xFFF59E0B),
+      accent2: const Color(0xFFEA580C),
+      icon: Icons.calendar_month_rounded,
+    );
+  }
+
+  Future<void> _onClearPeriod() async {
+    final anchor = _selectedDay ?? _focusedDay;
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020, 1, 1),
+      lastDate: DateTime(2035, 12, 31),
+      initialDateRange: DateTimeRange(
+        start: _dayKey(anchor),
+        end: _dayKey(anchor).add(const Duration(days: 6)),
+      ),
+      locale: const Locale('pt', 'BR'),
+      helpText: 'Período para limpar compromissos',
+      cancelText: 'Cancelar',
+      confirmText: 'Continuar',
+      builder: (ctx, child) {
+        return Theme(
+          data: Theme.of(ctx).copyWith(
+            colorScheme: Theme.of(ctx).colorScheme.copyWith(
+                  primary: const Color(0xFF7C3AED),
+                  onPrimary: Colors.white,
+                ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked == null || !mounted) return;
+
+    final start = _dayKey(picked.start);
+    final end = _dayKey(picked.end);
+    final fmt = DateFormat('dd/MM/yyyy', 'pt_BR');
+    await _runBulkClear(
+      start: start,
+      end: end,
+      title: 'Limpar por período',
+      periodLabel: '${fmt.format(start)} — ${fmt.format(end)}',
+      accent: const Color(0xFFA855F7),
+      accent2: const Color(0xFF7C3AED),
+      icon: Icons.date_range_rounded,
+    );
+  }
 
   /// Janela de lembretes: ano focado ± repetições anuais (evita stream sem filtro).
   (DateTime, DateTime) _remindersQueryBounds() {
@@ -368,7 +540,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     if (financeColor != null) {
       return (fillColor: financeColor, googleOnly: false);
     }
-    if (_googleBusyDays.contains(key)) {
+    if (_googleBusyDays.contains(key) || _appleBusyDays.contains(key)) {
       return (fillColor: null, googleOnly: true);
     }
     return (fillColor: null, googleOnly: false);
@@ -737,8 +909,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
 
   Future<QueryDocumentSnapshot<Map<String, dynamic>>?> _selecionarCompromisso(
     BuildContext context,
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> items,
-  ) async {
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> items, {
+    String sheetTitle = 'Qual compromisso?',
+  }) async {
     if (items.isEmpty) return null;
     if (items.length == 1) return items.first;
     return showModalBottomSheet<QueryDocumentSnapshot<Map<String, dynamic>>>(
@@ -754,9 +927,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
-                'Qual compromisso?',
-                style: TextStyle(
+              Text(
+                sheetTitle,
+                style: const TextStyle(
                   fontWeight: FontWeight.w900,
                   fontSize: 17,
                   color: AppColors.textPrimary,
@@ -867,8 +1040,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
 
   Future<GoogleCalendarEventItem?> _selecionarGoogleEvent(
     BuildContext context,
-    List<GoogleCalendarEventItem> items,
-  ) async {
+    List<GoogleCalendarEventItem> items, {
+    String sheetTitle = 'Qual evento Google?',
+  }) async {
     if (items.isEmpty) return null;
     if (items.length == 1) return items.first;
     return showModalBottomSheet<GoogleCalendarEventItem>(
@@ -884,9 +1058,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
-                'Qual evento Google?',
-                style: TextStyle(
+              Text(
+                sheetTitle,
+                style: const TextStyle(
                   fontWeight: FontWeight.w900,
                   fontSize: 17,
                   color: AppColors.textPrimary,
@@ -1023,6 +1197,178 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
       final item = await _selecionarFinancePending(context, financePending);
       if (item == null || !mounted) return;
       await _editFinancePending(item);
+    }
+  }
+
+  Future<void> _confirmRemoverCompromissoLocal(
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) async {
+    final data = doc.data();
+    final title = (data['title'] ?? 'Compromisso').toString();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remover compromisso?'),
+        content: Text(
+          'Remove "$title" da Agenda neste dia. '
+          'Lançamentos do Financeiro não são alterados.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Remover'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await CompromissoReminderService.deleteOne(
+        userDocId: _userDocId,
+        reminderDocId: doc.id,
+        googleEventId: (data['googleEventId'] ?? '').toString(),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Compromisso "$title" removido.')),
+      );
+      if (_googleEnabled) unawaited(_refreshGoogleDays());
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao remover: $e')),
+      );
+    }
+  }
+
+  Future<void> _confirmRemoverGoogleEvent(GoogleCalendarEventItem event) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remover evento Google?'),
+        content: Text(
+          'Remove "${event.title}" da Agenda neste dia '
+          '(e do Google Calendar, se sincronizado).',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Remover'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await CompromissoReminderService.deleteGoogleOnlyEvent(
+      userDocId: _userDocId,
+      googleEventId: event.id,
+      recurringEventId: event.recurringEventId,
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Evento "${event.title}" removido.')),
+    );
+    if (_googleEnabled) unawaited(_refreshGoogleDays());
+  }
+
+  Future<void> _removerUmCompromissoDoDia(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> items,
+    List<GoogleCalendarEventItem> googleEvents,
+  ) async {
+    if (items.isEmpty && googleEvents.isEmpty) return;
+
+    final onlyLocal = items.isNotEmpty && googleEvents.isEmpty;
+    final onlyGoogle = googleEvents.isNotEmpty && items.isEmpty;
+
+    if (onlyLocal) {
+      final doc = await _selecionarCompromisso(
+        context,
+        items,
+        sheetTitle: items.length == 1
+            ? 'Remover compromisso'
+            : 'Qual compromisso remover?',
+      );
+      if (doc == null || !mounted) return;
+      await _confirmRemoverCompromissoLocal(doc);
+      return;
+    }
+    if (onlyGoogle) {
+      final event = await _selecionarGoogleEvent(
+        context,
+        googleEvents,
+        sheetTitle: googleEvents.length == 1
+            ? 'Remover evento Google'
+            : 'Qual evento Google remover?',
+      );
+      if (event == null || !mounted) return;
+      await _confirmRemoverGoogleEvent(event);
+      return;
+    }
+
+    if (!mounted) return;
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'O que deseja remover?',
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                leading: const Icon(Icons.event_rounded, color: AppColors.primary),
+                title: const Text('Compromisso particular'),
+                onTap: () => Navigator.pop(ctx, 'compromisso'),
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.event_rounded,
+                  color: GoogleCalendarSyncService.googleEventColor,
+                ),
+                title: const Text('Evento Google Calendar'),
+                onTap: () => Navigator.pop(ctx, 'google'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted || choice == null) return;
+    if (choice == 'compromisso') {
+      final doc = await _selecionarCompromisso(
+        context,
+        items,
+        sheetTitle: 'Qual compromisso remover?',
+      );
+      if (doc == null || !mounted) return;
+      await _confirmRemoverCompromissoLocal(doc);
+    } else if (choice == 'google') {
+      final event = await _selecionarGoogleEvent(
+        context,
+        googleEvents,
+        sheetTitle: 'Qual evento Google remover?',
+      );
+      if (event == null || !mounted) return;
+      await _confirmRemoverGoogleEvent(event);
     }
   }
 
@@ -1478,6 +1824,23 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                       ),
                     ],
                   ),
+                  if (items.isNotEmpty || googleEvents.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    _menuActionButton(
+                      icon: Icons.delete_outline_rounded,
+                      label: 'Remover compromisso',
+                      color: const Color(0xFFE11D48),
+                      iconGradient: const [
+                        Color(0xFFF43F5E),
+                        Color(0xFFE11D48),
+                      ],
+                      fullWidth: true,
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        unawaited(_removerUmCompromissoDoDia(items, googleEvents));
+                      },
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   _menuActionButton(
                     icon: Icons.delete_sweep_rounded,
@@ -1571,6 +1934,19 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                                       ],
                                     ),
                                   ),
+                                  IconButton(
+                                    tooltip: 'Remover',
+                                    visualDensity: VisualDensity.compact,
+                                    icon: Icon(
+                                      Icons.delete_outline_rounded,
+                                      color: Colors.red.shade700,
+                                      size: 22,
+                                    ),
+                                    onPressed: () {
+                                      Navigator.pop(ctx);
+                                      unawaited(_confirmRemoverCompromissoLocal(doc));
+                                    },
+                                  ),
                                   Icon(
                                     Icons.chevron_right_rounded,
                                     color: Colors.grey.shade500,
@@ -1638,6 +2014,19 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                                           ),
                                         ],
                                       ),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'Remover',
+                                      visualDensity: VisualDensity.compact,
+                                      icon: Icon(
+                                        Icons.delete_outline_rounded,
+                                        color: Colors.red.shade700,
+                                        size: 22,
+                                      ),
+                                      onPressed: () {
+                                        Navigator.pop(ctx);
+                                        unawaited(_confirmRemoverGoogleEvent(event));
+                                      },
                                     ),
                                     Icon(
                                       Icons.chevron_right_rounded,
@@ -3451,11 +3840,15 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                       ),
                       const SizedBox(height: 10),
                       if (_userDocId.isNotEmpty)
-                        GoogleCalendarIntegrationToggle(
+                        ExternalCalendarIntegrationPanel(
                           userDocId: _userDocId,
                           compact: true,
-                          onChanged: () {
+                          onGoogleChanged: () {
                             unawaited(_refreshGoogleDays());
+                            setState(() {});
+                          },
+                          onAppleChanged: () {
+                            unawaited(_refreshAppleDays());
                             setState(() {});
                           },
                         ),
@@ -3513,6 +3906,18 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                             ),
                           ],
                         ),
+                      ),
+                      const SizedBox(height: 8),
+                      if (_bulkClearLoading)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 6),
+                          child: LinearProgressIndicator(minHeight: 2),
+                        ),
+                      AgendaBulkClearToolbar(
+                        enabled: !_bulkClearLoading && _userDocId.isNotEmpty,
+                        onClearWeek: _onClearWeek,
+                        onClearMonth: _onClearMonth,
+                        onClearPeriod: _onClearPeriod,
                       ),
                       const SizedBox(height: 12),
                       _buildRodapeFeriadosMes(

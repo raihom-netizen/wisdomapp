@@ -10,7 +10,7 @@ import '../theme/app_colors.dart';
 import '../utils/fifty_two_weeks_plan.dart';
 import '../utils/goal_objective_visuals.dart';
 import '../utils/premium_upgrade.dart';
-import '../widgets/brl_amount_text_field.dart';
+import '../widgets/goal_deposit_ui.dart';
 import '../widgets/goal_52_weeks_summary_panel.dart';
 import '../widgets/goal_finance_account_field.dart';
 import '../widgets/registrar_deposito_dialog.dart';
@@ -456,6 +456,13 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
     );
   }
 
+  static const Color _depositGreen = Color(0xFF16A34A);
+  static const Color _depositGreenDark = Color(0xFF15803D);
+  static const List<Color> _depositGradient = [
+    Color(0xFF22C55E),
+    Color(0xFF16A34A),
+  ];
+
   Widget _selectionStickyBar({
     required List<FiftyTwoWeeksWeekEntry> schedule,
     required Color accent,
@@ -464,14 +471,17 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
     final selectedTotal =
         FiftyTwoWeeksPlan.sumWeekAmounts(schedule, _selectedWeeks);
     final count = _selectedWeeks.length;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+    final navBottom = MediaQuery.viewPaddingOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: navBottom > 0 ? navBottom + 4 : 10),
+      child: Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         boxShadow: [
           BoxShadow(
-            color: accent.withValues(alpha: 0.18),
+            color: _depositGreen.withValues(alpha: 0.22),
             blurRadius: 20,
             offset: const Offset(0, -6),
           ),
@@ -484,7 +494,7 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              gradient: LinearGradient(colors: gradient),
+              gradient: const LinearGradient(colors: _depositGradient),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Row(
@@ -495,8 +505,8 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
                     children: [
                       Text(
                         count == 0
-                            ? 'Nenhuma semana selecionada'
-                            : '$count semana${count == 1 ? '' : 's'} selecionada${count == 1 ? '' : 's'}',
+                            ? 'Nenhuma semana para depositar'
+                            : '$count semana${count == 1 ? '' : 's'} para depositar',
                         style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w800,
@@ -529,23 +539,14 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
             ),
           ),
           const SizedBox(height: 10),
-          FilledButton.icon(
+          GoalDepositUi.depositPrimaryButton(
             onPressed: count == 0 ? null : () => _openDepositForm(),
-            icon: const Icon(Icons.arrow_forward_rounded),
-            label: const Text(
-              'Continuar para depósito',
-              style: TextStyle(fontWeight: FontWeight.w900),
-            ),
-            style: FilledButton.styleFrom(
-              backgroundColor: accent,
-              foregroundColor: Colors.white,
-              disabledBackgroundColor: Colors.grey.shade300,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            ),
+            label: 'Depositar',
+            icon: Icons.savings_rounded,
           ),
         ],
       ),
+    ),
     );
   }
 
@@ -598,19 +599,15 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
             ),
           ),
           const SizedBox(height: 16),
-          BrlAmountTextField(
+          GoalDepositAmountField(
             controller: _amountCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Valor do depósito (R\$)',
-              prefixText: 'R\$ ',
-              border: OutlineInputBorder(),
-              filled: true,
-              fillColor: Colors.white,
-            ),
+            label: 'Valor do depósito',
+            hint: 'Digite o valor',
+            onChanged: (_) => _onAmountFieldChanged(),
           ),
           const SizedBox(height: 6),
           Text(
-            'Digite o valor depositado - o app ajusta as semanas automaticamente.',
+            'Digite o valor depositado — o app ajusta as semanas automaticamente.',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
@@ -638,27 +635,10 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
             ),
           ],
           const SizedBox(height: 18),
-          FilledButton.icon(
-            onPressed: _saving
-                ? null
-                : () => _registrarDepositoSelecionado(schedule, data),
-            icon: _saving
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                  )
-                : const Icon(Icons.savings_rounded),
-            label: const Text(
-              'Registrar depósito no banco',
-              style: TextStyle(fontWeight: FontWeight.w900),
-            ),
-            style: FilledButton.styleFrom(
-              backgroundColor: accent,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            ),
+          GoalDepositUi.depositPrimaryButton(
+            onPressed: _saving ? null : () => _registrarDepositoSelecionado(schedule, data),
+            label: _saving ? 'Registrando...' : 'Depositar',
+            icon: Icons.savings_rounded,
           ),
           sheetWideVoltarButton(context, footer: true),
         ],
@@ -702,7 +682,8 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
             _depositStep == _DepositFlowStep.depositForm;
         final inWeekSelection = widget.depositMode &&
             _depositStep == _DepositFlowStep.selectWeeks;
-        final bottomPad = inWeekSelection ? 150.0 : 24.0;
+        final navBottom = MediaQuery.viewPaddingOf(context).bottom;
+        final bottomPad = inWeekSelection ? 168.0 + navBottom : 24.0;
 
         if (inDepositForm) {
           return Container(
@@ -778,7 +759,7 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
                                   children: [
                                     Text(
                                       widget.depositMode
-                                          ? 'Selecionar semanas - depósito'
+                                          ? 'Semanas para depositar'
                                           : 'Projeto 52 semanas',
                                       style: const TextStyle(
                                         fontWeight: FontWeight.w900,
@@ -835,21 +816,10 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
                           const SizedBox(height: 10),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 18),
-                            child: FilledButton.tonalIcon(
+                            child: GoalDepositUi.depositPrimaryButton(
                               onPressed: () => _openDepositForm(fromDirectAmount: true),
-                              icon: const Icon(Icons.payments_rounded, size: 20),
-                              label: const Text(
-                                'Informar valor direto',
-                                style: TextStyle(fontWeight: FontWeight.w800),
-                              ),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: visual.color.withValues(alpha: 0.12),
-                                foregroundColor: visual.color,
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                              ),
+                              label: 'Informar valor direto',
+                              icon: Icons.payments_rounded,
                             ),
                           ),
                           Padding(

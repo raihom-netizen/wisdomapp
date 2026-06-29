@@ -219,7 +219,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   static const List<String> _moduleTitles = [
     'Início',
     'Financeiro',
-    'Objetivo Financeiro',
+    'Objetivos Financeiros',
     'Agenda',
     'Calculadora',
     'Dicas Financeiras',
@@ -2003,7 +2003,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     const items = [
       (0, Icons.home_rounded, 'Início'),
       (1, Icons.account_balance_wallet_rounded, 'Financeiro'),
-      (2, Icons.flag_rounded, 'Objetivo Financeiro'),
+      (2, Icons.flag_rounded, 'Objetivos Financeiros'),
       (3, Icons.event_note_rounded, 'Agenda'),
       (5, Icons.lightbulb_outline_rounded, 'Dicas Financeiras'),
       (7, Icons.ondemand_video_rounded, 'Cursos em Vídeo'),

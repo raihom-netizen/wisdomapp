@@ -16,6 +16,13 @@ class GoalDepositService {
   ) =>
       goalRef.collection('contributions');
 
+  static List<int> weeksFromContribData(Map<String, dynamic> data) {
+    final week = data['weekNumber'] as int?;
+    final weeks = (data['weekNumbers'] as List?)?.whereType<int>().toList() ?? [];
+    if (week != null) return [week];
+    return weeks;
+  }
+
   /// Saldo líquido acumulado de uma conta (todos os lançamentos pagos).
   static Future<double> accountBalanceAllTime({
     required String uid,
@@ -62,11 +69,7 @@ class GoalDepositService {
     if (createFinanceTx) {
       final txRef = TransactionSaveService.txRef(uid).doc();
       transactionId = txRef.id;
-      final weekLabel = weeks.isEmpty
-          ? ''
-          : weeks.length == 1
-              ? ' · sem. ${weeks.first}'
-              : ' · sem. ${weeks.join(', ')}';
+      final weekLabel = _weekLabel(weeks);
       await txRef.set({
         'type': 'income',
         'amount': amount,
@@ -110,10 +113,12 @@ class GoalDepositService {
 
   static Future<void> updateDeposit({
     required String uid,
+    required DocumentReference<Map<String, dynamic>> goalRef,
     required QueryDocumentSnapshot<Map<String, dynamic>> contribDoc,
     required double amount,
     required DateTime date,
     String? financeAccountId,
+    String? goalTitle,
   }) async {
     if (amount <= 0) {
       throw ArgumentError('Valor deve ser maior que zero.');
@@ -121,24 +126,99 @@ class GoalDepositService {
     final data = contribDoc.data();
     final accountId = financeAccountId?.trim() ?? '';
     final txId = (data['transactionId'] ?? '').toString().trim();
+    final goalSnap = await goalRef.get();
+    final goalData = goalSnap.data() ?? {};
+    final title = goalTitle ?? (goalData['title'] ?? 'Objetivo').toString();
+    final is52 = FiftyTwoWeeksPlan.is52WeeksGoal(goalData);
 
-    await contribDoc.reference.update({
+    List<int> newWeeks = const [];
+    if (is52) {
+      final target = (goalData['targetAmount'] as num?)?.toDouble() ?? 0;
+      final planStart = FiftyTwoWeeksPlan.planStartFromData(goalData) ?? DateTime.now();
+      final schedule = FiftyTwoWeeksPlan.buildSchedule(target: target, planStart: planStart);
+      final oldWeeks = weeksFromContribData(data);
+      var paid = FiftyTwoWeeksPlan.paidWeeksFromData(goalData);
+      paid.removeWhere(oldWeeks.contains);
+      newWeeks = FiftyTwoWeeksPlan.weeksForDepositAmount(
+        amount: amount,
+        schedule: schedule,
+        paidWeeks: paid,
+      );
+      paid.addAll(newWeeks);
+      paid.sort();
+      await goalRef.update({'weeksPaid': paid});
+    }
+
+    final effectiveDate = FinanceTransactionDatetime.mergeCalendarDayWithClockNow(date);
+    final contribUpdate = <String, dynamic>{
       'amount': amount,
-      'date': Timestamp.fromDate(date),
+      'date': Timestamp.fromDate(effectiveDate),
       if (accountId.isNotEmpty) 'financeAccountId': accountId,
-    });
+    };
+    if (is52) {
+      if (newWeeks.length == 1) {
+        contribUpdate['weekNumber'] = newWeeks.first;
+        contribUpdate['weekNumbers'] = FieldValue.delete();
+      } else if (newWeeks.length > 1) {
+        contribUpdate['weekNumbers'] = newWeeks;
+        contribUpdate['weekNumber'] = FieldValue.delete();
+      } else {
+        contribUpdate['weekNumber'] = FieldValue.delete();
+        contribUpdate['weekNumbers'] = FieldValue.delete();
+      }
+    }
+    await contribDoc.reference.update(contribUpdate);
 
     if (txId.isNotEmpty) {
-      final effectiveDate = FinanceTransactionDatetime.mergeCalendarDayWithClockNow(date);
+      final weekLabel = is52 ? _weekLabel(newWeeks) : _weekLabel(weeksFromContribData(data));
       await TransactionSaveService.txRef(uid).doc(txId).update({
         'amount': amount,
         'date': Timestamp.fromDate(effectiveDate),
         'effectiveDate': FinanceLineOpening.effectiveTimestampForWrite(date: effectiveDate),
+        'description': 'Depósito objetivo: $title$weekLabel',
         if (accountId.isNotEmpty) 'financeAccountId': accountId,
         'updatedAt': FieldValue.serverTimestamp(),
       });
       FinanceTransactionsHub.notifyMutated(uid: uid);
     }
+  }
+
+  /// Sincroniza depósito vinculado quando o lançamento é editado no Financeiro.
+  static Future<void> syncFromTransaction({
+    required String uid,
+    required String goalId,
+    required String txId,
+    required double amount,
+    required DateTime date,
+    String? financeAccountId,
+  }) async {
+    final fsUid = firestoreUserDocIdForAppShell(uid);
+    if (fsUid.isEmpty || goalId.trim().isEmpty || txId.trim().isEmpty) return;
+
+    final goalRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(fsUid)
+        .collection('goals')
+        .doc(goalId);
+    final goalSnap = await goalRef.get();
+    if (!goalSnap.exists) return;
+
+    final contribQuery = await goalRef
+        .collection('contributions')
+        .where('transactionId', isEqualTo: txId)
+        .limit(1)
+        .get();
+    if (contribQuery.docs.isEmpty) return;
+
+    await updateDeposit(
+      uid: uid,
+      goalRef: goalRef,
+      contribDoc: contribQuery.docs.first,
+      amount: amount,
+      date: date,
+      financeAccountId: financeAccountId,
+      goalTitle: (goalSnap.data()?['title'] ?? 'Objetivo').toString(),
+    );
   }
 
   static Future<void> deleteDeposit({
@@ -148,8 +228,7 @@ class GoalDepositService {
   }) async {
     final data = contribDoc.data();
     final txId = (data['transactionId'] ?? '').toString().trim();
-    final week = data['weekNumber'] as int?;
-    final weeks = (data['weekNumbers'] as List?)?.whereType<int>().toList() ?? [];
+    final weeksToRemove = weeksFromContribData(data).toSet();
 
     if (txId.isNotEmpty) {
       await TransactionSaveService.txRef(uid).doc(txId).delete();
@@ -158,14 +237,17 @@ class GoalDepositService {
 
     await contribDoc.reference.delete();
 
-    final weeksToRemove = <int>{};
-    if (week != null) weeksToRemove.add(week);
-    weeksToRemove.addAll(weeks);
     if (weeksToRemove.isNotEmpty) {
       final goalSnap = await goalRef.get();
       final paid = FiftyTwoWeeksPlan.paidWeeksFromData(goalSnap.data() ?? {});
       paid.removeWhere(weeksToRemove.contains);
       await goalRef.update({'weeksPaid': paid});
     }
+  }
+
+  static String _weekLabel(List<int> weeks) {
+    if (weeks.isEmpty) return '';
+    if (weeks.length == 1) return ' · sem. ${weeks.first}';
+    return ' · sem. ${weeks.join(', ')}';
   }
 }

@@ -25,7 +25,7 @@ import '../widgets/weekly_summary_premium_body.dart';
 import '../utils/app_update_launcher.dart';
 import '../constants/app_version.dart';
 import '../widgets/home_start_module_picker.dart';
-import '../widgets/google_calendar_integration_toggle.dart';
+import '../widgets/external_calendar_integration_panel.dart';
 import '../services/account_switch_flow.dart';
 import '../utils/keyboard_form_scaffold.dart';
 import '../utils/home_shell_layout.dart';
@@ -806,22 +806,9 @@ class SettingsScreen extends StatelessWidget {
             _tileBiometria(context),
             const SizedBox(height: 24),
             _sectionTitle('AGENDA'),
-            GoogleCalendarIntegrationToggle(
+            ExternalCalendarIntegrationPanel(
               userDocId: _docUid,
-              showChangeAccountAction: true,
-            ),
-            Padding(
-              padding: const EdgeInsets.only(top: 6, left: 4, right: 4, bottom: 8),
-              child: Text(
-                'Use o interruptor acima para sincronizar com o Gmail da sua conta. '
-                'Compromissos novos vão para o Google Calendar automaticamente.',
-                style: TextStyle(
-                  fontSize: 12,
-                  height: 1.35,
-                  color: Colors.grey.shade700,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+              showChangeGoogleAccountAction: true,
             ),
             const SizedBox(height: 24),
             _sectionTitle('BACKUP E DADOS'),

@@ -17,6 +17,7 @@ import '../utils/anexo_viewer_helper.dart';
 import '../utils/receipt_attachment_utils.dart';
 import '../services/finance_accounts_service.dart';
 import '../services/functions_service.dart';
+import '../services/goal_deposit_service.dart';
 import '../services/logs_service.dart';
 import '../services/user_categories_service.dart';
 import '../theme/app_colors.dart';
@@ -641,6 +642,19 @@ Future<bool> showFinanceTransactionEditDialog({
 
   try {
     await FirebaseFirestore.instance.collection('users').doc(fsUid).collection('transactions').doc(docId).update(updateData);
+    final goalId = (current['goalId'] ?? '').toString().trim();
+    if (goalId.isNotEmpty && type == 'income') {
+      unawaited(
+        GoalDepositService.syncFromTransaction(
+          uid: uid,
+          goalId: goalId,
+          txId: docId,
+          amount: amount,
+          date: date,
+          financeAccountId: aid.isEmpty ? null : aid,
+        ).catchError((_) {}),
+      );
+    }
     final effectiveDate = date;
     onSaved?.call(docId, {
       'type': type,

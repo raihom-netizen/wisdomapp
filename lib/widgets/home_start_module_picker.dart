@@ -17,7 +17,7 @@ const String kAgendaModuleFooterLabelNarrow = 'Agenda';
 /// Rótulos e índices permitidos (deve coincidir com as abas do shell).
 const Map<int, String> kHomeDefaultStartModuleLabels = {
   1: 'Financeiro',
-  2: 'Objetivo Financeiro',
+  2: 'Objetivos Financeiros',
   3: 'Agenda',
   7: 'Cursos',
 };

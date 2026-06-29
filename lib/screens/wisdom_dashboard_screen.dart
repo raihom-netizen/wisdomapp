@@ -77,6 +77,7 @@ class WisdomDashboardScreen extends StatelessWidget {
               _HeroCard(
                 profile: profile,
                 onOpenFinanceiro: () => onNavigateTo?.call(1),
+                onOpenObjetivo: () => onNavigateTo?.call(2),
                 onOpenAgenda: () => onNavigateTo?.call(3),
                 onOpenCursos: () => onNavigateTo?.call(7),
               ),
@@ -210,12 +211,14 @@ class _HeroCard extends StatelessWidget {
   const _HeroCard({
     required this.profile,
     required this.onOpenFinanceiro,
+    required this.onOpenObjetivo,
     required this.onOpenAgenda,
     required this.onOpenCursos,
   });
 
   final UserProfile profile;
   final VoidCallback onOpenFinanceiro;
+  final VoidCallback onOpenObjetivo;
   final VoidCallback onOpenAgenda;
   final VoidCallback onOpenCursos;
 
@@ -297,6 +300,12 @@ class _HeroCard extends StatelessWidget {
                 icon: Icons.account_balance_wallet_rounded,
                 color: const Color(0xFF5EEAD4),
                 onTap: onOpenFinanceiro,
+              ),
+              _QuickChip(
+                label: 'Objetivos Financeiros',
+                icon: Icons.flag_rounded,
+                color: const Color(0xFFF9A8D4),
+                onTap: onOpenObjetivo,
               ),
               _QuickChip(
                 label: 'Agenda',

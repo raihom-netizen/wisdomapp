@@ -1,7 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 import 'agenda_notifications_refresher.dart';
 import 'agenda_server_sync_service.dart';
+import 'apple_calendar_sync_service.dart';
 import 'google_calendar_sync_service.dart';
 
 /// Boot de notificações **leve no cliente**: servidor monta a fila; app só
@@ -35,8 +38,14 @@ class AgendaBootOrchestrator {
   }
 
   static Future<void> _run(String uid) async {
+    if (kIsWeb) {
+      unawaited(GoogleCalendarSyncService.completeWebOAuthReturnIfNeeded());
+    }
     unawaited(AgendaServerSyncService.requestLoginSync(uid));
     unawaited(GoogleCalendarSyncService.warmUpIfEnabled(uid));
+    if (AppleCalendarSyncService.isPlatformSupported) {
+      unawaited(AppleCalendarSyncService.warmUpIfEnabled(uid));
+    }
     await AgendaNotificationsRefresher.refresh(
       uid: uid,
       coalesceWithin: const Duration(seconds: 30),

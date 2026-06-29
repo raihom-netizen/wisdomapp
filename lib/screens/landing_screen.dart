@@ -989,7 +989,8 @@ class _LandingScreenState extends State<LandingScreen>
   // --- Módulos / Features (todas as funções do app) ---
   Widget _buildFeaturesSection() {
     const features = [
-      (Icons.account_balance_wallet_rounded, 'Módulo Financeiro', 'Receitas, despesas, orçamentos, metas e relatórios.'),
+      (Icons.account_balance_wallet_rounded, 'Módulo Financeiro', 'Receitas, despesas, orçamentos e relatórios.'),
+      (Icons.flag_rounded, 'Módulo Objetivos Financeiros', 'Metas com Projeto 52 semanas — viagem, carro, casa, reserva…'),
       (Icons.event_note_rounded, 'Módulo Agenda', 'Compromissos, lembretes e planejamento no dia a dia.'),
       (Icons.menu_book_rounded, 'Módulo Cursos Financeiros', 'Educação financeira com princípios bíblicos.'),
     ];
@@ -1004,7 +1005,7 @@ class _LandingScreenState extends State<LandingScreen>
           ),
           const SizedBox(height: 12),
           Text(
-            'Financeiro, agenda e cursos financeiros com princípios bíblicos — tudo integrado.',
+            'Financeiro, objetivos financeiros, agenda e cursos com princípios bíblicos — tudo integrado.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 15, height: 1.45, color: Colors.grey.shade700, fontWeight: FontWeight.w500),
           ),

@@ -31,13 +31,28 @@ try {
         "pubspec.yaml",
         "pubspec.lock",
         "android/app/build.gradle",
+        "web/version.json",
+        "ios/asc_build_number_floor.txt",
         "codemagic.yaml",
         "firestore.indexes.json",
         "firestore.rules",
         "deploy.ps1",
         "scripts/push-codemagic-ready.ps1",
         "scripts/Start-CodemagicIos.ps1",
+        "scripts/sync_app_version.ps1",
+        "scripts/bump_build.ps1",
+        "scripts/patch_flutter_plugin_gradle.ps1",
+        "scripts/Export-AabIosTemporarios.ps1",
+        "scripts/sync_app_version_from_dart.sh",
         "scripts/codemagic_ios_delete_appstore_profiles.py",
+        "scripts/codemagic_ios_prepare_api_pem.sh",
+        "scripts/codemagic_ios_read_asc_floor.sh",
+        "scripts/codemagic_ios_asc_latest_build_number.sh",
+        "scripts/codemagic_ios_resolve_app_store_apple_id.sh",
+        "scripts/codemagic_ios_sync_version_from_app_version_dart.sh",
+        "scripts/codemagic_ios_validate_ipa_before_upload.sh",
+        "scripts/codemagic_ios_pre_publish_90189_gate.sh",
+        "scripts/codemagic_ios_stamp_asc_floor.sh",
         "scripts/upload_ipa_to_storage.js"
     )
     foreach ($rel in $toStage) {
@@ -45,7 +60,7 @@ try {
         if (Test-Path $p) { git add -- $p 2>&1 | Out-Null }
     }
 
-    foreach ($rel in @("lib", "ios", "functions/index.js", "functions/package.json", "functions/package-lock.json")) {
+    foreach ($rel in @("lib", "ios", "packages", "functions/index.js", "functions/package.json", "functions/package-lock.json")) {
         $p = Join-Path $Root $rel
         if (Test-Path $p) { git add -- $p 2>&1 | Out-Null }
     }

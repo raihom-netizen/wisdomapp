@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/material.dart';
 
 import '../utils/url_launcher_helper.dart';
+import '../utils/admin_user_search.dart';
 import '../utils/firestore_user_doc_id.dart';
 import 'in_app_floating_message_service.dart';
 import 'fcm_local_notification_presenter.dart';
@@ -481,8 +482,11 @@ class PushNotificationService {
         .doc(tokenDocId)
         .set(tokenFields, SetOptions(merge: true));
 
-    // Campo legado no doc do usuário (opcional; pode falhar para delegado).
+    // Campo legado no doc do usuário — só se o perfil real já existir (evita fantasma).
     try {
+      final userSnap = await _firestore.collection('users').doc(uid).get();
+      if (!userSnap.exists) return;
+      if (!adminUserHasCompleteEmail(userSnap.data() ?? const {})) return;
       await _firestore.collection('users').doc(uid).set({
         'fcmToken': token,
         'pushEnabled': true,

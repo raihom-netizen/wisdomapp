@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -12,6 +13,8 @@ import '../models/wisdom_courses_module_config.dart';
 import '../services/course_video_file_service.dart';
 import '../services/course_video_image_service.dart';
 import '../services/course_media_storage_cleanup.dart';
+import '../services/course_videos_cache_service.dart';
+import '../widgets/admin/course_content_sheet_header.dart';
 import '../theme/app_colors.dart';
 import '../utils/course_content_link_helper.dart';
 import '../utils/course_media_url_resolver.dart';
@@ -23,6 +26,7 @@ import '../utils/course_video_validity.dart';
 import '../utils/course_thumb_resolver.dart';
 import '../utils/youtube_url_helper.dart';
 import '../widgets/course_media_preview.dart';
+import '../widgets/course/course_content_card_header.dart';
 import '../widgets/course_video/course_video_watch_screen.dart';
 import '../widgets/fast_text_field.dart';
 import '../widgets/module_header_premium.dart';
@@ -72,26 +76,49 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
   bool _validityPermanent = true;
   DateTime? _expiresAtDate;
   bool _expiryCleanupScheduled = false;
-  Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>>? _courseVideosFuture;
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _courseDocs = const [];
+  bool _courseDocsLoading = true;
+  Object? _courseDocsError;
 
   @override
   void initState() {
     super.initState();
     _scheduleExpiryCleanup();
-    _reloadCourseVideos();
+    unawaited(_reloadCourseVideos());
   }
 
-  void _reloadCourseVideos() {
-    setState(() {
-      _courseVideosFuture = _fetchCourseVideos();
-    });
+  Future<void> _afterContentMutation({String? snack}) async {
+    await _reloadCourseVideos();
+    unawaited(CourseVideosCacheService.instance.ensureLoaded(forceServer: true));
+    if (snack != null) _snack(snack);
+  }
+
+  Future<void> _reloadCourseVideos() async {
+    if (_courseDocs.isEmpty) {
+      if (mounted) setState(() => _courseDocsLoading = true);
+    }
+    try {
+      final docs = await _fetchCourseVideos();
+      if (!mounted) return;
+      setState(() {
+        _courseDocs = docs;
+        _courseDocsLoading = false;
+        _courseDocsError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _courseDocsLoading = false;
+        _courseDocsError = e;
+      });
+    }
   }
 
   Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> _fetchCourseVideos() async {
     return _courseFirestoreOp(() async {
       final snap = await FirebaseFirestore.instance
           .collection('course_videos')
-          .get(const GetOptions(source: Source.server));
+          .get(const GetOptions(source: Source.serverAndCache));
       return snap.docs;
     });
   }
@@ -476,8 +503,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
         _selectedIds.clear();
         _selectionMode = false;
       });
-      _reloadCourseVideos();
-      _snack('$n conteúdo(s) removido(s).');
+      await _afterContentMutation(snack: '$n conteúdo(s) removido(s).');
     } catch (e) {
       _snack('Erro ao excluir: $e');
     }
@@ -516,12 +542,12 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
     }
   }
 
-  Future<void> _publishVideo() async {
-    if (_savingVideo) return;
+  Future<bool> _publishVideo() async {
+    if (_savingVideo) return false;
     final title = _titleCtrl.text.trim();
     if (title.isEmpty) {
       _snack('Informe o título.');
-      return;
+      return false;
     }
 
     if (_type == 'curso') {
@@ -530,18 +556,18 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       final hasMp4 = _pickedVideos.isNotEmpty;
       if (!hasMp4 && !hasYoutube) {
         _snack('Anexe um vídeo MP4 ou informe link YouTube (opcional).');
-        return;
+        return false;
       }
       if (hasYoutube && !YoutubeUrlHelper.isValidYoutubeUrl(youtubeRaw)) {
         _snack('URL do YouTube inválida.');
-        return;
+        return false;
       }
     } else {
       final linkRaw = _youtubeCtrl.text.trim();
       if (linkRaw.isNotEmpty &&
           CourseContentLinkHelper.normalizeLink(linkRaw) == null) {
         _snack('Link inválido. Use YouTube ou site (https://…).');
-        return;
+        return false;
       }
       final body = _bodyTextCtrl.text.trim();
       final desc = _descriptionCtrl.text.trim();
@@ -551,13 +577,13 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
           _pickedImages.isEmpty &&
           !linkOk) {
         _snack('Informe texto, imagem ou link para a dica.');
-        return;
+        return false;
       }
     }
 
     if (!_validityPermanent && _expiresAtDate == null) {
       _snack('Escolha a data limite ou marque como permanente.');
-      return;
+      return false;
     }
 
     setState(() => _savingVideo = true);
@@ -698,10 +724,11 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
         _validityPermanent = true;
         _expiresAtDate = null;
       });
-      _reloadCourseVideos();
-      _snack('Conteúdo publicado — já aparece no módulo Cursos.');
+      await _afterContentMutation(snack: 'Conteúdo publicado — já aparece no módulo Cursos.');
+      return true;
     } catch (e) {
       _snack('Erro ao publicar: ${_formatPublishError(e)}');
+      return false;
     } finally {
       if (mounted) {
         setState(() {
@@ -742,6 +769,13 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
           .doc(docId)
           .get());
       final existingData = existing.data() ?? {};
+
+      if (removeVideos) {
+        await CourseMediaStorageCleanup.deleteMediaFromDoc(existingData, videos: true);
+      }
+      if (removeImages) {
+        await CourseMediaStorageCleanup.deleteMediaFromDoc(existingData, images: true);
+      }
 
       final patch = <String, dynamic>{
         'title': title,
@@ -924,8 +958,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
         data: patch,
         create: false,
       );
-      _reloadCourseVideos();
-      _snack('Alterações salvas.');
+      await _afterContentMutation();
       return true;
     } catch (e) {
       _snack('Erro ao salvar: ${_formatPublishError(e)}');
@@ -942,7 +975,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       },
       create: false,
     );
-    _reloadCourseVideos();
+    unawaited(_afterContentMutation());
   }
 
   Future<void> _deleteVideo(String docId, {bool skipConfirm = false}) async {
@@ -976,8 +1009,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
         data: snap.data(),
       );
       await AdminCourseFirestoreBridge.deleteCourseVideos([docId]);
-      _reloadCourseVideos();
-      _snack('Conteúdo excluído.');
+      await _afterContentMutation(snack: 'Conteúdo excluído.');
     } catch (e) {
       _snack('Erro ao excluir: $e');
     }
@@ -1004,6 +1036,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
     final List<_PickedMedia> editVideos = [];
     var removeImages = false;
     var removeVideos = false;
+    var saving = false;
 
     if (!mounted) return;
     await showModalBottomSheet<void>(
@@ -1014,43 +1047,45 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
         return StatefulBuilder(
           builder: (ctx, setLocal) {
             final accent = type == 'dica' ? const Color(0xFFF59E0B) : const Color(0xFF2563EB);
+            final accent2 = type == 'dica' ? const Color(0xFFD97706) : const Color(0xFF1D4ED8);
             final isDica = type == 'dica';
+            final navBottom = MediaQuery.viewPaddingOf(ctx).bottom;
             return Padding(
               padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
               child: Container(
-                margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.92),
+                margin: EdgeInsets.fromLTRB(10, 0, 10, 10 + navBottom),
+                constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.94),
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(22),
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: accent.withValues(alpha: 0.2),
+                      blurRadius: 24,
+                      offset: const Offset(0, -4),
+                    ),
+                  ],
                 ),
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Center(
-                        child: Container(
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade300,
-                            borderRadius: BorderRadius.circular(99),
-                          ),
-                        ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
+                      child: CourseContentSheetHeader(
+                        title: 'EDITAR CONTEÚDO',
+                        subtitle: isDica ? 'Dica · módulo Cursos' : 'Curso · módulo Cursos',
+                        accent: accent,
+                        accent2: accent2,
+                        icon: isDica ? Icons.lightbulb_rounded : Icons.school_rounded,
+                        onBack: saving ? () {} : () => Navigator.pop(ctx),
                       ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'EDITAR CONTEÚDO',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 18,
-                          letterSpacing: 0.8,
-                          color: accent,
-                        ),
-                      ),
-                      const SizedBox(height: 14),
+                    ),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(18, 14, 18, 20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
                       FastTextField(controller: titleCtrl, decoration: _fieldDeco('Título', accent: accent)),
                       const SizedBox(height: 10),
                       FastTextField(
@@ -1269,26 +1304,43 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                       ),
                       const SizedBox(height: 8),
                       FilledButton.icon(
-                        onPressed: () async {
-                          final ok = await _saveEditedVideo(
-                            doc.id,
-                            title: titleCtrl.text.trim(),
-                            description: descCtrl.text.trim(),
-                            bodyText: bodyCtrl.text.trim(),
-                            linkRaw: urlCtrl.text.trim(),
-                            type: type,
-                            published: published,
-                            validityPermanent: validityPermanent,
-                            expiresAtDate: expiresAtDate,
-                            newImages: List<_PickedMedia>.from(editImages),
-                            removeImages: removeImages,
-                            newVideos: List<_PickedMedia>.from(editVideos),
-                            removeVideos: removeVideos,
-                          );
-                          if (ok && ctx.mounted) Navigator.pop(ctx);
-                        },
-                        icon: const Icon(Icons.save_rounded),
-                        label: const Text('Salvar alterações'),
+                        onPressed: saving
+                            ? null
+                            : () async {
+                                setLocal(() => saving = true);
+                                final ok = await _saveEditedVideo(
+                                  doc.id,
+                                  title: titleCtrl.text.trim(),
+                                  description: descCtrl.text.trim(),
+                                  bodyText: bodyCtrl.text.trim(),
+                                  linkRaw: urlCtrl.text.trim(),
+                                  type: type,
+                                  published: published,
+                                  validityPermanent: validityPermanent,
+                                  expiresAtDate: expiresAtDate,
+                                  newImages: List<_PickedMedia>.from(editImages),
+                                  removeImages: removeImages,
+                                  newVideos: List<_PickedMedia>.from(editVideos),
+                                  removeVideos: removeVideos,
+                                );
+                                if (!ctx.mounted) return;
+                                if (ok) {
+                                  Navigator.pop(ctx);
+                                  if (mounted) {
+                                    _snack('Alterações salvas.');
+                                  }
+                                } else {
+                                  setLocal(() => saving = false);
+                                }
+                              },
+                        icon: saving
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(Icons.save_rounded),
+                        label: Text(saving ? 'Salvando…' : 'Salvar alterações'),
                         style: FilledButton.styleFrom(
                           backgroundColor: accent,
                           minimumSize: const Size(double.infinity, 48),
@@ -1297,31 +1349,33 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                       ),
                       const SizedBox(height: 10),
                       OutlinedButton.icon(
-                        onPressed: () async {
-                          final confirm = await showDialog<bool>(
-                            context: ctx,
-                            builder: (dCtx) => AlertDialog(
-                              title: Text('Excluir ${isDica ? 'dica' : 'curso'}?'),
-                              content: const Text(
-                                'Remove permanentemente do módulo Cursos e apaga arquivos no Storage.',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(dCtx, false),
-                                  child: const Text('Cancelar'),
-                                ),
-                                FilledButton(
-                                  onPressed: () => Navigator.pop(dCtx, true),
-                                  style: FilledButton.styleFrom(backgroundColor: Colors.red),
-                                  child: const Text('Excluir'),
-                                ),
-                              ],
-                            ),
-                          );
-                          if (confirm != true) return;
-                          if (ctx.mounted) Navigator.pop(ctx);
-                          await _deleteVideo(doc.id, skipConfirm: true);
-                        },
+                        onPressed: saving
+                            ? null
+                            : () async {
+                                final confirm = await showDialog<bool>(
+                                  context: ctx,
+                                  builder: (dCtx) => AlertDialog(
+                                    title: Text('Excluir ${isDica ? 'dica' : 'curso'}?'),
+                                    content: const Text(
+                                      'Remove permanentemente do módulo Cursos e apaga arquivos no Storage.',
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(dCtx, false),
+                                        child: const Text('Cancelar'),
+                                      ),
+                                      FilledButton(
+                                        onPressed: () => Navigator.pop(dCtx, true),
+                                        style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                                        child: const Text('Excluir'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (confirm != true) return;
+                                if (ctx.mounted) Navigator.pop(ctx);
+                                await _deleteVideo(doc.id, skipConfirm: true);
+                              },
                         icon: const Icon(Icons.delete_forever_rounded),
                         label: Text('Excluir ${isDica ? 'dica' : 'curso'}'),
                         style: OutlinedButton.styleFrom(
@@ -1332,7 +1386,10 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                         ),
                       ),
                     ],
-                  ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             );
@@ -1475,34 +1532,31 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       stream: FirebaseFirestore.instance.collection('app_config').doc(_configDoc).snapshots(),
       builder: (context, cfgSnap) {
         _hydrateConfig(cfgSnap.data?.data());
-        return FutureBuilder<List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
-          future: _courseVideosFuture,
-          builder: (context, videosSnap) {
-            if (videosSnap.hasError) {
-              return ListView(
-                padding: const EdgeInsets.all(24),
-                children: [
-                  Text('Erro: ${videosSnap.error}', style: const TextStyle(color: Colors.red)),
-                  const SizedBox(height: 12),
-                  FilledButton.icon(
-                    onPressed: _reloadCourseVideos,
-                    icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('Tentar novamente'),
-                  ),
-                ],
-              );
-            }
 
-            final docs = _filterDocs(_sortDocs(videosSnap.data ?? const []));
-            final allCount = _sortDocs(videosSnap.data ?? const []).length;
-            final dicasCount = _sortDocs(videosSnap.data ?? const [])
-                .where((d) => (d.data()['type'] ?? '').toString() == 'dica')
-                .length;
-            final cursosCount = allCount - dicasCount;
-            final syncing = videosSnap.connectionState == ConnectionState.waiting &&
-                !videosSnap.hasData;
+        if (_courseDocsError != null && _courseDocs.isEmpty) {
+          return ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              Text('Erro: $_courseDocsError', style: const TextStyle(color: Colors.red)),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: _reloadCourseVideos,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Tentar novamente'),
+              ),
+            ],
+          );
+        }
 
-            return ListView(
+        final docs = _filterDocs(_sortDocs(_courseDocs));
+        final allCount = _sortDocs(_courseDocs).length;
+        final dicasCount = _sortDocs(_courseDocs)
+            .where((d) => (d.data()['type'] ?? '').toString() == 'dica')
+            .length;
+        final cursosCount = allCount - dicasCount;
+        final syncing = _courseDocsLoading && _courseDocs.isEmpty;
+
+        return ListView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
               children: [
                 const ModuleHeaderPremium(
@@ -1514,7 +1568,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                 const SizedBox(height: 16),
                 _buildConfigCard(),
                 const SizedBox(height: 16),
-                _buildPublishCard(),
+                _buildNewContentLauncher(),
                 const SizedBox(height: 22),
                 _buildGridToolbar(allCount, cursosCount, dicasCount),
                 const SizedBox(height: 12),
@@ -1624,8 +1678,6 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                 ),
               ],
             );
-          },
-        );
       },
     );
   }
@@ -1744,6 +1796,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
             final data = docs[i].data();
             return _VideoGridCard(
               doc: docs[i],
+              index: i,
               thumbUrl: _thumbUrl(data),
               videoId: _videoId(data),
               hasMp4: _mp4Url(data) != null,
@@ -1849,28 +1902,94 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
     );
   }
 
-  Widget _buildPublishCard() {
-    final accent = _type == 'dica'
-        ? const Color(0xFFF59E0B)
-        : const Color(0xFF2563EB);
-    final accent2 = _type == 'dica'
-        ? const Color(0xFFD97706)
-        : const Color(0xFF1D4ED8);
+  Future<void> _openCreateSheet() async {
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final accent = _type == 'dica' ? const Color(0xFFF59E0B) : const Color(0xFF2563EB);
+        final accent2 = _type == 'dica' ? const Color(0xFFD97706) : const Color(0xFF1D4ED8);
+        final navBottom = MediaQuery.viewPaddingOf(ctx).bottom;
+        return Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
+          child: Container(
+            margin: EdgeInsets.fromLTRB(10, 0, 10, 10 + navBottom),
+            constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.94),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
+                  child: CourseContentSheetHeader(
+                    title: 'NOVO CONTEÚDO',
+                    subtitle: _type == 'dica' ? 'Publicar dica' : 'Publicar curso',
+                    accent: accent,
+                    accent2: accent2,
+                    icon: _type == 'dica' ? Icons.lightbulb_rounded : Icons.school_rounded,
+                    onBack: _savingVideo ? () {} : () => Navigator.pop(ctx),
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+                    child: _buildPublishFormColumn(),
+                  ),
+                ),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 12 + navBottom),
+                  child: FilledButton.icon(
+                    onPressed: _savingVideo
+                        ? null
+                        : () async {
+                            final ok = await _publishVideo();
+                            if (ok && ctx.mounted) Navigator.pop(ctx);
+                          },
+                    icon: _savingVideo
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : Icon(_type == 'dica' ? Icons.lightbulb_rounded : Icons.smart_display_rounded),
+                    label: Text(
+                      _savingVideo
+                          ? 'Publicando…'
+                          : (_type == 'dica' ? 'Publicar dica' : 'Publicar curso'),
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: accent,
+                      minimumSize: const Size(double.infinity, 52),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 
+  Widget _buildNewContentLauncher() {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        gradient: LinearGradient(
-          colors: [accent.withValues(alpha: 0.12), accent2.withValues(alpha: 0.06)],
+        gradient: const LinearGradient(
+          colors: [Color(0xFF2563EB), Color(0xFF7C3AED), Color(0xFFF59E0B)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        border: Border.all(color: accent.withValues(alpha: 0.28)),
         boxShadow: [
           BoxShadow(
-            color: accent.withValues(alpha: 0.15),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
+            color: const Color(0xFF2563EB).withValues(alpha: 0.35),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
@@ -1878,31 +1997,57 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
+          const Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(colors: [accent, accent2]),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Icon(Icons.add_circle_rounded, color: Colors.white, size: 22),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
+              Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 26),
+              SizedBox(width: 10),
+              Expanded(
                 child: Text(
-                  'PUBLICAR NOVO CONTEÚDO',
+                  'Criar curso ou dica',
                   style: TextStyle(
+                    color: Colors.white,
                     fontWeight: FontWeight.w900,
-                    fontSize: 15,
-                    letterSpacing: 0.5,
-                    color: Color(0xFF0B1B4B),
+                    fontSize: 17,
                   ),
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 8),
+          Text(
+            'Vídeos MP4, galeria de fotos, YouTube e validade — tudo num painel rápido.',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.92),
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+              height: 1.35,
+            ),
+          ),
           const SizedBox(height: 14),
+          FilledButton.icon(
+            onPressed: _openCreateSheet,
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: const Color(0xFF2563EB),
+              minimumSize: const Size(double.infinity, 48),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+            icon: const Icon(Icons.add_rounded),
+            label: const Text(
+              'Abrir editor de publicação',
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPublishFormColumn() {
+    final accent = _type == 'dica' ? const Color(0xFFF59E0B) : const Color(0xFF2563EB);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
           FastTextField(
             controller: _titleCtrl,
             decoration: _fieldDeco('Título', accent: accent),
@@ -2107,24 +2252,10 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
             title: const Text('Publicado'),
             subtitle: const Text('Desligado = oculto no módulo Cursos.'),
             value: _published,
-            activeThumbColor: accent,
+            activeThumbColor: _type == 'dica' ? const Color(0xFFF59E0B) : const Color(0xFF2563EB),
             onChanged: _savingVideo ? null : (v) => setState(() => _published = v),
           ),
-          FilledButton.icon(
-            onPressed: _savingVideo ? null : _publishVideo,
-            icon: _savingVideo
-                ? const SizedBox(
-                    width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.smart_display_rounded),
-            label: Text(_savingVideo ? 'Publicando…' : (_type == 'dica' ? 'Publicar dica' : 'Publicar curso')),
-            style: FilledButton.styleFrom(
-              backgroundColor: accent,
-              minimumSize: const Size(double.infinity, 50),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            ),
-          ),
         ],
-      ),
     );
   }
 }
@@ -2276,6 +2407,7 @@ class _ValidityPill extends StatelessWidget {
 class _VideoGridCard extends StatelessWidget {
   const _VideoGridCard({
     required this.doc,
+    required this.index,
     required this.thumbUrl,
     required this.videoId,
     required this.hasMp4,
@@ -2290,6 +2422,7 @@ class _VideoGridCard extends StatelessWidget {
   });
 
   final QueryDocumentSnapshot<Map<String, dynamic>> doc;
+  final int index;
   final String? thumbUrl;
   final String? videoId;
   final bool hasMp4;
@@ -2311,12 +2444,7 @@ class _VideoGridCard extends StatelessWidget {
     final previewText = body.isNotEmpty ? body : description;
     final type = (data['type'] ?? 'curso').toString();
     final published = data['published'] != false;
-    final accent = type == 'dica'
-        ? const Color(0xFFF59E0B)
-        : const Color(0xFF2563EB);
-    final accent2 = type == 'dica'
-        ? const Color(0xFFD97706)
-        : const Color(0xFF1D4ED8);
+    final (accent, accent2) = CourseContentCardHeader.colorsFor(type: type, index: index);
     final created = data['createdAt'];
     var dateLabel = '';
     if (created is Timestamp) {
@@ -2338,174 +2466,163 @@ class _VideoGridCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF212121),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: selected ? Colors.red.shade400 : Colors.white.withValues(alpha: 0.06),
-          width: selected ? 2 : 1,
-        ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          AspectRatio(
-            aspectRatio: 16 / 9,
-            child: Stack(
-              fit: StackFit.expand,
+        borderRadius: BorderRadius.circular(14),
+        child: Ink(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected ? accent : accent.withValues(alpha: 0.18),
+              width: selected ? 2 : 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: accent.withValues(alpha: 0.12),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(13),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (hasThumb)
-                  CourseMediaThumbnail.fromData(
-                    data,
-                    fit: thumbFit,
-                    fallback: _thumbFallback(accent, accent2),
-                    showPlayButton: isVideo || videoId != null || hasMp4,
-                    playIconSize: 52,
-                  )
-                else
-                  _thumbFallback(accent, accent2),
-                Material(
-                  color: Colors.transparent,
-                    child: InkWell(
-                    onTap: onPreview,
-                    child: hasThumb
-                        ? const SizedBox.expand()
-                        : Center(
-                      child: Icon(
-                        hasMp4
-                            ? Icons.movie_rounded
-                            : (type == 'dica' && videoId == null
-                                ? Icons.article_rounded
-                                : Icons.play_circle_fill_rounded),
-                        color: Colors.white.withValues(alpha: 0.95),
-                        size: 56,
-                      ),
+                CourseContentCardHeader(
+                  compact: true,
+                  title: title,
+                  subtitle: dateLabel.isNotEmpty ? dateLabel : null,
+                  accent: accent,
+                  accent2: accent2,
+                  icon: CourseContentCardHeader.iconForType(type),
+                  topBadges: [
+                    CourseContentCardHeader.badge(
+                      published ? 'PUBLICADO' : 'OCULTO',
+                      bg: published
+                          ? const Color(0xFF16A34A)
+                          : Colors.black.withValues(alpha: 0.35),
                     ),
+                    CourseContentCardHeader.badge(type.toUpperCase()),
+                    CourseContentCardHeader.badge(sourceLabel),
+                  ],
+                ),
+                AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (hasThumb)
+                        CourseMediaThumbnail.fromData(
+                          data,
+                          fit: thumbFit,
+                          fallback: _thumbFallback(accent, accent2),
+                          showPlayButton: isVideo || videoId != null || hasMp4,
+                          playIconSize: 48,
+                        )
+                      else
+                        _thumbFallback(accent, accent2),
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: onPreview,
+                          child: hasThumb
+                              ? const SizedBox.expand()
+                              : Center(
+                                  child: Icon(
+                                    hasMp4
+                                        ? Icons.movie_rounded
+                                        : (type == 'dica' && videoId == null
+                                            ? Icons.article_rounded
+                                            : Icons.play_circle_fill_rounded),
+                                    color: Colors.white.withValues(alpha: 0.95),
+                                    size: 48,
+                                  ),
+                                ),
+                        ),
+                      ),
+                      if (selectionMode)
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: CircleAvatar(
+                            radius: 14,
+                            backgroundColor:
+                                selected ? accent : Colors.white,
+                            child: Icon(
+                              selected ? Icons.check_rounded : Icons.circle_outlined,
+                              size: 18,
+                              color: selected ? Colors.white : Colors.grey.shade500,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-                if (selectionMode)
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: CircleAvatar(
-                      radius: 14,
-                      backgroundColor: selected ? AppColors.primary : Colors.white,
-                      child: Icon(
-                        selected ? Icons.check_rounded : Icons.circle_outlined,
-                        size: 18,
-                        color: selected ? Colors.white : Colors.grey.shade500,
-                      ),
-                    ),
-                  ),
-                Positioned(
-                  left: 8,
-                  top: 8,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: published ? Colors.green.shade600 : Colors.grey.shade700,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      published ? 'PUBLICADO' : 'OCULTO',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w900,
-                      ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (previewText.isNotEmpty)
+                          Expanded(
+                            child: Text(
+                              previewText,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                height: 1.35,
+                                color: Colors.grey.shade700,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          )
+                        else
+                          const Spacer(),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            _miniChip(
+                              validityLabel,
+                              expired ? const Color(0xFFDC2626) : const Color(0xFF64748B),
+                            ),
+                            const Spacer(),
+                            IconButton(
+                              tooltip: 'Editar',
+                              visualDensity: VisualDensity.compact,
+                              icon: Icon(Icons.edit_rounded,
+                                  color: accent.withValues(alpha: 0.85), size: 18),
+                              onPressed: onEdit,
+                            ),
+                            IconButton(
+                              tooltip: published ? 'Ocultar' : 'Publicar',
+                              visualDensity: VisualDensity.compact,
+                              icon: Icon(
+                                published
+                                    ? Icons.visibility_off_outlined
+                                    : Icons.visibility_rounded,
+                                color: Colors.grey.shade600,
+                                size: 18,
+                              ),
+                              onPressed: () => onTogglePublished(!published),
+                            ),
+                            IconButton(
+                              tooltip: 'Excluir',
+                              visualDensity: VisualDensity.compact,
+                              icon: Icon(Icons.delete_outline_rounded,
+                                  color: Colors.red.shade400, size: 18),
+                              onPressed: onDelete,
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 ),
               ],
             ),
           ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                      height: 1.25,
-                      color: Colors.white,
-                    ),
-                  ),
-                  if (previewText.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Expanded(
-                      child: Text(
-                        previewText,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          height: 1.35,
-                          color: Colors.grey.shade400,
-                        ),
-                      ),
-                    ),
-                  ] else
-                    const Spacer(),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      _miniChip(sourceLabel, accent),
-                      _miniChip(type.toUpperCase(), accent2),
-                      _miniChip(
-                        validityLabel,
-                        expired ? const Color(0xFFDC2626) : const Color(0xFF64748B),
-                      ),
-                      if (dateLabel.isNotEmpty) ...[
-                        const SizedBox(width: 6),
-                        Text(
-                          dateLabel,
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.grey.shade500,
-                          ),
-                        ),
-                      ],
-                      const Spacer(),
-                      IconButton(
-                        tooltip: 'Editar',
-                        visualDensity: VisualDensity.compact,
-                        icon: Icon(Icons.edit_rounded, color: Colors.grey.shade300, size: 18),
-                        onPressed: onEdit,
-                      ),
-                      IconButton(
-                        tooltip: published ? 'Ocultar' : 'Publicar',
-                        visualDensity: VisualDensity.compact,
-                        icon: Icon(
-                          published ? Icons.visibility_off_outlined : Icons.visibility_rounded,
-                          color: Colors.grey.shade400,
-                          size: 18,
-                        ),
-                        onPressed: () => onTogglePublished(!published),
-                      ),
-                      IconButton(
-                        tooltip: 'Excluir',
-                        visualDensity: VisualDensity.compact,
-                        icon: Icon(Icons.delete_outline_rounded,
-                            color: Colors.red.shade300, size: 18),
-                        onPressed: onDelete,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
         ),
       ),
     );

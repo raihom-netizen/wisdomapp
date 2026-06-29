@@ -6,9 +6,11 @@ import 'package:flutter/material.dart';
 import '../models/user_profile.dart';
 import '../screens/compromisso_form_page.dart';
 import 'agenda_notification_reschedule_helper.dart';
+import 'agenda_notifications_refresher.dart';
 import 'agenda_reminder_delete_helper.dart';
 import 'agenda_reminder_edit_service.dart';
 import 'agenda_scale_mirror_service.dart';
+import 'apple_calendar_sync_service.dart';
 import 'google_calendar_sync_service.dart';
 import 'yearly_commitment_repeat_service.dart';
 
@@ -93,6 +95,19 @@ class CompromissoReminderService {
         endTimeHHmm: endTimeStr,
       );
     }
+    if (await AppleCalendarSyncService.isEnabled(userDocId)) {
+      unawaited(
+        AppleCalendarSyncService.syncReminder(
+          userDocId: userDocId,
+          reminderDocId: docRef.id,
+          title: result.title,
+          notes: result.notes,
+          date: result.date,
+          timeHHmm: timeStr,
+          endTimeHHmm: endTimeStr,
+        ),
+      );
+    }
 
     return (docId: docRef.id, googleSynced: googleSynced, created: 1);
   }
@@ -112,71 +127,82 @@ class CompromissoReminderService {
     final endTimeStr =
         '${result.endTime.hour.toString().padLeft(2, '0')}:${result.endTime.minute.toString().padLeft(2, '0')}';
 
-    var created = 0;
-    var synced = 0;
-    String? firstId;
+    const batchLimit = 400;
     final gcalEnabled = await GoogleCalendarSyncService.isEnabled(userDocId);
     if (gcalEnabled) {
       await GoogleCalendarSyncService.warmUpIfEnabled(userDocId);
     }
 
-    for (final rawDay in dates) {
-      final day = DateTime(rawDay.year, rawDay.month, rawDay.day);
-      final docRef = await _reminders(userDocId).add({
-        'type': 'compromisso',
-        'title': result.title,
-        'notes': result.notes,
-        'date': Timestamp.fromDate(day),
-        'time': timeStr,
-        'endTime': endTimeStr,
-        'colorHex': result.colorHex,
-        'status': 'EM_ABERTO',
-        'done': false,
-        'createdAt': FieldValue.serverTimestamp(),
-        'agendaLoginDaySyncAt': FieldValue.serverTimestamp(),
-        'batchGroupTitle': result.title,
-      });
-
-      firstId ??= docRef.id;
-
-      await AgendaScaleMirrorService.upsert(
-        userDocId: userDocId,
-        agendaId: docRef.id,
-        type: AgendaMirrorType.compromisso,
-        label: result.title,
-        date: day,
-        startHHmm: timeStr,
-        endHHmm: endTimeStr,
-        colorHex: result.colorHex,
-        notes: result.notes,
-      );
-
-      unawaited(AgendaNotificationRescheduleHelper.afterReminderSave(
-        userDocId: userDocId,
-        reminderRef: docRef,
-        newDate: day,
-        newTimeHHmm: timeStr,
-      ));
-
-      if (gcalEnabled) {
-        final ok = await GoogleCalendarSyncService.syncReminderToGoogle(
-          userDocId: userDocId,
-          reminderDocId: docRef.id,
-          title: result.title,
-          notes: result.notes,
-          date: day,
-          timeHHmm: timeStr,
-          endTimeHHmm: endTimeStr,
-        );
-        if (ok) synced++;
+    final createdRefs = <({DocumentReference<Map<String, dynamic>> ref, DateTime day})>[];
+    for (var i = 0; i < dates.length; i += batchLimit) {
+      final slice = dates.skip(i).take(batchLimit);
+      final batch = FirebaseFirestore.instance.batch();
+      for (final rawDay in slice) {
+        final day = DateTime(rawDay.year, rawDay.month, rawDay.day);
+        final ref = _reminders(userDocId).doc();
+        batch.set(ref, {
+          'type': 'compromisso',
+          'title': result.title,
+          'notes': result.notes,
+          'date': Timestamp.fromDate(day),
+          'time': timeStr,
+          'endTime': endTimeStr,
+          'colorHex': result.colorHex,
+          'status': 'EM_ABERTO',
+          'done': false,
+          'createdAt': FieldValue.serverTimestamp(),
+          'agendaLoginDaySyncAt': FieldValue.serverTimestamp(),
+          'batchGroupTitle': result.title,
+        });
+        createdRefs.add((ref: ref, day: day));
       }
-      created++;
+      await batch.commit();
     }
+
+    var synced = 0;
+    String? firstId;
+    for (var i = 0; i < createdRefs.length; i += 40) {
+      final chunk = createdRefs.skip(i).take(40);
+      await Future.wait(chunk.map((e) async {
+        firstId ??= e.ref.id;
+        await AgendaScaleMirrorService.upsert(
+          userDocId: userDocId,
+          agendaId: e.ref.id,
+          type: AgendaMirrorType.compromisso,
+          label: result.title,
+          date: e.day,
+          startHHmm: timeStr,
+          endHHmm: endTimeStr,
+          colorHex: result.colorHex,
+          notes: result.notes,
+        );
+        unawaited(AgendaNotificationRescheduleHelper.afterReminderSave(
+          userDocId: userDocId,
+          reminderRef: e.ref,
+          newDate: e.day,
+          newTimeHHmm: timeStr,
+        ));
+        if (gcalEnabled) {
+          final ok = await GoogleCalendarSyncService.syncReminderToGoogle(
+            userDocId: userDocId,
+            reminderDocId: e.ref.id,
+            title: result.title,
+            notes: result.notes,
+            date: e.day,
+            timeHHmm: timeStr,
+            endTimeHHmm: endTimeStr,
+          );
+          if (ok) synced++;
+        }
+      }));
+    }
+
+    unawaited(AgendaNotificationsRefresher.refresh(uid: userDocId));
 
     return (
       docId: firstId ?? '',
-      googleSynced: synced > 0 && synced == created,
-      created: created,
+      googleSynced: synced > 0 && synced == createdRefs.length,
+      created: createdRefs.length,
     );
   }
 
@@ -394,6 +420,98 @@ class CompromissoReminderService {
       if (ok) n++;
     }
     return n;
+  }
+
+  /// Limpeza em massa — compromissos particulares (Firestore em batch + espelhos).
+  static Future<int> clearCompromissosBulk({
+    required String userDocId,
+    required List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  }) async {
+    if (userDocId.isEmpty || docs.isEmpty) return 0;
+
+    const batchLimit = 450;
+    var removed = 0;
+    final googleTasks = <Future<void>>[];
+
+    for (var i = 0; i < docs.length; i += batchLimit) {
+      final slice = docs.skip(i).take(batchLimit).toList();
+      final batch = FirebaseFirestore.instance.batch();
+      final mirrorDeletes = <Future<void>>[];
+      final yearlyDeletes = <Future<void>>[];
+
+      for (final doc in slice) {
+        final data = doc.data();
+        if (!isCompromissoDoc(data)) continue;
+
+        if (YearlyCommitmentRepeatService.isYearlyRepeatEntry(data)) {
+          yearlyDeletes.add(
+            YearlyCommitmentRepeatService.deleteYearlyInstanceOnly(
+              userDocId: userDocId,
+              instanceReminderDocId: doc.id,
+              instanceData: data,
+            ),
+          );
+          removed++;
+          continue;
+        }
+
+        final gId = (data['googleEventId'] ?? '').toString().trim();
+        if (gId.isNotEmpty) {
+          googleTasks.add(
+            GoogleCalendarSyncService.deleteGoogleEventForReminder(
+              userDocId: userDocId,
+              reminderDocId: doc.id,
+              googleEventId: gId,
+            ),
+          );
+        }
+
+        batch.delete(doc.reference);
+        mirrorDeletes.add(
+          AgendaScaleMirrorService.delete(
+            userDocId: userDocId,
+            agendaId: doc.id,
+          ),
+        );
+        removed++;
+      }
+
+      if (mirrorDeletes.isNotEmpty) {
+        await batch.commit();
+        await Future.wait(mirrorDeletes);
+      }
+      if (yearlyDeletes.isNotEmpty) {
+        await Future.wait(yearlyDeletes);
+      }
+    }
+
+    if (googleTasks.isNotEmpty) {
+      unawaited(Future.wait(googleTasks));
+    }
+    unawaited(AgendaNotificationsRefresher.refresh(uid: userDocId));
+    return removed;
+  }
+
+  /// Busca compromissos particulares num intervalo (query indexada type+date).
+  static Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> fetchCompromissosInRange({
+    required String userDocId,
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    if (userDocId.isEmpty) return const [];
+    final endEod = DateTime(end.year, end.month, end.day, 23, 59, 59);
+    final snap = await _reminders(userDocId)
+        .where('type', isEqualTo: 'compromisso')
+        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+        .where('date', isLessThanOrEqualTo: Timestamp.fromDate(endEod))
+        .orderBy('date')
+        .get();
+    return snap.docs
+        .where((d) => YearlyCommitmentRepeatService.shouldShowInAgendaList(
+              d.data(),
+              docId: d.id,
+            ))
+        .toList(growable: false);
   }
 
   static bool isCompromissoDoc(Map<String, dynamic> data) {

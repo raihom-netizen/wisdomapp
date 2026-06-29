@@ -535,9 +535,23 @@ class _AdminFinancialTipsPageState extends State<AdminFinancialTipsPage>
   }
 
   int _gridCrossAxisCount(double w) {
-    if (w >= 1200) return 3;
-    if (w >= 720) return 2;
+    if (w >= 1200) return 4;
+    if (w >= 900) return 3;
+    if (w >= 520) return 2;
     return 1;
+  }
+
+  double _gridAspectRatio(int cross) {
+    switch (cross) {
+      case 4:
+        return 1.75;
+      case 3:
+        return 1.65;
+      case 2:
+        return 1.55;
+      default:
+        return 2.8;
+    }
   }
 
   @override
@@ -697,9 +711,9 @@ class _AdminFinancialTipsPageState extends State<AdminFinancialTipsPage>
                           sliver: SliverGrid(
                             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                               crossAxisCount: cross,
-                              mainAxisSpacing: 14,
-                              crossAxisSpacing: 14,
-                              childAspectRatio: cross >= 2 ? 0.82 : 0.88,
+                              mainAxisSpacing: 10,
+                              crossAxisSpacing: 10,
+                              childAspectRatio: _gridAspectRatio(cross),
                             ),
                             delegate: SliverChildBuilderDelegate(
                               (context, i) {
@@ -720,6 +734,7 @@ class _AdminFinancialTipsPageState extends State<AdminFinancialTipsPage>
                                     _selectionMode = true;
                                     _selectedIds.add(doc.id);
                                   }),
+                                  onViewDetail: () => _openDetail(doc),
                                   onEdit: () => _openEditor(doc),
                                   onDelete: () => _confirmDelete(doc.id),
                                   onToggleFavorite: (v) {

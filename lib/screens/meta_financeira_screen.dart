@@ -25,7 +25,7 @@ import '../utils/home_shell_layout.dart';
 import '../utils/fifty_two_weeks_plan.dart';
 import '../utils/goal_objective_visuals.dart';
 import '../widgets/fifty_two_weeks_schedule_sheet.dart';
-import '../widgets/goal_52_weeks_summary_panel.dart';
+import '../widgets/goal_52_weeks_objective_card.dart';
 import '../widgets/goal_finance_account_field.dart';
 
 /// Categorias de metas (estrutura base Premium).
@@ -610,7 +610,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
               const SizedBox(width: 12),
               const Expanded(
                 child: Text(
-                  'Objetivo Financeiro',
+                  'Objetivos Financeiros',
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w900,
@@ -1121,8 +1121,21 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
 
 
   Widget _buildGoalCard(BuildContext context, QueryDocumentSnapshot<Map<String, dynamic>> goalDoc) {
-    final isCompact = MediaQuery.sizeOf(context).width < 400;
     final data = goalDoc.data();
+    final is52Weeks = FiftyTwoWeeksPlan.is52WeeksGoal(data);
+
+    if (is52Weeks) {
+      return Goal52WeeksObjectiveCard(
+        goalDoc: goalDoc,
+        uid: widget.uid,
+        profile: widget.profile,
+        margin: const EdgeInsets.only(bottom: 20),
+        onEditGoal: () => _editarMeta(context, goalDoc),
+        onDeleteGoal: () => _excluirMeta(context, goalDoc),
+      );
+    }
+
+    final isCompact = MediaQuery.sizeOf(context).width < 400;
     final title = (data['title'] ?? 'Meta').toString();
     final target = (data['targetAmount'] ?? 0).toDouble();
     final dueTs = data['dueDate'] as Timestamp?;
@@ -1132,14 +1145,10 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
       priority = GoalPriority.values.firstWhere((e) => e.name == (data['priority'] ?? ''));
     } catch (_) {}
     final interestRate = (data['interestRateMonthly'] ?? 0).toDouble();
-    final is52Weeks = FiftyTwoWeeksPlan.is52WeeksGoal(data);
 
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: goalDoc.reference.collection('contributions').orderBy('date', descending: false).snapshots(),
       builder: (context, contribSnap) {
-        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: _tx.where('goalId', isEqualTo: goalDoc.id).snapshots(),
-          builder: (context, txSnap) {
             double contribSum = 0;
             final contribDocs = contribSnap.data?.docs ?? [];
             final contribByMonth = <String, double>{};
@@ -1152,11 +1161,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                 contribByMonth[key] = (contribByMonth[key] ?? 0) + amount;
               }
             }
-            double txSum = 0;
-            for (final d in txSnap.data?.docs ?? []) {
-              txSum += (d.data()['amount'] ?? 0).toDouble();
-            }
-            final current = contribSum + txSum;
+            final current = contribSum;
             final progress = target > 0 ? (current / target).clamp(0.0, 1.0) : 0.0;
             final faltam = (target - current).clamp(0.0, double.infinity);
             final due = dueTs?.toDate();
@@ -1426,44 +1431,6 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                       ),
                     ),
                   ],
-                  if (is52Weeks) ...[
-                    const SizedBox(height: 14),
-                    Goal52WeeksSummaryPanel(
-                      target: target,
-                      deposited: current,
-                      paidWeeks: FiftyTwoWeeksPlan.paidWeeksFromData(data).length,
-                      currentWeek: FiftyTwoWeeksPlan.currentWeekNumber(
-                        FiftyTwoWeeksPlan.planStartFromData(data) ?? DateTime.now(),
-                      ),
-                      gradient: goalVisualForData(data).gradient,
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: () => showFiftyTwoWeeksScheduleSheet(
-                          context: context,
-                          goalDoc: goalDoc,
-                          profile: widget.profile,
-                          uid: widget.uid,
-                        ),
-                        icon: const Icon(Icons.calendar_view_week_rounded, size: 18),
-                        label: const Text('Ver cronograma 52 semanas'),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 13),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Goal52WeeksPdfButton(
-                      onPressed: () => exportFiftyTwoWeeksGoalPdf(
-                        context: context,
-                        goalDoc: goalDoc,
-                      ),
-                      label: 'Exportar PDF',
-                    ),
-                  ],
                   if (target > 0) ...[
                     const SizedBox(height: 14),
                     AppPieChart(
@@ -1490,7 +1457,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                         FilledButton.icon(
                           onPressed: () => _registrarDeposito(context, goalDoc),
                           icon: const Icon(Icons.savings_rounded, size: 20),
-                          label: const Text('Selecionar semanas e depositar'),
+                          label: const Text('Depositar'),
                           style: FilledButton.styleFrom(
                             backgroundColor: AppColors.primary,
                             foregroundColor: Colors.white,
@@ -1522,11 +1489,8 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                         Expanded(
                           child: FilledButton.icon(
                             onPressed: () => _registrarDeposito(context, goalDoc),
-                            icon: Icon(
-                              is52Weeks ? Icons.calendar_view_week_rounded : Icons.savings_rounded,
-                              size: 20,
-                            ),
-                            label: Text(is52Weeks ? 'Semanas' : 'Depósito'),
+                            icon: const Icon(Icons.savings_rounded, size: 20),
+                            label: const Text('Depositar'),
                             style: FilledButton.styleFrom(
                               backgroundColor: AppColors.primary,
                               foregroundColor: Colors.white,
@@ -1558,8 +1522,6 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                 ],
               ),
             );
-          },
-        );
       },
     );
   }

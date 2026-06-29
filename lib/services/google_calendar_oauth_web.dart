@@ -62,6 +62,7 @@ class GoogleCalendarOAuthPlatform {
     String? enableUserDocId,
     bool selectAccount = false,
     bool promptNone = false,
+    bool forceConsent = false,
   }) {
     final returnUrl = html.window.location.href;
     final params = <String, String>{
@@ -75,7 +76,8 @@ class GoogleCalendarOAuthPlatform {
       html.window.sessionStorage[_enableUidKey] = enableUserDocId;
     }
     if (selectAccount) params['select_account'] = '1';
-    if (promptNone) params['prompt'] = 'none';
+    if (promptNone) params['silent'] = '1';
+    if (forceConsent) params['force_consent'] = '1';
 
     html.window.location.assign(GoogleOAuthConfig.buildOAuthStartUrl(params));
   }
@@ -97,6 +99,10 @@ class GoogleCalendarOAuthPlatform {
       final decoded = Uri.decodeComponent(payload);
       final map = jsonDecode(decoded) as Map<String, dynamic>;
       final code = (map['authorization_code'] ?? '').toString().trim();
+      final enableUid = (map['enable_uid'] ?? '').toString().trim();
+      if (enableUid.isNotEmpty) {
+        html.window.sessionStorage[_enableUidKey] = enableUid;
+      }
       _stripHashFromUrl();
       if (code.isEmpty) return false;
       return _exchangeCodeAndCache(code);

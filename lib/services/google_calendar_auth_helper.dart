@@ -63,11 +63,15 @@ class GoogleCalendarAuthHelper {
     String? preferredEmail,
     String? enableUserDocId,
     bool selectAccount = false,
+    bool promptNone = false,
+    bool forceConsent = false,
   }) {
     GoogleCalendarOAuthPlatform.startWebOAuthRedirect(
       preferredEmail: preferredEmail,
       enableUserDocId: enableUserDocId,
       selectAccount: selectAccount,
+      promptNone: promptNone,
+      forceConsent: forceConsent,
     );
   }
 

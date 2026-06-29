@@ -14,6 +14,7 @@ import '../utils/course_thumb_resolver.dart';
 import '../utils/youtube_url_helper.dart';
 import '../utils/course_media_url_resolver.dart';
 import '../widgets/course_media_preview.dart';
+import '../widgets/course/course_content_card_header.dart';
 import '../widgets/course_video/course_module_media_panel.dart';
 
 BoxFit _courseThumbFit(Map<String, dynamic> data) {
@@ -556,6 +557,7 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
             final related = allDocs.map((d) => {...d.data, 'id': d.id}).toList();
             return _DicaGridCard(
               data: {...data, 'id': docs[i].id},
+              index: i,
               videoId: _videoId(data),
               thumbUrl: _thumbUrl(data),
               accent: accent,
@@ -589,17 +591,19 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
     }
     return Column(
       children: [
-        for (final doc in docs)
+        for (var i = 0; i < docs.length; i++)
           _ModernVideoCard(
-            data: {...doc.data, 'id': doc.id},
-            videoId: _videoId(doc.data),
-            thumbUrl: _thumbUrl(doc.data),
+            data: {...docs[i].data, 'id': docs[i].id},
+            index: i,
+            videoId: _videoId(docs[i].data),
+            thumbUrl: _thumbUrl(docs[i].data),
             accent: accent,
             accent2: accent2,
-            selected: (_activeCurso?['id'] ?? (allDocs.isNotEmpty ? allDocs.first.id : '')) == doc.id,
+            selected: (_activeCurso?['id'] ?? (allDocs.isNotEmpty ? allDocs.first.id : '')) ==
+                docs[i].id,
             onTap: () => _openContent(
               context,
-              {...doc.data, 'id': doc.id},
+              {...docs[i].data, 'id': docs[i].id},
               related: allDocs.map((d) => {...d.data, 'id': d.id}).toList(),
               isDica: false,
             ),
@@ -943,6 +947,7 @@ class _FeaturedVideoHighlight extends StatelessWidget {
 class _ModernVideoCard extends StatelessWidget {
   const _ModernVideoCard({
     required this.data,
+    required this.index,
     required this.videoId,
     required this.thumbUrl,
     required this.accent,
@@ -952,6 +957,7 @@ class _ModernVideoCard extends StatelessWidget {
   });
 
   final Map<String, dynamic> data;
+  final int index;
   final String? videoId;
   final String? thumbUrl;
   final Color accent;
@@ -991,6 +997,8 @@ class _ModernVideoCard extends StatelessWidget {
     final hasThumb = CourseThumbResolver.hasVisualThumb(data);
     final isVideo = CourseThumbResolver.isVideoContent(data);
     final thumbFit = _courseThumbFit(data);
+    final (headerAccent, headerAccent2) =
+        CourseContentCardHeader.colorsFor(type: type, index: index);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -998,107 +1006,91 @@ class _ModernVideoCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: selected ? accent : accent.withValues(alpha: 0.12),
+          color: selected ? headerAccent : headerAccent.withValues(alpha: 0.12),
           width: selected ? 2.2 : 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: accent.withValues(alpha: 0.1),
+            color: headerAccent.withValues(alpha: 0.1),
             blurRadius: 14,
             offset: const Offset(0, 5),
           ),
         ],
       ),
+      clipBehavior: Clip.antiAlias,
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(18),
         child: InkWell(
-          borderRadius: BorderRadius.circular(18),
           onTap: onTap,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ClipRRect(
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(18)),
-                child: AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      if (hasThumb)
-                        CourseMediaThumbnail.fromData(
-                          data,
-                          fit: thumbFit,
-                          fallback: _coverFallback(type, accent, accent2),
-                          showPlayButton: isVideo,
-                        )
-                      else if (isVideo)
-                        CourseMediaThumbnail.fromData(
-                          data,
-                          fit: BoxFit.cover,
-                          fallback: _coverFallback(type, accent, accent2),
-                          showPlayButton: true,
-                        )
-                      else
-                        _coverFallback(type, accent, accent2),
-                      if (!hasThumb && !isVideo)
-                        Center(
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.25),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              _overlayIcon(),
-                              color: Colors.white.withValues(alpha: 0.95),
-                              size: 52,
-                            ),
+              CourseContentCardHeader(
+                title: title,
+                accent: headerAccent,
+                accent2: headerAccent2,
+                icon: CourseContentCardHeader.iconForType(type),
+                topBadges: [
+                  CourseContentCardHeader.badge(type.toUpperCase()),
+                  CourseContentCardHeader.badge(_sourceLabel()),
+                ],
+              ),
+              AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (hasThumb)
+                      CourseMediaThumbnail.fromData(
+                        data,
+                        fit: thumbFit,
+                        fallback: _coverFallback(type, headerAccent, headerAccent2),
+                        showPlayButton: isVideo,
+                      )
+                    else if (isVideo)
+                      CourseMediaThumbnail.fromData(
+                        data,
+                        fit: BoxFit.cover,
+                        fallback: _coverFallback(type, headerAccent, headerAccent2),
+                        showPlayButton: true,
+                      )
+                    else
+                      _coverFallback(type, headerAccent, headerAccent2),
+                    if (!hasThumb && !isVideo)
+                      Center(
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.25),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            _overlayIcon(),
+                            color: Colors.white.withValues(alpha: 0.95),
+                            size: 52,
                           ),
                         ),
-                    ],
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 15,
-                        height: 1.25,
                       ),
-                    ),
-                    if (preview.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        preview,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Colors.grey.shade700,
-                          height: 1.35,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        _chip(_sourceLabel(), accent),
-                        _chip(type.toUpperCase(), accent2),
-                      ],
-                    ),
                   ],
                 ),
               ),
+              if (preview.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+                  child: Text(
+                    preview,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.grey.shade700,
+                      height: 1.35,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 13,
+                    ),
+                  ),
+                )
+              else
+                const SizedBox(height: 10),
             ],
           ),
         ),
@@ -1110,32 +1102,16 @@ class _ModernVideoCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: type == 'dica' ? [a, b] : [a, b],
+          colors: [a, b],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
       ),
-      child: const Center(
-        child: Icon(Icons.ondemand_video_rounded, color: Colors.white, size: 44),
-      ),
-    );
-  }
-
-  Widget _chip(String text, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: 0.28)),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w900,
-          color: color,
-          letterSpacing: 0.3,
+      child: Center(
+        child: Icon(
+          type == 'dica' ? Icons.lightbulb_rounded : Icons.ondemand_video_rounded,
+          color: Colors.white,
+          size: 44,
         ),
       ),
     );
@@ -1145,6 +1121,7 @@ class _ModernVideoCard extends StatelessWidget {
 class _DicaGridCard extends StatelessWidget {
   const _DicaGridCard({
     required this.data,
+    required this.index,
     required this.videoId,
     required this.thumbUrl,
     required this.accent,
@@ -1154,6 +1131,7 @@ class _DicaGridCard extends StatelessWidget {
   });
 
   final Map<String, dynamic> data;
+  final int index;
   final String? videoId;
   final String? thumbUrl;
   final Color accent;
@@ -1173,6 +1151,13 @@ class _DicaGridCard extends StatelessWidget {
         : ((data['linkUrl'] ?? data['externalUrl'] ?? '').toString().isNotEmpty
             ? Icons.open_in_new_rounded
             : Icons.article_rounded);
+    final (headerAccent, headerAccent2) =
+        CourseContentCardHeader.colorsFor(type: 'dica', index: index);
+    final sourceLabel = videoId != null
+        ? 'YOUTUBE'
+        : ((data['linkUrl'] ?? data['externalUrl'] ?? '').toString().isNotEmpty
+            ? 'LINK'
+            : 'TEXTO');
 
     return Material(
       color: Colors.transparent,
@@ -1184,12 +1169,12 @@ class _DicaGridCard extends StatelessWidget {
             color: Colors.white,
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
-              color: selected ? accent : accent.withValues(alpha: 0.15),
+              color: selected ? headerAccent : headerAccent.withValues(alpha: 0.15),
               width: selected ? 2.2 : 1,
             ),
             boxShadow: [
               BoxShadow(
-                color: accent.withValues(alpha: 0.1),
+                color: headerAccent.withValues(alpha: 0.1),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
@@ -1199,6 +1184,17 @@ class _DicaGridCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              CourseContentCardHeader(
+                compact: true,
+                title: title,
+                accent: headerAccent,
+                accent2: headerAccent2,
+                icon: Icons.lightbulb_rounded,
+                topBadges: [
+                  CourseContentCardHeader.badge('DICA'),
+                  CourseContentCardHeader.badge(sourceLabel),
+                ],
+              ),
               AspectRatio(
                 aspectRatio: 16 / 10,
                 child: Stack(
@@ -1208,12 +1204,12 @@ class _DicaGridCard extends StatelessWidget {
                       CourseMediaThumbnail.fromData(
                         data,
                         fit: thumbFit,
-                        fallback: _fallback(accent, accent2),
+                        fallback: _fallback(headerAccent, headerAccent2),
                         showPlayButton: isVideo,
                         playIconSize: 44,
                       )
                     else
-                      _fallback(accent, accent2),
+                      _fallback(headerAccent, headerAccent2),
                     if (!hasThumb)
                       Center(
                         child: Icon(
@@ -1228,38 +1224,19 @@ class _DicaGridCard extends StatelessWidget {
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 13,
-                          height: 1.2,
-                          color: accent.withValues(alpha: 0.95),
-                        ),
-                      ),
-                      if (body.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Expanded(
-                          child: Text(
-                            body,
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              height: 1.35,
-                              color: Colors.grey.shade700,
-                            ),
+                  child: body.isNotEmpty
+                      ? Text(
+                          body,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            height: 1.35,
+                            color: Colors.grey.shade700,
+                            fontWeight: FontWeight.w500,
                           ),
-                        ),
-                      ] else
-                        const Spacer(),
-                    ],
-                  ),
+                        )
+                      : const SizedBox.shrink(),
                 ),
               ),
             ],

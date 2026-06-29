@@ -4,7 +4,7 @@ import '../../utils/course_media_url_resolver.dart';
 import '../../utils/course_thumb_resolver.dart';
 import '../../utils/youtube_url_helper.dart';
 import '../course_media_preview.dart';
-import 'course_video_embed.dart';
+import 'course_video_player_shell.dart';
 
 /// Conteúdo de curso/dica **dentro do módulo** — vídeo inline, fotos, detalhes modernos.
 class CourseModuleMediaPanel extends StatefulWidget {
@@ -142,11 +142,14 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
             Center(
               child: AspectRatio(
                 aspectRatio: 16 / 9,
-                child: CourseVideoEmbed(
-                  key: ValueKey('fs-${_youtubeId ?? ''}|${_resolvedMp4 ?? ''}'),
+                child: CourseVideoPlayerShell(
+                  embedKey: ValueKey('fs-${_youtubeId ?? ''}|${_resolvedMp4 ?? ''}'),
+                  posterData: widget.data,
                   youtubeVideoId: _youtubeId,
                   mp4Url: _resolvedMp4,
                   autoplay: true,
+                  accent: widget.accent,
+                  accent2: widget.accent2,
                 ),
               ),
             ),
@@ -222,13 +225,16 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
                                   ),
                                 )
                               : RepaintBoundary(
-                                  child: CourseVideoEmbed(
-                                    key: ValueKey(
+                                  child: CourseVideoPlayerShell(
+                                    embedKey: ValueKey(
                                       'mod-${widget.data['id']}|${_youtubeId ?? ''}|${_resolvedMp4 ?? ''}',
                                     ),
+                                    posterData: widget.data,
                                     youtubeVideoId: _youtubeId,
                                     mp4Url: _resolvedMp4,
                                     autoplay: false,
+                                    accent: widget.accent,
+                                    accent2: widget.accent2,
                                   ),
                                 ),
                         ),

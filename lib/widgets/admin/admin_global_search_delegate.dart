@@ -99,6 +99,7 @@ class AdminGlobalSearchDelegate extends SearchDelegate<String?> {
 
     void addDoc(QueryDocumentSnapshot<Map<String, dynamic>> d) {
       final data = d.data();
+      if (!adminUserHasCompleteEmail(data)) return;
       results[d.id] = _AdminSearchHit(
         uid: d.id,
         name: adminUserDisplayName(data),
@@ -146,11 +147,13 @@ class AdminGlobalSearchDelegate extends SearchDelegate<String?> {
       final direct = await _db.collection('users').doc(q).get();
       if (direct.exists) {
         final data = direct.data() ?? {};
-        results[direct.id] = _AdminSearchHit(
-          uid: direct.id,
-          name: adminUserDisplayName(data),
-          email: (data['email'] ?? '').toString(),
-        );
+        if (adminUserHasCompleteEmail(data)) {
+          results[direct.id] = _AdminSearchHit(
+            uid: direct.id,
+            name: adminUserDisplayName(data),
+            email: (data['email'] ?? '').toString(),
+          );
+        }
       }
     }
 

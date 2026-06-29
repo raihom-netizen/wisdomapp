@@ -10,8 +10,11 @@ import 'package:intl/intl.dart';
 
 import '../constants/google_oauth_config.dart';
 import '../utils/firestore_web_guard.dart';
+import '../utils/gcal_web_url_clean.dart';
 import 'google_calendar_auth_helper.dart';
 import 'google_calendar_oauth_bridge.dart';
+import 'google_calendar_token_store.dart';
+import 'google_calendar_oauth_return.dart';
 
 /// Evento do Google Calendar exibido na Agenda (editável quando integração ativa).
 class GoogleCalendarEventItem {
@@ -142,10 +145,13 @@ class GoogleCalendarSyncService {
   }
 
   /// Leitura pontual (UI do toggle) — evita `snapshots()` durante OAuth Calendar.
-  static Future<({bool enabled, String? email})> readIntegrationState(
+  static Future<({bool enabled, String? email, bool hasRefreshToken})>
+      readIntegrationState(
     String uid,
   ) async {
-    if (uid.isEmpty) return (enabled: false, email: null);
+    if (uid.isEmpty) {
+      return (enabled: false, email: null, hasRefreshToken: false);
+    }
     try {
       final snap = await FirestoreWebGuard.runFirestoreOpSafe(
         () => _settingsRef(uid).get(),
@@ -155,9 +161,10 @@ class GoogleCalendarSyncService {
       return (
         enabled: data['enabled'] == true,
         email: emailRaw.isEmpty ? null : emailRaw,
+        hasRefreshToken: data['hasRefreshToken'] == true,
       );
     } catch (_) {
-      return (enabled: false, email: null);
+      return (enabled: false, email: null, hasRefreshToken: false);
     }
   }
 
@@ -198,26 +205,59 @@ class GoogleCalendarSyncService {
       return GoogleCalendarEnableResult.fail('Sessão inválida. Entre novamente.');
     }
     await completeWebOAuthReturnIfNeeded();
+    if (await _tryServerRefreshOnly(uid)) {
+      return _enableCore(uid, forceNewCredentials: false, skipSilent: false);
+    }
     return _enableCore(uid, forceNewCredentials: false, skipSilent: false);
   }
 
-  /// Web: após redirect OAuth, grava token e ativa integração se pendente.
-  static Future<void> completeWebOAuthReturnIfNeeded() async {
-    if (!kIsWeb) return;
+  /// Web: após redirect OAuth, grava token e ativa integração.
+  /// Retorna resultado quando processou retorno (?gcal=ok ou code pendente).
+  static Future<GoogleCalendarEnableResult?> completeWebOAuthReturnIfNeeded() async {
+    if (!kIsWeb) return null;
 
+    final gcalOk = Uri.base.queryParameters['gcal'] == 'ok';
     final gcalError = _readWebOAuthErrorQuery();
+
     if (gcalError != null) {
       debugPrint('Google Calendar OAuth error: $gcalError');
       GoogleCalendarAuthHelper.clearPendingWebEnableUserDocId();
-      return;
+      cleanGcalQueryFromBrowserUrl();
+      final fail = GoogleCalendarEnableResult.fail(
+        GoogleCalendarOAuthReturn.friendlyOAuthError(gcalError),
+      );
+      GoogleCalendarOAuthReturn.notify(fail);
+      return fail;
     }
 
+    final pendingUid = GoogleCalendarAuthHelper.pendingWebEnableUserDocId();
     final consumed = await GoogleCalendarAuthHelper.consumeWebOAuthReturn();
-    if (!consumed) return;
-    final uid = GoogleCalendarAuthHelper.pendingWebEnableUserDocId();
-    if (uid == null || uid.isEmpty) return;
+
+    if (!consumed && !gcalOk && (pendingUid == null || pendingUid.isEmpty)) {
+      return null;
+    }
+
+    var uid = pendingUid;
+    if (uid == null || uid.isEmpty) {
+      uid = _uidFromCurrentFirebaseUser();
+    }
+    if (uid.isEmpty) {
+      cleanGcalQueryFromBrowserUrl();
+      return null;
+    }
+
     GoogleCalendarAuthHelper.clearPendingWebEnableUserDocId();
-    await enable(uid, skipSilent: false);
+    cleanGcalQueryFromBrowserUrl();
+
+    final result = await enable(uid, skipSilent: false);
+    GoogleCalendarOAuthReturn.notify(result);
+    return result;
+  }
+
+  static String _uidFromCurrentFirebaseUser() {
+    final u = FirebaseAuth.instance.currentUser;
+    if (u == null) return '';
+    return u.uid;
   }
 
   static String? _readWebOAuthErrorQuery() {
@@ -267,6 +307,30 @@ class GoogleCalendarSyncService {
     });
   }
 
+  static Future<bool> _tryServerRefreshOnly(String uid) async {
+    if (!kIsWeb || uid.isEmpty) return false;
+    try {
+      final snap = await FirestoreWebGuard.runFirestoreOpSafe(
+        () => _settingsRef(uid).get(),
+      );
+      if (snap.data()?['hasRefreshToken'] != true) return false;
+      final server = await GoogleCalendarOAuthBridge.refreshAccessToken();
+      if (server == null || server.accessToken.isEmpty) return false;
+      await GoogleCalendarTokenStore.save(
+        server.accessToken,
+        email: server.email,
+        expiresAt: server.expiresAt,
+      );
+      if (server.email != null && server.email!.isNotEmpty) {
+        _activeConnectedEmail = server.email;
+      }
+      return true;
+    } catch (e, st) {
+      debugPrint('GoogleCalendar server refresh: $e\n$st');
+      return false;
+    }
+  }
+
   static Future<GoogleCalendarEnableResult> _enableCore(
     String uid, {
     required bool forceNewCredentials,
@@ -292,6 +356,10 @@ class GoogleCalendarSyncService {
         : preferredEmail;
 
     try {
+      if (!forceNewCredentials && kIsWeb) {
+        await _tryServerRefreshOnly(uid);
+      }
+
       final GoogleCalendarAuthResult auth;
       if (skipSilent || forceNewCredentials) {
         auth = await GoogleCalendarAuthHelper.requestInteractive(

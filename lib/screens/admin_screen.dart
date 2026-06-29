@@ -148,6 +148,9 @@ class _AdminScreenState extends State<AdminScreen> {
   bool _usersListStreamBound = false;
   bool _partnershipsBound = false;
   bool _adminHeavyWorkScheduled = false;
+  bool _partnershipMetricsScheduled = false;
+  bool _partnershipMetricsLoading = false;
+  List<AdminPartnershipMetric>? _overlayPartnershipMetrics;
   bool _didEnsureGlobalScaleRates = false;
   // Resumo: período dos indicadores (7, 30 ou 90 dias)
   int _resumoPeriodDays = 30;
@@ -303,11 +306,113 @@ class _AdminScreenState extends State<AdminScreen> {
     _adminHeavyWorkScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      Future<void>.delayed(const Duration(milliseconds: 16), () {
+      final delay = _adminPreferLightStatsIO
+          ? (defaultTargetPlatform == TargetPlatform.android
+              ? const Duration(milliseconds: 1400)
+              : const Duration(milliseconds: 900))
+          : const Duration(milliseconds: 48);
+      Future<void>.delayed(delay, () {
         if (!mounted) return;
         _resumeAdminHeavyWork();
       });
     });
+  }
+
+  /// Mobile: menos I/O Firestore no 1º paint — evita ANR ao abrir o painel.
+  bool get _adminPreferLightStatsIO =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+
+  int get _usersListLimit => _adminPreferLightStatsIO ? 400 : 2000;
+
+  int get _kAdminTxMaxDetailDocs => _adminPreferLightStatsIO ? 400 : 2500;
+
+  int get _kAdminUsersFallbackLimit => _adminPreferLightStatsIO ? 800 : 5000;
+
+  int get _kAdminUsersSizeSample => _adminPreferLightStatsIO ? 60 : 300;
+
+  int get _kAdminTxSizeSample => _adminPreferLightStatsIO ? 80 : 400;
+
+  int get _kAdminMpPaymentsLimit => _adminPreferLightStatsIO ? 250 : 800;
+
+  int get _kAdminLicenseHorizonLimit => _adminPreferLightStatsIO ? 400 : 1500;
+
+  void _schedulePartnershipMetricsOverlay() {
+    if (!_adminPreferLightStatsIO) return;
+    if (_partnershipMetricsScheduled) return;
+    if (_overlayPartnershipMetrics != null) return;
+    _partnershipMetricsScheduled = true;
+    Future<void>.delayed(const Duration(milliseconds: 2200), () {
+      if (!mounted) return;
+      unawaited(_loadPartnershipMetricsOverlay());
+    });
+  }
+
+  Future<void> _loadPartnershipMetricsOverlay() async {
+    if (_partnershipMetricsLoading || _overlayPartnershipMetrics != null) {
+      return;
+    }
+    _partnershipMetricsLoading = true;
+    try {
+      final metrics = await _fetchPartnershipMetrics();
+      if (!mounted) return;
+      setState(() => _overlayPartnershipMetrics = metrics);
+    } catch (e) {
+      debugPrint('Métricas convênios (adiado admin): $e');
+    } finally {
+      _partnershipMetricsLoading = false;
+    }
+  }
+
+  Future<List<AdminPartnershipMetric>> _fetchPartnershipMetrics() async {
+    final partnershipMetrics = <AdminPartnershipMetric>[];
+    final pSnap = await firestoreQueryGetReliable(
+      FirebaseFirestore.instance.collection('partnerships'),
+    );
+    final catalog = parsePartnershipPlansSnapshot(pSnap);
+    if (catalog.isEmpty) return partnershipMetrics;
+    final metrics = await Future.wait(
+      catalog.map((c) async {
+        final n = await countUsersPartnershipInPeriod(
+          FirebaseFirestore.instance,
+          c.partnershipDocId,
+          0,
+          partnershipPlanCode: c.planCode,
+        );
+        return AdminPartnershipMetric(
+          partnershipDocId: c.partnershipDocId,
+          planCode: c.planCode,
+          partnershipName: c.partnershipName,
+          userCount: n,
+        );
+      }),
+    );
+    partnershipMetrics.addAll(metrics);
+    return partnershipMetrics;
+  }
+
+  static int _estimateDocSizeBytes(Map<String, dynamic> data) {
+    var bytes = 48;
+    for (final e in data.entries) {
+      final v = e.value;
+      if (v is String) {
+        bytes += v.length;
+      } else if (v is num) {
+        bytes += 12;
+      } else if (v is bool) {
+        bytes += 1;
+      } else if (v is Timestamp) {
+        bytes += 12;
+      } else if (v is Map) {
+        bytes += 64;
+      } else if (v is List) {
+        bytes += v.length * 8;
+      } else {
+        bytes += 24;
+      }
+    }
+    return bytes;
   }
 
   void _openAdminGlobalSearch() {
@@ -750,7 +855,7 @@ class _AdminScreenState extends State<AdminScreen> {
 
   Stream<QuerySnapshot<Map<String, dynamic>>> _createUsersListStream() {
     Query<Map<String, dynamic>> q =
-        FirebaseFirestore.instance.collection('users');
+        adminUsersWithEmailQuery(FirebaseFirestore.instance.collection('users'));
     if (widget.useUnifiedPanel) {
       q = q.where('app', isEqualTo: _selectedApp);
     }
@@ -1094,11 +1199,6 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
-  static const int _usersListLimit = 2000;
-
-  /// Soma, gráfico e estimativa de MB: no máx. N docs (mais recentes no período) para o painel não fazer leitura ilimitada.
-  static const int _kAdminTxMaxDetailDocs = 15000;
-
   String _formatAdminResumoError(Object error) {
     if (FirestoreWebGuard.isRecoverableFirestoreWebError(error)) {
       return 'Instabilidade temporária do Firestore na Web. '
@@ -1119,6 +1219,8 @@ class _AdminScreenState extends State<AdminScreen> {
     }
     if (!mounted) return;
     setState(() {
+      _overlayPartnershipMetrics = null;
+      _partnershipMetricsScheduled = false;
       _statsFuture = _loadStats(periodDays: _resumoPeriodDays);
     });
   }
@@ -1136,7 +1238,7 @@ class _AdminScreenState extends State<AdminScreen> {
   Future<_AdminStats> _loadStatsCore({int periodDays = 30}) async {
     final now = DateTime.now();
     Query<Map<String, dynamic>> usersQuery =
-        FirebaseFirestore.instance.collection('users');
+        adminUsersWithEmailQuery(FirebaseFirestore.instance.collection('users'));
     if (widget.useUnifiedPanel) {
       usersQuery = usersQuery.where('app', isEqualTo: _selectedApp);
     }
@@ -1179,11 +1281,20 @@ class _AdminScreenState extends State<AdminScreen> {
       usersSample = sampleSnap.docs.map((d) => d.data()).toList();
       docsForLicenses = [];
     } catch (_) {
-      final usersSnap = await firestoreQueryGetReliable(usersQuery.limit(5000));
-      totalUsers = usersSnap.size;
-      usersSample = usersSnap.docs.take(6).map((d) => d.data()).toList();
-      docsForLicenses = usersSnap.docs;
-      for (final doc in usersSnap.docs) {
+      final usersSnap = await firestoreQueryGetReliable(
+        usersQuery.limit(_kAdminUsersFallbackLimit),
+      );
+      usersSample = usersSnap.docs
+          .where((d) => adminUserHasCompleteEmail(d.data()))
+          .take(6)
+          .map((d) => d.data())
+          .toList();
+      docsForLicenses = usersSnap.docs
+          .where((d) => adminUserHasCompleteEmail(d.data()))
+          .toList();
+      totalUsers = 0;
+      for (final doc in docsForLicenses) {
+        totalUsers++;
         final data = doc.data();
         final role = (data['role'] ?? 'user').toString();
         final plan = (data['plan'] ?? 'free').toString().toLowerCase();
@@ -1201,32 +1312,12 @@ class _AdminScreenState extends State<AdminScreen> {
       }
     }
 
-    try {
-      final pSnap = await firestoreQueryGetReliable(
-        FirebaseFirestore.instance.collection('partnerships'),
-      );
-      final catalog = parsePartnershipPlansSnapshot(pSnap);
-      if (catalog.isNotEmpty) {
-        final metrics = await Future.wait(
-          catalog.map((c) async {
-            final n = await countUsersPartnershipInPeriod(
-              FirebaseFirestore.instance,
-              c.partnershipDocId,
-              0,
-              partnershipPlanCode: c.planCode,
-            );
-            return AdminPartnershipMetric(
-              partnershipDocId: c.partnershipDocId,
-              planCode: c.planCode,
-              partnershipName: c.partnershipName,
-              userCount: n,
-            );
-          }),
-        );
-        partnershipMetrics.addAll(metrics);
+    if (!_adminPreferLightStatsIO) {
+      try {
+        partnershipMetrics.addAll(await _fetchPartnershipMetrics());
+      } catch (e) {
+        debugPrint('Métricas convênios (resumo admin): $e');
       }
-    } catch (e) {
-      debugPrint('Métricas convênios (resumo admin): $e');
     }
 
     double revenue30d = 0;
@@ -1263,14 +1354,14 @@ class _AdminScreenState extends State<AdminScreen> {
               .where('dateApprovedAt',
                   isGreaterThanOrEqualTo: Timestamp.fromDate(periodStart))
               .orderBy('dateApprovedAt', descending: true)
-              .limit(800),
+              .limit(_kAdminMpPaymentsLimit),
         );
       } catch (_) {
         mpSnap = await firestoreQueryGetReliable(
           FirebaseFirestore.instance
               .collection('mp_payments')
               .where('status', isEqualTo: 'approved')
-              .limit(2000),
+              .limit(_adminPreferLightStatsIO ? 500 : 2000),
         );
       }
       final allForLast = <Map<String, dynamic>>[];
@@ -1373,18 +1464,9 @@ class _AdminScreenState extends State<AdminScreen> {
     double txEstimatedMb = 0;
     final series = List<double>.filled(nTxBuckets, 0);
 
-    int estimateJsonSizeBytes(Object? value) {
-      if (value == null) return 0;
-      try {
-        return utf8.encode(jsonEncode(value)).length;
-      } catch (_) {
-        return value.toString().length;
-      }
-    }
-
     try {
       final uSamp = await Future.wait<QuerySnapshot<Map<String, dynamic>>>([
-        firestoreQueryGetReliable(usersQuery.limit(300)),
+        firestoreQueryGetReliable(usersQuery.limit(_kAdminUsersSizeSample)),
         firestoreQueryGetReliable(
           usersQuery.orderBy('createdAt', descending: true).limit(1),
         ),
@@ -1394,7 +1476,7 @@ class _AdminScreenState extends State<AdminScreen> {
       if (usersSampleForSize.docs.isNotEmpty && totalUsers > 0) {
         var sum = 0;
         for (final d in usersSampleForSize.docs) {
-          sum += estimateJsonSizeBytes(d.data());
+          sum += _estimateDocSizeBytes(d.data());
         }
         final avg = sum / usersSampleForSize.docs.length;
         final totalEstimatedBytes = avg * totalUsers;
@@ -1427,7 +1509,8 @@ class _AdminScreenState extends State<AdminScreen> {
           final ts0 = latestTxSnap.docs.first.data()['date'];
           if (ts0 is Timestamp) latestTransactionAt = ts0.toDate();
         }
-        for (final doc in txDetailSnap.docs) {
+        for (var i = 0; i < txDetailSnap.docs.length; i++) {
+          final doc = txDetailSnap.docs[i];
           final data = doc.data();
           final amount = (data['amount'] ?? 0).toDouble();
           totalValue += amount;
@@ -1442,6 +1525,9 @@ class _AdminScreenState extends State<AdminScreen> {
               }
             }
           }
+          if (i % 120 == 119) {
+            await Future<void>.delayed(Duration.zero);
+          }
         }
         if (txCount30d > _kAdminTxMaxDetailDocs) {
           txResumoAviso =
@@ -1449,10 +1535,12 @@ class _AdminScreenState extends State<AdminScreen> {
               'Lanç. no período: $txCount30d (contagem exata).';
         }
         if (txDetailSnap.docs.isNotEmpty) {
-          final sample = txDetailSnap.docs.take(400).toList();
+          final sample = txDetailSnap.docs
+              .take(_kAdminTxSizeSample)
+              .toList();
           var sampleBytes = 0;
           for (final d in sample) {
-            sampleBytes += estimateJsonSizeBytes(d.data());
+            sampleBytes += _estimateDocSizeBytes(d.data());
           }
           final avgTx = sampleBytes / sample.length;
           txEstimatedMb = (avgTx * txCount30d) / (1024 * 1024);
@@ -1506,7 +1594,7 @@ class _AdminScreenState extends State<AdminScreen> {
 
     try {
       Query<Map<String, dynamic>> licQ =
-          FirebaseFirestore.instance.collection('users');
+          adminUsersWithEmailQuery(FirebaseFirestore.instance.collection('users'));
       if (widget.useUnifiedPanel) {
         licQ = licQ.where('app', isEqualTo: _selectedApp);
       }
@@ -1534,7 +1622,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   isGreaterThanOrEqualTo: Timestamp.fromDate(startOfToday))
               .where('licenseExpiresAt',
                   isLessThanOrEqualTo: Timestamp.fromDate(horizonEndEod))
-              .limit(1500),
+              .limit(_kAdminLicenseHorizonLimit),
         );
         for (final doc in horizonSnap.docs) {
           final expRaw = doc.data()['licenseExpiresAt'];
@@ -1880,7 +1968,7 @@ class _AdminScreenState extends State<AdminScreen> {
       case AdminMenuItem.usuarios:
         return 'Usuários';
       case AdminMenuItem.usuarios360:
-        return 'Usuários 360°';
+        return 'WISDOMAPP 360°';
       case AdminMenuItem.equipe:
         return 'Equipe';
       case AdminMenuItem.logs:
@@ -3219,6 +3307,7 @@ class _AdminScreenState extends State<AdminScreen> {
     final query = _userSearchCtrl.text.trim();
     var list = docs.where((doc) {
       final d = doc.data();
+      if (!adminUserHasCompleteEmail(d)) return false;
       if (query.isNotEmpty && !adminUserMatchesSearch(d, doc.id, query)) {
         return false;
       }
@@ -3652,7 +3741,7 @@ class _AdminScreenState extends State<AdminScreen> {
     Widget build360Button({bool iconOnly = false}) {
       if (iconOnly) {
         return Tooltip(
-          message: 'Visão 360° — uso, plano, convênio e pagamentos',
+          message: 'WISDOMAPP 360° — uso, plano, convênio e pagamentos',
           child: IconButton.filled(
             onPressed: open360,
             style: IconButton.styleFrom(
@@ -4785,6 +4874,8 @@ class _AdminScreenState extends State<AdminScreen> {
                 onChanged: (v) {
                   setState(() {
                     _resumoPeriodDays = v;
+                    _overlayPartnershipMetrics = null;
+                    _partnershipMetricsScheduled = false;
                     _statsFuture = _loadStats(periodDays: v);
                   });
                 },
@@ -4806,6 +4897,8 @@ class _AdminScreenState extends State<AdminScreen> {
                     if (v)
                       setState(() {
                         _resumoPeriodDays = d;
+                        _overlayPartnershipMetrics = null;
+                        _partnershipMetricsScheduled = false;
                         _statsFuture = _loadStats(periodDays: d);
                       });
                   },
@@ -4837,8 +4930,11 @@ class _AdminScreenState extends State<AdminScreen> {
     final horizontalPad = MediaQuery.sizeOf(context).width < 380 ? 12.0 : 16.0;
     return RefreshIndicator(
       onRefresh: () async {
-        setState(
-            () => _statsFuture = _loadStats(periodDays: _resumoPeriodDays));
+        setState(() {
+          _overlayPartnershipMetrics = null;
+          _partnershipMetricsScheduled = false;
+          _statsFuture = _loadStats(periodDays: _resumoPeriodDays);
+        });
         final f = _statsFuture;
         if (f != null) await f;
         if (mounted) setState(() => _lastResumoUpdate = DateTime.now());
@@ -4875,8 +4971,11 @@ class _AdminScreenState extends State<AdminScreen> {
           const SizedBox(height: 20),
           _AdminResumoQuickActions(
             onRefresh: () async {
-              setState(() =>
-                  _statsFuture = _loadStats(periodDays: _resumoPeriodDays));
+              setState(() {
+                _overlayPartnershipMetrics = null;
+                _partnershipMetricsScheduled = false;
+                _statsFuture = _loadStats(periodDays: _resumoPeriodDays);
+              });
               final f = _statsFuture;
               if (f != null) await f;
               if (mounted) setState(() => _lastResumoUpdate = DateTime.now());
@@ -4900,6 +4999,7 @@ class _AdminScreenState extends State<AdminScreen> {
                 if (snap.hasData && mounted) {
                   final s = snap.data!;
                   _cachedResumoStats = s;
+                  _schedulePartnershipMetricsOverlay();
                   final total = s.licensesExpiring7d + s.licensesExpired;
                   if (total != _alertCount) {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -4955,6 +5055,9 @@ class _AdminScreenState extends State<AdminScreen> {
                   );
                 }
                 final stats = snap.data!;
+                final partnershipMetrics = stats.partnershipMetrics.isNotEmpty
+                    ? stats.partnershipMetrics
+                    : (_overlayPartnershipMetrics ?? const []);
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -5131,7 +5234,7 @@ class _AdminScreenState extends State<AdminScreen> {
                             value: '${stats.totalPremiums}',
                             color: brandTeal,
                             icon: Icons.star_rounded),
-                        ...stats.partnershipMetrics.map(
+                        ...partnershipMetrics.map(
                           (m) => _MetricCard(
                             label: 'Convênio ${m.partnershipName}',
                             value: '${m.userCount}',

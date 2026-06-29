@@ -397,7 +397,7 @@ class _FirebaseInitErrorApp extends StatelessWidget {
 /// Atualiza `<title>` na web por rota (SEO / abas — sugestões melhorias web).
 class _WebRouteTitleObserver extends NavigatorObserver {
   static const String _defaultMetaDescription =
-      'WISDOMAPP — Sabedoria financeira baseada nos princípios bíblicos. Teste grátis 30 dias. Financeiro, agenda e cursos.';
+      'WISDOMAPP — Sabedoria financeira baseada nos princípios bíblicos. Teste grátis 30 dias. Financeiro, objetivos financeiros, agenda e cursos.';
   static const String _divulgacaoMetaDescription =
       'WISDOMAPP — Divulgação: planos, promoções e login no site oficial. Renove com PIX ou cartão.';
 

@@ -43,6 +43,7 @@ function Add-CodemagicGitFiles {
         "test",
         "tool",
         "scripts",
+        "packages",
         "deploy.ps1",
         "firestore.rules",
         "firestore.indexes.json",

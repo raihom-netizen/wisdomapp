@@ -1,6 +1,24 @@
 /// Busca de utilizadores no painel admin (lista, 360° e busca global).
 library;
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+final RegExp _kAdminCompleteEmailRe = RegExp(r'^[^@]+@[^@]+\.[^@]+$');
+
+/// Utilizador real no painel admin: documento com e-mail completo (não fantasma).
+bool adminUserHasCompleteEmail(Map<String, dynamic> data) {
+  final email = (data['email'] ?? '').toString().trim().toLowerCase();
+  if (email.isEmpty) return false;
+  return _kAdminCompleteEmailRe.hasMatch(email);
+}
+
+/// Consulta base: só documentos com campo `email` preenchido (exclui fantasmas).
+Query<Map<String, dynamic>> adminUsersWithEmailQuery(
+  CollectionReference<Map<String, dynamic>> col,
+) {
+  return col.where('email', isGreaterThan: '');
+}
+
 /// Nome apresentável — Firestore pode ter `name` ou `displayName`.
 String adminUserDisplayName(Map<String, dynamic> data) {
   final name = (data['name'] ?? '').toString().trim();

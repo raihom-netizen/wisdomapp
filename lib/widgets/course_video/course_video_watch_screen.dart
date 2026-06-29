@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../../utils/course_media_url_resolver.dart';
 import '../../utils/youtube_url_helper.dart';
 import '../course_media_preview.dart';
-import 'course_video_embed.dart';
+import 'course_video_player_shell.dart';
 
 /// Abre vídeo de curso com UI estilo YouTube (player + lista relacionada).
 Future<void> openCourseVideoFromData(
@@ -140,6 +140,8 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
           youtubeVideoId: _youtubeId,
           mp4Url: _mp4Url,
           title: _title,
+          posterData: widget.data,
+          accent: _accent,
         ),
       ),
     );
@@ -192,11 +194,14 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
-                          CourseVideoEmbed(
-                            key: ValueKey('${_youtubeId ?? ''}|${_mp4Url ?? ''}'),
+                          CourseVideoPlayerShell(
+                            embedKey: ValueKey('${_youtubeId ?? ''}|${_mp4Url ?? ''}'),
+                            posterData: widget.data,
                             youtubeVideoId: _youtubeId,
                             mp4Url: _mp4Url,
                             autoplay: true,
+                            accent: _accent,
+                            accent2: _accent.withValues(alpha: 0.72),
                           ),
                           Positioned(
                             right: 8,
@@ -401,11 +406,15 @@ class _CourseVideoFullscreenPage extends StatelessWidget {
     this.youtubeVideoId,
     this.mp4Url,
     required this.title,
+    this.posterData,
+    this.accent = const Color(0xFF2563EB),
   });
 
   final String? youtubeVideoId;
   final String? mp4Url;
   final String title;
+  final Map<String, dynamic>? posterData;
+  final Color accent;
 
   @override
   Widget build(BuildContext context) {
@@ -420,11 +429,14 @@ class _CourseVideoFullscreenPage extends StatelessWidget {
         child: Center(
           child: AspectRatio(
             aspectRatio: 16 / 9,
-            child: CourseVideoEmbed(
-              key: ValueKey('fs-${youtubeVideoId ?? ''}|${mp4Url ?? ''}'),
+            child: CourseVideoPlayerShell(
+              embedKey: ValueKey('fs-${youtubeVideoId ?? ''}|${mp4Url ?? ''}'),
+              posterData: posterData,
               youtubeVideoId: youtubeVideoId,
               mp4Url: mp4Url,
               autoplay: true,
+              accent: accent,
+              accent2: accent.withValues(alpha: 0.72),
             ),
           ),
         ),

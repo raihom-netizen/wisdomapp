@@ -85,7 +85,7 @@ class UserMenuLateral extends StatelessWidget {
                   _tile(1, Icons.account_balance_wallet_rounded, 'Financeiro',
                       isCollapsed,
                       accent: const Color(0xFF5EEAD4)),
-                  _tile(2, Icons.flag_rounded, 'Objetivo Financeiro',
+                  _tile(2, Icons.flag_rounded, 'Objetivos Financeiros',
                       isCollapsed,
                       accent: const Color(0xFFEC4899)),
                   _tile(3, Icons.calendar_month_rounded, kAgendaModuleDisplayName,

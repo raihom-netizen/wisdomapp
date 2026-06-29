@@ -6,6 +6,11 @@ $versionFile = Join-Path $root "lib\constants\app_version.dart"
 
 if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Path $destDir -Force | Out-Null }
 
+Set-Location $root
+& (Join-Path $root "scripts\patch_flutter_plugin_gradle.ps1")
+& (Join-Path $root "scripts\sync_app_version.ps1")
+if ($LASTEXITCODE -ne 0) { throw "sync_app_version falhou." }
+
 $v = "10.02"; $pub = 2; $vc = 2
 if (Test-Path $versionFile) {
   $raw = Get-Content $versionFile -Raw
@@ -40,6 +45,14 @@ New-Item -ItemType Directory -Force -Path $staging | Out-Null
 @("codemagic.yaml", "pubspec.yaml", "pubspec.lock") | ForEach-Object {
   $p = Join-Path $root $_
   if (Test-Path $p) { Copy-Item $p (Join-Path $staging $_) -Force }
+}
+$localCal = Join-Path $root "packages\device_calendar"
+if (Test-Path $localCal) {
+  $calDst = Join-Path $staging "packages\device_calendar"
+  New-Item -ItemType Directory -Force -Path (Split-Path $calDst) | Out-Null
+  & robocopy $localCal $calDst /E /NFL /NDL /NJH /NJS | Out-Null
+  if ($LASTEXITCODE -ge 8) { Write-Host "Aviso robocopy device_calendar: $LASTEXITCODE" -ForegroundColor Yellow }
+  $global:LASTEXITCODE = 0
 }
 Copy-Item $versionFile (Join-Path $staging "app_version.dart") -Force
 Copy-Item (Join-Path $root "android\app\build.gradle") (Join-Path $staging "android_build.gradle") -Force

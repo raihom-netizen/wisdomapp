@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../widgets/fast_text_field.dart';
 import 'package:intl/intl.dart';
@@ -16,7 +17,7 @@ import '../widgets/admin/admin_page_shell.dart';
 import '../widgets/admin_delegate_email_section.dart';
 import '../widgets/admin/admin_user_360_extras.dart';
 
-/// Painel admin: visão 360° por utilizador (uso, versão do cliente, convênio, MP, mensagem push).
+/// Painel admin WISDOMAPP: visão 360° por utilizador (uso, versão do cliente, convênio, MP, mensagem push).
 class AdminUsuariosInteligenciaTab extends StatefulWidget {
   final bool useUnifiedPanel;
   final String unifiedApp;
@@ -44,6 +45,14 @@ class _AdminUsuariosInteligenciaTabState
   // a cada tecla digitada na busca — era isso que fazia a busca "não funcionar".
   Stream<QuerySnapshot<Map<String, dynamic>>>? _usersStreamCached;
   String? _usersStreamApp;
+
+  static int get _usersStreamLimit {
+    if (kIsWeb) return 2000;
+    return (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS)
+        ? 400
+        : 1200;
+  }
 
   void _onSearchChanged(String v) {
     _filterDebounce?.cancel();
@@ -80,11 +89,11 @@ class _AdminUsuariosInteligenciaTabState
     // stream para a busca filtrar localmente sem perder os dados já carregados.
     if (_usersStreamCached == null || _usersStreamApp != appKey) {
       Query<Map<String, dynamic>> q =
-          FirebaseFirestore.instance.collection('users');
+          adminUsersWithEmailQuery(FirebaseFirestore.instance.collection('users'));
       if (widget.useUnifiedPanel) {
         q = q.where('app', isEqualTo: widget.unifiedApp);
       }
-      _usersStreamCached = q.limit(2000).snapshots();
+      _usersStreamCached = q.limit(_usersStreamLimit).snapshots();
       _usersStreamApp = appKey;
     }
     return _usersStreamCached!;
@@ -137,6 +146,7 @@ class _AdminUsuariosInteligenciaTabState
     final q = _filter.trim();
     if (q.isEmpty) return docs;
     return docs
+        .where((doc) => adminUserHasCompleteEmail(doc.data()))
         .where((doc) => adminUserMatchesSearch(doc.data(), doc.id, q))
         .toList();
   }
@@ -158,12 +168,12 @@ class _AdminUsuariosInteligenciaTabState
         children: [
           if (!phoneDetail) ...[
             ModuleHeaderPremium(
-              title: 'Usuários 360°',
+              title: 'WISDOMAPP 360°',
               icon: Icons.hub_rounded,
               dense: narrow,
               subtitleFontSize: narrow ? 11.5 : null,
               subtitle:
-                  'Uso estimado, plataforma (Web / Android / iPhone), versão, tela inicial, convênio, Mercado Pago e push individual.',
+                  'WISDOMAPP — uso estimado, plataforma (Web / Android / iPhone), versão, tela inicial, convênio, Mercado Pago e push individual.',
             ),
             SizedBox(height: narrow ? 10 : 16),
             FastTextField(
@@ -662,11 +672,18 @@ class _Usuario360DetailState extends State<_Usuario360Detail> {
       if (t is Timestamp) lastTxDate = t.toDate();
     }
 
-    final tx = await count('transactions');
-    final scales = await count('scales');
-    final reminders = await count('reminders');
-    final goals = await count('goals');
-    final ocorrencias = await count('ocorrencias');
+    final counts = await Future.wait<int>([
+      count('transactions'),
+      count('finance_accounts'),
+      count('reminders'),
+      count('goals'),
+      count('bank_connections'),
+    ]);
+    final tx = counts[0];
+    final financeAccounts = counts[1];
+    final reminders = counts[2];
+    final goals = counts[3];
+    final bankConnections = counts[4];
 
     final mpSnap = await db.collection('mp_payments').where('uid', isEqualTo: uid).get();
     double mpTotal = 0;
@@ -694,10 +711,10 @@ class _Usuario360DetailState extends State<_Usuario360Detail> {
 
     return _UsageBundle(
       transactions: tx,
-      scales: scales,
+      financeAccounts: financeAccounts,
       reminders: reminders,
       goals: goals,
-      ocorrencias: ocorrencias,
+      bankConnections: bankConnections,
       lastTransactionAt: lastTxDate,
       mpTotalApproved: mpTotal,
       mpApprovedCount: mpApproved,
@@ -708,10 +725,10 @@ class _Usuario360DetailState extends State<_Usuario360Detail> {
 
   double _estimateStorageKb(_UsageBundle b) {
     return b.transactions * 2.8 +
-        b.scales * 2.2 +
+        b.financeAccounts * 1.5 +
         b.reminders * 1.2 +
         b.goals * 1.0 +
-        b.ocorrencias * 2.0 +
+        b.bankConnections * 0.8 +
         48;
   }
 
@@ -772,13 +789,16 @@ class _Usuario360DetailState extends State<_Usuario360Detail> {
                     if (planSnap.hasData && planSnap.data!.exists) {
                       final p = planSnap.data!.data() ?? {};
                       final v = p[kHomeDefaultStartModuleField];
-                      if (v is int) startIdx = v;
-                      else if (v is num) startIdx = v.toInt();
+                      if (v is int) {
+                        startIdx = normalizeHomeStartModuleIndex(v);
+                      } else if (v is num) {
+                        startIdx = normalizeHomeStartModuleIndex(v.toInt());
+                      }
                     }
                     final startLabel = startIdx != null
                         ? (kHomeDefaultStartModuleLabels[startIdx] ??
                             'Índice $startIdx')
-                        : 'Padrão (Início)';
+                        : 'Padrão (Financeiro)';
 
                     return FutureBuilder<_UsageBundle>(
                       future: _usageFuture,
@@ -1195,10 +1215,10 @@ class _Usuario360DetailState extends State<_Usuario360Detail> {
 
 class _UsageBundle {
   final int transactions;
-  final int scales;
+  final int financeAccounts;
   final int reminders;
   final int goals;
-  final int ocorrencias;
+  final int bankConnections;
   final DateTime? lastTransactionAt;
   final double mpTotalApproved;
   final int mpApprovedCount;
@@ -1207,10 +1227,10 @@ class _UsageBundle {
 
   _UsageBundle({
     required this.transactions,
-    required this.scales,
+    required this.financeAccounts,
     required this.reminders,
     required this.goals,
-    required this.ocorrencias,
+    required this.bankConnections,
     required this.lastTransactionAt,
     required this.mpTotalApproved,
     required this.mpApprovedCount,
@@ -1229,18 +1249,18 @@ class _VolumeBarChart extends StatelessWidget {
   Widget build(BuildContext context) {
     final maxV = [
       b.transactions,
-      b.scales,
+      b.financeAccounts,
       b.reminders,
       b.goals,
-      b.ocorrencias,
+      b.bankConnections,
     ].reduce((a, c) => a > c ? a : c).toDouble().clamp(1, 999999);
 
     final data = [
       (compact ? 'Trans.' : 'Transações', b.transactions.toDouble(), const Color(0xFF2563EB)),
-      ('Escalas', b.scales.toDouble(), const Color(0xFF0D9488)),
+      (compact ? 'Contas' : 'Contas fin.', b.financeAccounts.toDouble(), const Color(0xFF0D9488)),
       (compact ? 'Lembr.' : 'Lembretes', b.reminders.toDouble(), const Color(0xFFEA580C)),
-      ('Metas', b.goals.toDouble(), const Color(0xFF7C3AED)),
-      ('Ocorr.', b.ocorrencias.toDouble(), const Color(0xFF64748B)),
+      (compact ? 'Obj.' : 'Objetivos', b.goals.toDouble(), const Color(0xFF7C3AED)),
+      (compact ? 'O. Fin.' : 'Open Finance', b.bankConnections.toDouble(), const Color(0xFF64748B)),
     ];
 
     return BarChart(
@@ -1324,18 +1344,18 @@ class _VolumeMetricsCompact extends StatelessWidget {
   Widget build(BuildContext context) {
     final maxV = [
       b.transactions,
-      b.scales,
+      b.financeAccounts,
       b.reminders,
       b.goals,
-      b.ocorrencias,
+      b.bankConnections,
     ].reduce((a, c) => a > c ? a : c).toDouble().clamp(1, 999999);
 
     final rows = [
       ('Transações', b.transactions, const Color(0xFF2563EB)),
-      ('Escalas', b.scales, const Color(0xFF0D9488)),
+      ('Contas financeiras', b.financeAccounts, const Color(0xFF0D9488)),
       ('Lembretes', b.reminders, const Color(0xFFEA580C)),
-      ('Metas', b.goals, const Color(0xFF7C3AED)),
-      ('Ocorrências', b.ocorrencias, const Color(0xFF64748B)),
+      ('Objetivos', b.goals, const Color(0xFF7C3AED)),
+      ('Open Finance', b.bankConnections, const Color(0xFF64748B)),
     ];
 
     return Container(
@@ -1523,7 +1543,7 @@ class _AdminUser360PreviewHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Visão 360°',
+                  'WISDOMAPP · Visão 360°',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.88),
                     fontSize: 12,

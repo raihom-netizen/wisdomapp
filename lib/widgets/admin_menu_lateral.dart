@@ -100,7 +100,7 @@ class AdminMenuLateral extends StatelessWidget {
     final filteredEntries = <({AdminMenuItem item, String title, IconData icon})>[
       (item: AdminMenuItem.resumo, title: 'Resumo', icon: Icons.dashboard_rounded),
       (item: AdminMenuItem.usuarios, title: 'Usuários', icon: Icons.people_rounded),
-      (item: AdminMenuItem.usuarios360, title: 'Usuários 360°', icon: Icons.hub_rounded),
+      (item: AdminMenuItem.usuarios360, title: 'WISDOMAPP 360°', icon: Icons.hub_rounded),
       (item: AdminMenuItem.equipe, title: 'Equipe', icon: Icons.groups_rounded),
       (item: AdminMenuItem.logs, title: 'Logs', icon: Icons.history_rounded),
       (item: AdminMenuItem.relatorios, title: 'Relatórios', icon: Icons.bar_chart_rounded),

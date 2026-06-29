@@ -37,7 +37,7 @@ const List<LandingFieldDef> kDivulgacaoLandingFields = [
   LandingFieldDef(
     'divHeroHeadline',
     'Hero — parágrafo (branco)',
-    'Finanças, agenda e cursos em um só lugar — com sabedoria financeira baseada nos princípios bíblicos.',
+    'Finanças, objetivos financeiros, agenda e cursos em um só lugar — com sabedoria financeira baseada nos princípios bíblicos.',
   ),
   LandingFieldDef('divHeroBtnEntrar', 'Hero — botão Entrar', 'Entrar'),
   LandingFieldDef('divHeroBtnPlanos', 'Hero — botão Ver planos', 'Ver planos'),
@@ -166,20 +166,20 @@ const List<LandingFieldDef> kDivulgacaoLandingFields = [
   LandingFieldDef(
     'divStep3Body',
     'Passo 3 — texto',
-    'A mesma conta no celular e no computador — finanças, escalas e metas sincronizadas.',
+    'A mesma conta no celular e no computador — finanças, objetivos, agenda e metas sincronizadas.',
   ),
   LandingFieldDef(
       'divLabelComece', 'Seção — rótulo “Comece aqui”', 'Comece aqui'),
   LandingFieldDef(
     'divComeceParagraph',
     'Comece aqui — parágrafo',
-    'Gestão financeira, escalas e metas num só lugar — padrão super premium no site.',
+    'Gestão financeira, Objetivos Financeiros (Projeto 52 semanas), agenda e cursos num só lugar — padrão super premium no site.',
   ),
   LandingFieldDef('divLabelPlanos', 'Seção — rótulo “Planos”', 'Planos'),
   LandingFieldDef(
     'divPlanosSubtitle',
     'Planos — subtítulo',
-    r'Plano Premium: finanças, agenda e cursos num só lugar. Pague mensal ou anual — no anual, melhor custo-benefício; recomendamos o anual. No cartão, o plano anual pode ser parcelado em até 6 vezes quando o Mercado Pago permitir.',
+    r'Plano Premium: finanças, objetivos financeiros, agenda e cursos num só lugar. Pague mensal ou anual — no anual, melhor custo-benefício; recomendamos o anual. No cartão, o plano anual pode ser parcelado em até 6 vezes quando o Mercado Pago permitir.',
   ),
   LandingFieldDef(
       'divBasicoTitulo', 'Bloco secundário — título (opcional)', 'Destaque'),
@@ -190,7 +190,7 @@ const List<LandingFieldDef> kDivulgacaoLandingFields = [
   LandingFieldDef(
     'divBasicoBeneficios',
     'Bloco secundário — benefícios (vírgula)',
-    'Controle financeiro, Agenda e lembretes, Cursos financeiros bíblicos, Relatórios e metas',
+    'Controle financeiro, Objetivos Financeiros (52 semanas), Agenda e lembretes, Cursos financeiros bíblicos, Relatórios',
   ),
   LandingFieldDef('divPremiumTitulo', 'Plano Premium — nome', 'Premium'),
   LandingFieldDef(
@@ -200,12 +200,12 @@ const List<LandingFieldDef> kDivulgacaoLandingFields = [
   LandingFieldDef(
     'divPremiumBeneficios',
     'Plano Premium — benefícios (vírgula)',
-    'Módulo financeiro completo, Agenda e lembretes, Cursos bíblicos, Comprovantes e backup, Relatórios e metas',
+    'Módulo financeiro completo, Objetivos Financeiros (52 semanas), Agenda e lembretes, Cursos bíblicos, Comprovantes e backup, Relatórios',
   ),
   LandingFieldDef(
     'divPremiumCardSubtitle',
     'Cartão Premium — subtítulo (cinza)',
-    'Finanças, agenda e cursos com controlo total à mão',
+    'Finanças, objetivos financeiros, agenda e cursos com controlo total à mão',
   ),
   LandingFieldDef(
       'divPremiumRibbon', 'Cartão Premium — faixa superior', 'SUPER PREMIUM'),
@@ -370,30 +370,30 @@ List<LandingFieldDef> get kDivulgacaoPlanPricingFields =>
 const Map<String, String> kLegacyLandingDefaults = {
   'heroTitle': 'WISDOMAPP',
   'heroSubtitle': 'Sabedoria financeira baseada nos princípios bíblicos.',
-  'heroTealLine': 'Módulo Financeiro · Agenda · Cursos financeiros',
-  'heroSlateLine': 'Organize suas finanças, compromissos e aprendizado em um só app.',
+  'heroTealLine': 'Módulo Financeiro · Objetivos Financeiros · Agenda · Cursos',
+  'heroSlateLine': 'Organize finanças, metas, compromissos e aprendizado em um só app.',
   'heroBadges':
-      'Receitas e despesas, Orçamentos, Compromissos, Cursos bíblicos, Dicas do dia',
+      'Receitas e despesas, Objetivos Financeiros 52 semanas, Orçamentos, Compromissos, Cursos bíblicos, Dicas do dia',
   'heroNote': '',
   'plansTitle': 'Plano Premium',
   'premiumPrice': r'R$ 49,90/mês • R$ 478,80/ano',
   'masterPrice': r'R$ 49,90/mês • R$ 478,80/ano',
   'premiumPerks':
-      'Módulo financeiro completo, Agenda e lembretes, Cursos com princípios bíblicos, Anexar comprovantes, Relatórios e dicas bíblicas',
+      'Módulo financeiro completo, Objetivos Financeiros (52 semanas), Agenda e lembretes, Cursos com princípios bíblicos, Anexar comprovantes, Relatórios e dicas bíblicas',
   'masterPerks':
-      'Módulo financeiro completo, Agenda e lembretes, Cursos com princípios bíblicos, Anexar comprovantes, Relatórios e dicas bíblicas',
+      'Módulo financeiro completo, Objetivos Financeiros (52 semanas), Agenda e lembretes, Cursos com princípios bíblicos, Anexar comprovantes, Relatórios e dicas bíblicas',
   'planCtaText': 'Assinar agora',
   'landingPremiumDetail':
       r'Plano mensal: R$ 49,90 por mês. Plano anual: R$ 478,80/ano — equivalente a R$ 39,90/mês; recomendamos o anual para máxima economia.',
   'landingPremiumCardPeriod':
       r'Mensal ou anual — no anual: R$ 39,90/mês; recomendamos comprar anual',
   'landingPremiumFeatures':
-      'Financeiro e relatórios, Agenda e lembretes, Cursos financeiros bíblicos, Anexar comprovantes, Acesso web e celular, Downloads e suporte',
+      'Financeiro e relatórios, Objetivos Financeiros (52 semanas), Agenda e lembretes, Cursos financeiros bíblicos, Anexar comprovantes, Acesso web e celular, Downloads e suporte',
   'footerText':
       'WISDOMAPP — sabedoria financeira com princípios bíblicos. Acesso pelo celular, computador ou notebook.',
   'supportTitle': 'Downloads e suporte',
   'supportSubtitle':
-      'Financeiro, agenda, cursos e relatórios; anexar comprovantes; acesso total.',
+      'Financeiro, Objetivos Financeiros, agenda, cursos e relatórios; anexar comprovantes; acesso total.',
 };
 
 Map<String, String>? _divDefaultsCache;

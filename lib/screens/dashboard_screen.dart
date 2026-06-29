@@ -6864,7 +6864,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          const Text('Crie objetivos no módulo Objetivo Financeiro e acompanhe aqui.',
+          const Text('Crie objetivos no módulo Objetivos Financeiros e acompanhe aqui.',
               style: TextStyle(color: Colors.white70, fontSize: 12)),
           if (widget.onNavigateTo != null) ...[
             const SizedBox(height: 16),

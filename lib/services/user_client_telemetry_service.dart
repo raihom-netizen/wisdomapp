@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/admin_user_search.dart';
 import '../utils/firestore_user_doc_id.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
@@ -78,15 +79,22 @@ class UserClientTelemetryService {
   static Future<void> pingIfDue(String uid) async {
     if (uid.isEmpty) return;
     final id = firestoreUserDocIdForAppShell(uid);
+    if (id.isEmpty) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       final key = '$_prefsKeyPrefix$id';
       final last = prefs.getInt(key) ?? 0;
       final now = DateTime.now().millisecondsSinceEpoch;
       if (now - last < _minInterval.inMilliseconds) return;
+
+      final ref = FirebaseFirestore.instance.collection('users').doc(id);
+      final snap = await ref.get(const GetOptions(source: Source.serverAndCache));
+      if (!snap.exists) return;
+      if (!adminUserHasCompleteEmail(snap.data() ?? const {})) return;
+
       await prefs.setInt(key, now);
 
-      await FirebaseFirestore.instance.collection('users').doc(id).set(
+      await ref.set(
         {
           'clientTelemetry': {
             'appVersion': AppVersion.current,

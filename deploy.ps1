@@ -28,10 +28,13 @@ function Get-AppVersionInfo {
 }
 
 Write-Host "=== WISDOMAPP Deploy completo ===" -ForegroundColor Cyan
+& (Join-Path $root "scripts\sync_app_version.ps1")
+if ($LASTEXITCODE -ne 0) { exit 1 }
 $ver = Get-AppVersionInfo
 Write-Host "Versao: $($ver.Tag) (#$($ver.VersionCode))" -ForegroundColor Yellow
 
 Write-Host "`n=== 1/7 Flutter pub get ===" -ForegroundColor Cyan
+& (Join-Path $root "scripts\patch_flutter_plugin_gradle.ps1")
 if ($Clean) { flutter clean; if ($LASTEXITCODE -ne 0) { exit 1 } }
 flutter pub get
 if ($LASTEXITCODE -ne 0) { exit 1 }

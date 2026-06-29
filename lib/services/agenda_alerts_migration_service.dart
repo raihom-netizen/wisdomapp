@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../utils/admin_user_search.dart';
 import '../utils/agenda_delivery_reset.dart';
 import '../utils/agenda_reminder_end_of_day.dart';
 import 'agenda_alerts_queue_repair_service.dart';
@@ -71,10 +72,15 @@ class AgendaAlertsMigrationService {
 
     if (remindersMigrated == 0 && scalesMigrated == 0) {
       try {
-        await FirebaseFirestore.instance.collection('users').doc(uid).set({
-          'agendaNotifUserMigratedV': kMigrationVersion,
-          'agendaNotifUserMigratedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+        final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
+        final userSnap = await userRef.get();
+        if (userSnap.exists &&
+            adminUserHasCompleteEmail(userSnap.data() ?? const {})) {
+          await userRef.set({
+            'agendaNotifUserMigratedV': kMigrationVersion,
+            'agendaNotifUserMigratedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+        }
       } catch (_) {}
     }
 
