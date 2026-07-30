@@ -1,5 +1,5 @@
 """
-Remove perfis IOS_APP_STORE do App Store Connect para o bundle do WISDOMAPP.
+Remove perfis IOS_APP_STORE do app e do Widget WISDOMAPP.
 Usado no Codemagic antes de fetch-signing-files para forçar recriação com capabilities atuais.
 """
 import json
@@ -10,6 +10,10 @@ import sys
 
 def main() -> int:
     bundle = os.environ.get("BUNDLE_ID", "com.wisdomapp")
+    widget_bundle = os.environ.get(
+        "WIDGET_BUNDLE_ID", "com.wisdomapp.WisdomappWidget"
+    )
+    target_bundles = {bundle, widget_bundle}
     r = subprocess.run(
         ["app-store-connect", "profiles", "list", "--type", "IOS_APP_STORE", "--json", "-s"],
         capture_output=True,
@@ -52,7 +56,7 @@ def main() -> int:
             continue
         ident = bundle_for(item)
         name_hit = "wisdomapp" in name.lower() or "wisdom" in name.lower()
-        if ident != bundle and not (ident is None and name_hit):
+        if ident not in target_bundles and not (ident is None and name_hit):
             continue
         print("Removendo perfil App Store:", name, pid)
         subprocess.run(
