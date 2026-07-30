@@ -1,8 +1,6 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -13,7 +11,6 @@ import '../constants/finance_category_visuals.dart';
 import '../models/finance_account.dart';
 import '../models/user_profile.dart';
 import '../screens/anexo_viewer_screen.dart';
-import '../utils/anexo_viewer_helper.dart';
 import '../utils/receipt_attachment_utils.dart';
 import '../services/finance_accounts_service.dart';
 import '../services/functions_service.dart';
@@ -384,7 +381,7 @@ Future<bool> showFinanceTransactionEditDialog({
                           const SizedBox(height: 10),
                           DropdownButtonFormField<String>(
                             key: ValueKey<String>(status),
-                            value: status,
+                            initialValue: status,
                             decoration: financePremiumDropdownDecoration(
                               label: 'Status',
                               prefixIcon: Icons.flag_rounded,
@@ -407,7 +404,7 @@ Future<bool> showFinanceTransactionEditDialog({
                           else
                             DropdownButtonFormField<String?>(
                               key: ValueKey<String?>(selectedFinanceAccountId),
-                              value: selectedFinanceAccountId,
+                              initialValue: selectedFinanceAccountId,
                               decoration: financePremiumDropdownDecoration(
                                 label: 'Conta do lançamento',
                                 prefixIcon: Icons.account_balance_rounded,

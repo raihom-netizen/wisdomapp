@@ -400,7 +400,7 @@ class _EscolhaPlanoPageState extends State<EscolhaPlanoPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(15),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 12, offset: const Offset(0, 4))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 12, offset: const Offset(0, 4))],
       ),
       child: Row(
         children: [
@@ -701,8 +701,8 @@ class _EscolhaPlanoPageState extends State<EscolhaPlanoPage> {
             width: selected ? 2.5 : 0,
           ),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10),
-            if (selected) BoxShadow(color: const Color(0xFF2962FF).withOpacity(0.15), blurRadius: 12),
+            BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10),
+            if (selected) BoxShadow(color: const Color(0xFF2962FF).withValues(alpha: 0.15), blurRadius: 12),
           ],
         ),
         child: ListTile(

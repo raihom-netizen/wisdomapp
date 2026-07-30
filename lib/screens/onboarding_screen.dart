@@ -91,7 +91,7 @@ class _OnboardingPageViewState extends State<_OnboardingPageView> {
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
-                  color: Colors.white.withOpacity(0.95),
+                  color: Colors.white.withValues(alpha: 0.95),
                   letterSpacing: 1,
                 ),
               ),
@@ -111,9 +111,9 @@ class _OnboardingPageViewState extends State<_OnboardingPageView> {
                           Container(
                             padding: const EdgeInsets.all(28),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.12),
+                              color: Colors.white.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(24),
-                              border: Border.all(color: Colors.white.withOpacity(0.2)),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
                             ),
                             child: Icon(icon, size: 64, color: Colors.white),
                           ),
@@ -134,7 +134,7 @@ class _OnboardingPageViewState extends State<_OnboardingPageView> {
                             style: TextStyle(
                               fontSize: 15,
                               height: 1.4,
-                              color: Colors.white.withOpacity(0.9),
+                              color: Colors.white.withValues(alpha: 0.9),
                             ),
                           ),
                         ],
@@ -152,7 +152,7 @@ class _OnboardingPageViewState extends State<_OnboardingPageView> {
                     width: sel ? 24 : 8,
                     height: 8,
                     decoration: BoxDecoration(
-                      color: sel ? Colors.white : Colors.white.withOpacity(0.4),
+                      color: sel ? Colors.white : Colors.white.withValues(alpha: 0.4),
                       borderRadius: BorderRadius.circular(4),
                     ),
                   );
@@ -187,7 +187,7 @@ class _OnboardingPageViewState extends State<_OnboardingPageView> {
               const SizedBox(height: 16),
               TextButton(
                 onPressed: _finish,
-                child: Text('Pular', style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 14)),
+                child: Text('Pular', style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 14)),
               ),
               const SizedBox(height: 24),
             ],

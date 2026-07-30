@@ -25,7 +25,7 @@ if (-not ($firebaseContent -match '"public"\s*:\s*"build/web"')) {
 Write-Host "[BLINDAGEM] Raiz e firebase.json OK." -ForegroundColor Green
 
 $publicDir = Join-Path $repoRoot "build\web"
-$requiredFiles = @("index.html", "flutter_bootstrap.js", "main.dart.js", "version.json")
+$requiredFiles = @("index.html", "flutter_bootstrap.js", "main.dart.js", "version.json", "google_calendar_oauth.html", "google-oauth-config.js")
 foreach ($f in $requiredFiles) {
     $path = Join-Path $publicDir $f
     if (-not (Test-Path $path)) {

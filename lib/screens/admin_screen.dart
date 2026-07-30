@@ -11,19 +11,16 @@ import '../models/user_profile.dart';
 import '../models/landing_public_content.dart';
 import '../services/mp_checkout_pricing_service.dart';
 import '../services/mp_admin_config_service.dart';
-import '../models/goias_ac4_rate_schedule.dart';
 import '../models/scale_rates.dart';
 import '../services/scale_rates_period_service.dart';
 import '../services/scale_rates_service.dart';
 import '../widgets/admin_scale_rates_periods_panel.dart';
 import '../constants/app_brand.dart';
-import '../constants/admin_partner_config.dart';
 import '../constants/app_version.dart';
 import '../constants/premium_pro_limits.dart';
 import '../constants/currency_formats.dart';
 import '../constants/app_strings.dart';
 import '../theme/app_colors.dart';
-import '../widgets/app_logo.dart';
 import '../widgets/module_header_premium.dart';
 import '../widgets/partnerships_admin_module.dart';
 import '../widgets/admin_menu_lateral.dart';
@@ -52,7 +49,6 @@ import 'package:intl/intl.dart';
 import '../utils/url_launcher_helper.dart' as url_helper;
 import '../constants/app_business_rules.dart';
 import '../utils/keyboard_form_scaffold.dart';
-import '../widgets/shell_keyboard_bottom_pad.dart';
 import '../widgets/light_filter_picker.dart';
 import '../utils/admin_user_search.dart';
 import '../utils/debounced_text_controller.dart';
@@ -854,8 +850,8 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Stream<QuerySnapshot<Map<String, dynamic>>> _createUsersListStream() {
-    Query<Map<String, dynamic>> q =
-        adminUsersWithEmailQuery(FirebaseFirestore.instance.collection('users'));
+    Query<Map<String, dynamic>> q = adminUsersWithEmailQuery(
+        FirebaseFirestore.instance.collection('users'));
     if (widget.useUnifiedPanel) {
       q = q.where('app', isEqualTo: _selectedApp);
     }
@@ -1237,8 +1233,8 @@ class _AdminScreenState extends State<AdminScreen> {
 
   Future<_AdminStats> _loadStatsCore({int periodDays = 30}) async {
     final now = DateTime.now();
-    Query<Map<String, dynamic>> usersQuery =
-        adminUsersWithEmailQuery(FirebaseFirestore.instance.collection('users'));
+    Query<Map<String, dynamic>> usersQuery = adminUsersWithEmailQuery(
+        FirebaseFirestore.instance.collection('users'));
     if (widget.useUnifiedPanel) {
       usersQuery = usersQuery.where('app', isEqualTo: _selectedApp);
     }
@@ -1276,7 +1272,21 @@ class _AdminScreenState extends State<AdminScreen> {
             .count()
             .get();
         usersWithPartnership = pw.count ?? 0;
-      } catch (_) {}
+      } catch (_) {
+        // Fallback: conta partnershipId preenchido na amostra de documentos
+        usersWithPartnership = 0;
+        try {
+          final pSnap = await firestoreQueryGetReliable(
+            usersQuery.limit(_kAdminUsersFallbackLimit),
+          );
+          for (final doc in pSnap.docs) {
+            final pid = (doc.data()['partnershipId'] ?? '').toString().trim();
+            if (pid.isNotEmpty) usersWithPartnership++;
+          }
+        } catch (_) {
+          // Se também falhar, mantém 0
+        }
+      }
       final sampleSnap = await firestoreQueryGetReliable(usersQuery.limit(6));
       usersSample = sampleSnap.docs.map((d) => d.data()).toList();
       docsForLicenses = [];
@@ -1535,9 +1545,7 @@ class _AdminScreenState extends State<AdminScreen> {
               'Lanç. no período: $txCount30d (contagem exata).';
         }
         if (txDetailSnap.docs.isNotEmpty) {
-          final sample = txDetailSnap.docs
-              .take(_kAdminTxSizeSample)
-              .toList();
+          final sample = txDetailSnap.docs.take(_kAdminTxSizeSample).toList();
           var sampleBytes = 0;
           for (final d in sample) {
             sampleBytes += _estimateDocSizeBytes(d.data());
@@ -1592,12 +1600,13 @@ class _AdminScreenState extends State<AdminScreen> {
       }
     }
 
+    Query<Map<String, dynamic>> licQ = adminUsersWithEmailQuery(
+        FirebaseFirestore.instance.collection('users'));
+    if (widget.useUnifiedPanel) {
+      licQ = licQ.where('app', isEqualTo: _selectedApp);
+    }
+
     try {
-      Query<Map<String, dynamic>> licQ =
-          adminUsersWithEmailQuery(FirebaseFirestore.instance.collection('users'));
-      if (widget.useUnifiedPanel) {
-        licQ = licQ.where('app', isEqualTo: _selectedApp);
-      }
       final licAggs = await Future.wait<AggregateQuerySnapshot>([
         licQ
             .where('licenseExpiresAt',
@@ -1641,6 +1650,17 @@ class _AdminScreenState extends State<AdminScreen> {
         }
       }
     } catch (_) {
+      // Fallback: busca documentos para contagem manual de licenças
+      try {
+        final licFallbackSnap = await firestoreQueryGetReliable(
+          licQ.limit(_kAdminUsersFallbackLimit),
+        );
+        docsForLicenses = licFallbackSnap.docs
+            .where((d) => adminUserHasCompleteEmail(d.data()))
+            .toList();
+      } catch (_) {
+        // mantém lista vazia
+      }
       for (final doc in docsForLicenses) {
         final d = doc.data();
         final exp = d['licenseExpiresAt'] is Timestamp
@@ -1900,8 +1920,7 @@ class _AdminScreenState extends State<AdminScreen> {
                 isCollapsed: false,
                 asDrawer: true,
                 onCloseDrawer: () => _scaffoldKey.currentState?.closeDrawer(),
-                allowedItems:
-                    _isRestrictedPanel ? _allowedMenuItems : null,
+                allowedItems: _isRestrictedPanel ? _allowedMenuItems : null,
                 accountEmail: widget.profile.email,
                 accountSubtitle: _isContentGestor
                     ? '${widget.profile.email ?? ''} · gestor · dicas · cursos · relatórios'
@@ -4643,7 +4662,8 @@ class _AdminScreenState extends State<AdminScreen> {
     });
     try {
       final apkUrl = _apkDownloadUrlCtrl.text.trim();
-      Future<Map<String, dynamic>> call() => FunctionsService().adminPushAppVersion(
+      Future<Map<String, dynamic>> call() =>
+          FunctionsService().adminPushAppVersion(
             version: AppVersion.current,
             buildNumber: AppVersion.buildNumber,
             versionCode: AppVersion.versionCode,
@@ -4670,7 +4690,8 @@ class _AdminScreenState extends State<AdminScreen> {
           ),
         );
       } else {
-        throw StateError((result['error'] ?? 'Falha ao gravar versão.').toString());
+        throw StateError(
+            (result['error'] ?? 'Falha ao gravar versão.').toString());
       }
     } catch (e) {
       if (mounted) {
@@ -4799,7 +4820,8 @@ class _AdminScreenState extends State<AdminScreen> {
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.notifications_off_outlined, size: 18),
+                        : const Icon(Icons.notifications_off_outlined,
+                            size: 18),
                     label: Text(_clearingForceUpdate
                         ? 'Desativando...'
                         : 'Desativar aviso de versão'),
@@ -5033,7 +5055,8 @@ class _AdminScreenState extends State<AdminScreen> {
                         Icon(Icons.error_outline_rounded,
                             size: 48, color: Colors.orange.shade700),
                         const SizedBox(height: 12),
-                        Text('Erro ao carregar: ${_formatAdminResumoError(snap.error!)}',
+                        Text(
+                            'Erro ao carregar: ${_formatAdminResumoError(snap.error!)}',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                                 color: Colors.grey.shade700, fontSize: 13)),
@@ -6118,14 +6141,17 @@ class _AdminScreenState extends State<AdminScreen> {
                           ],
                         ),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFFD4AF37).withValues(alpha: 0.35)),
+                        border: Border.all(
+                            color: const Color(0xFFD4AF37)
+                                .withValues(alpha: 0.35)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Row(
                             children: [
-                              Icon(Icons.hub_rounded, color: Colors.indigo.shade700),
+                              Icon(Icons.hub_rounded,
+                                  color: Colors.indigo.shade700),
                               const SizedBox(width: 8),
                               Text(
                                 'Canais oficiais (site / landing)',
@@ -6139,7 +6165,10 @@ class _AdminScreenState extends State<AdminScreen> {
                           const SizedBox(height: 6),
                           Text(
                             'YouTube, Instagram e WhatsApp na barra superior do site e apps (landing). Salve com o botão abaixo.',
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade700, height: 1.35),
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade700,
+                                height: 1.35),
                           ),
                           const SizedBox(height: 14),
                           ...kLandingOfficialChannelsFields.map(
@@ -6163,7 +6192,8 @@ class _AdminScreenState extends State<AdminScreen> {
                         ),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                            color: const Color(0xFF34A853).withValues(alpha: 0.35)),
+                            color: const Color(0xFF34A853)
+                                .withValues(alpha: 0.35)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -6213,7 +6243,8 @@ class _AdminScreenState extends State<AdminScreen> {
                         ),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                            color: const Color(0xFFBE185D).withValues(alpha: 0.35)),
+                            color: const Color(0xFFBE185D)
+                                .withValues(alpha: 0.35)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -8029,16 +8060,20 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
     final ownerGross = data['splitOwnerShareGross'];
     final partnerGross = data['splitPartnerShareGross'];
     if (ownerGross == null && partnerGross == null) return null;
-    final owner = (data['splitOwnerLabel'] ?? AppBrand.developerName).toString();
-    final partner = (data['splitPartnerLabel'] ?? AppBrand.idealizerName).toString();
+    final owner =
+        (data['splitOwnerLabel'] ?? AppBrand.developerName).toString();
+    final partner =
+        (data['splitPartnerLabel'] ?? AppBrand.idealizerName).toString();
     return '$owner / $partner';
   }
 
-  static bool _matchesRecipientFilter(Map<String, dynamic> data, String filter) {
+  static bool _matchesRecipientFilter(
+      Map<String, dynamic> data, String filter) {
     if (filter == 'all') return true;
     final ownerLabel = (data['splitOwnerLabel'] ?? '').toString().toLowerCase();
     if (filter == 'raihom') {
-      return ownerLabel.contains('raihom') || data['splitOwnerShareGross'] != null;
+      return ownerLabel.contains('raihom') ||
+          data['splitOwnerShareGross'] != null;
     }
     if (filter == 'partner') {
       return ownerLabel.contains('johnathan') ||
@@ -8307,8 +8342,8 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
                       decoration: const InputDecoration(
                         hintText: 'ID do pagamento (ex: 147204656312)',
                         border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 12),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                       ),
                       keyboardType: TextInputType.number,
                       enabled: !_syncing,
@@ -8328,7 +8363,11 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
                     if (narrow) {
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [idField, const SizedBox(height: 10), syncBtn],
+                        children: [
+                          idField,
+                          const SizedBox(height: 10),
+                          syncBtn
+                        ],
                       );
                     }
                     return Row(
@@ -8396,8 +8435,8 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
                       decoration: const InputDecoration(
                         hintText: 'E-mail do usuário (ex: usuario@email.com)',
                         border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 12),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                       ),
                       keyboardType: TextInputType.emailAddress,
                       enabled: !_syncingEmail,
@@ -8420,7 +8459,11 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
                     if (narrow) {
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [emailField, const SizedBox(height: 10), syncBtn],
+                        children: [
+                          emailField,
+                          const SizedBox(height: 10),
+                          syncBtn
+                        ],
                       );
                     }
                     return Row(
@@ -8458,7 +8501,8 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
                 },
                 child: Text(DateFormat('dd/MM/yyyy').format(_filterStart)),
               ),
-              Text('até', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+              Text('até',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
               OutlinedButton(
                 style: OutlinedButton.styleFrom(minimumSize: const Size(0, 36)),
                 onPressed: () async {
@@ -8614,7 +8658,8 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.cloud_off_rounded, size: 40, color: Colors.orange.shade800),
+            Icon(Icons.cloud_off_rounded,
+                size: 40, color: Colors.orange.shade800),
             const SizedBox(height: 10),
             Text(
               _loadPaymentsError!,
@@ -8649,7 +8694,8 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
               child: Text(
                 'Nenhum pagamento registrado ainda. Quando houver vendas via '
                 'Mercado Pago, elas aparecerão aqui.',
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 14, height: 1.35),
+                style: TextStyle(
+                    color: Colors.grey.shade600, fontSize: 14, height: 1.35),
               ),
             ),
           ],
@@ -8659,8 +8705,8 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
 
     final startDay =
         DateTime(_filterStart.year, _filterStart.month, _filterStart.day);
-    final endDay = DateTime(
-        _filterEnd.year, _filterEnd.month, _filterEnd.day, 23, 59, 59);
+    final endDay =
+        DateTime(_filterEnd.year, _filterEnd.month, _filterEnd.day, 23, 59, 59);
     var docs = allDocs.where((d) {
       final data = d.data();
       if (data['isOutgoing'] == true) return false;
@@ -8745,7 +8791,8 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
             ),
             child: Row(
               children: [
-                Icon(Icons.inbox_rounded, size: 40, color: Colors.grey.shade400),
+                Icon(Icons.inbox_rounded,
+                    size: 40, color: Colors.grey.shade400),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Text(

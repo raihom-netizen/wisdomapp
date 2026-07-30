@@ -649,7 +649,7 @@ class _AdminFinancialTipsPageState extends State<AdminFinancialTipsPage>
                       padding: EdgeInsets.fromLTRB(pad.left, 0, pad.right, 8),
                       sliver: SliverToBoxAdapter(
                         child: DropdownButtonFormField<String?>(
-                          value: _bookFilter,
+                          initialValue: _bookFilter,
                           isExpanded: true,
                           decoration: InputDecoration(
                             labelText: 'Filtrar por livro bíblico',

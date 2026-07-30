@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart' as fa;
 import '../models/finance_account.dart';
 import '../utils/firestore_user_doc_id.dart';
 import 'finance_advanced_settings_service.dart';
+import 'goal_deposit_service.dart';
 import '../utils/finance_transactions_hub.dart';
 
 class FinanceAccountsService {
@@ -41,8 +42,7 @@ class FinanceAccountsService {
         final cachedSnap =
             await _col(uid).get(const GetOptions(source: Source.cache));
         if (cachedSnap.docs.isNotEmpty) {
-          final list =
-              cachedSnap.docs.map(FinanceAccount.fromDoc).toList();
+          final list = cachedSnap.docs.map(FinanceAccount.fromDoc).toList();
           sortFinanceAccounts(list);
           yield list;
         }
@@ -74,10 +74,52 @@ class FinanceAccountsService {
     if (productType == FinanceAccount.kChecking ||
         productType == FinanceAccount.kSavings ||
         productType == FinanceAccount.kCard ||
-        productType == FinanceAccount.kBankAndCard) {
+        productType == FinanceAccount.kBankAndCard ||
+        productType == FinanceAccount.kVault) {
       return productType;
     }
     return FinanceAccount.kChecking;
+  }
+
+  /// Localiza a conta Cofre pessoal na lista (productType vault).
+  static FinanceAccount? findVaultAccount(Iterable<FinanceAccount> accounts) {
+    for (final a in accounts) {
+      if (a.isVaultProduct) return a;
+    }
+    return null;
+  }
+
+  /// Garante uma conta «Cofre pessoal» por usuário (reserva / dinheiro físico).
+  Future<String> ensureVaultAccount(String uid) async {
+    if (firestoreUserDocIdStrictFromSession().isEmpty) return '';
+    final prefs = FinanceAdvancedSettingsService();
+    final savedId = await prefs.getVaultAccountId(uid);
+    if (savedId != null && savedId.isNotEmpty) {
+      final doc = await _col(uid).doc(savedId).get();
+      if (doc.exists) {
+        final acc = FinanceAccount.fromDoc(doc);
+        if (acc.isVaultProduct) return savedId;
+      }
+    }
+    final all = await listOnce(uid);
+    final existing = findVaultAccount(all);
+    if (existing != null) {
+      await prefs.setVaultAccountId(uid, existing.id);
+      return existing.id;
+    }
+    final ref = _col(uid).doc();
+    await ref.set({
+      ...FinanceAccount(
+        id: ref.id,
+        presetId: FinanceAccount.kVaultPresetId,
+        productType: FinanceAccount.kVault,
+        nickname: 'Cofre pessoal',
+        sortOrder: -1000000,
+      ).toMap(),
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    await prefs.setVaultAccountId(uid, ref.id);
+    return ref.id;
   }
 
   Future<String> addAccount({
@@ -90,7 +132,8 @@ class FinanceAccountsService {
   }) async {
     final pt = _normalizeProductType(productType);
     final ref = _col(uid).doc();
-    final sc = _normalizeStatementClosingDay(statementClosingDay, productType: pt);
+    final sc =
+        _normalizeStatementClosingDay(statementClosingDay, productType: pt);
     final cc = _normalizeCardColorId(cardColorId);
     await ref.set({
       ...FinanceAccount(
@@ -113,9 +156,13 @@ class FinanceAccountsService {
     return t;
   }
 
-  static int? _normalizeStatementClosingDay(int? day, {required String productType}) {
+  static int? _normalizeStatementClosingDay(int? day,
+      {required String productType}) {
     if (day == null) return null;
-    if (productType != FinanceAccount.kCard && productType != FinanceAccount.kBankAndCard) return null;
+    if (productType != FinanceAccount.kCard &&
+        productType != FinanceAccount.kBankAndCard) {
+      return null;
+    }
     if (day < 1 || day > 31) return null;
     return day;
   }
@@ -130,7 +177,8 @@ class FinanceAccountsService {
     String? cardColorId,
   }) async {
     final pt = _normalizeProductType(productType);
-    final sc = _normalizeStatementClosingDay(statementClosingDay, productType: pt);
+    final sc =
+        _normalizeStatementClosingDay(statementClosingDay, productType: pt);
     final cc = _normalizeCardColorId(cardColorId);
     final acc = FinanceAccount(
       id: accountId,
@@ -196,16 +244,20 @@ class FinanceAccountsService {
     }
   }
 
-  Future<Set<String>> _collectLinkedTransactionIds(String uid, String accountId) async {
+  Future<Set<String>> _collectLinkedTransactionIds(
+      String uid, String accountId) async {
     final ids = <String>{};
     await _forEachTxByField(uid, 'financeAccountId', accountId, ids.add);
-    await _forEachTxByField(uid, 'paidFromFinanceAccountId', accountId, ids.add);
+    await _forEachTxByField(
+        uid, 'paidFromFinanceAccountId', accountId, ids.add);
 
     final pairIds = <String>{};
     final idList = ids.toList();
     for (var i = 0; i < idList.length; i += 25) {
-      final chunk = idList.sublist(i, i + 25 > idList.length ? idList.length : i + 25);
-      final snaps = await Future.wait(chunk.map((id) => _txCol(uid).doc(id).get()));
+      final chunk =
+          idList.sublist(i, i + 25 > idList.length ? idList.length : i + 25);
+      final snaps =
+          await Future.wait(chunk.map((id) => _txCol(uid).doc(id).get()));
       for (final snap in snaps) {
         final pair = (snap.data()?['transferPairId'] ?? '').toString().trim();
         if (pair.isNotEmpty) pairIds.add(pair);
@@ -224,6 +276,20 @@ class FinanceAccountsService {
   Future<void> _deleteTransactionsByIds(String uid, Set<String> ids) async {
     if (ids.isEmpty) return;
     final col = _txCol(uid);
+
+    // Desvincula Meta / recalcula semanas antes de apagar cada lançamento.
+    for (final id in ids) {
+      try {
+        final snap = await col.doc(id).get();
+        if (!snap.exists) continue;
+        await GoalDepositService.unlinkBeforeTransactionDelete(
+          uid: uid,
+          txId: id,
+          txData: snap.data() ?? {},
+        );
+      } catch (_) {}
+    }
+
     var batch = _db.batch();
     var n = 0;
     for (final id in ids) {
@@ -238,19 +304,33 @@ class FinanceAccountsService {
     if (n > 0) await batch.commit();
   }
 
-  /// Remove a conta e **todos** os lançamentos vinculados (inclui transferências relacionadas).
+  /// Remove a conta e todos os lançamentos vinculados (inclui transferências relacionadas).
+  /// O Cofre pessoal não pode ser excluído.
   Future<int> deleteAccount(String uid, String accountId) async {
+    final doc = await _col(uid).doc(accountId).get();
+    if (doc.exists) {
+      final acc = FinanceAccount.fromDoc(doc);
+      if (acc.isVaultProduct) {
+        throw StateError('O Cofre pessoal não pode ser excluído.');
+      }
+    }
     final linkedIds = await _collectLinkedTransactionIds(uid, accountId);
     await _deleteTransactionsByIds(uid, linkedIds);
     await _col(uid).doc(accountId).delete();
-    await FinanceAdvancedSettingsService().clearDefaultFinanceAccountIfMatches(uid, accountId);
-    FinanceTransactionsHub.notifyMutated(uid: firestoreUserDocIdForAppShell(uid));
+    await FinanceAdvancedSettingsService()
+        .clearDefaultFinanceAccountIfMatches(uid, accountId);
+    FinanceTransactionsHub.notifyMutated(
+        uid: firestoreUserDocIdForAppShell(uid));
     return linkedIds.length;
   }
 
   /// Persiste a ordem exibida (campo [FinanceAccount.sortOrder]).
-  Future<void> setAccountOrder(String uid, List<String> orderedAccountIds) async {
-    if (orderedAccountIds.isEmpty || firestoreUserDocIdStrictFromSession().isEmpty) return;
+  Future<void> setAccountOrder(
+      String uid, List<String> orderedAccountIds) async {
+    if (orderedAccountIds.isEmpty ||
+        firestoreUserDocIdStrictFromSession().isEmpty) {
+      return;
+    }
     final batch = _db.batch();
     for (var i = 0; i < orderedAccountIds.length; i++) {
       batch.update(_col(uid).doc(orderedAccountIds[i]), {
@@ -261,7 +341,8 @@ class FinanceAccountsService {
     await batch.commit();
   }
 
-  Future<void> updateNickname(String uid, String accountId, String? nickname) async {
+  Future<void> updateNickname(
+      String uid, String accountId, String? nickname) async {
     final data = <String, dynamic>{
       'updatedAt': FieldValue.serverTimestamp(),
     };

@@ -6,7 +6,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
@@ -21,6 +22,7 @@ import '../utils/firestore_web_guard.dart';
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+
   /// Callable `ctResolveCpfEmail` e demais funções estão em us-central1.
   final FirebaseFunctions _fn =
       FirebaseFunctions.instanceFor(region: 'us-central1');
@@ -106,7 +108,7 @@ class AuthService {
   String maskCpf(String cpfDigits) {
     final c = normalizeCpf(cpfDigits);
     if (c.length != 11) return cpfDigits;
-    return '${c.substring(0,3)}.${c.substring(3,6)}.${c.substring(6,9)}-${c.substring(9,11)}';
+    return '${c.substring(0, 3)}.${c.substring(3, 6)}.${c.substring(6, 9)}-${c.substring(9, 11)}';
   }
 
   Future<String> cpfToEmail(String cpfOrEmail) async {
@@ -136,7 +138,8 @@ class AuthService {
     }
   }
 
-  Future<UserCredential> signInWithCpf(String cpfOrEmail, String password) async {
+  Future<UserCredential> signInWithCpf(
+      String cpfOrEmail, String password) async {
     final email = await cpfToEmail(cpfOrEmail);
     return _auth.signInWithEmailAndPassword(email: email, password: password);
   }
@@ -157,7 +160,9 @@ class AuthService {
     if (cpfDigits.length != 11) throw Exception('CPF inválido');
 
     final emailTrim = email.trim();
-    if (emailTrim.isEmpty) throw Exception('E-mail é obrigatório para identificação.');
+    if (emailTrim.isEmpty) {
+      throw Exception('E-mail é obrigatório para identificação.');
+    }
     if (!RegExp(r'^[^@]+@[^@]+\.[^@]+$').hasMatch(emailTrim)) {
       throw Exception('Informe um e-mail válido (ex.: nome@dominio.com).');
     }
@@ -173,7 +178,8 @@ class AuthService {
     final now = FieldValue.serverTimestamp();
     await _refreshWriteSession(cred.user);
 
-    final trialEnd = DateTime.now().add(Duration(days: UserProfile.newUserTrialDays));
+    final trialEnd =
+        DateTime.now().add(Duration(days: UserProfile.newUserTrialDays));
     await _runFirestoreWriteWithRetry(() async {
       await _db.collection('users').doc(uid).set({
         'cpf': cpfDigits,
@@ -194,7 +200,12 @@ class AuthService {
         'createdAt': now,
       }, SetOptions(merge: true));
 
-      await _db.collection('users').doc(uid).collection('settings').doc('general').set({
+      await _db
+          .collection('users')
+          .doc(uid)
+          .collection('settings')
+          .doc('general')
+          .set({
         'nightStart': '22:00',
         'nightEnd': '05:00',
         'regionDefault': 'GO',
@@ -224,7 +235,8 @@ class AuthService {
         data['cpf'] = cpfDigits;
         data['cpfMasked'] = maskCpf(cpfDigits);
         final userSnap = await ref.get();
-        emailToUse ??= (userSnap.data()?['email'] ?? '').toString().trim().toLowerCase();
+        emailToUse ??=
+            (userSnap.data()?['email'] ?? '').toString().trim().toLowerCase();
         if (emailToUse.isNotEmpty) {
           await _db.collection('cpf_index').doc(cpfDigits).set({
             'uid': uid,
@@ -261,7 +273,8 @@ class AuthService {
   /// Web: popup do Firebase.
   /// Android/iOS: google_sign_in + signInWithCredential.
   /// [forceAccountPicker]: após «trocar de conta», obriga escolher outra conta Google.
-  Future<UserCredential?> signInWithGoogle({bool forceAccountPicker = false}) async {
+  Future<UserCredential?> signInWithGoogle(
+      {bool forceAccountPicker = false}) async {
     if (kIsWeb) {
       final GoogleAuthProvider googleProvider = GoogleAuthProvider();
       if (forceAccountPicker) {
@@ -652,7 +665,8 @@ class AuthService {
     }
 
     final now = FieldValue.serverTimestamp();
-    final trialEnd = DateTime.now().add(Duration(days: UserProfile.newUserTrialDays));
+    final trialEnd =
+        DateTime.now().add(Duration(days: UserProfile.newUserTrialDays));
     await _refreshWriteSession(u);
     await _runFirestoreWriteWithRetry(() {
       return ref.set({
@@ -678,11 +692,16 @@ class AuthService {
     final emailTrim = email.trim();
     final nameTrim = name.trim();
     if (nameTrim.isEmpty) throw Exception('Informe o nome completo.');
-    if (emailTrim.isEmpty) throw Exception('E-mail é obrigatório para identificação. Informe um e-mail válido.');
+    if (emailTrim.isEmpty) {
+      throw Exception(
+          'E-mail é obrigatório para identificação. Informe um e-mail válido.');
+    }
     if (!RegExp(r'^[^@]+@[^@]+\.[^@]+$').hasMatch(emailTrim)) {
       throw Exception('Informe um e-mail válido (ex.: nome@dominio.com).');
     }
-    if (password.length < 6) throw Exception('A senha deve ter no mínimo 6 caracteres.');
+    if (password.length < 6) {
+      throw Exception('A senha deve ter no mínimo 6 caracteres.');
+    }
 
     final cred = await _auth.createUserWithEmailAndPassword(
       email: emailTrim,
@@ -693,7 +712,8 @@ class AuthService {
     final now = FieldValue.serverTimestamp();
     await _refreshWriteSession(cred.user);
 
-    final trialEnd = DateTime.now().add(Duration(days: UserProfile.newUserTrialDays));
+    final trialEnd =
+        DateTime.now().add(Duration(days: UserProfile.newUserTrialDays));
     await _runFirestoreWriteWithRetry(() async {
       await _db.collection('users').doc(uid).set({
         'name': nameTrim,
@@ -707,7 +727,12 @@ class AuthService {
         'updatedAt': now,
       }, SetOptions(merge: true));
 
-      await _db.collection('users').doc(uid).collection('settings').doc('notifications').set({
+      await _db
+          .collection('users')
+          .doc(uid)
+          .collection('settings')
+          .doc('notifications')
+          .set({
         'scaleReminderEnabled': true,
         'scaleReminderMinutes': 60,
         'emailReminderEnabled': true,
@@ -723,6 +748,27 @@ class AuthService {
     }, user: cred.user);
 
     return cred;
+  }
+
+  /// Envia e-mail profissional de boas-vindas + link de confirmação (CF ctSendVerificationEmail).
+  /// Chamado após cadastro manual — igual Controle Total; falha não bloqueia o cadastro.
+  Future<void> sendCustomVerificationEmail({
+    required String email,
+    required String name,
+  }) async {
+    final callable = _fn.httpsCallable(
+      'ctSendVerificationEmail',
+      options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
+    );
+    await callable.call({'email': email.trim(), 'name': name.trim()});
+  }
+
+  /// Recarrega o usuário e informa se o e-mail já foi confirmado (polling da tela de verificação).
+  Future<bool> isEmailVerified() async {
+    final user = _auth.currentUser;
+    if (user == null) return false;
+    await user.reload();
+    return _auth.currentUser?.emailVerified ?? false;
   }
 
   /// Encerra sessão Firebase. O app permanece logado até «Entrar com outra conta» nas Configurações.
@@ -789,7 +835,8 @@ class AuthService {
       }
     }
     final s = e.toString();
-    if (s.contains('invalid-credential') || s.contains('ERROR_INVALID_CREDENTIAL')) {
+    if (s.contains('invalid-credential') ||
+        s.contains('ERROR_INVALID_CREDENTIAL')) {
       return 'Credencial inválida ou expirada. No Firebase Console, confira o provedor Apple (chave .p8, '
           'Service ID e domínios). Na Apple Developer, confira Sign In with Apple no App ID e no Services ID.';
     }
@@ -836,4 +883,3 @@ class AuthService {
     return e.toString().replaceFirst(RegExp(r'^Exception:?\s*'), '');
   }
 }
-

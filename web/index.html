@@ -33,10 +33,10 @@
   </script>
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="WISDOMAPP — Sabedoria financeira baseada nos princípios bíblicos. Teste grátis 30 dias. Financeiro, agenda e cursos.">
+  <meta name="description" content="WISDOMAPP — Sabedoria financeira baseada nos princípios bíblicos. Teste grátis 30 dias. Financeiro, objetivos financeiros, agenda e cursos.">
   <link rel="canonical" href="https://wisdomapp-b9e98.web.app/">
   <meta property="og:title" content="WISDOMAPP — Sabedoria financeira">
-  <meta property="og:description" content="Teste grátis 30 dias. Finanças, agenda e cursos com princípios bíblicos. Acesso por celular ou computador.">
+  <meta property="og:description" content="Teste grátis 30 dias. Finanças, Objetivos Financeiros (Projeto 52 semanas), agenda e cursos com princípios bíblicos. Acesso por celular ou computador.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://wisdomapp-b9e98.web.app/">
   <meta property="og:image" content="https://wisdomapp-b9e98.web.app/icons/Icon-512.png">
@@ -357,7 +357,7 @@
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>WISDOMAPP — Sabedoria financeira | Financeiro, agenda e cursos</title>
+  <title>WISDOMAPP — Sabedoria financeira | Financeiro, objetivos financeiros, agenda e cursos</title>
   <link rel="manifest" href="manifest.json">
   <!-- Preload só de assets leves — main.dart.js via rede local no Safari iOS -->
   <link rel="preload" href="icons/wisdomapp_emblem.png" as="image">
@@ -652,29 +652,9 @@
       }
     })();
   </script>
+  <!-- Boot único: web/flutter_bootstrap.js customizado já chama _flutter.loader.load
+       (canvaskit full local). Load duplicado aqui causava 2ª execução do main() e
+       FirebaseError failed-precondition: initializeFirestore() com opções diferentes. -->
   <script src="flutter_bootstrap.js" async></script>
-  <script>
-    (function () {
-      function bootFlutter() {
-        if (!window._flutter || !_flutter.loader || !_flutter.buildConfig) {
-          setTimeout(bootFlutter, 40);
-          return;
-        }
-        try {
-          _flutter.loader.load({
-            serviceWorkerSettings: null,
-            config: {
-              canvasKitVariant: "full",
-              canvasKitBaseUrl: "/canvaskit/"
-            }
-          });
-        } catch (e) {
-          console.error("Flutter loader:", e);
-        }
-      }
-      if (document.readyState === "complete") bootFlutter();
-      else window.addEventListener("load", bootFlutter);
-    })();
-  </script>
 </body>
 </html>

@@ -87,7 +87,7 @@ class NotificationAndroidStyle {
       color: Color(theme.colorArgb),
       icon: '@mipmap/ic_launcher',
       largeIcon: const DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
-      subText: '$moduleSubtitle · ${kNotificationBrandApp}',
+      subText: '$moduleSubtitle · $kNotificationBrandApp',
       ticker: title,
       visibility: NotificationVisibility.public,
       category: AndroidNotificationCategory.reminder,

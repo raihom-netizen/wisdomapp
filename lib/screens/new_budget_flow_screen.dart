@@ -10,7 +10,6 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 import '../constants/app_version.dart';
 import '../models/budget_provider.dart';
-import '../services/theme.dart';
 import '../services/functions_service.dart';
 import '../constants/currency_formats.dart';
 import '../constants/app_strings.dart';
@@ -510,7 +509,7 @@ class _NewBudgetFlowScreenState extends State<NewBudgetFlowScreen> {
           const Text('Usar modelo', style: TextStyle(fontWeight: FontWeight.w700)),
           const SizedBox(height: 6),
           DropdownButtonFormField<Map<String, dynamic>>(
-            value: null,
+            initialValue: null,
             decoration: const InputDecoration(
               labelText: 'Escolha um modelo para preencher os itens',
               border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
@@ -611,10 +610,14 @@ class _NewBudgetFlowScreenState extends State<NewBudgetFlowScreen> {
               selected: sel,
               onSelected: (v) {
                 setState(() {
-                  if (v) _paymentSelected.add(opt); else _paymentSelected.remove(opt);
+                  if (v) {
+                    _paymentSelected.add(opt);
+                  } else {
+                    _paymentSelected.remove(opt);
+                  }
                 });
               },
-              selectedColor: AppColors.primary.withOpacity(0.3),
+              selectedColor: AppColors.primary.withValues(alpha: 0.3),
             );
           }).toList(),
         ),
@@ -659,7 +662,7 @@ class _NewBudgetFlowScreenState extends State<NewBudgetFlowScreen> {
         ),
         const SizedBox(height: 16),
         Card(
-          color: AppColors.primary.withOpacity(0.08),
+          color: AppColors.primary.withValues(alpha: 0.08),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Row(

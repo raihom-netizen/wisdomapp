@@ -20,10 +20,13 @@ class FinanceAdvancedSettingsService {
 
   /// ID do documento em `finance_accounts` usado como padrão em novos lançamentos.
   static const String keyDefaultFinanceAccountId = 'defaultFinanceAccountId';
+  static const String keyVaultAccountId = 'vaultAccountId';
 
   Stream<bool> watchStripHideZeroBalances(String uid) {
     if (uid.isEmpty) return Stream.value(false);
-    return _doc(uid).snapshots().map((s) => s.data()?[_keyStripHideZero] == true);
+    return _doc(uid)
+        .snapshots()
+        .map((s) => s.data()?[_keyStripHideZero] == true);
   }
 
   /// Leitura única (entrada rápida no Financeiro; o stream continua a atualizar).
@@ -77,11 +80,27 @@ class FinanceAdvancedSettingsService {
     }
   }
 
-  Future<void> clearDefaultFinanceAccountIfMatches(String uid, String accountId) async {
+  Future<void> clearDefaultFinanceAccountIfMatches(
+      String uid, String accountId) async {
     final cur = await getDefaultFinanceAccountId(uid);
     if (cur != null && cur == accountId) {
       await setDefaultFinanceAccountId(uid, null);
     }
   }
-}
 
+  Future<String?> getVaultAccountId(String uid) async {
+    if (uid.isEmpty) return null;
+    final snap = await _doc(uid).get();
+    final v = snap.data()?[keyVaultAccountId];
+    if (v is String && v.trim().isNotEmpty) return v.trim();
+    return null;
+  }
+
+  Future<void> setVaultAccountId(String uid, String accountId) async {
+    if (uid.isEmpty || accountId.trim().isEmpty) return;
+    await _doc(uid).set({
+      keyVaultAccountId: accountId.trim(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+}

@@ -54,7 +54,7 @@ class _ControleFinanceiroScreenState extends State<ControleFinanceiroScreen> {
     decoration: BoxDecoration(
       gradient: const LinearGradient(colors: [Color(0xFF1A237E), Color(0xFF3949AB)]),
       borderRadius: BorderRadius.circular(30),
-      boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))],
+      boxShadow: [BoxShadow(color: Colors.blue.withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, 10))],
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -110,7 +110,7 @@ class _ControleFinanceiroScreenState extends State<ControleFinanceiroScreen> {
           LineChartBarData(
             spots: [const FlSpot(0, 3), const FlSpot(2, 5), const FlSpot(4, 4), const FlSpot(6, 8)],
             isCurved: true, color: Colors.blueAccent, barWidth: 4, dotData: const FlDotData(show: false),
-            belowBarData: BarAreaData(show: true, color: Colors.blueAccent.withOpacity(0.1)),
+            belowBarData: BarAreaData(show: true, color: Colors.blueAccent.withValues(alpha: 0.1)),
           ),
         ],
       ),
@@ -130,7 +130,7 @@ class _ControleFinanceiroScreenState extends State<ControleFinanceiroScreen> {
     decoration: BoxDecoration(color: const Color(0xFF1D1E33), borderRadius: BorderRadius.circular(20)),
     child: Row(
       children: [
-        CircleAvatar(backgroundColor: c.withOpacity(0.1), child: Icon(i, color: c, size: 20)),
+        CircleAvatar(backgroundColor: c.withValues(alpha: 0.1), child: Icon(i, color: c, size: 20)),
         const SizedBox(width: 16),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(t, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),

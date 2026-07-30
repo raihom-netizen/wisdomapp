@@ -21,8 +21,10 @@ class AdminCourseFirestoreBridge {
   static const Object _skip = Object();
 
   static dynamic encodeValue(dynamic value) {
-    if (identical(value, FieldValue.serverTimestamp())) return _skip;
-    if (identical(value, FieldValue.delete())) return cfDelete;
+    // FieldValue não serializa no canal do httpsCallable (e `identical` nunca
+    // casa: cada FieldValue.xxx() cria instância nova). createdAt/updatedAt são
+    // aplicados pela Cloud Function; deleção de campo deve usar [cfDelete].
+    if (value is FieldValue) return _skip;
     if (value is Timestamp) return {'_tsMs': value.millisecondsSinceEpoch};
     if (value is Map) {
       return encodeMap(Map<String, dynamic>.from(value));
@@ -53,7 +55,8 @@ class AdminCourseFirestoreBridge {
     await FunctionsService().adminDeleteCourseVideos(docIds: docIds);
   }
 
-  static Future<void> saveWisdomCoursesModuleConfig(Map<String, dynamic> data) async {
+  static Future<void> saveWisdomCoursesModuleConfig(
+      Map<String, dynamic> data) async {
     await FunctionsService().adminSaveWisdomCoursesModuleConfig(
       data: encodeMap(data),
     );

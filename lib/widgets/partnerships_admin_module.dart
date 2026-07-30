@@ -10,7 +10,6 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../constants/currency_formats.dart';
-import '../widgets/shell_keyboard_bottom_pad.dart';
 import '../services/admin_partnership_plan_catalog.dart';
 import '../services/admin_user_plan_apply_service.dart';
 import '../services/admin_audit_service.dart';
@@ -4493,7 +4492,7 @@ class _PartnershipUsersPanelState extends State<PartnershipUsersPanel> {
           const SizedBox(height: 10),
           if (!isRemoved) ...[
             DropdownButtonFormField<String>(
-              value: adminUserPlanDropdownValue(plan),
+              initialValue: adminUserPlanDropdownValue(plan),
               isExpanded: true,
               decoration: const InputDecoration(
                 labelText: 'Plano / convênio',

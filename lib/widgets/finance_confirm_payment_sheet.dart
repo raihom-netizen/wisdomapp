@@ -175,7 +175,7 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentSheet({
                   else
                     DropdownButtonFormField<String?>(
                       key: ValueKey<String?>(selectedFinanceAccountId),
-                      value: selectedFinanceAccountId,
+                      initialValue: selectedFinanceAccountId,
                       decoration: financePremiumDropdownDecoration(
                         label: isIncome ? 'Banco / conta de recebimento' : 'Banco / conta de pagamento',
                         prefixIcon: Icons.account_balance_rounded,
@@ -626,7 +626,7 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentBatchSheet({
                   else
                     DropdownButtonFormField<String?>(
                       key: ValueKey<String?>(selectedFinanceAccountId),
-                      value: selectedFinanceAccountId,
+                      initialValue: selectedFinanceAccountId,
                       decoration: financePremiumDropdownDecoration(
                         label: isIncome ? 'Banco / conta de recebimento (todos)' : 'Banco / conta de pagamento (todos)',
                         prefixIcon: Icons.account_balance_rounded,

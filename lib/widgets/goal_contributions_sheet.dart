@@ -59,7 +59,8 @@ Future<void> showGoalContributionsSheet({
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
               child: Row(
                 children: [
-                  Icon(Icons.list_alt_rounded, color: AppColors.primary, size: 28),
+                  Icon(Icons.list_alt_rounded,
+                      color: AppColors.primary, size: 28),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -78,7 +79,8 @@ Future<void> showGoalContributionsSheet({
             const Divider(height: 1),
             Expanded(
               child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: contribRef.orderBy('date', descending: true).snapshots(),
+                stream:
+                    contribRef.orderBy('date', descending: true).snapshots(),
                 builder: (context, snap) {
                   if (snap.hasError) {
                     return Center(
@@ -88,7 +90,8 @@ Future<void> showGoalContributionsSheet({
                       ),
                     );
                   }
-                  if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
+                  if (snap.connectionState == ConnectionState.waiting &&
+                      !snap.hasData) {
                     return const Center(child: CircularProgressIndicator());
                   }
                   final docs = snap.data?.docs ?? [];
@@ -101,16 +104,19 @@ Future<void> showGoalContributionsSheet({
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.inbox_rounded, size: 64, color: Colors.grey.shade400),
+                              Icon(Icons.inbox_rounded,
+                                  size: 64, color: Colors.grey.shade400),
                               const SizedBox(height: 16),
                               Text(
                                 'Nenhum depósito ainda',
-                                style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+                                style: TextStyle(
+                                    fontSize: 16, color: Colors.grey.shade600),
                               ),
                               const SizedBox(height: 8),
                               Text(
                                 'Use "Depositar" no card da meta.',
-                                style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+                                style: TextStyle(
+                                    fontSize: 13, color: Colors.grey.shade500),
                               ),
                             ],
                           ),
@@ -125,8 +131,8 @@ Future<void> showGoalContributionsSheet({
                       final accounts = accSnap.data ?? const <FinanceAccount>[];
                       final accById = {for (final a in accounts) a.id: a};
                       return ListView.builder(
-                        controller: scrollController,
                         cacheExtent: 400,
+                        controller: scrollController,
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                         itemCount: docs.length + 1,
                         itemBuilder: (context, i) {
@@ -139,10 +145,14 @@ Future<void> showGoalContributionsSheet({
                           final dateTs = d['date'] as Timestamp?;
                           final date = dateTs?.toDate() ?? DateTime.now();
                           final week = d['weekNumber'] as int?;
-                          final weeks =
-                              (d['weekNumbers'] as List?)?.whereType<int>().toList() ?? [];
-                          final accountId = (d['financeAccountId'] ?? '').toString();
-                          final account = accountId.isNotEmpty ? accById[accountId] : null;
+                          final weeks = (d['weekNumbers'] as List?)
+                                  ?.whereType<int>()
+                                  .toList() ??
+                              [];
+                          final accountId =
+                              (d['financeAccountId'] ?? '').toString();
+                          final account =
+                              accountId.isNotEmpty ? accById[accountId] : null;
                           final preset = account?.preset;
                           final accent = preset?.color1 ?? AppColors.primary;
                           final grad = [
@@ -161,7 +171,8 @@ Future<void> showGoalContributionsSheet({
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
-                              border: Border.all(color: accent.withValues(alpha: 0.35)),
+                              border: Border.all(
+                                  color: accent.withValues(alpha: 0.35)),
                             ),
                             child: ListTile(
                               contentPadding: const EdgeInsets.symmetric(
@@ -227,7 +238,8 @@ Future<void> showGoalContributionsSheet({
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   IconButton(
-                                    icon: Icon(Icons.edit_rounded, size: 22, color: accent),
+                                    icon: Icon(Icons.edit_rounded,
+                                        size: 22, color: accent),
                                     onPressed: () => _editGoalDeposit(
                                       ctx,
                                       doc: doc,
@@ -312,7 +324,9 @@ Future<void> _deleteGoalDeposit(
         'O valor será descontado da meta e removido do Financeiro, se vinculado.',
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar')),
         FilledButton(
           style: FilledButton.styleFrom(backgroundColor: AppColors.error),
           onPressed: () => Navigator.pop(ctx, true),

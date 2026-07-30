@@ -45,7 +45,7 @@ class LinkUtilItem {
   static int? _toInt(dynamic v) {
     if (v == null) return null;
     if (v is int) return v;
-    if (v is num) return (v as num).toInt();
+    if (v is num) return (v).toInt();
     if (v is String) return int.tryParse(v);
     return null;
   }
@@ -54,7 +54,7 @@ class LinkUtilItem {
     final subList = map['subLinks'];
     final subLinks = subList is List
         ? subList.map((e) {
-            final m = e is Map ? Map<String, dynamic>.from(e as Map) : <String, dynamic>{};
+            final m = e is Map ? Map<String, dynamic>.from(e) : <String, dynamic>{};
             return SubLinkItem(
               title: (m['title'] ?? '').toString(),
               url: (m['url'] ?? '').toString(),

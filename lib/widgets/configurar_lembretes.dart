@@ -75,7 +75,7 @@ class _ConfigurarLembretesState extends State<ConfigurarLembretes> {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: unidade,
+                  initialValue: unidade,
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
                   ),
@@ -91,8 +91,9 @@ class _ConfigurarLembretesState extends State<ConfigurarLembretes> {
               ElevatedButton(
                 onPressed: () {
                   String label;
-                  if (unidade == 'Dias') label = '$tempo dia(s) antes';
-                  else if (unidade == 'Horas') label = '$tempo hora(s) antes';
+                  if (unidade == 'Dias') {
+                    label = '$tempo dia(s) antes';
+                  } else if (unidade == 'Horas') label = '$tempo hora(s) antes';
                   else label = '$tempo min antes';
                   setState(() {
                     lembretes.add({

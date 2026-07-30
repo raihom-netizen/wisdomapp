@@ -23,7 +23,8 @@ class FixedIncomeService {
       .collection('transactions');
 
   Future<List<Map<String, dynamic>>> list(String uid) async {
-    final snap = await _fixedRef(uid).orderBy('createdAt', descending: true).get();
+    final snap =
+        await _fixedRef(uid).orderBy('createdAt', descending: true).get();
     return snap.docs.map((d) {
       final m = Map<String, dynamic>.from(d.data());
       m['id'] = d.id;
@@ -45,28 +46,40 @@ class FixedIncomeService {
     String mode = modePeriod,
     int? totalParcelas,
     int? parcelaInicial,
+    bool addToCalendar = false,
+    String? calendarColorHex,
   }) async {
     final day = dayOfMonth.clamp(1, 31);
     DateTime end;
     int? effTotalParcelas;
-    if (mode == modeInstallments && totalParcelas != null && totalParcelas >= 1) {
-      effTotalParcelas = totalParcelas.clamp(1, AppBusinessRules.maxFixedFlowInstallments);
+    if (mode == modeInstallments &&
+        totalParcelas != null &&
+        totalParcelas >= 1) {
+      effTotalParcelas =
+          totalParcelas.clamp(1, AppBusinessRules.maxFixedFlowInstallments);
       final start = DateTime(startDate.year, startDate.month, startDate.day);
       final ini = (parcelaInicial ?? 1).clamp(1, effTotalParcelas);
       final meses = effTotalParcelas - ini + 1;
       end = DateTime(start.year, start.month + meses - 1, start.day);
     } else {
       effTotalParcelas = null;
-      end = endDate ?? DateTime(startDate.year + 10, startDate.month, startDate.day);
+      end = endDate ??
+          DateTime(startDate.year + 10, startDate.month, startDate.day);
     }
     final data = <String, dynamic>{
       'description': description,
       'category': category,
       'amount': amount,
       'dayOfMonth': day,
-      'startDate': Timestamp.fromDate(DateTime(startDate.year, startDate.month, startDate.day)),
+      'startDate': Timestamp.fromDate(
+          DateTime(startDate.year, startDate.month, startDate.day)),
       'endDate': Timestamp.fromDate(DateTime(end.year, end.month, end.day)),
       'active': true,
+      'addToCalendar': addToCalendar,
+      if (addToCalendar &&
+          calendarColorHex != null &&
+          calendarColorHex.trim().isNotEmpty)
+        'calendarColorHex': calendarColorHex.trim(),
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     };
@@ -94,6 +107,8 @@ class FixedIncomeService {
     String? mode,
     int? totalParcelas,
     int? parcelaInicial,
+    bool? addToCalendar,
+    String? calendarColorHex,
   }) async {
     final data = <String, dynamic>{
       'updatedAt': FieldValue.serverTimestamp(),
@@ -102,8 +117,14 @@ class FixedIncomeService {
     if (category != null) data['category'] = category;
     if (amount != null) data['amount'] = amount;
     if (dayOfMonth != null) data['dayOfMonth'] = dayOfMonth.clamp(1, 31);
-    if (startDate != null) data['startDate'] = Timestamp.fromDate(DateTime(startDate.year, startDate.month, startDate.day));
-    if (endDate != null) data['endDate'] = Timestamp.fromDate(DateTime(endDate.year, endDate.month, endDate.day));
+    if (startDate != null) {
+      data['startDate'] = Timestamp.fromDate(
+          DateTime(startDate.year, startDate.month, startDate.day));
+    }
+    if (endDate != null) {
+      data['endDate'] = Timestamp.fromDate(
+          DateTime(endDate.year, endDate.month, endDate.day));
+    }
     if (active != null) data['active'] = active;
     if (mode != null) {
       data['mode'] = mode;
@@ -113,18 +134,69 @@ class FixedIncomeService {
       }
     }
     if (totalParcelas != null) {
-      data['totalParcelas'] = totalParcelas.clamp(1, AppBusinessRules.maxFixedFlowInstallments);
+      data['totalParcelas'] =
+          totalParcelas.clamp(1, AppBusinessRules.maxFixedFlowInstallments);
     }
     if (parcelaInicial != null && totalParcelas != null) {
-      final cap = totalParcelas.clamp(1, AppBusinessRules.maxFixedFlowInstallments);
+      final cap =
+          totalParcelas.clamp(1, AppBusinessRules.maxFixedFlowInstallments);
       data['parcelaInicial'] = parcelaInicial.clamp(1, cap);
     }
+    if (addToCalendar != null) {
+      data['addToCalendar'] = addToCalendar;
+      if (!addToCalendar) data['calendarColorHex'] = FieldValue.delete();
+    }
+    if (calendarColorHex != null) {
+      final hex = calendarColorHex.trim();
+      data['calendarColorHex'] = hex.isEmpty ? FieldValue.delete() : hex;
+    }
     await _fixedRef(uid).doc(id).update(data);
-    if (dayOfMonth != null) return updateFuturePendingEntries(uid, id, dayOfMonth.clamp(1, 31));
+    if (addToCalendar != null || calendarColorHex != null) {
+      await _updateFuturePendingCalendarFlags(
+          uid, id, addToCalendar ?? true, calendarColorHex);
+    }
+    if (dayOfMonth != null) {
+      return updateFuturePendingEntries(uid, id, dayOfMonth.clamp(1, 31));
+    }
     return 0;
   }
 
-  Future<int> updateFuturePendingEntries(String uid, String fixedIncomeId, int newDayOfMonth) async {
+  /// Propaga «mostrar no calendário» + cor para as parcelas futuras pendentes desta receita fixa.
+  Future<void> _updateFuturePendingCalendarFlags(
+      String uid,
+      String fixedIncomeId,
+      bool addToCalendar,
+      String? calendarColorHex) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final snap = await _txRef(uid)
+        .where('fixedIncomeId', isEqualTo: fixedIncomeId)
+        .where('status', isEqualTo: 'pending')
+        .get();
+    final toUpdate = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+    for (final doc in snap.docs) {
+      final dateTs = doc.data()['date'];
+      if (dateTs is! Timestamp) continue;
+      if (dateTs.toDate().isBefore(today)) continue;
+      toUpdate.add(doc);
+    }
+    for (var i = 0; i < toUpdate.length; i += batchLimit) {
+      final batch = _db.batch();
+      for (final doc in toUpdate.skip(i).take(batchLimit)) {
+        final hex = (calendarColorHex ?? '').trim();
+        batch.update(doc.reference, {
+          'addToCalendar': addToCalendar,
+          'calendarColorHex':
+              (addToCalendar && hex.isNotEmpty) ? hex : FieldValue.delete(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+    }
+  }
+
+  Future<int> updateFuturePendingEntries(
+      String uid, String fixedIncomeId, int newDayOfMonth) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final snap = await _txRef(uid)
@@ -178,7 +250,9 @@ class FixedIncomeService {
 
   Future<int> deleteAllParcelas(String uid, String fixedIncomeId) async {
     try {
-      final snap = await _txRef(uid).where('fixedIncomeId', isEqualTo: fixedIncomeId).get();
+      final snap = await _txRef(uid)
+          .where('fixedIncomeId', isEqualTo: fixedIncomeId)
+          .get();
       if (snap.docs.isEmpty) return 0;
       int deleted = 0;
       for (var i = 0; i < snap.docs.length; i += batchLimit) {
@@ -212,7 +286,10 @@ class FixedIncomeService {
     if (activeItems.isEmpty) return 0;
 
     final existingSnaps = await Future.wait([
-      for (final fe in activeItems) _txRef(uid).where('fixedIncomeId', isEqualTo: fe['id'].toString()).get(),
+      for (final fe in activeItems)
+        _txRef(uid)
+            .where('fixedIncomeId', isEqualTo: fe['id'].toString())
+            .get(),
     ]);
 
     final List<Map<String, dynamic>> toCreate = [];
@@ -226,6 +303,8 @@ class FixedIncomeService {
       final description = (fe['description'] ?? 'Receita fixa').toString();
       final feId = fe['id'].toString();
       final amount = (fe['amount'] as num?)?.toDouble() ?? 0;
+      final addToCalendar = fe['addToCalendar'] != false;
+      final calHex = (fe['calendarColorHex'] ?? '').toString().trim();
 
       final existingMonthKeys = <String>{};
       for (final d in existingSnap.docs) {
@@ -238,14 +317,16 @@ class FixedIncomeService {
         final dateTs = data['date'];
         if (dateTs is Timestamp) {
           final dt = dateTs.toDate();
-          existingMonthKeys.add('${dt.year}-${dt.month.toString().padLeft(2, '0')}');
+          existingMonthKeys
+              .add('${dt.year}-${dt.month.toString().padLeft(2, '0')}');
         }
       }
 
       final isByInstallments = (fe['mode'] ?? modePeriod) == modeInstallments;
       final totalParcelas = (fe['totalParcelas'] as num?)?.toInt();
       final parcelaInicial = (fe['parcelaInicial'] as num?)?.toInt() ?? 1;
-      final installmentCount = isByInstallments && totalParcelas != null ? totalParcelas : 1;
+      final installmentCount =
+          isByInstallments && totalParcelas != null ? totalParcelas : 1;
       final startMonth = DateTime(start.year, start.month, 1);
 
       DateTime month = DateTime(start.year, start.month, 1);
@@ -256,15 +337,18 @@ class FixedIncomeService {
           month = DateTime(month.year, month.month + 1, 1);
           continue;
         }
-        final monthKey = '${month.year}-${month.month.toString().padLeft(2, '0')}';
+        final monthKey =
+            '${month.year}-${month.month.toString().padLeft(2, '0')}';
         if (existingMonthKeys.contains(monthKey)) {
           month = DateTime(month.year, month.month + 1, 1);
           continue;
         }
         int parcelIndex = 1;
         if (isByInstallments && totalParcelas != null) {
-          final monthsFromStart = (month.year - start.year) * 12 + (month.month - start.month);
-          parcelIndex = (parcelaInicial + monthsFromStart).clamp(1, totalParcelas);
+          final monthsFromStart =
+              (month.year - start.year) * 12 + (month.month - start.month);
+          parcelIndex =
+              (parcelaInicial + monthsFromStart).clamp(1, totalParcelas);
           if (parcelIndex > totalParcelas) {
             month = DateTime(month.year, month.month + 1, 1);
             continue;
@@ -277,9 +361,10 @@ class FixedIncomeService {
         } catch (_) {}
         final dayClamped = dayOfMonth.clamp(1, lastDay);
         final date = DateTime(month.year, month.month, dayClamped);
-        final descOut = isByInstallments && totalParcelas != null && totalParcelas > 1
-            ? '$description · $parcelIndex/$totalParcelas'
-            : description;
+        final descOut =
+            isByInstallments && totalParcelas != null && totalParcelas > 1
+                ? '$description · $parcelIndex/$totalParcelas'
+                : description;
         final dateTs = Timestamp.fromDate(date);
         toCreate.add({
           'type': 'income',
@@ -295,6 +380,8 @@ class FixedIncomeService {
           'installmentIndex': parcelIndex,
           'fixedIncomeId': feId,
           'fixedIncomeMonthKey': monthKey,
+          'addToCalendar': addToCalendar,
+          if (addToCalendar && calHex.isNotEmpty) 'calendarColorHex': calHex,
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });

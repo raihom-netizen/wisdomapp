@@ -478,7 +478,7 @@ class _DelegateSharingCardState extends State<_DelegateSharingCard> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: AppColors.primary.withOpacity(0.18)),
+        side: BorderSide(color: AppColors.primary.withValues(alpha: 0.18)),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
@@ -559,10 +559,10 @@ class _DelegateSharingCardState extends State<_DelegateSharingCard> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.06),
+                  color: AppColors.primary.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                      color: AppColors.primary.withOpacity(0.2)),
+                      color: AppColors.primary.withValues(alpha: 0.2)),
                 ),
                 child: Row(
                   children: [
@@ -759,9 +759,9 @@ class SettingsScreen extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.06),
+                  color: AppColors.primary.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
                 ),
                 child: Row(
                   children: [
@@ -1048,7 +1048,7 @@ class SettingsScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1A237E).withOpacity(0.18),
+            color: const Color(0xFF1A237E).withValues(alpha: 0.18),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
@@ -1064,10 +1064,10 @@ class SettingsScreen extends StatelessWidget {
                 height: 52,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.18),
+                  color: Colors.white.withValues(alpha: 0.18),
                   shape: BoxShape.circle,
                   border: Border.all(
-                      color: Colors.white.withOpacity(0.35), width: 1),
+                      color: Colors.white.withValues(alpha: 0.35), width: 1),
                 ),
                 child: Text(
                   initial,
@@ -1101,7 +1101,7 @@ class SettingsScreen extends StatelessWidget {
                           : 'Conta em uso neste aparelho',
                       style: TextStyle(
                         fontSize: 11.5,
-                        color: Colors.white.withOpacity(0.80),
+                        color: Colors.white.withValues(alpha: 0.80),
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -1115,9 +1115,9 @@ class SettingsScreen extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.14),
+              color: Colors.white.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white.withOpacity(0.22)),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
             ),
             child: Row(
               children: [
@@ -1158,7 +1158,7 @@ class SettingsScreen extends StatelessWidget {
                       child: Padding(
                         padding: const EdgeInsets.all(4),
                         child: Icon(Icons.copy_rounded,
-                            color: Colors.white.withOpacity(0.85), size: 18),
+                            color: Colors.white.withValues(alpha: 0.85), size: 18),
                       ),
                     ),
                   ),
@@ -1175,9 +1175,9 @@ class SettingsScreen extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.18),
+                  color: Colors.white.withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withOpacity(0.28)),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.28)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -1201,9 +1201,9 @@ class SettingsScreen extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.14),
+                    color: Colors.white.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white.withOpacity(0.22)),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -1265,7 +1265,7 @@ class SettingsScreen extends StatelessWidget {
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.white,
                 side: const BorderSide(color: Colors.white, width: 1.25),
-                backgroundColor: Colors.white.withOpacity(0.14),
+                backgroundColor: Colors.white.withValues(alpha: 0.14),
                 minimumSize: const Size(double.infinity, 48),
                 padding:
                     const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
@@ -1281,7 +1281,7 @@ class SettingsScreen extends StatelessWidget {
               'Encerra a sessão, apaga credenciais locais e abre login para outra conta.',
               style: TextStyle(
                 fontSize: 11,
-                color: Colors.white.withOpacity(0.88),
+                color: Colors.white.withValues(alpha: 0.88),
                 height: 1.35,
                 letterSpacing: 0.15,
               ),
@@ -1479,7 +1479,7 @@ class SettingsScreen extends StatelessWidget {
               AppVerse.full,
               style: TextStyle(
                   fontSize: 10,
-                  color: AppColors.textMuted.withOpacity(0.8),
+                  color: AppColors.textMuted.withValues(alpha: 0.8),
                   fontStyle: FontStyle.italic),
             ),
           ],

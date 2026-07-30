@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "766524666378-fpqr2fo28v9ai4u55dv2onb1fo38kko2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.wisdomapp.app",
+            "certificate_hash": "d061eabece6e929d96f529ef2f0638212568796b"
+          }
+        },
+        {
           "client_id": "766524666378-i4bpijc06bcu32ej2pdj536ek8fasbpa.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/goal_deposit_service.dart';
 import 'brl_amount_text_field.dart';
 
 /// Verde destacado para ações de depósito (paridade com sheet 52 semanas).
@@ -13,7 +14,8 @@ class GoalDepositUi {
     Color(0xFF16A34A),
   ];
 
-  static BoxDecoration gradientDecoration({double radius = 14}) => BoxDecoration(
+  static BoxDecoration gradientDecoration({double radius = 14}) =>
+      BoxDecoration(
         gradient: const LinearGradient(colors: gradient),
         borderRadius: BorderRadius.circular(radius),
         boxShadow: [
@@ -105,7 +107,8 @@ class GoalDepositAmountField extends StatelessWidget {
             gradient: LinearGradient(
               colors: [accent.withValues(alpha: 0.1), Colors.white],
             ),
-            border: Border.all(color: accent.withValues(alpha: 0.28), width: 1.5),
+            border:
+                Border.all(color: accent.withValues(alpha: 0.28), width: 1.5),
             boxShadow: [
               BoxShadow(
                 color: accent.withValues(alpha: 0.08),
@@ -143,6 +146,47 @@ class GoalDepositAmountField extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Faixa de aviso ao excluir — desmarca semanas na Meta (Projeto 52 semanas).
+class GoalDepositWeeksUnmarkBanner extends StatelessWidget {
+  const GoalDepositWeeksUnmarkBanner({
+    super.key,
+    required this.info,
+  });
+
+  final GoalLinkedTransactionInfo info;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7ED),
+        borderRadius: BorderRadius.circular(12),
+        border:
+            Border.all(color: const Color(0xFFEA580C).withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.event_busy_rounded, size: 18, color: Color(0xFFEA580C)),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              info.deleteImpactMessage(),
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF9A3412),
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

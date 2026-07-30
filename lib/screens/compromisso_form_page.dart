@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide showDatePicker;
 import 'package:flutter/services.dart';
+import 'package:flutter_native_contact_picker/flutter_native_contact_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../constants/color_palette.dart';
@@ -26,6 +28,8 @@ class CompromissoFormResult {
   CompromissoFormResult({
     required this.title,
     required this.notes,
+    String linkLocalizacao = '',
+    String contatoWhatsApp = '',
     required this.date,
     required this.time,
     required this.endTime,
@@ -36,23 +40,36 @@ class CompromissoFormResult {
     this.repeatYearly = false,
     this.yearlyRepeatWeekdays,
     List<DateTime>? targetDates,
-  }) : targetDates = CompromissoScheduleDates.uniqueSorted(
+  })  : linkLocalizacao = linkLocalizacao.trim(),
+        contatoWhatsApp = contatoWhatsApp.trim(),
+        targetDates = CompromissoScheduleDates.uniqueSorted(
           targetDates ?? [date],
         );
 
   final String title;
   final String notes;
+
+  /// Link de localização (Maps, endereço ou texto livre).
+  final String linkLocalizacao;
+
+  /// Contato WhatsApp (número, wa.me link, etc.).
+  final String contatoWhatsApp;
+
   /// Primeiro dia da seleção (compatibilidade / exibição).
   final DateTime date;
   final TimeOfDay time;
   final TimeOfDay endTime;
   final String colorHex;
+
   /// Todos os dias onde o compromisso será gravado (1 = único).
   final List<DateTime> targetDates;
+
   /// Aniversário, casamento, etc. — relança automaticamente todo ano em Escalas.
   final bool repeatYearly;
+
   /// Ex.: [DateTime.wednesday, DateTime.thursday] — todas as quas/quis do ano.
   final List<int>? yearlyRepeatWeekdays;
+
   /// Antecedências em minutos só para este item; null = usa Configurações → Notificações.
   final List<int>? reminderLeads;
 
@@ -88,8 +105,10 @@ class CompromissoFormPage extends StatefulWidget {
   final UserProfile profile;
   final bool hasActiveLicense;
   final QueryDocumentSnapshot<Map<String, dynamic>>? existingDoc;
+
   /// Dia pré-selecionado ao abrir pelo calendário da Agenda.
   final DateTime? initialDate;
+
   /// Pré-preenche formulário ao editar evento que veio só do Google Calendar.
   final GoogleCalendarEventItem? googleEventSeed;
 
@@ -100,7 +119,11 @@ class CompromissoFormPage extends StatefulWidget {
 }
 
 class _CompromissoFormPageState extends State<CompromissoFormPage> {
+  final FlutterNativeContactPicker _contactPicker =
+      FlutterNativeContactPicker();
   late TextEditingController _titleCtrl;
+  late TextEditingController _linkLocalizacaoCtrl;
+  late TextEditingController _whatsAppCtrl;
   late TextEditingController _notesCtrl;
   late DateTime _date;
   late TimeOfDay _time;
@@ -131,14 +154,24 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
     final doc = widget.existingDoc;
     if (doc != null) {
       final data = doc.data();
-      _titleCtrl = TextEditingController(text: (data['title'] ?? '').toString());
-      _notesCtrl = TextEditingController(text: (data['notes'] ?? '').toString());
-      _date = (data['date'] as Timestamp?)?.toDate() ?? DateTime.now().add(const Duration(days: 1));
+      _titleCtrl =
+          TextEditingController(text: (data['title'] ?? '').toString());
+      _linkLocalizacaoCtrl = TextEditingController(
+          text: (data['linkLocalizacao'] ?? '').toString());
+      _whatsAppCtrl = TextEditingController(
+          text: (data['contatoWhatsApp'] ?? '').toString());
+      _notesCtrl =
+          TextEditingController(text: (data['notes'] ?? '').toString());
+      _date = (data['date'] as Timestamp?)?.toDate() ??
+          DateTime.now().add(const Duration(days: 1));
       _time = _parseHHmm((data['time'] ?? '09:00').toString(),
           const TimeOfDay(hour: 9, minute: 0));
-      _endTime = _parseHHmm((data['endTime'] ?? '').toString(), _addOneHour(_time));
+      _endTime =
+          _parseHHmm((data['endTime'] ?? '').toString(), _addOneHour(_time));
       final corSalva = (data['colorHex'] ?? '').toString().trim();
-      _colorHex = corSalva.isNotEmpty ? _normalizeHex(corSalva) : kAgendaCompromissoDefaultColor;
+      _colorHex = corSalva.isNotEmpty
+          ? _normalizeHex(corSalva)
+          : kAgendaCompromissoDefaultColor;
       _repeatYearly = data['repeatYearly'] == true ||
           data['isYearlyRepeatTemplate'] == true ||
           (data['yearlyRepeatTemplateId'] ?? '').toString().trim().isNotEmpty;
@@ -162,6 +195,8 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
       ];
     } else {
       _titleCtrl = TextEditingController();
+      _linkLocalizacaoCtrl = TextEditingController();
+      _whatsAppCtrl = TextEditingController();
       _notesCtrl = TextEditingController();
       final seed = widget.initialDate;
       _date = seed != null
@@ -179,6 +214,8 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
   @override
   void dispose() {
     _titleCtrl.dispose();
+    _linkLocalizacaoCtrl.dispose();
+    _whatsAppCtrl.dispose();
     _notesCtrl.dispose();
     super.dispose();
   }
@@ -201,7 +238,8 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
     return Color(int.parse('FF$h', radix: 16));
   }
 
-  static Future<void> _pasteInto(TextEditingController ctrl, VoidCallback onChanged) async {
+  static Future<void> _pasteInto(
+      TextEditingController ctrl, VoidCallback onChanged) async {
     try {
       final data = await Clipboard.getData(Clipboard.kTextPlain);
       if (data?.text == null) return;
@@ -209,20 +247,71 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
       final start = sel.start.clamp(0, ctrl.text.length);
       final end = sel.end.clamp(0, ctrl.text.length);
       ctrl.text = ctrl.text.replaceRange(start, end, data!.text!);
-      ctrl.selection = TextSelection.collapsed(offset: start + data.text!.length);
+      ctrl.selection =
+          TextSelection.collapsed(offset: start + data.text!.length);
       onChanged();
     } catch (_) {}
   }
 
-  InputDecoration _inputDecoration(String label, String hint, {Widget? suffixIcon}) =>
+  Future<void> _pickWhatsAppContact() async {
+    final isMobile = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS);
+    if (!isMobile) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('A agenda de contatos está disponível no celular.'),
+        ),
+      );
+      return;
+    }
+
+    try {
+      final contact = await _contactPicker.selectPhoneNumber();
+      if (!mounted || contact == null) return;
+
+      final phone = (contact.selectedPhoneNumber ??
+              (contact.phoneNumbers?.isNotEmpty == true
+                  ? contact.phoneNumbers!.first
+                  : null))
+          ?.trim();
+      if (phone == null || phone.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('O contato selecionado não possui telefone.'),
+          ),
+        );
+        return;
+      }
+
+      setState(() {
+        _whatsAppCtrl.value = TextEditingValue(
+          text: phone,
+          selection: TextSelection.collapsed(offset: phone.length),
+        );
+      });
+    } on PlatformException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível abrir a agenda de contatos.'),
+        ),
+      );
+    }
+  }
+
+  InputDecoration _inputDecoration(String label, String hint,
+          {Widget? suffixIcon, Widget? prefixIcon}) =>
       InputDecoration(
         labelText: label,
         hintText: hint,
         isDense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         filled: true,
         fillColor: const Color(0xFFF1F5F9),
         suffixIcon: suffixIcon,
+        prefixIcon: prefixIcon,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(GeminiTheme.inputRadius),
           borderSide: BorderSide.none,
@@ -235,12 +324,16 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
     required String hint,
     int maxLines = 1,
     Widget? suffixIcon,
+    Widget? prefixIcon,
+    TextInputType? keyboardType,
   }) {
     final isMultiline = maxLines != 1;
     return FastTextField(
       controller: controller,
-      decoration: _inputDecoration(label, hint, suffixIcon: suffixIcon),
+      decoration: _inputDecoration(label, hint,
+          suffixIcon: suffixIcon, prefixIcon: prefixIcon),
       kind: isMultiline ? FastTextFieldKind.prose : FastTextFieldKind.standard,
+      keyboardType: keyboardType,
       maxLines: maxLines,
       minLines: isMultiline ? 1 : null,
       scrollPadding: KeyboardFormInsets.fieldScrollPadding(
@@ -442,7 +535,8 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
               onPressed: () => Navigator.pop(dlgCtx),
               icon: const Icon(Icons.close_rounded, size: 18),
               label: const Text('Cancelar'),
-              style: TextButton.styleFrom(foregroundColor: AppColors.textSecondary),
+              style: TextButton.styleFrom(
+                  foregroundColor: AppColors.textSecondary),
             ),
           ],
         ),
@@ -499,6 +593,8 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
       CompromissoFormResult(
         title: title,
         notes: _notesCtrl.text.trim(),
+        linkLocalizacao: _linkLocalizacaoCtrl.text.trim(),
+        contatoWhatsApp: _whatsAppCtrl.text.trim(),
         date: _date,
         time: _time,
         endTime: _endTime,
@@ -523,8 +619,8 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF1F5F9),
-      resizeToAvoidBottomInset:
-          scaffoldKeyboardResizeToAvoidBottomInset(standaloneFullPageForm: true),
+      resizeToAvoidBottomInset: scaffoldKeyboardResizeToAvoidBottomInset(
+          standaloneFullPageForm: true),
       appBar: AppBar(
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -541,7 +637,8 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
         ),
         title: Text(
           title,
-          style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.2),
+          style:
+              const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.2),
         ),
         leading: IconButton(
           tooltip: 'Fechar',
@@ -564,155 +661,217 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
       body: keyboardScaffoldBody(
         standaloneFullPageForm: true,
         SafeArea(
-        bottom: false,
-        child: Builder(builder: (ctx) {
-          final kb = KeyboardFormInsets.scrollBottomExtra(
-            ctx,
-            extra: 0,
-            standaloneFullPageForm: true,
-          );
-          return ListView(
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: EdgeInsets.fromLTRB(16, 8, 16, 16 + kb),
-            children: [
-              _buildHeader(title),
-              const SizedBox(height: 10),
-              // Ícones rápidos coloridos: REUNIÃO, MÉDICO, DENTISTA, IGREJA,
-              // ANIVERSÁRIO, CASAMENTO. 1 toque preenche descrição + cor.
-              CommitmentQuickIconsRow(
-                currentName: _titleCtrl.text,
-                enabled: true,
-                onPick: _aplicarPreset,
-              ),
-              const SizedBox(height: 10),
-              // Título com sufixo "abrir lista" — abre picker fullscreen com
-              // a lista alfabética completa + opção de incluir personalizado.
-              _field(
-                controller: _titleCtrl,
-                label: 'Título *',
-                hint: 'Ex: Reunião, Consulta',
-                suffixIcon: IconButton(
-                  tooltip: 'Lista de compromissos',
-                  icon: const Icon(Icons.list_alt_rounded, size: 20),
-                  color: AppColors.primary,
-                  onPressed: _abrirPickerDescricao,
-                  splashRadius: 22,
+          bottom: false,
+          child: Builder(builder: (ctx) {
+            final kb = KeyboardFormInsets.scrollBottomExtra(
+              ctx,
+              extra: 0,
+              standaloneFullPageForm: true,
+            );
+            return ListView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: EdgeInsets.fromLTRB(16, 8, 16, 16 + kb),
+              children: [
+                _buildHeader(title),
+                const SizedBox(height: 10),
+                // Ícones rápidos coloridos: REUNIÃO, MÉDICO, DENTISTA, IGREJA,
+                // ANIVERSÁRIO, CASAMENTO. 1 toque preenche descrição + cor.
+                CommitmentQuickIconsRow(
+                  currentName: _titleCtrl.text,
+                  enabled: true,
+                  onPick: _aplicarPreset,
                 ),
-              ),
-              const SizedBox(height: 10),
-              // Data + Início + Fim em 3 colunas para iPhone estreito.
-              Row(
-                children: [
-                  Expanded(
-                    flex: 5,
-                    child: _compactPickerTile(
-                      icon: Icons.calendar_today_rounded,
-                      label: 'DATA',
-                      value: _dateFieldLabel,
-                      onTap: _pickDate,
+                const SizedBox(height: 10),
+                // Título com sufixo "abrir lista" — abre picker fullscreen com
+                // a lista alfabética completa + opção de incluir personalizado.
+                _field(
+                  controller: _titleCtrl,
+                  label: 'Título *',
+                  hint: 'Ex: Reunião, Consulta',
+                  suffixIcon: IconButton(
+                    tooltip: 'Lista de compromissos',
+                    icon: const Icon(Icons.list_alt_rounded, size: 20),
+                    color: AppColors.primary,
+                    onPressed: _abrirPickerDescricao,
+                    splashRadius: 22,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                // Link de localização
+                _field(
+                  controller: _linkLocalizacaoCtrl,
+                  label: 'Link de localização',
+                  hint: 'Digite ou cole o link (opcional)',
+                  prefixIcon: const Padding(
+                    padding: EdgeInsets.only(left: 12, right: 8),
+                    child: Icon(
+                      Icons.location_on_rounded,
+                      size: 18,
+                      color: Color(0xFF2563EB),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 3,
-                    child: _compactPickerTile(
-                      icon: Icons.schedule_rounded,
-                      label: 'INÍCIO',
-                      value: _time.format(context),
-                      onTap: _pickStartTime,
+                  suffixIcon: IconButton(
+                    tooltip: 'Colar',
+                    icon: const Icon(Icons.content_paste_rounded, size: 18),
+                    color: AppColors.primary,
+                    splashRadius: 22,
+                    onPressed: () =>
+                        _pasteInto(_linkLocalizacaoCtrl, () => setState(() {})),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                // Contato WhatsApp
+                _field(
+                  controller: _whatsAppCtrl,
+                  label: 'Contato WhatsApp',
+                  hint: 'Digite ou escolha da agenda',
+                  keyboardType: TextInputType.phone,
+                  prefixIcon: const Padding(
+                    padding: EdgeInsets.only(left: 12, right: 8),
+                    child: Icon(
+                      Icons.chat_rounded,
+                      size: 18,
+                      color: Color(0xFF25D366),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 3,
-                    child: _compactPickerTile(
-                      icon: Icons.schedule_rounded,
-                      label: 'FIM',
-                      value: _endTime.format(context),
-                      onTap: _pickEndTime,
-                    ),
+                  suffixIcon: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: 'Escolher da agenda',
+                        icon: const Icon(Icons.contacts_rounded, size: 19),
+                        color: AppColors.primary,
+                        splashRadius: 22,
+                        onPressed: _pickWhatsAppContact,
+                      ),
+                      IconButton(
+                        tooltip: 'Colar',
+                        icon: const Icon(Icons.content_paste_rounded, size: 18),
+                        color: AppColors.primary,
+                        splashRadius: 22,
+                        onPressed: () =>
+                            _pasteInto(_whatsAppCtrl, () => setState(() {})),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              if (_multiDateMode) ...[
-                const SizedBox(height: 8),
+                ),
+                const SizedBox(height: 10),
+                // Data + Início + Fim em 3 colunas para iPhone estreito.
                 Row(
                   children: [
                     Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _openPersonalizeDates,
-                        icon: const Icon(Icons.tune_rounded, size: 18),
-                        label: const Text(
-                          'Personalizar',
-                          style: TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.primary,
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                        ),
+                      flex: 5,
+                      child: _compactPickerTile(
+                        icon: Icons.calendar_today_rounded,
+                        label: 'DATA',
+                        value: _dateFieldLabel,
+                        onTap: _pickDate,
                       ),
                     ),
-                    if (_selectedDates.length > 1) ...[
-                      const SizedBox(width: 8),
-                      TextButton(
-                        onPressed: () => setState(() {
-                          final d = _selectedDates.first;
-                          _selectedDates = [DateTime(d.year, d.month, d.day)];
-                          _date = _selectedDates.first;
-                        }),
-                        child: const Text('1 dia'),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 3,
+                      child: _compactPickerTile(
+                        icon: Icons.schedule_rounded,
+                        label: 'INÍCIO',
+                        value: _time.format(context),
+                        onTap: _pickStartTime,
                       ),
-                    ],
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 3,
+                      child: _compactPickerTile(
+                        icon: Icons.schedule_rounded,
+                        label: 'FIM',
+                        value: _endTime.format(context),
+                        onTap: _pickEndTime,
+                      ),
+                    ),
                   ],
                 ),
-                if (_selectedDates.length > 1)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      _selectedDatesSummary(),
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade700,
-                        height: 1.25,
+                if (_multiDateMode) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _openPersonalizeDates,
+                          icon: const Icon(Icons.tune_rounded, size: 18),
+                          label: const Text(
+                            'Personalizar',
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.primary,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                        ),
+                      ),
+                      if (_selectedDates.length > 1) ...[
+                        const SizedBox(width: 8),
+                        TextButton(
+                          onPressed: () => setState(() {
+                            final d = _selectedDates.first;
+                            _selectedDates = [DateTime(d.year, d.month, d.day)];
+                            _date = _selectedDates.first;
+                          }),
+                          child: const Text('1 dia'),
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (_selectedDates.length > 1)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        _selectedDatesSummary(),
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade700,
+                          height: 1.25,
+                        ),
                       ),
                     ),
-                  ),
-              ],
-              const SizedBox(height: 10),
-              _buildColorCard(pickedFill, onPicked),
-              const SizedBox(height: 10),
-              _field(
-                controller: _notesCtrl,
-                label: 'Observações',
-                hint: _repeatYearly
-                    ? 'Inclui aviso de repetição anual (editável)'
-                    : 'Detalhes opcionais',
-                maxLines: 4,
-              ),
-              const SizedBox(height: 6),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  icon: const Icon(Icons.content_paste_rounded, size: 16),
-                  label: const Text('Colar nas observações'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppColors.primary,
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    minimumSize: const Size(0, 36),
-                    textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
-                  ),
-                  onPressed: () => _pasteInto(_notesCtrl, () => setState(() {})),
+                ],
+                const SizedBox(height: 10),
+                _buildColorCard(pickedFill, onPicked),
+                const SizedBox(height: 10),
+                _field(
+                  controller: _notesCtrl,
+                  label: 'Observações',
+                  hint: _repeatYearly
+                      ? 'Inclui aviso de repetição anual (editável)'
+                      : 'Detalhes opcionais',
+                  maxLines: 4,
                 ),
-              ),
-              const SizedBox(height: 10),
-              _buildRepeatYearlyCard(),
-              const SizedBox(height: 6),
-              _buildIntegracaoEscalaInfo(),
-            ],
-          );
-        }),
-      ),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    icon: const Icon(Icons.content_paste_rounded, size: 16),
+                    label: const Text('Colar nas observações'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      minimumSize: const Size(0, 36),
+                      textStyle: const TextStyle(
+                          fontSize: 12.5, fontWeight: FontWeight.w700),
+                    ),
+                    onPressed: () =>
+                        _pasteInto(_notesCtrl, () => setState(() {})),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _buildRepeatYearlyCard(),
+                const SizedBox(height: 6),
+                _buildIntegracaoEscalaInfo(),
+              ],
+            );
+          }),
+        ),
       ),
     );
   }
@@ -808,7 +967,8 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
                 onTap: _abrirSeletorCor,
                 borderRadius: BorderRadius.circular(12),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -839,55 +999,58 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Material(
-      color: Colors.white,
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(
-          color: _repeatYearly
-              ? const Color(0xFF2E7D32).withValues(alpha: 0.45)
-              : Colors.grey.shade300,
-          width: _repeatYearly ? 2 : 1,
-        ),
-      ),
-      child: SwitchListTile(
-        value: _repeatYearly,
-        onChanged: _selectedDates.length > 1
-            ? null
-            : (v) {
-          setState(() {
-            _repeatYearly = v;
-            if (v) {
-              _applyYearlyNotesLine();
-            } else {
-              _notesCtrl.text = YearlyCommitmentRepeatService.stripYearlyRepeatLines(
-                _notesCtrl.text,
-              );
-            }
-          });
-        },
-        activeThumbColor: const Color(0xFF2E7D32),
-        title: const Text(
-          'Repetir todo ano',
-          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
-        ),
-        subtitle: Text(
-          'Repete todo ano exatamente o título, horário e cor que você '
-          'escreveu — sem criar outro compromisso similar.',
-          style: TextStyle(
-            fontSize: 11.5,
-            height: 1.3,
-            color: Colors.grey.shade700,
-            fontWeight: FontWeight.w500,
+          color: Colors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(
+              color: _repeatYearly
+                  ? const Color(0xFF2E7D32).withValues(alpha: 0.45)
+                  : Colors.grey.shade300,
+              width: _repeatYearly ? 2 : 1,
+            ),
+          ),
+          child: SwitchListTile(
+            value: _repeatYearly,
+            onChanged: _selectedDates.length > 1
+                ? null
+                : (v) {
+                    setState(() {
+                      _repeatYearly = v;
+                      if (v) {
+                        _applyYearlyNotesLine();
+                      } else {
+                        _notesCtrl.text = YearlyCommitmentRepeatService
+                            .stripYearlyRepeatLines(
+                          _notesCtrl.text,
+                        );
+                      }
+                    });
+                  },
+            activeThumbColor: const Color(0xFF2E7D32),
+            title: const Text(
+              'Repetir todo ano',
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+            ),
+            subtitle: Text(
+              'Repete todo ano exatamente o título, horário e cor que você '
+              'escreveu — sem criar outro compromisso similar.',
+              style: TextStyle(
+                fontSize: 11.5,
+                height: 1.3,
+                color: Colors.grey.shade700,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            secondary: Icon(
+              Icons.event_repeat_rounded,
+              color:
+                  _repeatYearly ? const Color(0xFF2E7D32) : AppColors.primary,
+            ),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           ),
         ),
-        secondary: Icon(
-          Icons.event_repeat_rounded,
-          color: _repeatYearly ? const Color(0xFF2E7D32) : AppColors.primary,
-        ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      ),
-    ),
       ],
     );
   }
@@ -904,8 +1067,7 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.event_note_rounded,
-                size: 16, color: AppColors.primary),
+            Icon(Icons.event_note_rounded, size: 16, color: AppColors.primary),
             const SizedBox(width: 8),
             Expanded(
               child: Text(

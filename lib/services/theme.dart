@@ -65,7 +65,7 @@ class CtTheme {
       navigationBarTheme: NavigationBarThemeData(
         height: 68,
         labelTextStyle: WidgetStateProperty.all(const TextStyle(fontWeight: FontWeight.w600)),
-        indicatorColor: primary.withOpacity(0.12),
+        indicatorColor: primary.withValues(alpha: 0.12),
       ),
     );
   }

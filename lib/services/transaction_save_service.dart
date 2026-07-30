@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -182,7 +181,8 @@ class TransactionSaveService {
   }
 
   /// Web Firestore 11.x: retry curto após assert de listeners concorrentes.
-  static Future<void> _firestoreWriteWithRetry(Future<void> Function() write) async {
+  static Future<void> _firestoreWriteWithRetry(
+      Future<void> Function() write) async {
     Object? last;
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
@@ -190,7 +190,9 @@ class TransactionSaveService {
         return;
       } catch (e) {
         last = e;
-        if (!kIsWeb || !_isFirestoreInternalAssertion(e) || attempt >= 2) rethrow;
+        if (!kIsWeb || !_isFirestoreInternalAssertion(e) || attempt >= 2) {
+          rethrow;
+        }
         await Future<void>.delayed(Duration(milliseconds: 160 * (attempt + 1)));
       }
     }
@@ -221,7 +223,8 @@ class TransactionSaveService {
       mimeType: mime,
     );
     if (result['ok'] != true) {
-      throw StateError((result['error'] ?? 'Falha ao enviar comprovante.').toString());
+      throw StateError(
+          (result['error'] ?? 'Falha ao enviar comprovante.').toString());
     }
     // Cloud Function já grava `receipt` no documento; reforça hasReceipt para listeners antigos.
     await _firestoreWriteWithRetry(
@@ -280,6 +283,9 @@ class TransactionSaveService {
             .clamp(1, installments);
     final receipt = data['receipt'] as Map<String, dynamic>?;
     final financeAccountId = (data['financeAccountId'] ?? '').toString().trim();
+    // Mostrar no calendário Agenda/Escala (só faz sentido em pendentes).
+    final addToCalendar = data['addToCalendar'] == true;
+    final calendarColorHex = (data['calendarColorHex'] ?? '').toString().trim();
     if (type == 'expense' && financeAccountId.isEmpty) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -312,6 +318,9 @@ class TransactionSaveService {
           'installmentCount': 1,
           'installmentIndex': 1,
           if (financeAccountId.isNotEmpty) 'financeAccountId': financeAccountId,
+          'addToCalendar': addToCalendar,
+          if (addToCalendar && calendarColorHex.isNotEmpty)
+            'calendarColorHex': calendarColorHex,
           ..._optionalClosureAndSourceFields(data),
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
@@ -368,6 +377,9 @@ class TransactionSaveService {
           'installmentIndex': i,
           'installmentGroupId': groupId,
           if (financeAccountId.isNotEmpty) 'financeAccountId': financeAccountId,
+          'addToCalendar': addToCalendar,
+          if (addToCalendar && calendarColorHex.isNotEmpty)
+            'calendarColorHex': calendarColorHex,
           ..._optionalClosureAndSourceFields(data),
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
@@ -417,7 +429,7 @@ class TransactionSaveService {
           try {
             await attachReceiptToTransaction(
               uid: uid,
-              docId: firstDocId!,
+              docId: firstDocId,
               bytes: bytes,
               name: name,
               mime: mime,

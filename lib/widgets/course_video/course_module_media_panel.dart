@@ -52,7 +52,8 @@ class CourseModuleMediaPanel extends StatefulWidget {
   static bool hasInlineDicaContent(Map<String, dynamic> data) {
     final type = (data['type'] ?? 'curso').toString().trim().toLowerCase();
     if (type != 'dica') return false;
-    final body = (data['bodyText'] ?? data['description'] ?? '').toString().trim();
+    final body =
+        (data['bodyText'] ?? data['description'] ?? '').toString().trim();
     return CourseMediaUrlResolver.hasResolvableImage(data) || body.isNotEmpty;
   }
 
@@ -64,7 +65,8 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
     with AutomaticKeepAliveClientMixin {
   String? _resolvedMp4;
   var _mp4Loading = false;
-  var _descExpanded = false;
+  // A descrição completa já abre visível, como solicitado para o catálogo.
+  var _descExpanded = true;
   String? _panelDocId;
 
   @override
@@ -83,7 +85,7 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
     final newId = widget.data['id']?.toString();
     if (newId != _panelDocId) {
       _panelDocId = newId;
-      _descExpanded = false;
+      _descExpanded = true;
       _resolvedMp4 = CourseModuleMediaPanel.mp4From(widget.data);
       _loadMp4();
     }
@@ -100,7 +102,8 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
     if (CourseMediaUrlResolver.collectVideoEntries(widget.data).isEmpty) return;
     if (!_mp4Loading) setState(() => _mp4Loading = true);
     try {
-      final entries = await CourseMediaUrlResolver.resolveVideoEntries(widget.data);
+      final entries =
+          await CourseMediaUrlResolver.resolveVideoEntries(widget.data);
       if (!mounted) return;
       setState(() {
         _resolvedMp4 = entries.isNotEmpty ? entries.first.url : null;
@@ -121,7 +124,9 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
 
   String? get _youtubeId => CourseModuleMediaPanel.youtubeIdFrom(widget.data);
 
-  bool get _isDica => (widget.data['type'] ?? 'curso').toString().trim().toLowerCase() == 'dica';
+  bool get _isDica =>
+      (widget.data['type'] ?? 'curso').toString().trim().toLowerCase() ==
+      'dica';
 
   bool get _showVideo =>
       CourseModuleMediaPanel.hasInlineVideo(widget.data) &&
@@ -143,7 +148,8 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
               child: AspectRatio(
                 aspectRatio: 16 / 9,
                 child: CourseVideoPlayerShell(
-                  embedKey: ValueKey('fs-${_youtubeId ?? ''}|${_resolvedMp4 ?? ''}'),
+                  embedKey:
+                      ValueKey('fs-${_youtubeId ?? ''}|${_resolvedMp4 ?? ''}'),
                   posterData: widget.data,
                   youtubeVideoId: _youtubeId,
                   mp4Url: _resolvedMp4,
@@ -283,7 +289,8 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
                       text: _description,
                       expanded: _descExpanded,
                       accent: widget.accent,
-                      onToggle: () => setState(() => _descExpanded = !_descExpanded),
+                      onToggle: () =>
+                          setState(() => _descExpanded = !_descExpanded),
                     ),
                   ),
                 if (_showVideo)
@@ -372,7 +379,8 @@ class _ModernHeader extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.22),
                   borderRadius: BorderRadius.circular(999),
@@ -434,9 +442,9 @@ class _DescriptionCard extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: const Color(0xFF1A1A1A),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: accent.withValues(alpha: 0.15)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -456,14 +464,13 @@ class _DescriptionCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            Text(
+            SelectableText(
               text,
               maxLines: expanded ? null : 4,
-              overflow: expanded ? null : TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 14,
                 height: 1.5,
-                color: Colors.grey.shade800,
+                color: Colors.grey.shade300,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -498,10 +505,8 @@ class _RelatedStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = related
-        .where((r) => r['id']?.toString() != currentId)
-        .take(8)
-        .toList();
+    final items =
+        related.where((r) => r['id']?.toString() != currentId).take(8).toList();
     if (items.isEmpty) return const SizedBox.shrink();
 
     return Padding(
@@ -543,12 +548,14 @@ class _RelatedStrip extends StatelessWidget {
                             child: CourseMediaThumbnail.fromData(
                               item,
                               fit: BoxFit.cover,
-                              showPlayButton: CourseThumbResolver.isVideoContent(item),
+                              showPlayButton:
+                                  CourseThumbResolver.isVideoContent(item),
                             ),
                           ),
                           Expanded(
                             child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 6),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 6),
                               child: Text(
                                 title,
                                 maxLines: 3,

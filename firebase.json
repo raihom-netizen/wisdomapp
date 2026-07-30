@@ -6,8 +6,9 @@
     "public": "build/web",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [
+      { "source": "/google-oauth-config.js", "destination": "/google-oauth-config.js" },
       { "source": "/google_calendar_oauth.html", "destination": "/google_calendar_oauth.html" },
-      { "source": "!/@(assets|canvaskit|icons)/**", "destination": "/index.html" }
+      { "source": "!/@(.well-known|assets|canvaskit|icons)/**", "destination": "/index.html" }
     ],
     "headers": [
       {
@@ -27,6 +28,7 @@
       { "source": "/canvaskit/**", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] },
       { "source": "**/*.wasm", "headers": [{ "key": "Content-Type", "value": "application/wasm" }, { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] },
       { "source": "/icons/**", "headers": [{ "key": "Cache-Control", "value": "public, max-age=2592000" }] },
+      { "source": "/.well-known/assetlinks.json", "headers": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Cache-Control", "value": "public, max-age=3600" }] },
       { "source": "**/*.@(png|jpg|jpeg|gif|svg|webp|ico|woff|woff2|ttf|otf)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=2592000" }] }
     ]
   }

@@ -5,7 +5,6 @@ import '../utils/agenda_delivery_reset.dart';
 import 'agenda_notification_reschedule_helper.dart';
 import 'agenda_notifications_refresher.dart';
 import 'agenda_reminder_delete_helper.dart';
-import '../models/scale_entry.dart';
 import 'agenda_scale_mirror_service.dart';
 import 'produtividade_scale_mirror_service.dart';
 

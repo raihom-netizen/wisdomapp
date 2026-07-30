@@ -10,7 +10,7 @@ $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $repoUrl = $env:WISDOMAPP_GITHUB_REPO
 if ([string]::IsNullOrWhiteSpace($repoUrl)) {
-    $repoUrl = "https://github.com/ralhom-netizen/wisdomapp.git"
+    $repoUrl = "https://github.com/raihom-netizen/wisdomapp.git"
 }
 
 if (Get-Command git -ErrorAction SilentlyContinue) {
@@ -70,9 +70,9 @@ if ($appId) {
 }
 
 Write-Host ""
-Write-Host "WISDOMAPP reutiliza do Controle Total (Team level):" -ForegroundColor Cyan
-Write-Host "  - Integração Developer Portal: ControleTotalAPI1" -ForegroundColor White
-Write-Host "  - Grupo appstore_credentials: CERTIFICATE_PRIVATE_KEY (secret)" -ForegroundColor White
+Write-Host "WISDOMAPP — integracao Apple wisdomapp (Key 4UMWWALR3U):" -ForegroundColor Cyan
+Write-Host "  - Integração Developer Portal: wisdomapp" -ForegroundColor White
+Write-Host "  - Grupo appstore_credentials: CERTIFICATE_PRIVATE_KEY (PEM RSA, nao o Key ID)" -ForegroundColor White
 Write-Host "  - Opcional firebase_ipa_upload: FIREBASE_SERVICE_ACCOUNT_JSON (wisdomapp-b9e98)" -ForegroundColor White
 Write-Host ""
 Write-Host "No app WISDOMAPP: Workflow Editor > Switch to YAML configuration" -ForegroundColor Cyan

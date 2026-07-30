@@ -122,13 +122,14 @@ class PublicDivulgacaoPromo {
 
   /// Uma promoção pública: a mais recente por [createdAt] entre as elegíveis.
   static Stream<PublicDivulgacaoPromo?> watchFeatured() {
-    return FirebaseFirestore.instance.collection('promotions').snapshots().map((snap) {
+    try {
+    return FirebaseFirestore.instance.collection('promotions').snapshots().map<PublicDivulgacaoPromo?>((snap) {
       PublicDivulgacaoPromo? best;
       Timestamp? bestTs;
       for (final d in snap.docs) {
         final p = _fromDoc(d);
         if (p == null) continue;
-        final ca = d.data()?['createdAt'] as Timestamp?;
+        final ca = d.data()['createdAt'] as Timestamp?;
         if (best == null) {
           best = p;
           bestTs = ca;
@@ -142,7 +143,13 @@ class PublicDivulgacaoPromo {
         }
       }
       return best;
+    }).handleError((Object e) {
+      debugPrint('watchFeatured stream: $e');
     });
+    } catch (e) {
+      debugPrint('watchFeatured init: $e');
+      return Stream<PublicDivulgacaoPromo?>.value(null);
+    }
   }
 }
 
@@ -173,6 +180,7 @@ class DivulgacaoPublicPromoCard extends StatelessWidget {
     return StreamBuilder<PublicDivulgacaoPromo?>(
       stream: PublicDivulgacaoPromo.watchFeatured(),
       builder: (context, snap) {
+        if (snap.hasError) return const SizedBox.shrink();
         final promo = snap.data;
         if (promo == null) return const SizedBox.shrink();
         // Safari iPhone/iPad: só mensagem + site (sem checkout MP na web móvel Apple).

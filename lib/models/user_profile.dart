@@ -10,15 +10,18 @@ class UserProfile {
   final String email;
   final String name;
   final String role; // admin / master (acesso painel) / user
-  final String plan; // free | premium | premium_assego | premium_pro (+ legados basic/master só leitura)
+  final String
+      plan; // free | premium | premium_assego | premium_pro (+ legados basic/master só leitura)
   final String planStatus; // active/canceled/past_due
   /// Data de validade da licença (trial ou paga). null = sem limite (ex.: free sem trial).
   final DateTime? licenseExpiresAt;
+
   /// Data de criação da conta. Alinhado a [newUserTrialDays] (fallback de acesso).
   final DateTime? createdAt;
 
   /// Dias de teste grátis a partir do cadastro (APK, AAB, iOS, web). Textos de divulgação (landing, planos, etc.) e `licenseExpiresAt` na criação devem seguir este valor (site: meta em `web/index.html`).
   static const int newUserTrialDays = 30;
+
   /// false = cadastro rápido; usuário pode completar dados depois (ex.: CPF).
   final bool profileComplete;
 
@@ -34,6 +37,12 @@ class UserProfile {
 
   /// E-mail autorizado a acessar os dados desta licença (sub-login — um único e-mail).
   final String? authorizedDelegateEmail;
+
+  /// Primeiro nome exibido no painel (editável pelo sheet de nome).
+  final String firstName;
+
+  /// Sobrenome exibido no painel (editável pelo sheet de nome).
+  final String lastName;
 
   const UserProfile({
     required this.uid,
@@ -52,6 +61,8 @@ class UserProfile {
     this.partnershipId,
     this.premiumProIncludedBankConnections,
     this.authorizedDelegateEmail,
+    this.firstName = '',
+    this.lastName = '',
   });
 
   /// Normaliza o campo vindo do Firestore para [planStatus] interno: `active` | `canceled` | `past_due`.
@@ -118,8 +129,9 @@ class UserProfile {
     } else if (exp is String) {
       licenseExpiresAt = DateTime.tryParse(exp);
     }
-    final createdAt =
-        d['createdAt'] is Timestamp ? (d['createdAt'] as Timestamp).toDate() : null;
+    final createdAt = d['createdAt'] is Timestamp
+        ? (d['createdAt'] as Timestamp).toDate()
+        : null;
     final rawPid = d['partnershipId'];
     final partnershipId = rawPid == null || rawPid.toString().trim().isEmpty
         ? null
@@ -144,7 +156,8 @@ class UserProfile {
       name: (d['name'] ?? '') as String,
       role: (d['role'] ?? 'user') as String,
       plan: (d['plan'] ?? 'premium').toString().trim().toLowerCase(),
-      planStatus: normalizePlanStatusFromFirestore(d['planStatus'] ?? d['statusAssinatura'] ?? d['status']),
+      planStatus: normalizePlanStatusFromFirestore(
+          d['planStatus'] ?? d['statusAssinatura'] ?? d['status']),
       licenseExpiresAt: licenseExpiresAt,
       createdAt: createdAt,
       profileComplete: d['profileComplete'] != false,
@@ -153,7 +166,31 @@ class UserProfile {
       partnershipId: partnershipId,
       premiumProIncludedBankConnections: proSlots,
       authorizedDelegateEmail: authorizedDelegateEmail,
+      firstName: (d['displayFirstName'] ?? '') as String,
+      lastName: (d['displayLastName'] ?? '') as String,
     );
+  }
+
+  /// Partes iniciais para o formulário de edição do nome no painel.
+  (String first, String last) get displayNamePartsForEdit {
+    if (firstName.isNotEmpty || lastName.isNotEmpty) {
+      return (firstName, lastName);
+    }
+    final full = name.trim();
+    if (full.isEmpty) return ('', '');
+    final space = full.indexOf(' ');
+    if (space <= 0) return (full, '');
+    return (full.substring(0, space).trim(), full.substring(space + 1).trim());
+  }
+
+  /// Compõe nome completo a partir de primeiro nome e sobrenome.
+  static String composeDisplayNameParts(String first, String last) {
+    final fn = first.trim();
+    final ln = last.trim();
+    if (fn.isEmpty && ln.isEmpty) return '';
+    if (fn.isEmpty) return ln;
+    if (ln.isEmpty) return fn;
+    return '$fn $ln';
   }
 
   /// `premium_pro` ou códigos de checkout `premium_pro_*` no Firestore.
@@ -196,14 +233,13 @@ class UserProfile {
     if (createdAt == null) return false;
     return DateTime.now().difference(createdAt!).inDays < newUserTrialDays;
   }
+
   /// Quem adquire o plano tem acesso total (app, web e comprovantes). Inclui convênio ASSEGO (`premium_assego`).
   /// [plan] do Firestore pode variar em maiúsculas (import CSV, Console).
   bool get isPremium {
     final p = plan.trim().toLowerCase();
     if (UserProfile.planIndicatesPremiumPro(p)) return true;
-    if (p == 'premium' ||
-        p == 'premium_monthly' ||
-        p == 'premium_annual') {
+    if (p == 'premium' || p == 'premium_monthly' || p == 'premium_annual') {
       return true;
     }
     if (p == 'premium_assego') return true;
@@ -219,9 +255,7 @@ class UserProfile {
   static bool _planIndicatesPublicPremiumTier(String plan) {
     final p = plan.trim().toLowerCase();
     if (planIndicatesPremiumPro(p)) return true;
-    if (p == 'premium' ||
-        p == 'premium_monthly' ||
-        p == 'premium_annual') {
+    if (p == 'premium' || p == 'premium_monthly' || p == 'premium_annual') {
       return true;
     }
     if (p == 'premium_assego') return true;
@@ -255,14 +289,10 @@ class UserProfile {
         if (p.startsWith('premium_')) {
           final rest = p.substring('premium_'.length);
           if (rest.isEmpty) return 'Premium';
-          final pretty = rest
-              .split('_')
-              .where((s) => s.isNotEmpty)
-              .map((s) {
-                if (s.length == 1) return s.toUpperCase();
-                return '${s[0].toUpperCase()}${s.substring(1).toLowerCase()}';
-              })
-              .join(' ');
+          final pretty = rest.split('_').where((s) => s.isNotEmpty).map((s) {
+            if (s.length == 1) return s.toUpperCase();
+            return '${s[0].toUpperCase()}${s.substring(1).toLowerCase()}';
+          }).join(' ');
           return 'Premium $pretty';
         }
         return plan.isEmpty ? 'Plano' : plan;
@@ -297,7 +327,8 @@ class UserProfile {
   /// Último dia da carência (dia do vencimento + 3 dias). Durante esse período o usuário ainda tem acesso.
   DateTime? get _graceEndDate {
     if (licenseExpiresAt == null) return null;
-    final expDay = DateTime(licenseExpiresAt!.year, licenseExpiresAt!.month, licenseExpiresAt!.day);
+    final expDay = DateTime(
+        licenseExpiresAt!.year, licenseExpiresAt!.month, licenseExpiresAt!.day);
     return expDay.add(const Duration(days: licenseGracePeriodDays));
   }
 
@@ -305,7 +336,8 @@ class UserProfile {
   bool get isPastGracePeriod {
     if (licenseExpiresAt == null || isAdmin) return false;
     final graceEnd = _graceEndDate!;
-    final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+    final today =
+        DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
     return today.isAfter(graceEnd);
   }
 
@@ -343,7 +375,8 @@ class UserProfile {
   }
 
   /// Em período de teste ([newUserTrialDays] dias) ou licença paga ainda válida.
-  bool get isInTrialOrValidLicense => licenseExpiresAt != null && _isLicenseValidByDate(licenseExpiresAt);
+  bool get isInTrialOrValidLicense =>
+      licenseExpiresAt != null && _isLicenseValidByDate(licenseExpiresAt);
 
   /// Licença existia mas já venceu (data no passado), sem considerar carência.
   bool get isLicenseExpired => isLicenseExpiredByDate(licenseExpiresAt);
@@ -354,21 +387,28 @@ class UserProfile {
 
   /// Verifica acesso total a partir de um mapa (ex.: Firestore). Quem tem licença ativa tem acesso total.
   static bool temAcessoPremiumFromMap(Map<String, dynamic> userData) {
-    final p = (userData['plan'] ?? userData['plano'] ?? 'trial').toString().toLowerCase();
-    final status = (userData['planStatus'] ?? userData['statusAssinatura'] ?? '').toString().toLowerCase();
+    final p = (userData['plan'] ?? userData['plano'] ?? 'trial')
+        .toString()
+        .toLowerCase();
+    final status =
+        (userData['planStatus'] ?? userData['statusAssinatura'] ?? '')
+            .toString()
+            .toLowerCase();
     if (p == 'free') return false;
     if (status != 'active' && status != 'ativo') return false;
     final exp = userData['licenseExpiresAt'] ?? userData['dataExpiracao'];
     if (exp == null) return true;
     DateTime? dt;
-    if (exp is DateTime) dt = exp;
-    else if (exp is String) dt = DateTime.tryParse(exp);
+    if (exp is DateTime) {
+      dt = exp;
+    } else if (exp is String) dt = DateTime.tryParse(exp);
     if (dt == null) return true;
     if (_isLicenseValidByDate(dt)) return true;
     // Dentro dos 3 dias de carência
     final expDay = DateTime(dt.year, dt.month, dt.day);
     final graceEnd = expDay.add(const Duration(days: licenseGracePeriodDays));
-    final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+    final today =
+        DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
     return !today.isAfter(graceEnd);
   }
 
@@ -388,9 +428,10 @@ class UserProfile {
       'premiumPro': premiumPro,
       'isPremiumPro': isPremiumPro,
       'partnershipId': partnershipId,
-      'premiumProIncludedBankConnections':
-          premiumProIncludedBankConnections,
+      'premiumProIncludedBankConnections': premiumProIncludedBankConnections,
       'authorizedDelegateEmail': authorizedDelegateEmail,
+      'displayFirstName': firstName,
+      'displayLastName': lastName,
     };
   }
 
@@ -434,6 +475,22 @@ class UserProfile {
       partnershipId: partnershipId,
       premiumProIncludedBankConnections: proSlots,
       authorizedDelegateEmail: authorizedDelegateEmail,
+      firstName: (d['displayFirstName'] ?? '') as String,
+      lastName: (d['displayLastName'] ?? '') as String,
     );
+  }
+
+  /// Resolve nome amigável a partir do perfil (prioriza name, displayName, email).
+  static String resolveFriendlyName(Map<String, dynamic> d) {
+    final name = (d['name'] ?? '').toString().trim();
+    if (name.isNotEmpty) return name;
+    final displayName = (d['displayName'] ?? '').toString().trim();
+    if (displayName.isNotEmpty) return displayName;
+    final email = (d['email'] ?? '').toString().trim().toLowerCase();
+    if (email.contains('@')) {
+      final local = email.split('@').first.trim();
+      if (local.isNotEmpty) return local;
+    }
+    return '';
   }
 }

@@ -27,10 +27,12 @@ class _NaturezasConfigScreenState extends State<NaturezasConfigScreen> {
 
   Future<void> _load() async {
     final list = await _service.load(widget.uid);
-    if (mounted) setState(() {
+    if (mounted) {
+      setState(() {
       _naturezas = list;
       _loading = false;
     });
+    }
   }
 
   Future<void> _addNatureza() async {

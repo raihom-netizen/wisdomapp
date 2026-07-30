@@ -42,7 +42,8 @@ class _SupportedBanksPageState extends State<SupportedBanksPage> {
     final q = _searchCtrl.text.trim().toLowerCase();
     if (q.isEmpty) return kSpotlightBanks;
     return kSpotlightBanks.where((b) {
-      if (b.name.toLowerCase().contains(q) || b.shortLabel.toLowerCase().contains(q)) return true;
+      if (b.name.toLowerCase().contains(q) ||
+          b.shortLabel.toLowerCase().contains(q)) return true;
       final tokens = BankBrandAssets.tokensFor(b.id);
       return tokens.any((t) => t.contains(q) || q.contains(t));
     }).toList();
@@ -56,7 +57,8 @@ class _SupportedBanksPageState extends State<SupportedBanksPage> {
       );
       return;
     }
-    final snap = await FirebaseFirestore.instance.collection('users').doc(u.uid).get();
+    final snap =
+        await FirebaseFirestore.instance.collection('users').doc(u.uid).get();
     if (!context.mounted) return;
     final profile = UserProfile.fromFirestoreMap(u.uid, snap.data() ?? {});
 
@@ -113,17 +115,24 @@ class _SupportedBanksPageState extends State<SupportedBanksPage> {
                         const SizedBox(height: 6),
                         Text(
                           p.premiumMonthlyLine,
-                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+                          style: const TextStyle(
+                              fontSize: 22, fontWeight: FontWeight.w900),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           'Ou ${p.premiumAnnualLine} (${p.premiumAnnualEquivPerMonthLine} em média)',
-                          style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary, height: 1.35),
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              color: AppColors.textSecondary,
+                              height: 1.35),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           'A lista abaixo é só de referência. O app não abre novas ligações automáticas a bancos; use lançamentos manuais no Premium.',
-                          style: TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.35),
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                              height: 1.35),
                         ),
                       ],
                     ),
@@ -137,7 +146,8 @@ class _SupportedBanksPageState extends State<SupportedBanksPage> {
                   borderRadius: BorderRadius.circular(16),
                   color: Colors.white,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     child: FastTextField(
                       controller: _searchCtrl,
                       autocorrect: false,
@@ -151,8 +161,10 @@ class _SupportedBanksPageState extends State<SupportedBanksPage> {
                       onTapOutside: (_) =>
                           FocusManager.instance.primaryFocus?.unfocus(),
                       decoration: InputDecoration(
-                        hintText: 'Busca offline: nome, código ou apelido (ex.: nu, 237, c6…)',
-                        prefixIcon: Icon(Icons.search_rounded, color: AppColors.primary.withValues(alpha: 0.85)),
+                        hintText:
+                            'Busca offline: nome, código ou apelido (ex.: nu, 237, c6…)',
+                        prefixIcon: Icon(Icons.search_rounded,
+                            color: AppColors.primary.withValues(alpha: 0.85)),
                         border: InputBorder.none,
                         suffixIcon: _searchCtrl.text.isEmpty
                             ? null
@@ -178,21 +190,24 @@ class _SupportedBanksPageState extends State<SupportedBanksPage> {
                           child: Text(
                             'Nenhum banco encontrado para "${_searchCtrl.text}".',
                             textAlign: TextAlign.center,
-                            style: TextStyle(color: AppColors.textSecondary, height: 1.4),
+                            style: TextStyle(
+                                color: AppColors.textSecondary, height: 1.4),
                           ),
                         ),
                       )
                     : GridView.builder(
+                        cacheExtent: 280,
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 2,
                           mainAxisSpacing: 12,
                           crossAxisSpacing: 12,
                           childAspectRatio: 0.98,
                         ),
-                        cacheExtent: 280,
                         itemCount: banks.length,
-                        itemBuilder: (context, i) => _BankBrandTile(bank: banks[i]),
+                        itemBuilder: (context, i) =>
+                            _BankBrandTile(bank: banks[i]),
                       ),
               ),
             ],
@@ -209,7 +224,8 @@ class _SupportedBanksPageState extends State<SupportedBanksPage> {
               onPressed: () => _onConnectNow(context),
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
               ),
               child: const Text('Ver plano Premium'),
             ),
@@ -259,7 +275,8 @@ class _BankBrandTile extends StatelessWidget {
                           fit: BoxFit.contain,
                           filterQuality: FilterQuality.high,
                           gaplessPlayback: true,
-                          errorBuilder: (_, __, ___) => Icon(bank.icon, color: bank.placeholderColor, size: 30),
+                          errorBuilder: (_, __, ___) => Icon(bank.icon,
+                              color: bank.placeholderColor, size: 30),
                         ),
                       ),
                     ),
@@ -280,12 +297,16 @@ class _BankBrandTile extends StatelessWidget {
                 bank.name,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, height: 1.2),
+                style: const TextStyle(
+                    fontWeight: FontWeight.w800, fontSize: 14, height: 1.2),
               ),
               const SizedBox(height: 4),
               Text(
                 'Logo offline · sem rede',
-                style: TextStyle(fontSize: 10, color: AppColors.textMuted, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                    fontSize: 10,
+                    color: AppColors.textMuted,
+                    fontWeight: FontWeight.w600),
               ),
             ],
           ),

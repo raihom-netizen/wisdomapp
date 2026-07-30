@@ -381,7 +381,7 @@ class FunctionsService {
   Future<Map<String, dynamic>?> generateBudgetWithAI(String description) async {
     final res = await _fn.httpsCallable('ctGenerateBudgetWithAI').call({'text': description});
     final data = res.data;
-    if (data is Map) return Map<String, dynamic>.from(data as Map);
+    if (data is Map) return Map<String, dynamic>.from(data);
     return null;
   }
 
@@ -397,7 +397,7 @@ class FunctionsService {
       'tom': tom.trim(),
     });
     final data = res.data;
-    if (data is Map) return Map<String, dynamic>.from(data as Map);
+    if (data is Map) return Map<String, dynamic>.from(data);
     return null;
   }
 

@@ -9,7 +9,6 @@ import 'package:share_plus/share_plus.dart';
 
 import '../constants/color_palette.dart';
 import '../constants/commitment_presets.dart';
-import '../constants/reminder_lead_chip_presets.dart';
 import '../constants/currency_formats.dart';
 import '../constants/field_text_limits.dart';
 import '../models/scale_entry.dart';
@@ -17,7 +16,6 @@ import '../models/scale_rates.dart';
 import '../models/shift_location.dart';
 import '../services/scale_rates_service.dart';
 import '../theme/app_colors.dart';
-import '../widgets/shell_keyboard_bottom_pad.dart';
 import '../utils/uppercase_text_input_formatter.dart';
 import 'commitment_description_picker.dart';
 import 'employer_vinculo_chips.dart';

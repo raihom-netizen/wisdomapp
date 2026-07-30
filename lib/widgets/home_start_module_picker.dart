@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 
 import '../services/home_start_module_cache.dart';
 import '../theme/app_colors.dart';
-import '../widgets/shell_keyboard_bottom_pad.dart';
 
 /// Campo em `users/{uid}/settings/planning` — índice do módulo no [HomeShell].
 const String kHomeDefaultStartModuleField = 'defaultStartModuleIndex';

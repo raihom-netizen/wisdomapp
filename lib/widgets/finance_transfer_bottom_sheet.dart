@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -134,7 +133,7 @@ class _FinanceTransferPageState extends State<_FinanceTransferPage> {
   late DateTime _transferDay;
   late String _fromId;
   late String _toId;
-  bool _submitting = false;
+  final bool _submitting = false;
   bool _hasReceipt = false;
   Uint8List? _receiptBytes;
   String _receiptName = '';
@@ -691,7 +690,7 @@ class _FinanceTransferEdit {
         'inId': inDoc.id,
       };
     }
-    if (!context.mounted || pairData == null) return false;
+    if (!context.mounted) return false;
 
     final fsUid = firestoreUserDocIdForAppShell(uid);
     var receiptLink = '';
@@ -793,7 +792,7 @@ class _FinanceTransferEdit {
                             ),
                             const SizedBox(height: 14),
                             DropdownButtonFormField<String>(
-                              value: editFromId,
+                              initialValue: editFromId,
                               decoration: const InputDecoration(labelText: 'Conta de origem (saída)', border: OutlineInputBorder()),
                               items: accounts.where((a) => a.id != editToId).map((a) => DropdownMenuItem(value: a.id, child: Text(a.displayName))).toList(),
                               onChanged: (v) {
@@ -803,7 +802,7 @@ class _FinanceTransferEdit {
                             ),
                             const SizedBox(height: 10),
                             DropdownButtonFormField<String>(
-                              value: editToId,
+                              initialValue: editToId,
                               decoration: const InputDecoration(labelText: 'Conta de destino (entrada)', border: OutlineInputBorder()),
                               items: accounts.where((a) => a.id != editFromId).map((a) => DropdownMenuItem(value: a.id, child: Text(a.displayName))).toList(),
                               onChanged: (v) {

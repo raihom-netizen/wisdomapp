@@ -3,7 +3,6 @@ import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import '../widgets/fast_text_field.dart';
 
 import '../constants/app_business_rules.dart';
 import '../models/finance_account.dart';
@@ -21,7 +20,6 @@ import '../utils/finance_line_opening.dart';
 import '../utils/finance_fatura_transaction_sort.dart';
 import '../utils/finance_transactions_hub.dart';
 import '../utils/finance_transactions_realtime.dart';
-import '../constants/currency_formats.dart';
 import '../constants/date_time_formats.dart';
 import '../utils/firestore_user_doc_id.dart';
 import '../utils/keyboard_form_scaffold.dart';
@@ -764,7 +762,7 @@ class _FinanceTransactionsFullscreenPageState extends State<FinanceTransactionsF
                                       ],
                                       const Divider(height: 22),
                                       DropdownButtonFormField<String>(
-                                        value: _typeFilter,
+                                        initialValue: _typeFilter,
                                         isExpanded: true,
                                         decoration: const InputDecoration(
                                           labelText: 'Tipo de lançamento',
@@ -786,7 +784,7 @@ class _FinanceTransactionsFullscreenPageState extends State<FinanceTransactionsF
                                       ),
                                       const SizedBox(height: 12),
                                       DropdownButtonFormField<String>(
-                                        value: _statusFilter,
+                                        initialValue: _statusFilter,
                                         isExpanded: true,
                                         decoration: const InputDecoration(
                                           labelText: 'Status',

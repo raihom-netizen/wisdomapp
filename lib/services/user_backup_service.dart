@@ -37,7 +37,7 @@ class UserBackupService {
 
     for (final col in _userCollections) {
       final snap = await userRef.collection(col).get();
-      out['collections']![col] = snap.docs.map((d) => _sanitizeMap({'id': d.id, ...?d.data()})).toList();
+      out['collections']![col] = snap.docs.map((d) => _sanitizeMap({'id': d.id, ...d.data()})).toList();
     }
 
     return out;

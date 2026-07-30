@@ -55,18 +55,21 @@ class CourseVideoValidity {
 
   /// Campos Firestore de validade.
   ///
-  /// [forUpdate]: true ao editar documento existente (permite `FieldValue.delete`
-  /// em `expiresAt` com `set(..., merge: true)`). Na **criação**, omitir o campo.
+  /// [forUpdate]: true ao editar documento existente (permite apagar
+  /// `expiresAt` com `set(..., merge: true)`). Na **criação**, omitir o campo.
+  /// [deleteValue]: sentinel de deleção — padrão `FieldValue.delete()`; ao
+  /// gravar via Cloud Function use `AdminCourseFirestoreBridge.cfDelete`.
   static Map<String, dynamic> firestoreFields({
     required bool permanent,
     DateTime? expiresAt,
     bool forUpdate = false,
+    Object? deleteValue,
   }) {
     if (permanent || expiresAt == null) {
       if (forUpdate) {
         return {
           'validityMode': modePermanent,
-          'expiresAt': FieldValue.delete(),
+          'expiresAt': deleteValue ?? FieldValue.delete(),
         };
       }
       return {'validityMode': modePermanent};

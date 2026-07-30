@@ -1,11 +1,11 @@
 {
     "short_name": "WISDOMAPP",
     "name": "WISDOMAPP",
-    "description": "Sabedoria financeira — finanças, agenda e cursos. Web instalável e app.",
+    "description": "Sabedoria financeira — finanças, objetivos financeiros, agenda e cursos. Web instalável e app.",
     "start_url": "/",
     "display": "standalone",
     "theme_color": "#0A1F56",
-    "background_color": "#0A1F56",
+    "background_color": "#000000",
     "gcm_sender_id": "103953800507",
     "icons": [
         {

@@ -127,7 +127,7 @@ class _ScaleEntryNotesGridBlockState extends State<ScaleEntryNotesGridBlock> {
                 label: Text(
                   _expanded
                       ? 'Ver menos'
-                      : 'Veja mais (${kScaleNotesGridExpandChars} iniciais)',
+                      : 'Veja mais ($kScaleNotesGridExpandChars iniciais)',
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,

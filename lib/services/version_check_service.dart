@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_version.dart';
 import 'version_check_web_stub.dart'
     if (dart.library.html) 'version_check_web_impl.dart' as reload_impl;
@@ -18,6 +19,61 @@ class VersionCheckService {
   /// No mobile, quando há versão nova no servidor, fica aqui para a UI mostrar aviso.
   static String? pendingUpdateVersion;
 
+  /// Build do servidor que disparou [pendingUpdateVersion] (para dispensar só uma vez por release).
+  static int? pendingUpdateBuildNumber;
+
+  /// Preferência: aviso «nova versão» já dispensado pelo usuário (Mais tarde).
+  static const String kVersionUpdateDismissedPrefsKey =
+      'version_update_dismissed_notice_id';
+
+  static String? _dismissedUpdateNoticeId;
+  static bool _dismissedUpdateLoaded = false;
+
+  static String noticeIdForServer({String? version, int? buildNumber}) {
+    final v = (version ?? '').trim();
+    final b = buildNumber ?? 0;
+    return '$v#$b';
+  }
+
+  static Future<void> _ensureDismissedUpdateLoaded() async {
+    if (_dismissedUpdateLoaded) return;
+    _dismissedUpdateLoaded = true;
+    try {
+      final p = await SharedPreferences.getInstance();
+      _dismissedUpdateNoticeId =
+          p.getString(kVersionUpdateDismissedPrefsKey)?.trim();
+    } catch (_) {}
+  }
+
+  static bool _shouldSuppressUpdateNotice({
+    required String? serverVersion,
+    required int? serverBuild,
+  }) {
+    final id =
+        noticeIdForServer(version: serverVersion, buildNumber: serverBuild);
+    if (id == '#0' || id == '#') {
+      return false;
+    }
+    return _dismissedUpdateNoticeId == id;
+  }
+
+  /// Usuário tocou «Mais tarde» — não mostrar de novo até sair build/versão nova no servidor.
+  static Future<void> dismissUpdateNotice() async {
+    await _ensureDismissedUpdateLoaded();
+    final id = noticeIdForServer(
+      version: pendingUpdateVersion,
+      buildNumber: pendingUpdateBuildNumber,
+    );
+    if (id != '#0' && id != '#') {
+      _dismissedUpdateNoticeId = id;
+      try {
+        final p = await SharedPreferences.getInstance();
+        await p.setString(kVersionUpdateDismissedPrefsKey, id);
+      } catch (_) {}
+    }
+    clearPendingUpdate();
+  }
+
   /// Link de atualização no Android (Play Store). Campo legado no Firestore: `apkDownloadUrl`.
   static String? apkDownloadUrl;
 
@@ -35,7 +91,9 @@ class VersionCheckService {
 
   static String get effectiveTestFlightUrl {
     final t = testFlightUrl?.trim();
-    if (t != null && t.isNotEmpty && (t.startsWith('http://') || t.startsWith('https://'))) {
+    if (t != null &&
+        t.isNotEmpty &&
+        (t.startsWith('http://') || t.startsWith('https://'))) {
       return t;
     }
     return defaultTestFlightPublicUrl;
@@ -44,10 +102,12 @@ class VersionCheckService {
   /// Legado: aviso nunca bloqueia o app (só faixa com link). Mantido para compatibilidade.
   static bool forceUpdateRequired = false;
 
-  static final ValueNotifier<bool> forceUpdateNotifier = ValueNotifier<bool>(false);
+  static final ValueNotifier<bool> forceUpdateNotifier =
+      ValueNotifier<bool>(false);
 
   static void clearPendingUpdate() {
     pendingUpdateVersion = null;
+    pendingUpdateBuildNumber = null;
     apkDownloadUrl = null;
     forceUpdateRequired = false;
     forceUpdateNotifier.value = !forceUpdateNotifier.value;
@@ -64,9 +124,10 @@ class VersionCheckService {
     return playStoreAppUrl;
   }
 
-  static void _onNewVersionFound(String serverVersion) {
+  static void _onNewVersionFound(String serverVersion, {int? serverBuild}) {
     pendingUpdateVersion = serverVersion;
-    // Nunca bloqueia Android/iOS — só exibe faixa com link (Play Store / TestFlight).
+    pendingUpdateBuildNumber = serverBuild;
+    // Nunca bloqueia Android/iOS — diálogo com «Atualizar agora» / «Mais tarde».
     forceUpdateRequired = false;
     forceUpdateNotifier.value = true;
   }
@@ -77,8 +138,11 @@ class VersionCheckService {
     return int.tryParse(v.toString().trim());
   }
 
-  static bool _serverIsNewer({required int? serverBuild, required String? serverVersion}) {
-    if (serverBuild != null && serverBuild > AppVersion.buildNumber) return true;
+  static bool _serverIsNewer(
+      {required int? serverBuild, required String? serverVersion}) {
+    if (serverBuild != null && serverBuild > AppVersion.buildNumber) {
+      return true;
+    }
     if (serverVersion != null &&
         serverVersion.isNotEmpty &&
         AppVersion.isNewer(serverVersion, AppVersion.current)) {
@@ -101,6 +165,7 @@ class VersionCheckService {
 
   /// Firestore com `forceUpdate: true` + versão/build mais novos que o cliente.
   static Future<void> checkAndReloadIfNeeded() async {
+    await _ensureDismissedUpdateLoaded();
     try {
       final snap = await FirebaseFirestore.instance
           .collection(_collection)
@@ -123,12 +188,15 @@ class VersionCheckService {
 
       final serverVersion = data[_field]?.toString().trim();
       final serverBuild = _parsePositiveInt(data['buildNumber']);
-      if (!_serverIsNewer(serverBuild: serverBuild, serverVersion: serverVersion)) {
+      if (!_serverIsNewer(
+          serverBuild: serverBuild, serverVersion: serverVersion)) {
         return;
       }
 
       final tf = data['testFlightUrl']?.toString().trim();
-      if (tf != null && tf.isNotEmpty && (tf.startsWith('http://') || tf.startsWith('https://'))) {
+      if (tf != null &&
+          tf.isNotEmpty &&
+          (tf.startsWith('http://') || tf.startsWith('https://'))) {
         testFlightUrl = tf;
       } else {
         testFlightUrl = null;
@@ -144,9 +212,16 @@ class VersionCheckService {
         apkDownloadUrl = hasValidUrl ? url : null;
       }
 
-      final label =
-          serverVersion != null && serverVersion.isNotEmpty ? serverVersion : AppVersion.current;
-      _onNewVersionFound(label);
+      final label = serverVersion != null && serverVersion.isNotEmpty
+          ? serverVersion
+          : AppVersion.current;
+      if (_shouldSuppressUpdateNotice(
+        serverVersion: label,
+        serverBuild: serverBuild,
+      )) {
+        return;
+      }
+      _onNewVersionFound(label, serverBuild: serverBuild);
     } catch (_) {}
   }
 

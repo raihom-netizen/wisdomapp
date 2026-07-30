@@ -168,7 +168,7 @@ class AdminMenuLateral extends StatelessWidget {
                 ),
               ),
               currentAccountPicture: CircleAvatar(
-                backgroundColor: Colors.white.withOpacity(0.15),
+                backgroundColor: Colors.white.withValues(alpha: 0.15),
                 child: const Icon(Icons.admin_panel_settings_rounded, color: Colors.white70),
               ),
             ),

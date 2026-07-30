@@ -7,6 +7,7 @@ import '../utils/finance_line_opening.dart';
 import '../utils/finance_transaction_datetime.dart';
 import '../utils/finance_transactions_hub.dart';
 import '../utils/firestore_user_doc_id.dart';
+import 'goal_deposit_service.dart';
 import 'logs_service.dart';
 import 'smart_category_hints_service.dart';
 
@@ -22,9 +23,13 @@ abstract final class FinanceService {
   FinanceService._();
 
   static CollectionReference<Map<String, dynamic>> _txCol(String uid) =>
-      FirebaseFirestore.instance.collection('users').doc(firestoreUserDocIdForAppShell(uid)).collection('transactions');
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(firestoreUserDocIdForAppShell(uid))
+          .collection('transactions');
 
   /// Apaga lançamentos criados pelo expresso (ex.: «Desfazer» após lote).
+  /// Desvincula Meta / desmarca semanas antes de apagar cada documento.
   static Future<bool> deleteTransactionsByDocumentIds({
     required String uid,
     required BuildContext context,
@@ -33,19 +38,47 @@ abstract final class FinanceService {
     if (documentIds.isEmpty) return true;
     try {
       final col = _txCol(uid);
-      final w = FirebaseFirestore.instance.batch();
-      for (final id in documentIds) {
-        if (id.trim().isEmpty) continue;
-        w.delete(col.doc(id.trim()));
+      final ids =
+          documentIds.map((e) => e.trim()).where((e) => e.isNotEmpty).toSet();
+      final processedPairs = <String>{};
+
+      for (final id in ids) {
+        final snap = await col.doc(id).get();
+        if (!snap.exists) continue;
+        final data = snap.data() ?? {};
+        final pairId = (data['transferPairId'] ?? '').toString().trim();
+        if (pairId.isNotEmpty) {
+          if (processedPairs.contains(pairId)) continue;
+          processedPairs.add(pairId);
+          final pairSnap =
+              await col.where('transferPairId', isEqualTo: pairId).get();
+          for (final pairDoc in pairSnap.docs) {
+            await GoalDepositService.unlinkBeforeTransactionDelete(
+              uid: uid,
+              txId: pairDoc.id,
+              txData: pairDoc.data(),
+            );
+            await pairDoc.reference.delete();
+          }
+        } else {
+          await GoalDepositService.unlinkBeforeTransactionDelete(
+            uid: uid,
+            txId: id,
+            txData: data,
+          );
+          await col.doc(id).delete();
+        }
       }
-      await w.commit();
       FinanceTransactionsHub.notifyMutated(uid: uid);
       return true;
     } on FirebaseException catch (e) {
       if (context.mounted) {
-        final msg = (e.message != null && e.message!.isNotEmpty) ? e.message! : 'Não foi possível desfazer.';
+        final msg = (e.message != null && e.message!.isNotEmpty)
+            ? e.message!
+            : 'Não foi possível desfazer.';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: const Color(0xFFB00020)),
+          SnackBar(
+              content: Text(msg), backgroundColor: const Color(0xFFB00020)),
         );
       }
       return false;
@@ -72,22 +105,32 @@ abstract final class FinanceService {
     required String category,
     required String description,
     required DateTime date,
+
     /// Em receitas pode ser vazio (sem conta). Em despesas é obrigatório.
     required String financeAccountId,
     String rawSnippet = '',
     bool saveLearnedMapping = false,
+
     /// [paid] = entra no saldo agora; [pending] = pendente (crédito / a receber).
     String status = 'paid',
+
     /// Em gravação em série, só o último item deve mostrar SnackBar/haptic.
     bool showFeedback = true,
+
     /// ID fixo do documento (lote / desfazer).
     String? documentId,
+
     /// Agrupa lançamentos do mesmo lote expresso (opcional). Grava [smartPasteBatchId] no documento;
     /// regras permissivas costumam aceitar campos extra — se a whitelist for fechada, inclua esta chave.
     String? smartPasteBatchId,
+
     /// Parcelas de um plano (ex.: lançamento expresso com N meses).
     int? installmentIndex,
     int? installmentCount,
+
+    /// Se true (e status pendente), o lançamento aparece no calendário Agenda/Escala.
+    bool addToCalendar = false,
+    String? calendarColorHex,
   }) async {
     if (amount.isNaN || amount.isInfinite || amount <= 0) return null;
     final st = status == 'pending' ? 'pending' : 'paid';
@@ -103,7 +146,8 @@ abstract final class FinanceService {
       return null;
     }
 
-    final mergedDate = FinanceTransactionDatetime.mergeCalendarDayWithClockNow(date);
+    final mergedDate =
+        FinanceTransactionDatetime.mergeCalendarDayWithClockNow(date);
     final docRef = (documentId != null && documentId.trim().isNotEmpty)
         ? _txCol(uid).doc(documentId.trim())
         : _txCol(uid).doc();
@@ -131,9 +175,16 @@ abstract final class FinanceService {
           if (financeAccountId.isNotEmpty) 'financeAccountId': financeAccountId,
           'source': 'smart_paste',
           if (rawSnippet.isNotEmpty)
-            'parsedSnippet': rawSnippet.substring(0, rawSnippet.length > 500 ? 500 : rawSnippet.length),
+            'parsedSnippet': rawSnippet.substring(
+                0, rawSnippet.length > 500 ? 500 : rawSnippet.length),
           if (smartPasteBatchId != null && smartPasteBatchId.trim().isNotEmpty)
             'smartPasteBatchId': smartPasteBatchId.trim(),
+          'addToCalendar': st == 'pending' && addToCalendar,
+          if (st == 'pending' &&
+              addToCalendar &&
+              calendarColorHex != null &&
+              calendarColorHex.trim().isNotEmpty)
+            'calendarColorHex': calendarColorHex.trim(),
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
@@ -155,7 +206,8 @@ abstract final class FinanceService {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Não foi possível salvar o lançamento. Tente novamente.'),
+            content:
+                Text('Não foi possível salvar o lançamento. Tente novamente.'),
             backgroundColor: Color(0xFFB00020),
           ),
         );
@@ -165,7 +217,8 @@ abstract final class FinanceService {
 
     if (saveLearnedMapping && description.trim().length >= 3) {
       try {
-        await SmartCategoryHintsService.recordLearnedMapping(uid, description, category);
+        await SmartCategoryHintsService.recordLearnedMapping(
+            uid, description, category);
       } catch (_) {}
     }
 

@@ -284,7 +284,7 @@ async function sendEmailHtml(to, subject, html) {
     tls: { rejectUnauthorized: true },
   });
   const mail = {
-    from: `"Controle Total" <${cfg.user}>`,
+    from: `"Wisdom APP" <${cfg.user}>`,
     to,
     subject,
     html,
@@ -9834,5 +9834,152 @@ exports.ctAdminFinanceConsolidateSantander = onRequest(
       console.error("ctAdminFinanceConsolidateSantander:", e);
       return res.status(500).json({ ok: false, error: String(e?.message || e) });
     }
+  },
+);
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * ctSendVerificationEmail
+ * Envia e-mail personalizado de boas-vindas + link de confirmação de e-mail.
+ * Chamado após cadastro manual (e-mail + senha) para evitar contas com e-mails falsos.
+ * Fluxo copiado do Controle Total App, com identidade visual WISDOMAPP.
+ * ──────────────────────────────────────────────────────────────────────────── */
+const WISDOM_WEB_DOMAIN = "https://wisdomapp-b9e98.web.app";
+const WISDOM_ICON_URL = `${WISDOM_WEB_DOMAIN}/icons/Icon-192.png`;
+
+exports.ctSendVerificationEmail = onCall(
+  { region: "us-central1", cors: true },
+  async (request) => {
+    const email = (request.data?.email || "").toString().trim().toLowerCase();
+    const name = (request.data?.name || "").toString().trim();
+    if (!email) throw new functions.https.HttpsError("invalid-argument", "E-mail obrigatório.");
+
+    let link;
+    try {
+      link = await admin.auth().generateEmailVerificationLink(email, {
+        url: WISDOM_WEB_DOMAIN,
+        handleCodeInApp: false,
+      });
+    } catch (e) {
+      console.error("[ctSendVerificationEmail] generateLink:", e?.message);
+      throw new functions.https.HttpsError("internal", "Não foi possível gerar o link de verificação.");
+    }
+
+    const firstName = name.split(/\s+/)[0] || "usuário";
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Bem-vindo ao WISDOMAPP</title>
+</head>
+<body style="margin:0;padding:0;background:linear-gradient(135deg,#eefcf9 0%,#e6f4f1 100%);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(135deg,#eefcf9 0%,#e6f4f1 100%);padding:32px 0;">
+<tr><td align="center">
+<table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:24px;overflow:hidden;box-shadow:0 12px 40px rgba(20,184,166,0.18);">
+
+<!-- Header com gradiente -->
+<tr><td style="background:linear-gradient(135deg,#030712 0%,#0f172a 50%,#134e4a 100%);padding:40px 32px;text-align:center;">
+  <img src="${WISDOM_ICON_URL}" alt="WISDOMAPP" width="88" height="88" style="border-radius:22px;display:block;margin:0 auto 18px;box-shadow:0 10px 30px rgba(0,0,0,0.35);border:3px solid rgba(255,255,255,0.2);" />
+  <h1 style="color:#ffffff;font-size:24px;margin:0 0 6px;letter-spacing:1.5px;text-transform:uppercase;font-weight:800;">WISDOMAPP</h1>
+  <p style="color:rgba(255,255,255,0.7);font-size:13px;margin:0;letter-spacing:0.5px;">Sabedoria financeira baseada nos princípios bíblicos</p>
+</td></tr>
+
+<!-- Badge de boas-vindas -->
+<tr><td style="text-align:center;padding:30px 32px 0;">
+  <div style="display:inline-block;background:linear-gradient(135deg,#0D9488,#14B8A6);color:#fff;padding:10px 24px;border-radius:24px;font-size:14px;font-weight:800;letter-spacing:0.5px;box-shadow:0 4px 16px rgba(20,184,166,0.3);">&#x1F389; BEM-VINDO(A)!</div>
+</td></tr>
+
+<!-- Corpo -->
+<tr><td style="padding:26px 36px 8px;">
+  <h2 style="color:#0f172a;font-size:24px;margin:0 0 16px;font-weight:800;">Olá, ${firstName}!</h2>
+  <p style="color:#475569;font-size:15px;margin:0 0 16px;line-height:1.75;">Seja muito bem-vindo(a) ao <strong style="color:#0D9488;">WISDOMAPP</strong> — o sistema que vai transformar a forma como você organiza suas finanças, objetivos, agenda e estudos!</p>
+  <p style="color:#475569;font-size:15px;margin:0 0 8px;line-height:1.75;">Para garantir a segurança da sua conta, precisamos que confirme seu e-mail.</p>
+</td></tr>
+
+<!-- Passo a passo -->
+<tr><td style="padding:16px 36px 8px;">
+  <table cellpadding="0" cellspacing="0" width="100%" style="background:#f8fafc;border-radius:14px;border:1px solid #e2e8f0;">
+    <tr><td style="padding:18px 20px;">
+      <table cellpadding="0" cellspacing="0" width="100%">
+        <tr>
+          <td style="padding:8px 0;color:#475569;font-size:14px;line-height:1.5;">
+            <span style="display:inline-block;width:28px;height:28px;background:linear-gradient(135deg,#0D9488,#14B8A6);border-radius:50%;text-align:center;line-height:28px;color:#fff;font-weight:800;font-size:13px;margin-right:10px;vertical-align:middle;">1</span>
+            Abra sua caixa de entrada
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0;color:#475569;font-size:14px;line-height:1.5;">
+            <span style="display:inline-block;width:28px;height:28px;background:linear-gradient(135deg,#0D9488,#14B8A6);border-radius:50%;text-align:center;line-height:28px;color:#fff;font-weight:800;font-size:13px;margin-right:10px;vertical-align:middle;">2</span>
+            Clique no botão <strong>"CONFIRMAR MEU E-MAIL"</strong>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0;color:#475569;font-size:14px;line-height:1.5;">
+            <span style="display:inline-block;width:28px;height:28px;background:linear-gradient(135deg,#0D9488,#14B8A6);border-radius:50%;text-align:center;line-height:28px;color:#fff;font-weight:800;font-size:13px;margin-right:10px;vertical-align:middle;">3</span>
+            Volte ao app — atualizamos automaticamente
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</td></tr>
+
+<!-- Botão de confirmação -->
+<tr><td style="text-align:center;padding:28px 32px 8px;">
+  <a href="${link}" style="display:inline-block;background:linear-gradient(135deg,#0D9488 0%,#14B8A6 100%);color:#ffffff!important;text-decoration:none;padding:18px 44px;border-radius:14px;font-size:17px;font-weight:800;letter-spacing:0.5px;box-shadow:0 8px 24px rgba(20,184,166,0.4);">&#x2713; CONFIRMAR MEU E-MAIL</a>
+  <p style="color:#94a3b8;font-size:12px;margin:14px 0 0;">Este link é válido por 24 horas.</p>
+</td></tr>
+
+<!-- Link fallback -->
+<tr><td style="text-align:center;padding:0 36px 8px;">
+  <p style="color:#94a3b8;font-size:12px;margin:0;">Se o botão não funcionar, copie e cole este link no navegador:<br>
+  <a href="${link}" style="color:#0D9488;font-size:11px;word-break:break-all;text-decoration:underline;">${link}</a></p>
+</td></tr>
+
+<!-- Separador -->
+<tr><td style="padding:8px 36px;">
+  <div style="border-top:1px solid #e2e8f0;"></div>
+</td></tr>
+
+<!-- Dicas rápidas -->
+<tr><td style="padding:20px 36px;">
+  <p style="color:#64748b;font-size:13px;margin:0 0 14px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">O que você pode fazer:</p>
+  <table cellpadding="0" cellspacing="0" width="100%">
+    <tr><td style="padding:5px 0;color:#475569;font-size:14px;">&#x1F4B0; Gerenciar finanças com relatórios inteligentes</td></tr>
+    <tr><td style="padding:5px 0;color:#475569;font-size:14px;">&#x1F3AF; Definir e acompanhar objetivos financeiros</td></tr>
+    <tr><td style="padding:5px 0;color:#475569;font-size:14px;">&#x1F4C5; Organizar agenda, escalas e compromissos</td></tr>
+    <tr><td style="padding:5px 0;color:#475569;font-size:14px;">&#x1F4D6; Estudar com cursos e conteúdos exclusivos</td></tr>
+  </table>
+</td></tr>
+
+<!-- Disclaimer -->
+<tr><td style="padding:0 36px 20px;">
+  <div style="background:#fef3c7;border-left:3px solid #f59e0b;padding:12px 16px;border-radius:8px;">
+    <p style="color:#92400e;font-size:12px;margin:0;line-height:1.5;">Se você não criou esta conta, pode ignorar este e-mail com segurança. Nenhuma ação é necessária.</p>
+  </div>
+</td></tr>
+
+<!-- Rodapé / Assinatura -->
+<tr><td style="background:linear-gradient(135deg,#f8fafc,#f1f5f9);padding:28px 36px;text-align:center;border-top:1px solid #e2e8f0;">
+  <p style="color:#0f172a;font-size:15px;margin:0 0 4px;font-weight:700;">Equipe Wisdom APP</p>
+  <p style="color:#64748b;font-size:13px;margin:0 0 12px;">Raihom Barbosa — Desenvolvedor</p>
+  <div style="display:inline-block;background:#e2e8f0;padding:5px 16px;border-radius:12px;">
+    <a href="${WISDOM_WEB_DOMAIN}" style="color:#0D9488;font-size:12px;text-decoration:none;font-weight:600;">wisdomapp-b9e98.web.app</a>
+  </div>
+  <p style="color:#94a3b8;font-size:11px;margin:16px 0 0;line-height:1.5;">Este é um e-mail automático do WISDOMAPP.<br>Por favor, não responda a esta mensagem.</p>
+</td></tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>`;
+
+    const res = await sendEmailHtml(email, "Bem-vindo(a) ao WISDOMAPP — Confirme seu e-mail", html);
+    if (!res.ok) {
+      console.error("[ctSendVerificationEmail] sendMail erro:", res.error);
+      throw new functions.https.HttpsError("internal", res.error || "Falha ao enviar e-mail de verificação.");
+    }
+    return { ok: true };
   },
 );

@@ -6,18 +6,26 @@ class FinanceAccount {
   static const String kChecking = 'checking';
   static const String kSavings = 'savings';
   static const String kCard = 'card';
+
   /// Mesma instituição com conta bancária e cartão (um cadastro; útil p.ex. Nubank corrente + crédito).
   static const String kBankAndCard = 'bank_and_card';
 
+  /// Reserva separada (dinheiro físico / emergência) — Cofre pessoal.
+  static const String kVault = 'vault';
+  static const String kVaultPresetId = 'cofre_pessoal';
+
   final String id;
   final String presetId;
+
   /// Conta corrente, poupança ou cartão (`kChecking` / `kSavings` / `kCard`).
   final String productType;
   final String? nickname;
   final int sortOrder;
   final DateTime? createdAt;
+
   /// Dia do mês em que a fatura do cartão fecha (1–31), para conferir com o app do banco.
   final int? statementClosingDay;
+
   /// Tema de cor do card no Financeiro (`ocean`, `violet`, …). Null = automática (banco + tipo).
   final String? cardColorId;
 
@@ -33,7 +41,8 @@ class FinanceAccount {
   });
 
   /// Próxima data de fechimento (só calendário), útil para exibir ao usuário.
-  static DateTime? computeNextStatementClosing(int closingDay, [DateTime? from]) {
+  static DateTime? computeNextStatementClosing(int closingDay,
+      [DateTime? from]) {
     if (closingDay < 1 || closingDay > 31) return null;
     final now = from ?? DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -50,10 +59,13 @@ class FinanceAccount {
 
   /// Compatível com dados antigos (`kind` no Firestore).
   String get kind {
+    if (productType == kVault) return 'vault';
     if (productType == kCard) return 'card';
     if (productType == kBankAndCard) return 'bank_and_card';
     return 'bank';
   }
+
+  bool get isVaultProduct => productType == kVault;
 
   /// Usado em filtros: esta conta representa movimentação de cartão.
   bool get isCardProduct => productType == kCard || productType == kBankAndCard;
@@ -62,7 +74,8 @@ class FinanceAccount {
   bool get isCreditCardProduct => productType == kCard;
 
   /// Conta bancária / débito (saída imediata do saldo).
-  bool get isDebitBankProduct => productType == kChecking || productType == kSavings;
+  bool get isDebitBankProduct =>
+      productType == kChecking || productType == kSavings;
 
   /// Despesa em cartão de crédito ou conta+cartão → pagamento futuro (pendente).
   bool get expenseDefaultsToPending =>
@@ -70,13 +83,16 @@ class FinanceAccount {
 
   /// Inclui corrente, poupança e o modo «conta + cartão» (saldo bancário).
   bool get isBankProduct =>
-      productType == kChecking || productType == kSavings || productType == kBankAndCard;
+      productType == kChecking ||
+      productType == kSavings ||
+      productType == kBankAndCard;
 
   FinanceBankPreset? get preset => financeBankPresetById(presetId);
 
   String get displayName {
     final n = nickname?.trim();
     if (n != null && n.isNotEmpty) return n;
+    if (isVaultProduct) return 'Cofre pessoal';
     return preset?.name ?? presetId;
   }
 
@@ -89,6 +105,8 @@ class FinanceAccount {
         return 'Cartão';
       case kBankAndCard:
         return 'Conta + cartão';
+      case kVault:
+        return 'Cofre pessoal';
       case kChecking:
       default:
         return 'Conta corrente';
@@ -108,7 +126,11 @@ class FinanceAccount {
     final cardColorId = rawCc.isEmpty ? null : rawCc;
     final rawPt = (d['productType'] ?? '').toString().trim();
     String pt;
-    if (rawPt == kChecking || rawPt == kSavings || rawPt == kCard || rawPt == kBankAndCard) {
+    if (rawPt == kChecking ||
+        rawPt == kSavings ||
+        rawPt == kCard ||
+        rawPt == kBankAndCard ||
+        rawPt == kVault) {
       pt = rawPt;
     } else {
       final legacyKind = (d['kind'] ?? 'bank').toString();
@@ -131,11 +153,14 @@ class FinanceAccount {
       'presetId': presetId,
       'productType': productType,
       'kind': kind,
-      if (nickname != null && nickname!.trim().isNotEmpty) 'nickname': nickname!.trim(),
+      if (nickname != null && nickname!.trim().isNotEmpty)
+        'nickname': nickname!.trim(),
       'sortOrder': sortOrder,
       'updatedAt': FieldValue.serverTimestamp(),
-      if (statementClosingDay != null) 'statementClosingDay': statementClosingDay,
-      if (cardColorId != null && cardColorId!.isNotEmpty) 'cardColorId': cardColorId,
+      if (statementClosingDay != null)
+        'statementClosingDay': statementClosingDay,
+      if (cardColorId != null && cardColorId!.isNotEmpty)
+        'cardColorId': cardColorId,
     };
   }
 }

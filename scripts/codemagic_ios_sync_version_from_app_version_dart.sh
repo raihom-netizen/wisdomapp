@@ -53,7 +53,9 @@ else
 fi
 
 BLOCK="$LATEST"
-if [[ "$FLOOR" -gt "$BLOCK" && "$LATEST" -le 0 ]]; then
+# Floor do repo é o mínimo conhecido: vale sempre que for maior que a resposta da API
+# (API pode devolver valor obsoleto logo após um upload — causa DUPLICATE -19232 na Apple).
+if [[ "$FLOOR" -gt "$BLOCK" ]]; then
   BLOCK="$FLOOR"
 fi
 

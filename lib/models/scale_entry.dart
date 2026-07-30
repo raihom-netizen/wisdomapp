@@ -14,10 +14,12 @@ ShiftLocation? matchShiftLocationForScaleEntry(
     final nameBase = ShiftLocation.baseNameFromFull(loc.name).toUpperCase();
     final locAbbr = loc.abbreviation.trim().toUpperCase();
     if (nameBase.isNotEmpty &&
-        (labelBase.contains(nameBase) || nameBase.contains(labelBase)))
+        (labelBase.contains(nameBase) || nameBase.contains(labelBase))) {
       return loc;
-    if (locAbbr.isNotEmpty && (abbr == locAbbr || labelBase.contains(locAbbr)))
+    }
+    if (locAbbr.isNotEmpty && (abbr == locAbbr || labelBase.contains(locAbbr))) {
       return loc;
+    }
   }
   return null;
 }
@@ -266,8 +268,9 @@ class ScaleEntry {
       if (v is String) {
         final s = v.trim().toLowerCase();
         if (s == 'true' || s == '1' || s == 'sim' || s == 'yes') return true;
-        if (s == 'false' || s == '0' || s == 'nao' || s == 'não' || s == 'no')
+        if (s == 'false' || s == '0' || s == 'nao' || s == 'não' || s == 'no') {
           return false;
+        }
       }
       return fallback;
     }
@@ -354,8 +357,9 @@ class FrenteServico {
 
   Color get color {
     final hex = colorHex.replaceFirst('#', '');
-    if (hex.length >= 6)
+    if (hex.length >= 6) {
       return Color(0xFF000000 + int.parse(hex.substring(0, 6), radix: 16));
+    }
     return const Color(0xFF2D5BFF);
   }
 

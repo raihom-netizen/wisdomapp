@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fa;
@@ -2736,7 +2735,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
     required String fileName,
     required String contentType,
   }) async {
-    final storagePath = 'users/${_userDocId}/ocorrencias/$docId/anexo.$extension';
+    final storagePath = 'users/$_userDocId/ocorrencias/$docId/anexo.$extension';
     final ref = FirebaseStorage.instance.ref(storagePath);
     try {
       await ref.putData(
@@ -3550,7 +3549,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                     _buildLabelObrigatorio('Natureza'),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<OcorrenciaNatureza?>(
-                      value: naturezaSelecionada,
+                      initialValue: naturezaSelecionada,
                       isExpanded: true,
                       decoration: _inputDecoration('Selecione a natureza'),
                       selectedItemBuilder: (context) => [
@@ -3614,7 +3613,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                         children: [
                           Icon(Icons.star_rounded, color: AppColors.amber, size: 22),
                           const SizedBox(width: 12),
-                          Text('${pontuacao} pts', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                          Text('$pontuacao pts', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
@@ -4161,7 +4160,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                             _buildLabelObrigatorio('Natureza'),
                             const SizedBox(height: 8),
                             DropdownButtonFormField<OcorrenciaNatureza>(
-                              value: naturezaSelecionada,
+                              initialValue: naturezaSelecionada,
                               isExpanded: true,
                               decoration: _inputDecoration('Selecione a natureza'),
                               items: _naturezas.map((n) => DropdownMenuItem(value: n, child: Text(n.label, overflow: TextOverflow.ellipsis, maxLines: 2))).toList(),
@@ -4206,7 +4205,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                                 children: [
                                   Icon(Icons.star_rounded, color: AppColors.amber, size: 22),
                                   const SizedBox(width: 12),
-                                  Text('${pontuacao} pts', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                                  Text('$pontuacao pts', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(

@@ -1,4 +1,5 @@
-import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
+import 'package:flutter/foundation.dart'
+    show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 
 import '../services/version_check_service.dart';
@@ -57,14 +58,18 @@ class FloatingVersionUpdateStrip extends StatelessWidget {
                     begin: Alignment.centerLeft,
                     end: Alignment.centerRight,
                   ),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+                  border:
+                      Border.all(color: Colors.white.withValues(alpha: 0.35)),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   child: Row(
                     children: [
                       Icon(
-                        kIsWeb ? Icons.auto_awesome_rounded : Icons.system_update_rounded,
+                        kIsWeb
+                            ? Icons.auto_awesome_rounded
+                            : Icons.system_update_rounded,
                         color: Colors.white,
                         size: 22,
                       ),
@@ -97,14 +102,17 @@ class FloatingVersionUpdateStrip extends StatelessWidget {
                         ),
                       ),
                       TextButton(
-                        onPressed: VersionCheckService.clearPendingUpdate,
+                        onPressed: VersionCheckService.dismissUpdateNotice,
                         style: TextButton.styleFrom(
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
-                        child: const Text('Ver depois', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
+                        child: const Text('Mais tarde',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w900, fontSize: 12)),
                       ),
                       const SizedBox(width: 4),
                       FilledButton.tonal(
@@ -112,13 +120,15 @@ class FloatingVersionUpdateStrip extends StatelessWidget {
                         style: FilledButton.styleFrom(
                           foregroundColor: AppColors.deepBlueDark,
                           backgroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
                         child: Text(
                           _actionLabel(),
-                          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w900, fontSize: 12),
                         ),
                       ),
                     ],

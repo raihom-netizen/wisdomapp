@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 import '../widgets/fast_text_field.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
-import '../services/ios_payments_gate.dart';
-import '../services/push_notification_service.dart';
-import '../services/version_check_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/keyboard_form_scaffold.dart';
 
@@ -61,12 +58,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   String _friendlyError(dynamic e) {
     final s = e.toString().replaceFirst(RegExp(r'^Exception:?\s*'), '');
-    if (s.contains('email-already-in-use') || s.toLowerCase().contains('email já')) return 'Este e-mail já está em uso. Use outro ou faça login.';
-    if (s.contains('weak-password')) return 'Senha muito fraca. Use no mínimo 6 caracteres.';
+    if (s.contains('email-already-in-use') ||
+        s.toLowerCase().contains('email já')) {
+      return 'Este e-mail já está em uso. Use outro ou faça login.';
+    }
+    if (s.contains('weak-password')) {
+      return 'Senha muito fraca. Use no mínimo 6 caracteres.';
+    }
     if (s.contains('invalid-email')) return 'E-mail inválido.';
-    if (s.contains('permission-denied') || s.contains('PERMISSION_DENIED')) return 'Erro ao salvar dados. Tente novamente ou entre em contato.';
-    if (s.contains('network') || s.contains('unavailable')) return 'Sem conexão. Verifique a internet e tente de novo.';
-    if (s.contains('Google') || s.contains('popup')) return 'Erro ao criar conta. Tente novamente.';
+    if (s.contains('permission-denied') || s.contains('PERMISSION_DENIED')) {
+      return 'Erro ao salvar dados. Tente novamente ou entre em contato.';
+    }
+    if (s.contains('network') || s.contains('unavailable')) {
+      return 'Sem conexão. Verifique a internet e tente de novo.';
+    }
+    if (s.contains('Google') || s.contains('popup')) {
+      return 'Erro ao criar conta. Tente novamente.';
+    }
     return s.isEmpty ? 'Erro ao criar conta.' : s;
   }
 
@@ -78,19 +86,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
     final pass = _passController.text;
     if (name.isEmpty || email.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nome e e-mail são obrigatórios para identificação.')),
+        const SnackBar(
+            content:
+                Text('Nome e e-mail são obrigatórios para identificação.')),
       );
       return;
     }
     if (!RegExp(r'^[^@]+@[^@]+\.[^@]+$').hasMatch(email)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Informe um e-mail válido (ex.: nome@dominio.com).')),
+        const SnackBar(
+            content: Text('Informe um e-mail válido (ex.: nome@dominio.com).')),
       );
       return;
     }
     if (pass.length < 6) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('A senha deve ter no mínimo 6 caracteres.')),
+        const SnackBar(
+            content: Text('A senha deve ter no mínimo 6 caracteres.')),
       );
       return;
     }
@@ -98,27 +110,31 @@ class _SignUpScreenState extends State<SignUpScreen> {
     try {
       await _auth.signUpSimple(name: name, email: email, password: pass);
       if (!mounted) return;
-      PushNotificationService().inicializar().catchError((_) {});
-      VersionCheckService.checkAndReloadIfNeeded().catchError((_) {});
-      final pid = _pendingPromoId;
-      if (_afterLoginRoute == '/escolha-plano' && pid != null && pid.isNotEmpty) {
-        if (IosPaymentsGate.shouldHidePayments && IosPaymentsGate.isIosNative) {
-          IosPaymentsGate.openReaderPlansInSafari(source: 'signup_promo');
-          Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
-          return;
-        }
-        final m = <String, dynamic>{'promoId': pid};
-        if (_openMpCheckoutAfterPromoLoad) {
-          m['openMpCheckoutAfterPromoLoad'] = true;
-        }
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          '/escolha-plano',
-          (route) => false,
-          arguments: m,
-        );
-        return;
+      // Envia e-mail profissional de confirmação (igual Controle Total).
+      // Falha no envio NÃO bloqueia o cadastro — a tela de verificação mostra o erro e permite reenviar.
+      String? emailSendError;
+      try {
+        await _auth.sendCustomVerificationEmail(email: email, name: name);
+      } catch (e) {
+        emailSendError =
+            e.toString().replaceFirst(RegExp(r'^Exception:?\s*'), '');
       }
-      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+      if (!mounted) return;
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        '/email-verification',
+        (route) => false,
+        arguments: {
+          'email': email,
+          'name': name,
+          if (emailSendError != null) 'emailSendError': emailSendError,
+          if (_pendingPromoId != null && _pendingPromoId!.isNotEmpty)
+            'promoId': _pendingPromoId,
+          if (_afterLoginRoute != null && _afterLoginRoute!.isNotEmpty)
+            'afterLoginRoute': _afterLoginRoute,
+          if (_openMpCheckoutAfterPromoLoad)
+            'openMpCheckoutAfterPromoLoad': true,
+        },
+      );
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       String mensagem = 'Erro ao criar conta.';
@@ -144,7 +160,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_friendlyError(e)), backgroundColor: AppColors.error),
+        SnackBar(
+            content: Text(_friendlyError(e)), backgroundColor: AppColors.error),
       );
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -154,122 +171,194 @@ class _SignUpScreenState extends State<SignUpScreen> {
   @override
   Widget build(BuildContext context) {
     final viewPadding = MediaQuery.viewPaddingOf(context);
+    const brandTeal = Color(0xFF2DD4BF);
     return Scaffold(
       resizeToAvoidBottomInset: scaffoldKeyboardResizeToAvoidBottomInset(),
+      backgroundColor: const Color(0xFF030712),
       body: keyboardScaffoldBody(
-        SafeArea(
-        child: Container(
+        Container(
           width: double.infinity,
+          height: double.infinity,
           decoration: const BoxDecoration(
             gradient: LinearGradient(
-              colors: [Color(0xFFE0EAFC), Color(0xFFCFDEF3)],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFF030712),
+                Color(0xFF0f172a),
+                Color(0xFF134e4a),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
           ),
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            padding: EdgeInsets.only(
-              left: 28,
-              right: 28,
-              top: 20,
-              bottom: viewPadding.bottom + KeyboardFormInsets.scrollBottomExtra(context, extra: 24),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back_rounded, color: AppColors.deepBlue),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                    const Expanded(
-                      child: Text(
-                        'Cadastro rápido',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: AppColors.deepBlue, fontWeight: FontWeight.w800, fontSize: 20),
-                      ),
-                    ),
-                    const SizedBox(width: 48),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Nome completo e e-mail. Depois você pode completar seus dados no app.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
-                ),
-                const SizedBox(height: 24),
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.85),
-                    borderRadius: BorderRadius.circular(28),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.06),
-                        blurRadius: 20,
-                        spreadRadius: 4,
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+          child: SafeArea(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: EdgeInsets.only(
+                left: 28,
+                right: 28,
+                top: 20,
+                bottom: viewPadding.bottom +
+                    KeyboardFormInsets.scrollBottomExtra(context, extra: 24),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 20),
+                  Row(
                     children: [
-                      AutofillGroup(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _field('Nome completo', Icons.person_outline_rounded, _nameController,
-                                autofillHints: const [AutofillHints.name], textInputAction: TextInputAction.next),
-                            const SizedBox(height: 16),
-                            _field('E-mail', Icons.email_outlined, _emailController,
-                                autofillHints: const [AutofillHints.email], textInputAction: TextInputAction.next),
-                            const SizedBox(height: 16),
-                            _field('Senha (mín. 6 caracteres)', Icons.lock_outline_rounded, _passController,
-                                isPass: true,
-                                autofillHints: const [AutofillHints.newPassword],
-                                textInputAction: TextInputAction.done,
-                                onFieldSubmitted: (_) {
-                                  if (!_loading) _signUp();
-                                }),
-                          ],
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back_rounded,
+                            color: Colors.white),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                      const Expanded(
+                        child: Text(
+                          'Cadastro rápido',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 20),
                         ),
                       ),
-                      const SizedBox(height: 24),
-                      // CRIAR CONTA: apenas createUserWithEmailAndPassword (AuthService.signUpSimple).
-                      // NÃO usar signInWithPopup nem qualquer método de popup do Google aqui — evita erro popup-closed-by-user.
-                      SizedBox(
-                        height: 52,
-                        child: ElevatedButton(
-                          onPressed: _loading ? null : _signUp,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.accent,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            elevation: 2,
-                            shadowColor: AppColors.accent.withOpacity(0.4),
+                      const SizedBox(width: 48),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Nome completo e e-mail. Depois você pode completar seus dados no app.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.6),
+                        fontSize: 14),
+                  ),
+                  const SizedBox(height: 24),
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0f172a).withValues(alpha: 0.92),
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(
+                          color: brandTeal.withValues(alpha: 0.22), width: 1.2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: brandTeal.withValues(alpha: 0.15),
+                          blurRadius: 36,
+                          offset: const Offset(0, 14),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        AutofillGroup(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _field('Nome completo',
+                                  Icons.person_outline_rounded, _nameController,
+                                  autofillHints: const [AutofillHints.name],
+                                  textInputAction: TextInputAction.next),
+                              const SizedBox(height: 16),
+                              _field('E-mail', Icons.email_outlined,
+                                  _emailController,
+                                  autofillHints: const [AutofillHints.email],
+                                  textInputAction: TextInputAction.next),
+                              const SizedBox(height: 16),
+                              _field('Senha (mín. 6 caracteres)',
+                                  Icons.lock_outline_rounded, _passController,
+                                  isPass: true,
+                                  autofillHints: const [
+                                    AutofillHints.newPassword
+                                  ],
+                                  textInputAction: TextInputAction.done,
+                                  onFieldSubmitted: (_) {
+                                if (!_loading) _signUp();
+                              }),
+                            ],
                           ),
-                          child: Text(_loading ? 'Criando conta...' : 'CRIAR CONTA', style: const TextStyle(fontWeight: FontWeight.w700, letterSpacing: 0.8)),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextButton(
-                        onPressed: _loading ? null : () => Navigator.of(context).pop(),
-                        child: const Text('Já tenho conta – Entrar', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 24),
+                        // CRIAR CONTA — gradient button
+                        DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF0D9488), Color(0xFF14B8A6)],
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF14B8A6)
+                                    .withValues(alpha: 0.35),
+                                blurRadius: 18,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
+                          ),
+                          child: FilledButton(
+                            onPressed: _loading ? null : _signUp,
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size.fromHeight(52),
+                              backgroundColor: Colors.transparent,
+                              foregroundColor: Colors.white,
+                              shadowColor: Colors.transparent,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16)),
+                            ),
+                            child: Text(
+                                _loading ? 'Criando conta...' : 'CRIAR CONTA',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.8,
+                                    fontSize: 15)),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        // Já tenho conta — outlined button
+                        OutlinedButton.icon(
+                          onPressed: _loading
+                              ? null
+                              : () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                          label: const Text('Já tenho conta – Entrar',
+                              style: TextStyle(fontWeight: FontWeight.w700)),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(48),
+                            foregroundColor: brandTeal,
+                            side: BorderSide(
+                                color: brandTeal.withValues(alpha: 0.4),
+                                width: 1.3),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  // Footer badge
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.verified_user_rounded,
+                          color: Colors.white.withValues(alpha: 0.35),
+                          size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Seguro · Criptografado · Equipe Wisdom APP',
+                        style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.35),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500),
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 40),
-              ],
+                  const SizedBox(height: 20),
+                ],
+              ),
             ),
           ),
         ),
-      ),
       ),
     );
   }
@@ -287,22 +376,38 @@ class _SignUpScreenState extends State<SignUpScreen> {
       controller: ctrl,
       obscureText: isPass ? _obscurePass : false,
       autofillHints: autofillHints,
-      textInputAction: textInputAction ?? (isPass ? TextInputAction.done : TextInputAction.next),
+      textInputAction: textInputAction ??
+          (isPass ? TextInputAction.done : TextInputAction.next),
       onSubmitted: onFieldSubmitted,
-      style: const TextStyle(color: AppColors.textPrimary),
+      style: const TextStyle(color: Colors.white, fontSize: 16),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: AppColors.textSecondary),
-        prefixIcon: Icon(icon, color: AppColors.primary, size: 22),
+        labelStyle: const TextStyle(color: Color(0xFF94A3B8)),
+        prefixIcon: Icon(icon, color: const Color(0xFF94A3B8), size: 22),
         suffixIcon: isPass
             ? IconButton(
-                icon: Icon(_obscurePass ? Icons.visibility_rounded : Icons.visibility_off_rounded, size: 22, color: AppColors.textMuted),
+                icon: Icon(
+                    _obscurePass
+                        ? Icons.visibility_rounded
+                        : Icons.visibility_off_rounded,
+                    size: 22,
+                    color: const Color(0xFF94A3B8)),
                 onPressed: () => setState(() => _obscurePass = !_obscurePass),
               )
             : null,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(15),
+            borderSide:
+                BorderSide(color: Colors.white.withValues(alpha: 0.15))),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(15),
+            borderSide:
+                BorderSide(color: Colors.white.withValues(alpha: 0.15))),
+        focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(15),
+            borderSide: const BorderSide(color: Color(0xFF2DD4BF), width: 1.5)),
         filled: true,
-        fillColor: Colors.grey.shade50,
+        fillColor: const Color(0xFF1e293b),
       ),
     );
   }

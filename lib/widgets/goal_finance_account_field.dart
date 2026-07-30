@@ -238,7 +238,7 @@ class GoalFinanceAccountField extends StatelessWidget {
     bool dense = false,
   }) {
     return DropdownButtonFormField<String?>(
-      value: _effectiveSelectedId(accounts),
+      initialValue: _effectiveSelectedId(accounts),
       isExpanded: true,
       decoration: InputDecoration(
         labelText: 'Conta que guarda o dinheiro',

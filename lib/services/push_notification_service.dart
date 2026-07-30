@@ -15,8 +15,10 @@ import '../utils/firestore_user_doc_id.dart';
 import 'in_app_floating_message_service.dart';
 import 'fcm_local_notification_presenter.dart';
 import 'notification_audio_player.dart';
+import 'notification_center_store.dart';
 import 'notification_message_builder.dart';
 import 'notification_module_theme.dart';
+import 'notification_navigator.dart';
 import 'notification_sound_preferences.dart';
 import 'scale_notifications_service.dart';
 
@@ -74,7 +76,8 @@ class PushNotificationService {
     return null;
   }
 
-  static Future<void> openNotificationLinkIfPresent(RemoteMessage message) async {
+  static Future<void> openNotificationLinkIfPresent(
+      RemoteMessage message) async {
     final url = linkFromRemoteMessage(message);
     if (url == null || url.isEmpty) return;
     try {
@@ -100,7 +103,8 @@ class PushNotificationService {
   }
 
   /// Toca áudio de lembrete de agenda quando push chega com app aberto (paridade Yahweh).
-  static Future<void> playAgendaReminderAudioIfPresent(RemoteMessage message) async {
+  static Future<void> playAgendaReminderAudioIfPresent(
+      RemoteMessage message) async {
     final d = message.data;
     if ((d['type'] ?? '').toString() != 'agenda_reminder') return;
     try {
@@ -134,8 +138,8 @@ class PushNotificationService {
     if (t.isEmpty && b.isEmpty && link == null) return;
 
     final isAgenda = (d['type'] ?? '').toString() == 'agenda_reminder';
-    final channelKind =
-        NotificationModuleTheme.normalizeKind((d['channelKind'] ?? 'escala').toString());
+    final channelKind = NotificationModuleTheme.normalizeKind(
+        (d['channelKind'] ?? 'escala').toString());
     final theme = NotificationModuleTheme.forKind(channelKind);
     try {
       _scaffoldMessengerKey?.currentState?.showSnackBar(
@@ -279,7 +283,9 @@ class PushNotificationService {
 
       _attachAuthTokenListener();
 
-      if (!permissionOk && !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+      if (!permissionOk &&
+          !kIsWeb &&
+          defaultTargetPlatform == TargetPlatform.iOS) {
         _attachMessagingListeners();
         _pushInitialized = true;
         return;
@@ -363,13 +369,26 @@ class PushNotificationService {
     });
 
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      openNotificationLinkIfPresent(message);
+      unawaited(NotificationCenterStore.instance.recordPush(message));
+      // Navega para a aba correspondente na Central de Notificações.
+      final d = message.data;
+      final kind = (d['category'] ?? d['channelKind'] ?? '').toString();
+      final tab = NotificationNavigator.tabFromChannelKind(kind);
+      // Android/iOS: o toque na notificação deve abrir o app nativo,
+      // nunca o navegador. Na web mantemos o comportamento de abrir link.
+      final link = linkFromRemoteMessage(message);
+      if (link != null && !_isNativeMobile()) {
+        openNotificationLinkIfPresent(message);
+      } else {
+        NotificationNavigator.openNotificationCenter(initialTab: tab);
+      }
     });
 
     unawaited(_handleInitialMessage());
   }
 
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
+    unawaited(NotificationCenterStore.instance.recordPush(message));
     await playAgendaReminderAudioIfPresent(message);
     final d = message.data;
     final title = (message.notification?.title ?? d['title'])?.toString();
@@ -418,8 +437,20 @@ class PushNotificationService {
     try {
       final initial = await FirebaseMessaging.instance.getInitialMessage();
       if (initial != null) {
+        unawaited(NotificationCenterStore.instance.recordPush(initial));
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          openNotificationLinkIfPresent(initial);
+          final link = linkFromRemoteMessage(initial);
+          // Android/iOS: ao tocar na notificação com app encerrado,
+          // abrimos o app na Central de Notificações, não no navegador.
+          if (link != null && !_isNativeMobile()) {
+            openNotificationLinkIfPresent(initial);
+          } else {
+            // Abre a Central na aba correspondente ao tipo do push.
+            final d = initial.data;
+            final kind = (d['category'] ?? d['channelKind'] ?? '').toString();
+            final tab = NotificationNavigator.tabFromChannelKind(kind);
+            NotificationNavigator.openNotificationCenter(initialTab: tab);
+          }
         });
       }
     } catch (_) {}

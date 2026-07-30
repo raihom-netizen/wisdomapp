@@ -97,8 +97,9 @@ Color _corPorTipo(ScaleEntry e) {
 
 /// Resolve employerType para um plantÃ£o: usa campo salvo ou match por label/abbreviation com locations (igual ao painel).
 String _employerTypeForEntry(ScaleEntry e, List<ShiftLocation> locations) {
-  if (e.employerType != null && e.employerType!.isNotEmpty)
+  if (e.employerType != null && e.employerType!.isNotEmpty) {
     return e.employerType!;
+  }
   final labelBase = (e.label ?? '').trim().toUpperCase();
   final abbr = (e.abbreviation ?? '').trim().toUpperCase();
   if (labelBase.isEmpty && abbr.isEmpty) return 'private';
@@ -106,10 +107,13 @@ String _employerTypeForEntry(ScaleEntry e, List<ShiftLocation> locations) {
     final nameBase = ShiftLocation.baseNameFromFull(loc.name).toUpperCase();
     final locAbbr = loc.abbreviation.trim().toUpperCase();
     if (nameBase.isNotEmpty &&
-        (labelBase.contains(nameBase) || nameBase.contains(labelBase)))
+        (labelBase.contains(nameBase) || nameBase.contains(labelBase))) {
       return loc.employerType.name;
-    if (locAbbr.isNotEmpty && (abbr == locAbbr || labelBase.contains(locAbbr)))
+    }
+    if (locAbbr.isNotEmpty &&
+        (abbr == locAbbr || labelBase.contains(locAbbr))) {
       return loc.employerType.name;
+    }
   }
   return 'private';
 }
@@ -643,7 +647,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
 
   String _scalesMonthKey(DateTime day) => '${day.year}-${day.month}';
 
-  bool _scaleEntryInMonth(ScaleEntry e, DateTime monthStart, DateTime monthEnd) {
+  bool _scaleEntryInMonth(
+      ScaleEntry e, DateTime monthStart, DateTime monthEnd) {
     final d = DateTime(e.date.year, e.date.month, e.date.day);
     final start = DateTime(monthStart.year, monthStart.month, monthStart.day);
     final end = DateTime(monthEnd.year, monthEnd.month, monthEnd.day);
@@ -692,9 +697,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
         .orderBy('date')
         .snapshots()
         .listen(
-      _onScalesSnapshot,
-      onError: (Object e) => debugPrint('scales: snapshots: $e'),
-    );
+          _onScalesSnapshot,
+          onError: (Object e) => debugPrint('scales: snapshots: $e'),
+        );
   }
 
   void _onScalesSnapshot(QuerySnapshot<Map<String, dynamic>> snap) {
@@ -814,10 +819,11 @@ class _ScalesScreenState extends State<ScalesScreen> {
       final mod = m % (24 * 60);
       final isNight =
           (mod >= _toMinutes(nightStart)) || (mod < _toMinutes(nightEnd));
-      if (isNight)
+      if (isNight) {
         nightMin++;
-      else
+      } else {
         dayMin++;
+      }
     }
     return {
       'hoursDay': dayMin / 60,
@@ -853,8 +859,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     final embeddedInShell = widget.shellScrollController != null;
     final bottomPad = padding.bottom;
     final horizontalPad = isVeryNarrow ? 10.0 : (isNarrow ? 12.0 : 20.0);
-    final leftPad =
-        padding.left > horizontalPad ? padding.left : horizontalPad;
+    final leftPad = padding.left > horizontalPad ? padding.left : horizontalPad;
     final rightPad =
         padding.right > horizontalPad ? padding.right : horizontalPad;
     final sectionGap = isNarrow ? 16.0 : 24.0;
@@ -864,114 +869,113 @@ class _ScalesScreenState extends State<ScalesScreen> {
         embeddedInHomeShell: widget.shellScrollController != null,
       ),
       floatingActionButton: isNarrow
-              ? null
-              : FloatingActionButton.extended(
-                  onPressed: () => _preCadastrarPlantao(context),
-                  backgroundColor: const Color(0xFF7C3AED),
-                  foregroundColor: Colors.white,
-                  icon: const Icon(Icons.playlist_add_check_rounded),
-                  label: Text(
-                    _kListaPlantoesRecorrentesCta,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 16,
-                      letterSpacing: 0.3,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => _preCadastrarPlantao(context),
+              backgroundColor: const Color(0xFF7C3AED),
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.playlist_add_check_rounded),
+              label: Text(
+                _kListaPlantoesRecorrentesCta,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 16,
+                  letterSpacing: 0.3,
                 ),
-          // Android e iPhone: SafeArea + padding com insets para boa visibilidade (notch, home indicator, bordas)
-          body: SafeArea(
-            top: true,
-            bottom: homeShellSafeAreaBottom(embeddedInHomeShell: embeddedInShell),
-            left: true,
-            right: true,
-            child: RefreshIndicator(
-              onRefresh: () async {
-                _lastEntriesFingerprint = null;
-                _ensureScalesStreamBound();
-                await Future<void>.delayed(
-                  const Duration(milliseconds: 350),
-                );
-              },
-              child: SingleChildScrollView(
-                controller: widget.shellScrollController,
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: EdgeInsets.fromLTRB(
-                  leftPad,
-                  isNarrow ? 4 : 6,
-                  rightPad,
-                  embeddedInShell
-                      ? homeShellScrollBottomPadding(
-                          context,
-                          embeddedInHomeShell: true,
-                          tail: 8,
-                        )
-                      : (isNarrow ? 44 : 100) + bottomPad,
-                ),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                        maxWidth: 1100, minWidth: isNarrow ? 0 : 400),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _buildTopBar(context,
-                            isNarrow: isNarrow, isVeryNarrow: isVeryNarrow),
-                        SizedBox(height: isNarrow ? (isVeryNarrow ? 4 : 6) : 12),
-                        _buildCtaListaPlantoesRecorrentes(
-                          isNarrow: isNarrow,
-                          isVeryNarrow: isVeryNarrow,
-                        ),
-                        SizedBox(height: isNarrow ? (isVeryNarrow ? 5 : 7) : 12),
-                        // CalendÃ¡rio: altura mÃ­nima alta no mobile para a grade ficar bem visÃ­vel ao abrir o mÃ³dulo
-                        ConstrainedBox(
-                          constraints: BoxConstraints(
-                            minHeight: isNarrow
-                                ? screenSize.height *
-                                    (isVeryNarrow ? 0.72 : 0.76)
-                                : 520,
-                          ),
-                          child: _buildCalendarSection(
-                            isNarrow: isNarrow,
-                            isVeryNarrow: isVeryNarrow,
-                          ),
-                        ),
-                        SizedBox(height: sectionGap),
-                        // Â«Resumo de horas no mÃªsÂ» (JÃ¡ tirou / PrevisÃ£o / Teto): pedido do
-                        // usuÃ¡rio â€” fica logo apÃ³s o card do calendÃ¡rio + resumo feriados, e
-                        // antes do Controle Estado Â· MunicÃ­pio Â· Particular (nÃ£o no rodapÃ© do
-                        // grÃ¡fico Diurno x Noturno).
-                        _buildAlertaTeto192Rodape(),
-                        SizedBox(height: sectionGap),
-                        _buildResumoPorVinculo(isNarrow: isNarrow),
-                        SizedBox(height: sectionGap),
-                        ScaleMonthClosureInviteCard(
-                          uid: _userDocId,
-                          profile: widget.profile,
-                          entriesSource: _allEntries,
-                          locations: _locations,
-                          periodStart:
-                              DateTime(_focusedDay.year, _focusedDay.month, 1),
-                          periodEnd: DateTime(
-                              _focusedDay.year, _focusedDay.month + 1, 0),
-                          periodLabel:
-                              'MÃªs do calendÃ¡rio: ${DateFormat('MM/yyyy').format(_focusedDay)}',
-                          allowEditPeriodFromSource: true,
-                        ),
-                        SizedBox(height: sectionGap),
-                        _buildPieChartDiurnoNoturno(isNarrow: isNarrow),
-                        SizedBox(height: sectionGap),
-                        _buildResumoMesDetalhado(isNarrow: isNarrow),
-                        SizedBox(height: sectionGap),
-                      ],
+                textAlign: TextAlign.center,
+              ),
+            ),
+      // Android e iPhone: SafeArea + padding com insets para boa visibilidade (notch, home indicator, bordas)
+      body: SafeArea(
+        top: true,
+        bottom: homeShellSafeAreaBottom(embeddedInHomeShell: embeddedInShell),
+        left: true,
+        right: true,
+        child: RefreshIndicator(
+          onRefresh: () async {
+            _lastEntriesFingerprint = null;
+            _ensureScalesStreamBound();
+            await Future<void>.delayed(
+              const Duration(milliseconds: 350),
+            );
+          },
+          child: SingleChildScrollView(
+            controller: widget.shellScrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.fromLTRB(
+              leftPad,
+              isNarrow ? 4 : 6,
+              rightPad,
+              embeddedInShell
+                  ? homeShellScrollBottomPadding(
+                      context,
+                      embeddedInHomeShell: true,
+                      tail: 8,
+                    )
+                  : (isNarrow ? 44 : 100) + bottomPad,
+            ),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                    maxWidth: 1100, minWidth: isNarrow ? 0 : 400),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildTopBar(context,
+                        isNarrow: isNarrow, isVeryNarrow: isVeryNarrow),
+                    SizedBox(height: isNarrow ? (isVeryNarrow ? 4 : 6) : 12),
+                    _buildCtaListaPlantoesRecorrentes(
+                      isNarrow: isNarrow,
+                      isVeryNarrow: isVeryNarrow,
                     ),
-                  ),
+                    SizedBox(height: isNarrow ? (isVeryNarrow ? 5 : 7) : 12),
+                    // CalendÃ¡rio: altura mÃ­nima alta no mobile para a grade ficar bem visÃ­vel ao abrir o mÃ³dulo
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: isNarrow
+                            ? screenSize.height * (isVeryNarrow ? 0.72 : 0.76)
+                            : 520,
+                      ),
+                      child: _buildCalendarSection(
+                        isNarrow: isNarrow,
+                        isVeryNarrow: isVeryNarrow,
+                      ),
+                    ),
+                    SizedBox(height: sectionGap),
+                    // Â«Resumo de horas no mÃªsÂ» (JÃ¡ tirou / PrevisÃ£o / Teto): pedido do
+                    // usuÃ¡rio â€” fica logo apÃ³s o card do calendÃ¡rio + resumo feriados, e
+                    // antes do Controle Estado Â· MunicÃ­pio Â· Particular (nÃ£o no rodapÃ© do
+                    // grÃ¡fico Diurno x Noturno).
+                    _buildAlertaTeto192Rodape(),
+                    SizedBox(height: sectionGap),
+                    _buildResumoPorVinculo(isNarrow: isNarrow),
+                    SizedBox(height: sectionGap),
+                    ScaleMonthClosureInviteCard(
+                      uid: _userDocId,
+                      profile: widget.profile,
+                      entriesSource: _allEntries,
+                      locations: _locations,
+                      periodStart:
+                          DateTime(_focusedDay.year, _focusedDay.month, 1),
+                      periodEnd:
+                          DateTime(_focusedDay.year, _focusedDay.month + 1, 0),
+                      periodLabel:
+                          'MÃªs do calendÃ¡rio: ${DateFormat('MM/yyyy').format(_focusedDay)}',
+                      allowEditPeriodFromSource: true,
+                    ),
+                    SizedBox(height: sectionGap),
+                    _buildPieChartDiurnoNoturno(isNarrow: isNarrow),
+                    SizedBox(height: sectionGap),
+                    _buildResumoMesDetalhado(isNarrow: isNarrow),
+                    SizedBox(height: sectionGap),
+                  ],
                 ),
               ),
             ),
           ),
-        );
+        ),
+      ),
+    );
   }
 
   Widget _buildTopBar(BuildContext context,
@@ -1012,7 +1016,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-              color: AppColors.primary.withOpacity(0.3),
+              color: AppColors.primary.withValues(alpha: 0.3),
               blurRadius: 12,
               offset: const Offset(0, 4))
         ],
@@ -1117,7 +1121,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     return Container(
       margin: const EdgeInsets.only(left: 8),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(16),
       ),
       child: IconButton(
@@ -1187,11 +1191,11 @@ class _ScalesScreenState extends State<ScalesScreen> {
       decoration: GeminiTheme.cardDecoration(color: Colors.white).copyWith(
         boxShadow: [
           BoxShadow(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               blurRadius: 20,
               offset: const Offset(0, 10)),
           BoxShadow(
-              color: Colors.black.withOpacity(0.03),
+              color: Colors.black.withValues(alpha: 0.03),
               blurRadius: 10,
               offset: const Offset(0, 2)),
         ],
@@ -1202,7 +1206,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
+              color: color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Icon(icon, color: color, size: 26),
@@ -1236,7 +1240,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
     final monthStart = DateTime(_focusedDay.year, _focusedDay.month, 1);
     final monthEnd = DateTime(_focusedDay.year, _focusedDay.month + 1, 0);
     final weeks = <int, double>{};
-    for (int w = 1; w <= 5; w++) weeks[w] = 0;
+    for (int w = 1; w <= 5; w++) {
+      weeks[w] = 0;
+    }
     for (final e in _allEntries) {
       if (e.isCompromisso) continue;
       final day = e.date.day;
@@ -1264,7 +1270,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                   backDrawRodData: BackgroundBarChartRodData(
                       show: true,
                       toY: maxY,
-                      color: GeminiTheme.textMuted.withOpacity(0.08)),
+                      color: GeminiTheme.textMuted.withValues(alpha: 0.08)),
                 ),
               ],
               showingTooltipIndicators: [0],
@@ -1353,7 +1359,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                     show: true,
                     drawVerticalLine: false,
                     getDrawingHorizontalLine: (v) => FlLine(
-                        color: GeminiTheme.textMuted.withOpacity(0.12),
+                        color: GeminiTheme.textMuted.withValues(alpha: 0.12),
                         strokeWidth: 1)),
                 borderData: FlBorderData(show: false),
                 barGroups: spots,
@@ -1503,15 +1509,17 @@ class _ScalesScreenState extends State<ScalesScreen> {
       final val = e.totalValue;
       final isDiurno = e.hoursDay >= e.hoursNight;
       if (e.paid) {
-        if (isDiurno)
+        if (isDiurno) {
           diurnoReal += val;
-        else
+        } else {
           noturnoReal += val;
+        }
       } else {
-        if (isDiurno)
+        if (isDiurno) {
           diurnoPrev += val;
-        else
+        } else {
           noturnoPrev += val;
+        }
       }
     }
     final total = diurnoReal + noturnoReal + diurnoPrev + noturnoPrev;
@@ -1723,8 +1731,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
       );
     }
     final h = _formatHorasTetoDelta(diff);
-    final faltaLabel =
-        diff >= 0.95 && diff < 1.05 ? 'Falta $h' : 'Faltam $h';
+    final faltaLabel = diff >= 0.95 && diff < 1.05 ? 'Falta $h' : 'Faltam $h';
     return (
       title: 'Margem',
       value: faltaLabel,
@@ -1840,139 +1847,139 @@ class _ScalesScreenState extends State<ScalesScreen> {
             : 'PlantÃµes com valor no mÃªs de $nomeMes (sÃ³ entram horas com valor financeiro).';
         final fsTitulo = _scalesScreenFontSize(context, 15);
         return Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: passouTeto
-                      ? [
-                          Colors.orange.shade50,
-                          Colors.orange.shade100.withValues(alpha: 0.45),
-                        ]
-                      : [
-                          GeminiTheme.primary.withValues(alpha: 0.10),
-                          Colors.white,
-                        ],
-                ),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  width: 1.5,
-                  color: passouTeto
-                      ? Colors.orange.shade400
-                      : GeminiTheme.primary.withValues(alpha: 0.35),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.06),
-                    blurRadius: 14,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: passouTeto
+                  ? [
+                      Colors.orange.shade50,
+                      Colors.orange.shade100.withValues(alpha: 0.45),
+                    ]
+                  : [
+                      GeminiTheme.primary.withValues(alpha: 0.10),
+                      Colors.white,
+                    ],
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              width: 1.5,
+              color: passouTeto
+                  ? Colors.orange.shade400
+                  : GeminiTheme.primary.withValues(alpha: 0.35),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 14,
+                offset: const Offset(0, 5),
               ),
-              child: Column(
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        passouTeto
-                            ? Icons.warning_amber_rounded
-                            : Icons.schedule_rounded,
-                        size: 28,
-                        color: passouTeto
-                            ? Colors.orange.shade900
-                            : GeminiTheme.primary,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              tituloAlerta,
-                              style: TextStyle(
-                                fontSize: fsTitulo,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 0.2,
-                                color: passouTeto
-                                    ? Colors.orange.shade900
-                                    : const Color(0xFF1A237E),
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            MonthYearResumoHeader(
-                              monthStart: monthStart,
-                              compact: MediaQuery.sizeOf(context).width < 400,
-                              accentWhenCurrent: passouTeto
-                                  ? Colors.orange.shade900
-                                  : GeminiTheme.primary,
-                            ),
-                          ],
+                  Icon(
+                    passouTeto
+                        ? Icons.warning_amber_rounded
+                        : Icons.schedule_rounded,
+                    size: 28,
+                    color: passouTeto
+                        ? Colors.orange.shade900
+                        : GeminiTheme.primary,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          tituloAlerta,
+                          style: TextStyle(
+                            fontSize: fsTitulo,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.2,
+                            color: passouTeto
+                                ? Colors.orange.shade900
+                                : const Color(0xFF1A237E),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      _scaleTetoMetricPill(
-                        context,
-                        title: 'JÃ¡ tirou',
-                        value: jaStr,
-                        background: passouTeto
-                            ? Colors.white.withValues(alpha: 0.92)
-                            : const Color(0xFFE8EAF6),
-                        foreground: const Color(0xFF1A237E),
-                      ),
-                      _scaleTetoMetricPill(
-                        context,
-                        title: 'PrevisÃ£o no mÃªs',
-                        value: prevStr,
-                        background: passouTeto
-                            ? Colors.deepOrange.shade50
-                            : const Color(0xFFFFF3E0),
-                        foreground: const Color(0xFFE65100),
-                      ),
-                      _scaleTetoMetricPill(
-                        context,
-                        title: 'Teto',
-                        value: tetoStr,
-                        background: passouTeto
-                            ? Colors.red.shade50
-                            : const Color(0xFFE3F2FD),
-                        foreground: const Color(0xFF0D47A1),
-                        ring: true,
-                      ),
-                      _scaleTetoMetricPill(
-                        context,
-                        title: margem.title,
-                        value: margem.value,
-                        background: margem.bg,
-                        foreground: margem.fg,
-                        emphasized: true,
-                        ring: true,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    rodapeAlerta,
-                    style: TextStyle(
-                      fontSize: fsMsg,
-                      fontWeight: FontWeight.w600,
-                      height: 1.35,
-                      color: passouTeto
-                          ? Colors.orange.shade900
-                          : GeminiTheme.textPrimary,
+                        const SizedBox(height: 6),
+                        MonthYearResumoHeader(
+                          monthStart: monthStart,
+                          compact: MediaQuery.sizeOf(context).width < 400,
+                          accentWhenCurrent: passouTeto
+                              ? Colors.orange.shade900
+                              : GeminiTheme.primary,
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
-            );
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _scaleTetoMetricPill(
+                    context,
+                    title: 'JÃ¡ tirou',
+                    value: jaStr,
+                    background: passouTeto
+                        ? Colors.white.withValues(alpha: 0.92)
+                        : const Color(0xFFE8EAF6),
+                    foreground: const Color(0xFF1A237E),
+                  ),
+                  _scaleTetoMetricPill(
+                    context,
+                    title: 'PrevisÃ£o no mÃªs',
+                    value: prevStr,
+                    background: passouTeto
+                        ? Colors.deepOrange.shade50
+                        : const Color(0xFFFFF3E0),
+                    foreground: const Color(0xFFE65100),
+                  ),
+                  _scaleTetoMetricPill(
+                    context,
+                    title: 'Teto',
+                    value: tetoStr,
+                    background: passouTeto
+                        ? Colors.red.shade50
+                        : const Color(0xFFE3F2FD),
+                    foreground: const Color(0xFF0D47A1),
+                    ring: true,
+                  ),
+                  _scaleTetoMetricPill(
+                    context,
+                    title: margem.title,
+                    value: margem.value,
+                    background: margem.bg,
+                    foreground: margem.fg,
+                    emphasized: true,
+                    ring: true,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                rodapeAlerta,
+                style: TextStyle(
+                  fontSize: fsMsg,
+                  fontWeight: FontWeight.w600,
+                  height: 1.35,
+                  color: passouTeto
+                      ? Colors.orange.shade900
+                      : GeminiTheme.textPrimary,
+                ),
+              ),
+            ],
+          ),
+        );
       },
     );
   }
@@ -2039,7 +2046,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
     final fsTiny = _scalesScreenFontSize(context, 10);
     final fsHint = _scalesScreenFontSize(context, 11);
     final byType = <String, List<ScaleEntry>>{};
-    for (final t in types) byType[t] = [];
+    for (final t in types) {
+      byType[t] = [];
+    }
     for (final e in _allEntries) {
       if (!_entryInResumoFinanceiro(e, _locations)) continue;
       // Particular: sÃ³ entra se estiver explicitamente marcado como particular (nÃ£o por inferÃªncia).
@@ -2610,13 +2619,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
     bool isNarrow = false,
     bool isVeryNarrow = false,
   }) {
-    final cardPad = isNarrow
-        ? (isVeryNarrow ? 12.0 : 14.0)
-        : 26.0;
+    final cardPad = isNarrow ? (isVeryNarrow ? 12.0 : 14.0) : 26.0;
     // Topo mais justo: mÃªs/ano do calendÃ¡rio encosta melhor na borda superior do card branco.
-    final cardTopPad = isNarrow
-        ? (isVeryNarrow ? 5.0 : 6.0)
-        : 18.0;
+    final cardTopPad = isNarrow ? (isVeryNarrow ? 5.0 : 6.0) : 18.0;
     final gapRodape = isNarrow ? 8.0 : 16.0;
     final gapSel = isNarrow ? 8.0 : 12.0;
     return RepaintBoundary(
@@ -2627,11 +2632,11 @@ class _ScalesScreenState extends State<ScalesScreen> {
           borderRadius: BorderRadius.circular(isNarrow ? 22 : 28),
           boxShadow: [
             BoxShadow(
-                color: Colors.black.withOpacity(0.06),
+                color: Colors.black.withValues(alpha: 0.06),
                 blurRadius: 20,
                 offset: const Offset(0, 8)),
             BoxShadow(
-                color: AppColors.primary.withOpacity(0.04),
+                color: AppColors.primary.withValues(alpha: 0.04),
                 blurRadius: 24,
                 offset: const Offset(0, 4)),
           ],
@@ -2988,7 +2993,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
         final fs18 = _scalesScreenFontSize(context, 18);
         final fsResumoDiaHeader = _scalesScreenFontSize(context, 15);
         final fsResumoItemTitulo = _scalesScreenFontSize(context, 16.5);
-        final pillColor = (ScaleEntry e) =>
+        Color pillColor(ScaleEntry e) =>
             (e.colorHex != null && e.colorHex!.isNotEmpty)
                 ? e.color
                 : _corPorTipo(e);
@@ -3445,9 +3450,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
                   child: Text(
                     '${day.day}',
                     style: TextStyle(
-                      color: isHol
-                          ? const Color(0xFFE53935)
-                          : AppColors.primary,
+                      color:
+                          isHol ? const Color(0xFFE53935) : AppColors.primary,
                       fontWeight: FontWeight.w900,
                       fontSize: fsNumber,
                       height: 1.0,
@@ -3489,7 +3493,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
       final orderedColors = <Color>[];
       for (final e in events) {
         final c = vividFromEntry(e);
-        if (!orderedColors.any((x) => x.value == c.value)) orderedColors.add(c);
+        if (!orderedColors.any((x) => x.toARGB32() == c.toARGB32())) {
+          orderedColors.add(c);
+        }
       }
       final list = orderedColors.toList();
       final isSelected = _isSameDay(_selectedDay, d);
@@ -3505,13 +3511,13 @@ class _ScalesScreenState extends State<ScalesScreen> {
       final baseShadow = isSelected && list.isNotEmpty
           ? [
               BoxShadow(
-                  color: list.first.withOpacity(0.45),
+                  color: list.first.withValues(alpha: 0.45),
                   blurRadius: 10,
                   offset: const Offset(0, 2))
             ]
           : [
               BoxShadow(
-                  color: Colors.black.withOpacity(0.12),
+                  color: Colors.black.withValues(alpha: 0.12),
                   blurRadius: 5,
                   offset: const Offset(0, 1))
             ];
@@ -3522,11 +3528,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
       ];
       if (list.length == 1) {
         final fillColor = isToday && list.isEmpty
-            ? AppColors.primary.withOpacity(0.42)
-            : list.first.withOpacity(isSelected ? 1.0 : 0.93);
-        final fg = isHol
-            ? const Color(0xFFE53935)
-            : AppColors.onVividFill(fillColor);
+            ? AppColors.primary.withValues(alpha: 0.42)
+            : list.first.withValues(alpha: isSelected ? 1.0 : 0.93);
+        final fg =
+            isHol ? const Color(0xFFE53935) : AppColors.onVividFill(fillColor);
         final shadows = isHol
             ? AppColors.calendarDialLegibilityShadows(darkInk: false)
             : (fg == Colors.white
@@ -3570,22 +3575,22 @@ class _ScalesScreenState extends State<ScalesScreen> {
               Positioned.fill(
                 child: CustomPaint(
                   painter: _CalendarDayNPartsPainter(
-                    colors: list.map((c) => c.withOpacity(1.0)).toList(),
+                    colors: list.map((c) => c.withValues(alpha: 1.0)).toList(),
                   ),
                 ),
               ),
               _dialNumberInCell(
                 text: '${day.day}',
                 style: TextStyle(
-                    color: isHol
-                        ? const Color(0xFFE53935)
-                        : AppColors.textPrimary,
+                    color:
+                        isHol ? const Color(0xFFE53935) : AppColors.textPrimary,
                     shadows: isHol
-                        ? AppColors.calendarDialLegibilityShadows(darkInk: false)
-                        : AppColors.calendarDialLegibilityShadows(darkInk: true),
+                        ? AppColors.calendarDialLegibilityShadows(
+                            darkInk: false)
+                        : AppColors.calendarDialLegibilityShadows(
+                            darkInk: true),
                     fontWeight: FontWeight.w900,
-                    fontSize:
-                        (list.length > 3 ? 15 : 17) + (isToday ? 2 : 0)),
+                    fontSize: (list.length > 3 ? 15 : 17) + (isToday ? 2 : 0)),
               ),
             ],
           ),
@@ -3637,7 +3642,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
           titleCentered: true,
           formatButtonVisible: false,
           formatButtonDecoration: BoxDecoration(
-            color: AppColors.primary.withOpacity(0.12),
+            color: AppColors.primary.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(14),
           ),
           formatButtonTextStyle: TextStyle(
@@ -3656,7 +3661,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
           leftChevronIcon: Container(
             padding: EdgeInsets.all(isNarrow ? 7 : 6),
             decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.1),
+                color: AppColors.primary.withValues(alpha: 0.1),
                 shape: BoxShape.circle),
             child: Icon(Icons.chevron_left_rounded,
                 color: AppColors.primary, size: isNarrow ? 28 : 26),
@@ -3664,7 +3669,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
           rightChevronIcon: Container(
             padding: EdgeInsets.all(isNarrow ? 7 : 6),
             decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.1),
+                color: AppColors.primary.withValues(alpha: 0.1),
                 shape: BoxShape.circle),
             child: Icon(Icons.chevron_right_rounded,
                 color: AppColors.primary, size: isNarrow ? 28 : 26),
@@ -3800,25 +3805,27 @@ class _ScalesScreenState extends State<ScalesScreen> {
               final orderedColors = <Color>[];
               for (final e in events) {
                 final c = vividFromEntry(e);
-                if (!orderedColors.any((x) => x.value == c.value))
+                if (!orderedColors.any((x) => x.toARGB32() == c.toARGB32())) {
                   orderedColors.add(c);
+                }
               }
               final list = orderedColors.toList();
               Color borderColor =
                   list.isNotEmpty ? list.first : AppColors.primary;
-              if (list.isNotEmpty)
+              if (list.isNotEmpty) {
                 borderColor =
                     Color.lerp(list.first, Colors.black, 0.22) ?? list.first;
+              }
               final borderW = isTodayCell ? 3.0 : 2.5;
               final boxShadow = <BoxShadow>[
                 if (isTodayCell) ...todaySoftLift(list.first),
                 BoxShadow(
-                    color: list.first.withOpacity(0.45),
+                    color: list.first.withValues(alpha: 0.45),
                     blurRadius: 10,
                     offset: const Offset(0, 2))
               ];
               if (list.length == 1) {
-                final fillColor = list.first.withOpacity(1.0);
+                final fillColor = list.first.withValues(alpha: 1.0);
                 final fg = isHol
                     ? const Color(0xFFE53935)
                     : AppColors.onVividFill(fillColor);
@@ -3888,7 +3895,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                             child: CustomPaint(
                               painter: _CalendarDayNPartsPainter(
                                 colors: list
-                                    .map((c) => c.withOpacity(1.0))
+                                    .map((c) => c.withValues(alpha: 1.0))
                                     .toList(),
                               ),
                             ),
@@ -3953,8 +3960,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           color: isHol
                               ? const Color(0xFFE53935)
                               : const Color(0xFF1A1C1E),
-                          fontWeight:
-                              isHol ? FontWeight.w900 : FontWeight.w600,
+                          fontWeight: isHol ? FontWeight.w900 : FontWeight.w600,
                           fontSize: isNarrow ? 17 : 15,
                         ),
                       ),
@@ -3971,7 +3977,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                              color: AppColors.primary.withOpacity(0.45),
+                              color: AppColors.primary.withValues(alpha: 0.45),
                               blurRadius: 4)
                         ],
                       ),
@@ -4061,7 +4067,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20)),
               elevation: 4,
-              shadowColor: AppColors.primary.withOpacity(0.4),
+              shadowColor: AppColors.primary.withValues(alpha: 0.4),
             ),
           ),
         ),
@@ -4192,7 +4198,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-                color: Colors.black.withOpacity(0.04),
+                color: Colors.black.withValues(alpha: 0.04),
                 blurRadius: 10,
                 offset: const Offset(0, 4))
           ],
@@ -4277,7 +4283,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 10,
               offset: const Offset(0, 4))
         ],
@@ -4466,17 +4472,18 @@ class _ScalesScreenState extends State<ScalesScreen> {
       ]);
       final usesGlobal = results[0] as bool;
       final rates = results[1] as ScaleRates;
-      final hoje =
-          DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+      final hoje = DateTime(
+          DateTime.now().year, DateTime.now().month, DateTime.now().day);
       final escalas = _resumoMesToEscalasMap(entries, rates, hoje,
           goiasPerServiceDay: usesGlobal);
       double totalRecebido = 0, totalPendente = 0;
       for (final e in entries) {
         if (e.isCompromisso) continue;
-        if (e.paid)
+        if (e.paid) {
           totalRecebido += e.totalValue;
-        else
+        } else {
           totalPendente += e.totalValue;
+        }
       }
       final resumoPdf = _resumoBancoHorasFromEntries(entries, hoje, rates,
           goiasPerServiceDay: usesGlobal);
@@ -4542,22 +4549,22 @@ class _ScalesScreenState extends State<ScalesScreen> {
     switch (cat) {
       case 'Compromisso':
         return (
-          bg: const Color(0xFF00796B).withOpacity(0.12),
+          bg: const Color(0xFF00796B).withValues(alpha: 0.12),
           fg: const Color(0xFF00695C)
         );
       case 'Estado':
         return (
-          bg: const Color(0xFF1A237E).withOpacity(0.12),
+          bg: const Color(0xFF1A237E).withValues(alpha: 0.12),
           fg: const Color(0xFF1A237E)
         );
       case 'MunicÃ­pio':
         return (
-          bg: const Color(0xFF0D9488).withOpacity(0.14),
+          bg: const Color(0xFF0D9488).withValues(alpha: 0.14),
           fg: const Color(0xFF0F766E)
         );
       case 'Particular':
         return (
-          bg: const Color(0xFF7C3AED).withOpacity(0.12),
+          bg: const Color(0xFF7C3AED).withValues(alpha: 0.12),
           fg: const Color(0xFF6D28D9)
         );
       default:
@@ -4754,8 +4761,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     final valorBgColor = temValor
         ? AppColors.success.withValues(alpha: 0.10)
         : AppColors.textMuted.withValues(alpha: 0.10);
-    final valorFgColor =
-        temValor ? AppColors.success : AppColors.textSecondary;
+    final valorFgColor = temValor ? AppColors.success : AppColors.textSecondary;
     Widget valorPill() {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -4771,9 +4777,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              temValor
-                  ? Icons.payments_rounded
-                  : Icons.payments_outlined,
+              temValor ? Icons.payments_rounded : Icons.payments_outlined,
               size: 14,
               color: valorFgColor,
             ),
@@ -5168,7 +5172,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
     if (e.id == null || e.id!.isEmpty) return;
 
     if (ProdutividadeScaleMirrorService.isProdutividadeFolgaEntry(e)) {
-      await ProdutividadeScaleMirrorService.removeFromCalendarAndClearOcorrencias(
+      await ProdutividadeScaleMirrorService
+          .removeFromCalendarAndClearOcorrencias(
         userDocId: _userDocId,
         folgaDay: e.date,
       );
@@ -5189,7 +5194,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
             .get();
         if (snap.exists) {
           final data = snap.data() ?? {};
-          final isAud = (data['type'] ?? 'compromisso').toString() == 'audiencia';
+          final isAud =
+              (data['type'] ?? 'compromisso').toString() == 'audiencia';
           await deleteAgendaReminder(
             context: dialogContext,
             userDocId: _userDocId,
@@ -5215,9 +5221,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
     }
     final isFolgaProd =
         ProdutividadeScaleMirrorService.isProdutividadeFolgaEntry(e);
-    final label = isFolgaProd
-        ? 'Folga Â· Produtividade'
-        : (e.label ?? 'PlantÃ£o');
+    final label =
+        isFolgaProd ? 'Folga Â· Produtividade' : (e.label ?? 'PlantÃ£o');
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -5288,8 +5293,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
             onPressed: () => Navigator.of(ctx).pop(),
             style: TextButton.styleFrom(
               minimumSize: const Size(44, 44),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
               foregroundColor: AppColors.primary,
             ),
             child: const Text(
@@ -5358,8 +5362,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
               // mÃ³dulos â€” mantÃ©m paridade total iPhone / Android / Web.
               _scalesPreviewTopBar(ctx),
               Padding(
-                padding:
-                    const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
                 child: Text(
                   titulo,
                   style: const TextStyle(
@@ -5371,8 +5374,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
               const Divider(height: 1),
               Expanded(
                 child: ListView.builder(
-                  controller: scrollController,
                   cacheExtent: 400,
+                  controller: scrollController,
                   padding: EdgeInsets.fromLTRB(16, 12, 16, 24 + sheetBottomPad),
                   itemCount: sorted.length,
                   itemBuilder: (_, i) {
@@ -5409,7 +5412,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
         border: Border.all(color: Colors.grey.shade200),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 8,
               offset: const Offset(0, 3))
         ],
@@ -5460,7 +5463,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                            color: statusColor.withOpacity(0.14),
+                            color: statusColor.withValues(alpha: 0.14),
                             borderRadius: BorderRadius.circular(8)),
                         child: Text(jaOrd ? 'JÃ¡ tirado' : 'A tirar',
                             style: TextStyle(
@@ -5519,7 +5522,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
               onPressed: () => _editarItemNaEscalas(context, e),
               tooltip: 'Editar',
               style: IconButton.styleFrom(
-                backgroundColor: AppColors.primary.withOpacity(0.1),
+                backgroundColor: AppColors.primary.withValues(alpha: 0.1),
                 minimumSize: const Size(40, 40),
                 padding: EdgeInsets.zero,
               ),
@@ -5563,7 +5566,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 10,
               offset: const Offset(0, 4))
         ],
@@ -5847,14 +5850,14 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           final isUltraCompact =
                               panelW <= 360 || textScale >= 1.15;
                           final isCompact = panelW < 420;
-                          final fsResumoSecTitulo =
-                              _scalesScreenFontSize(ctx, isUltraCompact ? 15 : 17.5);
+                          final fsResumoSecTitulo = _scalesScreenFontSize(
+                              ctx, isUltraCompact ? 15 : 17.5);
                           final fsResumoItemTitulo = _scalesScreenFontSize(
                               ctx, isUltraCompact ? 14.75 : 17);
                           final fsResumoValor = _scalesScreenFontSize(
                               ctx, isUltraCompact ? 13.5 : 15.5);
-                          final fsResumoHint =
-                              _scalesScreenFontSize(ctx, isUltraCompact ? 11 : 12);
+                          final fsResumoHint = _scalesScreenFontSize(
+                              ctx, isUltraCompact ? 11 : 12);
                           final spacing =
                               isUltraCompact ? 6.0 : (isCompact ? 7.0 : 8.0);
                           Widget rowPair(Widget a, Widget b) {
@@ -6095,7 +6098,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
                               RepaintBoundary(
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
                                   children: [
                                     btnMagicPeriodo,
                                     SizedBox(height: spacing),
@@ -6105,307 +6109,358 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                   ],
                                 ),
                               ),
-                      // Resumo do dia (cores por frente + valores); toque para selecionar quando hÃ¡ mais de um
-                      if (entries.isNotEmpty) ...[
-                        const SizedBox(height: 24),
-                        const Divider(height: 1),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    AppColors.primary.withValues(alpha: 0.12),
-                                    AppColors.accent.withValues(alpha: 0.08),
-                                  ],
-                                ),
-                                borderRadius: BorderRadius.circular(11),
-                                border: Border.all(
-                                  color:
-                                      AppColors.primary.withValues(alpha: 0.18),
-                                ),
-                              ),
-                              child: Icon(Icons.summarize_rounded,
-                                  size: isUltraCompact ? 19 : 22,
-                                  color: AppColors.primary
-                                      .withValues(alpha: 0.95)),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                'Resumo do dia',
-                                style: TextStyle(
-                                    fontSize: fsResumoSecTitulo,
-                                    fontWeight: FontWeight.w900,
-                                    color: AppColors.textPrimary,
-                                    letterSpacing: 0.12,
-                                    height: 1.2),
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (entries.length >= 2)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: Text(
-                              'Toque em um plantÃ£o para selecionar e usar Limpar ou Trocar nele.',
-                              style: TextStyle(
-                                  fontSize: fsResumoHint,
-                                  color: Colors.grey.shade600,
-                                  fontStyle: FontStyle.italic),
-                            ),
-                          ),
-                        const SizedBox(height: 12),
-                        ...entries.map((e) {
-                          final jaOrd = _jaTiradoOrdinarioDisplay(e);
-                          final cor =
-                              (e.colorHex != null && e.colorHex!.isNotEmpty)
-                                  ? e.color
-                                  : _corPorTipo(e);
-                          final valorStr = e.isCompromisso
-                              ? 'â€”'
-                              : CurrencyFormats.formatBRL(e.totalValue);
-                          final horas = e.hoursDay + e.hoursNight;
-                          final subtitulo = e.isCompromisso
-                              ? 'Compromisso'
-                              : (horas > 0
-                                  ? '${horas.toStringAsFixed(1)}h'
-                                  : 'Valor fixo');
-                          final isSelected = e.id != null && e.id == selectedId;
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: Material(
-                              color: isSelected
-                                  ? AppColors.primary.withOpacity(0.08)
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(12),
-                              child: InkWell(
-                                onTap: e.id == null
-                                    ? null
-                                    : () => selectedIdNotifier.value =
-                                        isSelected ? null : e.id,
-                                borderRadius: BorderRadius.circular(12),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      vertical: 8, horizontal: 8),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        width: 6,
-                                        height: isUltraCompact ? 44 : 48,
-                                        decoration: BoxDecoration(
-                                          color: cor,
-                                          borderRadius:
-                                              BorderRadius.circular(3),
-                                        ),
-                                      ),
-                                      if (entries.length >= 2) ...[
-                                        const SizedBox(width: 8),
-                                        Icon(
-                                            isSelected
-                                                ? Icons.check_circle_rounded
-                                                : Icons
-                                                    .radio_button_unchecked_rounded,
-                                            size: 22,
-                                            color: isSelected
-                                                ? AppColors.primary
-                                                : Colors.grey.shade400),
-                                      ],
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            scaleEntryResumoTitleText(
-                                              e,
-                                              fontSize: fsResumoItemTitulo,
-                                              color: const Color(0xFF1A237E),
-                                            ),
-                                            const SizedBox(height: 6),
-                                            Text(
-                                              scaleEntryDiaSemanaDataHorario(e),
-                                              style: scaleEntryResumoMetaTextStyle(
-                                                fontSize: isUltraCompact ? 12.5 : 13.5,
-                                                color: AppColors.primary,
-                                              ),
-                                            ),
-                                            ...scaleEntryResumoNumberLines(e).map(
-                                              (linha) => Padding(
-                                                padding: const EdgeInsets.only(top: 2),
-                                                child: Text(
-                                                  linha,
-                                                  style: TextStyle(
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.w700,
-                                                    color: const Color(0xFF1A237E),
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                            Text(
-                                              subtitulo,
-                                              style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: Colors.grey.shade600),
-                                            ),
-                                            _scaleNotesGridBlock(
-                                              e,
-                                              fontSize: 11,
-                                              showObsPrefix: true,
-                                            ),
+                              // Resumo do dia (cores por frente + valores); toque para selecionar quando hÃ¡ mais de um
+                              if (entries.isNotEmpty) ...[
+                                const SizedBox(height: 24),
+                                const Divider(height: 1),
+                                const SizedBox(height: 16),
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          colors: [
+                                            AppColors.primary
+                                                .withValues(alpha: 0.12),
+                                            AppColors.accent
+                                                .withValues(alpha: 0.08),
                                           ],
                                         ),
-                                      ),
-                                      Text(
-                                        valorStr,
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w900,
-                                          fontSize: fsResumoValor,
-                                          color: e.isCompromisso
-                                              ? Colors.grey
-                                              : (jaOrd
-                                                  ? Colors.green
-                                                  : Colors.orange.shade800),
+                                        borderRadius: BorderRadius.circular(11),
+                                        border: Border.all(
+                                          color: AppColors.primary
+                                              .withValues(alpha: 0.18),
                                         ),
                                       ),
-                                    ],
+                                      child: Icon(Icons.summarize_rounded,
+                                          size: isUltraCompact ? 19 : 22,
+                                          color: AppColors.primary
+                                              .withValues(alpha: 0.95)),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        'Resumo do dia',
+                                        style: TextStyle(
+                                            fontSize: fsResumoSecTitulo,
+                                            fontWeight: FontWeight.w900,
+                                            color: AppColors.textPrimary,
+                                            letterSpacing: 0.12,
+                                            height: 1.2),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (entries.length >= 2)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 6),
+                                    child: Text(
+                                      'Toque em um plantÃ£o para selecionar e usar Limpar ou Trocar nele.',
+                                      style: TextStyle(
+                                          fontSize: fsResumoHint,
+                                          color: Colors.grey.shade600,
+                                          fontStyle: FontStyle.italic),
+                                    ),
                                   ),
-                                ),
-                              ),
-                            ),
-                          );
-                        }),
-                        const SizedBox(height: 12),
-                        RepaintBoundary(
-                          child: FutureBuilder<
-                              ({double ate2359, double de0007, bool temSplit})>(
-                            future: _computeSplitDia(day, entries),
-                            builder: (context, snap) {
-                              final split = snap.data;
-                              final temSplit = split?.temSplit ?? false;
-                              return Container(
-                                padding: const EdgeInsets.symmetric(
-                                    vertical: 10, horizontal: 14),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary.withOpacity(0.08),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                      color:
-                                          AppColors.primary.withOpacity(0.25)),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: [
-                                    if (temSplit && split != null) ...[
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text('AtÃ© 23:59 (padrÃ£o GO)',
-                                              style: TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: Colors.grey.shade800)),
-                                          Text(
-                                              CurrencyFormats.formatBRL(
-                                                  split.ate2359),
-                                              style: const TextStyle(
-                                                  fontWeight: FontWeight.w800,
-                                                  fontSize: 14,
-                                                  color: Color(0xFF1A237E))),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text('00h Ã s 07h (prÃ³x. dia)',
-                                              style: TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: Colors.grey.shade800)),
-                                          Text(
-                                              CurrencyFormats.formatBRL(
-                                                  split.de0007),
-                                              style: TextStyle(
-                                                  fontWeight: FontWeight.w800,
-                                                  fontSize: 14,
-                                                  color:
-                                                      Colors.indigo.shade700)),
-                                        ],
-                                      ),
-                                      if (_isLastDayOfMonth(day) &&
-                                          split.de0007 > 0) ...[
-                                        const SizedBox(height: 8),
-                                        Container(
-                                          padding: const EdgeInsets.all(8),
-                                          decoration: BoxDecoration(
-                                            color: Colors.indigo.shade50,
-                                            borderRadius:
-                                                BorderRadius.circular(8),
-                                            border: Border.all(
-                                                color: Colors.indigo.shade200),
-                                          ),
+                                const SizedBox(height: 12),
+                                ...entries.map((e) {
+                                  final jaOrd = _jaTiradoOrdinarioDisplay(e);
+                                  final cor = (e.colorHex != null &&
+                                          e.colorHex!.isNotEmpty)
+                                      ? e.color
+                                      : _corPorTipo(e);
+                                  final valorStr = e.isCompromisso
+                                      ? 'â€”'
+                                      : CurrencyFormats.formatBRL(e.totalValue);
+                                  final horas = e.hoursDay + e.hoursNight;
+                                  final subtitulo = e.isCompromisso
+                                      ? 'Compromisso'
+                                      : (horas > 0
+                                          ? '${horas.toStringAsFixed(1)}h'
+                                          : 'Valor fixo');
+                                  final isSelected =
+                                      e.id != null && e.id == selectedId;
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 10),
+                                    child: Material(
+                                      color: isSelected
+                                          ? AppColors.primary
+                                              .withValues(alpha: 0.08)
+                                          : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: InkWell(
+                                        onTap: e.id == null
+                                            ? null
+                                            : () => selectedIdNotifier.value =
+                                                isSelected ? null : e.id,
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 8, horizontal: 8),
                                           child: Row(
                                             children: [
-                                              Icon(Icons.info_outline_rounded,
-                                                  size: 14,
-                                                  color:
-                                                      Colors.indigo.shade700),
-                                              const SizedBox(width: 8),
+                                              Container(
+                                                width: 6,
+                                                height:
+                                                    isUltraCompact ? 44 : 48,
+                                                decoration: BoxDecoration(
+                                                  color: cor,
+                                                  borderRadius:
+                                                      BorderRadius.circular(3),
+                                                ),
+                                              ),
+                                              if (entries.length >= 2) ...[
+                                                const SizedBox(width: 8),
+                                                Icon(
+                                                    isSelected
+                                                        ? Icons
+                                                            .check_circle_rounded
+                                                        : Icons
+                                                            .radio_button_unchecked_rounded,
+                                                    size: 22,
+                                                    color: isSelected
+                                                        ? AppColors.primary
+                                                        : Colors.grey.shade400),
+                                              ],
+                                              const SizedBox(width: 12),
                                               Expanded(
-                                                child: Text(
-                                                  'O valor referente ao horÃ¡rio 00h00 Ã s 07h ficarÃ¡ para o prÃ³ximo mÃªs.',
-                                                  style: TextStyle(
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    scaleEntryResumoTitleText(
+                                                      e,
+                                                      fontSize:
+                                                          fsResumoItemTitulo,
+                                                      color: const Color(
+                                                          0xFF1A237E),
+                                                    ),
+                                                    const SizedBox(height: 6),
+                                                    Text(
+                                                      scaleEntryDiaSemanaDataHorario(
+                                                          e),
+                                                      style:
+                                                          scaleEntryResumoMetaTextStyle(
+                                                        fontSize: isUltraCompact
+                                                            ? 12.5
+                                                            : 13.5,
+                                                        color:
+                                                            AppColors.primary,
+                                                      ),
+                                                    ),
+                                                    ...scaleEntryResumoNumberLines(
+                                                            e)
+                                                        .map(
+                                                      (linha) => Padding(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .only(top: 2),
+                                                        child: Text(
+                                                          linha,
+                                                          style: TextStyle(
+                                                            fontSize: 11,
+                                                            fontWeight:
+                                                                FontWeight.w700,
+                                                            color: const Color(
+                                                                0xFF1A237E),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      subtitulo,
+                                                      style: TextStyle(
+                                                          fontSize: 12,
+                                                          color: Colors
+                                                              .grey.shade600),
+                                                    ),
+                                                    _scaleNotesGridBlock(
+                                                      e,
                                                       fontSize: 11,
-                                                      color: Colors
-                                                          .indigo.shade800),
+                                                      showObsPrefix: true,
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              Text(
+                                                valorStr,
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w900,
+                                                  fontSize: fsResumoValor,
+                                                  color: e.isCompromisso
+                                                      ? Colors.grey
+                                                      : (jaOrd
+                                                          ? Colors.green
+                                                          : Colors
+                                                              .orange.shade800),
                                                 ),
                                               ),
                                             ],
                                           ),
                                         ),
-                                      ] else ...[
-                                        const SizedBox(height: 6),
-                                        Text(
-                                          'Banco de Horas: 05h Ã s 22h (diurno); 22h01 Ã s 05h (noturno).',
-                                          style: TextStyle(
-                                              fontSize: 10,
-                                              color: Colors.grey.shade600),
-                                        ),
-                                      ],
-                                      const Divider(height: 16),
-                                    ],
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        const Text('Total do dia',
-                                            style: TextStyle(
-                                                fontWeight: FontWeight.w800,
-                                                fontSize: 14,
-                                                color: Color(0xFF1A237E))),
-                                        Text(
-                                          CurrencyFormats.formatBRL(totalDia),
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.w900,
-                                              fontSize: 16,
-                                              color: Color(0xFF1A237E)),
-                                        ),
-                                      ],
+                                      ),
                                     ),
-                                  ],
+                                  );
+                                }),
+                                const SizedBox(height: 12),
+                                RepaintBoundary(
+                                  child: FutureBuilder<
+                                      ({
+                                        double ate2359,
+                                        double de0007,
+                                        bool temSplit
+                                      })>(
+                                    future: _computeSplitDia(day, entries),
+                                    builder: (context, snap) {
+                                      final split = snap.data;
+                                      final temSplit = split?.temSplit ?? false;
+                                      return Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 10, horizontal: 14),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primary
+                                              .withValues(alpha: 0.08),
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          border: Border.all(
+                                              color: AppColors.primary
+                                                  .withValues(alpha: 0.25)),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: [
+                                            if (temSplit && split != null) ...[
+                                              Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment
+                                                        .spaceBetween,
+                                                children: [
+                                                  Text(
+                                                      'AtÃ© 23:59 (padrÃ£o GO)',
+                                                      style: TextStyle(
+                                                          fontSize: 12,
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                          color: Colors
+                                                              .grey.shade800)),
+                                                  Text(
+                                                      CurrencyFormats.formatBRL(
+                                                          split.ate2359),
+                                                      style: const TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.w800,
+                                                          fontSize: 14,
+                                                          color: Color(
+                                                              0xFF1A237E))),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 6),
+                                              Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment
+                                                        .spaceBetween,
+                                                children: [
+                                                  Text(
+                                                      '00h Ã s 07h (prÃ³x. dia)',
+                                                      style: TextStyle(
+                                                          fontSize: 12,
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                          color: Colors
+                                                              .grey.shade800)),
+                                                  Text(
+                                                      CurrencyFormats.formatBRL(
+                                                          split.de0007),
+                                                      style: TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.w800,
+                                                          fontSize: 14,
+                                                          color: Colors.indigo
+                                                              .shade700)),
+                                                ],
+                                              ),
+                                              if (_isLastDayOfMonth(day) &&
+                                                  split.de0007 > 0) ...[
+                                                const SizedBox(height: 8),
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.all(8),
+                                                  decoration: BoxDecoration(
+                                                    color:
+                                                        Colors.indigo.shade50,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            8),
+                                                    border: Border.all(
+                                                        color: Colors
+                                                            .indigo.shade200),
+                                                  ),
+                                                  child: Row(
+                                                    children: [
+                                                      Icon(
+                                                          Icons
+                                                              .info_outline_rounded,
+                                                          size: 14,
+                                                          color: Colors
+                                                              .indigo.shade700),
+                                                      const SizedBox(width: 8),
+                                                      Expanded(
+                                                        child: Text(
+                                                          'O valor referente ao horÃ¡rio 00h00 Ã s 07h ficarÃ¡ para o prÃ³ximo mÃªs.',
+                                                          style: TextStyle(
+                                                              fontSize: 11,
+                                                              color: Colors
+                                                                  .indigo
+                                                                  .shade800),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ] else ...[
+                                                const SizedBox(height: 6),
+                                                Text(
+                                                  'Banco de Horas: 05h Ã s 22h (diurno); 22h01 Ã s 05h (noturno).',
+                                                  style: TextStyle(
+                                                      fontSize: 10,
+                                                      color:
+                                                          Colors.grey.shade600),
+                                                ),
+                                              ],
+                                              const Divider(height: 16),
+                                            ],
+                                            Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
+                                              children: [
+                                                const Text('Total do dia',
+                                                    style: TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                        fontSize: 14,
+                                                        color:
+                                                            Color(0xFF1A237E))),
+                                                Text(
+                                                  CurrencyFormats.formatBRL(
+                                                      totalDia),
+                                                  style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w900,
+                                                      fontSize: 16,
+                                                      color: Color(0xFF1A237E)),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
                                 ),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
+                              ],
                             ],
                           );
                         },
@@ -7149,8 +7204,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
     var isCompromisso = e.isCompromisso;
     var semFinanceiro = e.isCompromisso || e.totalValue <= 0;
     var selectedColorHex = (e.colorHex ?? '#2D5BFF').replaceFirst('0xFF', '#');
-    if (!selectedColorHex.startsWith('#'))
+    if (!selectedColorHex.startsWith('#')) {
       selectedColorHex = '#$selectedColorHex';
+    }
     final scaleNumberCtrl = TextEditingController(
       text: scalePlantaoNumberFromEntry(e),
     );
@@ -7541,7 +7597,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
     final nome = nomeCtrl.text.trim().toUpperCase();
     if (nome.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Informe o nome do compromisso/plantÃ£o.')),
+        const SnackBar(
+            content: Text('Informe o nome do compromisso/plantÃ£o.')),
       );
       return;
     }
@@ -7642,10 +7699,11 @@ class _ScalesScreenState extends State<ScalesScreen> {
         ..['reminderLeads'] = FieldValue.delete()
         ..['notificationSoundId'] = FieldValue.delete()
         ..['notificationDeliveryMode'] = FieldValue.delete();
-      final afterPlan = Map<String, dynamic>.from(beforeData)..addAll(updateMap);
+      final afterPlan = Map<String, dynamic>.from(beforeData)
+        ..addAll(updateMap);
       final deliveryReset = AgendaDeliveryReset.scaleScheduleChanged(
-            beforeData, dataEscala, start) ||
-        AgendaDeliveryReset.scaleNotifyPlanChanged(beforeData, afterPlan);
+              beforeData, dataEscala, start) ||
+          AgendaDeliveryReset.scaleNotifyPlanChanged(beforeData, afterPlan);
       if (deliveryReset) {
         updateMap.addAll(
           AgendaDeliveryReset.clearDeliveryFields(includeScaleNotificado: true),
@@ -7798,14 +7856,16 @@ class _ScalesScreenState extends State<ScalesScreen> {
                   if (e.id == null) return;
                   try {
                     await _scales.doc(e.id).update({'paid': false});
-                    if (mounted)
+                    if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                           content: Text('Marcado como pendente.')));
+                    }
                   } catch (err) {
-                    if (mounted)
+                    if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                           content: Text(
                               'Erro: ${err.toString().split('\n').first}')));
+                    }
                   }
                 },
               )
@@ -7871,14 +7931,16 @@ class _ScalesScreenState extends State<ScalesScreen> {
                   try {
                     await _removeAutoLancamentoBySourceId(e.id!);
                     await _syncDeleteScaleEntry(e, dialogContext: context);
-                    if (mounted)
+                    if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('PlantÃ£o excluÃ­do.')));
+                    }
                   } catch (err) {
-                    if (mounted)
+                    if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                           content: Text(
                               'Erro ao excluir: ${err.toString().split('\n').first}')));
+                    }
                   }
                 }
               },
@@ -7915,14 +7977,16 @@ class _ScalesScreenState extends State<ScalesScreen> {
     Navigator.pop(sheetContext);
     try {
       await _scales.doc(e.id).update({'paid': true});
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('ServiÃ§o confirmado como realizado.')));
+      }
       setState(() {});
     } catch (err) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('Erro: ${err.toString().split('\n').first}')));
+      }
     }
   }
 
@@ -8201,8 +8265,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
       }
 
       final ids = docs.map((d) => d.id).toList();
-      final plantaoIds =
-          ids.where((id) => !id.startsWith('agenda_')).toList();
+      final plantaoIds = ids.where((id) => !id.startsWith('agenda_')).toList();
       if (plantaoIds.isNotEmpty) {
         await _removeAutoLancamentosBySourceIds(plantaoIds);
       }
@@ -8272,9 +8335,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
                         firstDate: DateTime(2020),
                         lastDate: DateTime(2030, 12, 31),
                       );
-                      if (picked != null)
+                      if (picked != null) {
                         setState(() => dataInicial =
                             DateTime(picked.year, picked.month, picked.day));
+                      }
                     },
                   ),
                   const SizedBox(height: 16),
@@ -8292,9 +8356,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
                         firstDate: DateTime(2020),
                         lastDate: DateTime(2030, 12, 31),
                       );
-                      if (picked != null)
+                      if (picked != null) {
                         setState(() => dataFinal =
                             DateTime(picked.year, picked.month, picked.day));
+                      }
                     },
                   ),
                 ],
@@ -8338,9 +8403,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
                       ],
                     ),
                   );
-                  if (confirm == true)
+                  if (confirm == true) {
                     await _executarLimpeza(
                         periodoInicio: inicio, periodoFim: fim);
+                  }
                 },
                 child: const Text('Limpar perÃ­odo'),
               ),
@@ -8468,16 +8534,17 @@ class _ScalesScreenState extends State<ScalesScreen> {
                   'Ainda existem lanÃ§amentos no perÃ­odo no banco. Tente remover novamente.')));
         } else {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content:
-                  Text('$msg RemoÃ§Ã£o concluÃ­da no banco e no calendÃ¡rio.')));
+              content: Text(
+                  '$msg RemoÃ§Ã£o concluÃ­da no banco e no calendÃ¡rio.')));
         }
         _refreshCalendarView();
       }
     } catch (err) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content:
                 Text('Erro ao limpar: ${err.toString().split('\n').first}')));
+      }
     }
   }
 
@@ -8706,18 +8773,14 @@ class _ScalesScreenState extends State<ScalesScreen> {
       double dayRate = 0, nightRate = 0;
       // Calcular valor SOMENTE se prÃ©-cadastro tiver financeiro ativado (Estado, MunicÃ­pio ou Particular).
       // Se financeiro nÃ£o estÃ¡ ativado no prÃ©-cadastro, tratar como compromisso (sem valor).
-      final financeiroAtivo = location != null && location!.financialEnabled;
+      final financeiroAtivo = location != null && location.financialEnabled;
       final considerarValor = !isCompromisso && financeiroAtivo;
       final isParticularValorFixo = considerarValor &&
-          location != null &&
-          location!.employerType == EmployerType.private &&
-          (location!.paymentType == PaymentType.fixed ||
-              location!.baseValue > 0);
+          location.employerType == EmployerType.private &&
+          (location.paymentType == PaymentType.fixed || location.baseValue > 0);
       if (considerarValor) {
-        if (isParticularValorFixo &&
-            location != null &&
-            location!.baseValue > 0) {
-          totalValue = location!.baseValue;
+        if (isParticularValorFixo && location.baseValue > 0) {
+          totalValue = location.baseValue;
         } else {
           final res = await ScaleRatesService().computeShiftForUid(
             uid: _userDocId,
@@ -8738,7 +8801,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
       }
       // Armazenar como compromisso quando nÃ£o hÃ¡ valor (compromisso explÃ­cito ou prÃ©-cadastro sem financeiro)
       final isCompromissoEntry =
-          isCompromisso || (location != null && !location!.financialEnabled);
+          isCompromisso || (location != null && !location.financialEnabled);
       final hoje = DateTime(
           DateTime.now().year, DateTime.now().month, DateTime.now().day);
       final isRetroativo = d.isBefore(hoje);
@@ -8792,7 +8855,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
           nome: nome,
           abbreviation: abbrev.isNotEmpty ? abbrev : null,
           colorHex: colorHex.startsWith('#') ? colorHex : '#$colorHex',
-          employerType: location?.employerType.name ?? 'state',
+          employerType: location.employerType.name ?? 'state',
         ));
       }
     }
@@ -8846,13 +8909,15 @@ class _ScalesScreenState extends State<ScalesScreen> {
           msg =
               '$plantoes ${plantoes == 1 ? 'plantÃ£o' : 'plantÃµes'} gerados.';
         }
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(msg)));
         setState(() {});
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('Erro ao gerar: ${e.toString().split('\n').first}')));
+      }
     }
   }
 
@@ -9055,7 +9120,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                         width: double.infinity,
                                         child: _magicGradientChoice(
                                           selected: !gerarComoCompromisso,
-                                          label: 'PlantÃ£o (lista de plantÃµes recorrentes)',
+                                          label:
+                                              'PlantÃ£o (lista de plantÃµes recorrentes)',
                                           icon: Icons.bolt_rounded,
                                           onTap: () => setModalState(() =>
                                               gerarComoCompromisso = false),
@@ -9095,7 +9161,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                       Expanded(
                                         child: _magicGradientChoice(
                                           selected: !gerarComoCompromisso,
-                                          label: 'PlantÃ£o (lista de plantÃµes recorrentes)',
+                                          label:
+                                              'PlantÃ£o (lista de plantÃµes recorrentes)',
                                           icon: Icons.bolt_rounded,
                                           onTap: () => setModalState(() =>
                                               gerarComoCompromisso = false),
@@ -9539,7 +9606,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                     ),
                                   ),
                                 ] else ...[
-                                  const Text('PlantÃ£o (obrigatÃ³rio para valor)',
+                                  const Text(
+                                      'PlantÃ£o (obrigatÃ³rio para valor)',
                                       style: TextStyle(
                                           fontWeight: FontWeight.w700)),
                                   const SizedBox(height: 6),
@@ -9716,8 +9784,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                         final setDias =
                                             await _showExpedienteDiasSemanaDialog(
                                                 ctx, expedienteDiasSemana);
-                                        if (!ctx.mounted || setDias == null)
+                                        if (!ctx.mounted || setDias == null) {
                                           return;
+                                        }
                                         setModalState(() =>
                                             expedienteDiasSemana = setDias);
                                       },
@@ -9768,15 +9837,15 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                           end: Alignment.bottomRight,
                                           colors: [
                                             const Color(0xFF4F46E5)
-                                                .withOpacity(0.92),
+                                                .withValues(alpha: 0.92),
                                             const Color(0xFF7C3AED)
-                                                .withOpacity(0.88),
+                                                .withValues(alpha: 0.88),
                                           ],
                                         ),
                                         boxShadow: [
                                           BoxShadow(
                                             color: const Color(0xFF4F46E5)
-                                                .withOpacity(0.35),
+                                                .withValues(alpha: 0.35),
                                             blurRadius: 12,
                                             offset: const Offset(0, 4),
                                           ),
@@ -9791,7 +9860,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                               padding: const EdgeInsets.all(8),
                                               decoration: BoxDecoration(
                                                 color: Colors.white
-                                                    .withOpacity(0.2),
+                                                    .withValues(alpha: 0.2),
                                                 borderRadius:
                                                     BorderRadius.circular(12),
                                               ),
@@ -9851,7 +9920,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                                     'PlantÃ£o a cada N dias corridos a partir do dia inicial (ex.: 2, 3, 8â€¦).',
                                                     style: TextStyle(
                                                         color: Colors.white
-                                                            .withOpacity(0.9),
+                                                            .withValues(
+                                                                alpha: 0.9),
                                                         fontSize: 12),
                                                   ),
                                                 ],
@@ -9900,7 +9970,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                           });
                                         },
                                         selectedColor: const Color(0xFF4F46E5)
-                                            .withOpacity(0.2),
+                                            .withValues(alpha: 0.2),
                                         checkmarkColor: const Color(0xFF4F46E5),
                                       );
                                     }).toList(),
@@ -10007,15 +10077,16 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                         selected: sel,
                                         onSelected: (_) {
                                           setModalState(() {
-                                            if (sel)
+                                            if (sel) {
                                               diasDaSemanaSelecionados
                                                   .remove(w);
-                                            else
+                                            } else {
                                               diasDaSemanaSelecionados.add(w);
+                                            }
                                           });
                                         },
-                                        selectedColor:
-                                            AppColors.primary.withOpacity(0.2),
+                                        selectedColor: AppColors.primary
+                                            .withValues(alpha: 0.2),
                                       );
                                     }).toList(),
                                   ),
@@ -10213,7 +10284,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          Text('Dia em que seu plantÃ£o comeÃ§a',
+                                          Text(
+                                              'Dia em que seu plantÃ£o comeÃ§a',
                                               style: TextStyle(
                                                   fontSize: 11,
                                                   fontWeight: FontWeight.w600,
@@ -10229,9 +10301,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                                               DateTime.now(),
                                                       firstDate: DateTime(2020),
                                                       lastDate: DateTime(2030));
-                                              if (d != null)
+                                              if (d != null) {
                                                 setModalState(
                                                     () => dataInicioPer = d);
+                                              }
                                             },
                                             icon: const Icon(
                                                 Icons
@@ -10284,9 +10357,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                                           lastDate,
                                                       firstDate: ini,
                                                       lastDate: lastDate);
-                                              if (d != null)
+                                              if (d != null) {
                                                 setModalState(
                                                     () => dataFimPer = d);
+                                              }
                                             },
                                             icon: const Icon(
                                                 Icons.calendar_today_rounded,
@@ -10375,8 +10449,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                           dataFimPer == null) {
                                         ScaffoldMessenger.of(context)
                                             .showSnackBar(const SnackBar(
-                                                content:
-                                                    Text('Defina o perÃ­odo.')));
+                                                content: Text(
+                                                    'Defina o perÃ­odo.')));
                                         return;
                                       }
                                       if (regime == 'DiaSemana' &&
@@ -10482,7 +10556,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                               : diaSemanaStartCtrl.text.trim())
                                           : (locSelecionada?.startTime ??
                                               startStr);
-                                      final endStrGerarRaw = regime == 'DiaSemana'
+                                      final endStrGerarRaw = regime ==
+                                              'DiaSemana'
                                           ? (diaSemanaEndCtrl.text
                                                   .trim()
                                                   .isEmpty
@@ -10766,10 +10841,11 @@ class _ScalesScreenState extends State<ScalesScreen> {
         }
         countPlantoes++;
       } catch (e) {
-        if (mounted)
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
               content:
                   Text('Erro ao gerar: ${e.toString().split('\n').first}')));
+        }
         return;
       }
     }
@@ -10816,7 +10892,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
 
   /// Horas diurnas/noturnas para PDF: usa valores gravados na escala ou recalcula pelo turno.
   (double hd, double hn) _hoursDayNightForPdfEntry(
-      ScaleEntry e, ScaleRates rates, {bool goiasPerServiceDay = false}) {
+      ScaleEntry e, ScaleRates rates,
+      {bool goiasPerServiceDay = false}) {
     if (e.hoursDay > 0 || e.hoursNight > 0) {
       return (e.hoursDay, e.hoursNight);
     }
@@ -11005,11 +11082,12 @@ class _ScalesScreenState extends State<ScalesScreen> {
     for (final e in _allEntries) {
       if (e.date.isBefore(
               DateTime(dataInicio.year, dataInicio.month, dataInicio.day)) ||
-          e.date.isAfter(DateTime(dataFim.year, dataFim.month, dataFim.day)))
+          e.date.isAfter(DateTime(dataFim.year, dataFim.month, dataFim.day))) {
         continue;
+      }
 
-      final (hdRow, hnRow) = _hoursDayNightForPdfEntry(e, rates,
-          goiasPerServiceDay: goiasPerDay);
+      final (hdRow, hnRow) =
+          _hoursDayNightForPdfEntry(e, rates, goiasPerServiceDay: goiasPerDay);
       hdT += hdRow;
       hnT += hnRow;
       if (e.effectiveJaTiradoParaExibicao(hojePdf)) {
@@ -11096,10 +11174,11 @@ class _ScalesScreenState extends State<ScalesScreen> {
       // Escalas sem valor: exibir R$ 0,00 no PDF.
       final valorStr =
           valorMes == 0 ? 'R\$ 0,00' : CurrencyFormats.formatBRL(valorMes);
-      if (e.paid)
+      if (e.paid) {
         totalRecebido += valorMes;
-      else
+      } else {
         totalPendente += valorMes;
+      }
       linhasPdfCat.add({
         'isCompromisso': false,
         'temFinanceiro': e.temFinanceiroHabilitadoNoPainel,
@@ -11236,7 +11315,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
               ),
               title: const Text(
                 'Configurar PlantÃ£o',
-                style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.2),
+                style:
+                    TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.2),
               ),
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back_rounded),
@@ -11246,998 +11326,1041 @@ class _ScalesScreenState extends State<ScalesScreen> {
             ),
             body: StatefulBuilder(
               builder: (ctx, setModalState) {
-            if (!ratesLoaded) {
-              ratesLoaded = true;
-              ScaleRatesService()
-                  .getRatesForServiceDay(_userDocId, dataEscala)
-                  .then((r) {
-                if (ctx.mounted) setModalState(() => ratesCache = r);
-              });
-            }
-            // Valor estimado: PadrÃ£o GO com dia + hora inicial/final
-            DateTime startDt = DateTime(dataEscala.year, dataEscala.month,
-                dataEscala.day, horaInicial.hour, horaInicial.minute);
-            DateTime endDt = DateTime(dataEscala.year, dataEscala.month,
-                dataEscala.day, horaFinal.hour, horaFinal.minute);
-            if (endDt.isBefore(startDt) || endDt.isAtSameMomentAs(startDt))
-              endDt = endDt.add(const Duration(days: 1));
-            final estKey =
-                '${dataEscala.toIso8601String()}_${horaInicial.hour}:${horaInicial.minute}_${horaFinal.hour}:${horaFinal.minute}_$tipoCalculo';
-            if (estimateKey != estKey &&
-                !isCompromisso &&
-                controleFinanceiroAtivo &&
-                (employerTypeConfig != 'private' ||
-                    tipoCalculo == 'PadrÃ£o GO')) {
-              estimateKey = estKey;
-              ScaleRatesService()
-                  .computeShiftForUid(
+                if (!ratesLoaded) {
+                  ratesLoaded = true;
+                  ScaleRatesService()
+                      .getRatesForServiceDay(_userDocId, dataEscala)
+                      .then((r) {
+                    if (ctx.mounted) setModalState(() => ratesCache = r);
+                  });
+                }
+                // Valor estimado: PadrÃ£o GO com dia + hora inicial/final
+                DateTime startDt = DateTime(dataEscala.year, dataEscala.month,
+                    dataEscala.day, horaInicial.hour, horaInicial.minute);
+                DateTime endDt = DateTime(dataEscala.year, dataEscala.month,
+                    dataEscala.day, horaFinal.hour, horaFinal.minute);
+                if (endDt.isBefore(startDt) ||
+                    endDt.isAtSameMomentAs(startDt)) {
+                  endDt = endDt.add(const Duration(days: 1));
+                }
+                final estKey =
+                    '${dataEscala.toIso8601String()}_${horaInicial.hour}:${horaInicial.minute}_${horaFinal.hour}:${horaFinal.minute}_$tipoCalculo';
+                if (estimateKey != estKey &&
+                    !isCompromisso &&
+                    controleFinanceiroAtivo &&
+                    (employerTypeConfig != 'private' ||
+                        tipoCalculo == 'PadrÃ£o GO')) {
+                  estimateKey = estKey;
+                  ScaleRatesService()
+                      .computeShiftForUid(
                     uid: _userDocId,
                     start: startDt,
                     end: endDt,
                     entryDate: dataEscala,
                   )
-                  .then((r) {
-                if (ctx.mounted) setModalState(() => estimateRes = r);
-              });
-            }
-            final res = estimateRes;
-            final valorEstimado = (res?['total'] ?? 0.0);
-            final hoursDay = (res?['hoursDay'] ?? 0.0);
-            final hoursNight = (res?['hoursNight'] ?? 0.0);
+                      .then((r) {
+                    if (ctx.mounted) setModalState(() => estimateRes = r);
+                  });
+                }
+                final res = estimateRes;
+                final valorEstimado = (res?['total'] ?? 0.0);
+                final hoursDay = (res?['hoursDay'] ?? 0.0);
+                final hoursNight = (res?['hoursNight'] ?? 0.0);
 
-            final sheetSafeBottomForm = MediaQuery.paddingOf(ctx).bottom + 25;
-            return KeyboardViewInsetPad(
-              left: 25,
-              right: 25,
-              top: 12,
-              bottom: sheetSafeBottomForm,
-              child: SingleChildScrollView(
-                child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 6),
-                      const Text(
-                          'PlantÃ£o com valor: busque na lista de plantÃµes recorrentes. Compromisso particular: marque a opÃ§Ã£o abaixo e salve.',
-                          style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF1A237E))),
-                      const SizedBox(height: 10),
-                      if (_locations.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Text(
-                                  'Nenhum plantÃ£o na lista de plantÃµes recorrentes. Crie o primeiro para depois escolher aqui.',
-                                  style: TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.grey.shade700)),
-                              const SizedBox(height: 12),
-                              OutlinedButton.icon(
-                                onPressed: () async {
-                                  final ok = await Navigator.of(ctx).push<bool>(
-                                      MaterialPageRoute(
-                                          builder: (_) => EditLocationScreen(
-                                              uid: _userDocId)));
-                                  if (ok == true && mounted) {
-                                    await _loadLocations();
-                                    setModalState(() {});
+                final sheetSafeBottomForm =
+                    MediaQuery.paddingOf(ctx).bottom + 25;
+                return KeyboardViewInsetPad(
+                  left: 25,
+                  right: 25,
+                  top: 12,
+                  bottom: sheetSafeBottomForm,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 6),
+                        const Text(
+                            'PlantÃ£o com valor: busque na lista de plantÃµes recorrentes. Compromisso particular: marque a opÃ§Ã£o abaixo e salve.',
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF1A237E))),
+                        const SizedBox(height: 10),
+                        if (_locations.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Text(
+                                    'Nenhum plantÃ£o na lista de plantÃµes recorrentes. Crie o primeiro para depois escolher aqui.',
+                                    style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.grey.shade700)),
+                                const SizedBox(height: 12),
+                                OutlinedButton.icon(
+                                  onPressed: () async {
+                                    final ok = await Navigator.of(ctx)
+                                        .push<bool>(MaterialPageRoute(
+                                            builder: (_) => EditLocationScreen(
+                                                uid: _userDocId)));
+                                    if (ok == true && mounted) {
+                                      await _loadLocations();
+                                      setModalState(() {});
+                                    }
+                                  },
+                                  icon: const Icon(Icons.add_rounded),
+                                  label: const Text(
+                                      'Criar primeiro plantÃ£o na lista de plantÃµes recorrentes'),
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 14),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(14)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: OutlinedButton.icon(
+                              onPressed: () async {
+                                final loc =
+                                    await showModalBottomSheet<ShiftLocation>(
+                                  context: ctx,
+                                  useSafeArea: true,
+                                  useRootNavigator: true,
+                                  barrierColor: Colors.black54,
+                                  shape: const RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.vertical(
+                                          top: Radius.circular(24))),
+                                  builder: (_) => DraggableScrollableSheet(
+                                    initialChildSize: 0.5,
+                                    expand: false,
+                                    builder: (__, scrollController) => ListView(
+                                      controller: scrollController,
+                                      padding: const EdgeInsets.all(20),
+                                      children: [
+                                        const Text(
+                                            'Buscar na lista de plantÃµes recorrentes',
+                                            style: TextStyle(
+                                                fontSize: 18,
+                                                fontWeight: FontWeight.w700)),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                            'Escolha um plantÃ£o para preencher os dados automaticamente. Depois, basta marcar a data.',
+                                            style: TextStyle(
+                                                fontSize: 13,
+                                                color: Colors.grey.shade600)),
+                                        const SizedBox(height: 16),
+                                        ..._locations.map((l) => ListTile(
+                                              leading: Container(
+                                                width: 40,
+                                                height: 40,
+                                                decoration: BoxDecoration(
+                                                  color: l.color,
+                                                  borderRadius:
+                                                      BorderRadius.circular(10),
+                                                  border: Border.all(
+                                                    color: l.color.withValues(
+                                                        alpha: 0.95),
+                                                  ),
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: l.color.withValues(
+                                                          alpha: 0.35),
+                                                      blurRadius: 6,
+                                                      offset:
+                                                          const Offset(0, 2),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              title: Text(l.name),
+                                              subtitle: Text(
+                                                  '${ShiftLocation.employerTypeLabel(l.employerType)} Â· ${l.startTime} - ${l.endTime}'),
+                                              onTap: () => Navigator.pop(_, l),
+                                            )),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                                if (loc != null && ctx.mounted) {
+                                  nomeCtrl.text =
+                                      ShiftLocation.fullNameWithSchedule(
+                                          loc.name, loc.startTime, loc.endTime);
+                                  employerTypeConfig = loc.employerType.name;
+                                  controleFinanceiroAtivo =
+                                      loc.financialEnabled;
+                                  isCompromisso = !loc.financialEnabled;
+                                  // Particular + valor fixo: reconhecer por paymentType.fixed OU baseValue > 0 (evita nÃ£o calcular)
+                                  final isParticularComValorFixo = loc
+                                              .employerType ==
+                                          EmployerType.private &&
+                                      (loc.paymentType == PaymentType.fixed ||
+                                          loc.baseValue > 0);
+                                  tipoCalculo = isParticularComValorFixo
+                                      ? 'Personalizado'
+                                      : 'PadrÃ£o GO';
+                                  if (isParticularComValorFixo &&
+                                      loc.baseValue > 0) {
+                                    valorPersonalizadoCtrl.text =
+                                        CurrencyFormats.formatBRLInput(
+                                            loc.baseValue);
                                   }
-                                },
-                                icon: const Icon(Icons.add_rounded),
-                                label: const Text(
-                                    'Criar primeiro plantÃ£o na lista de plantÃµes recorrentes'),
-                                style: OutlinedButton.styleFrom(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 14),
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(14)),
+                                  final startParts = loc.startTime.split(':');
+                                  final endParts = loc.endTime.split(':');
+                                  horaInicial = TimeOfDay(
+                                      hour: int.tryParse(startParts.first) ?? 8,
+                                      minute: startParts.length > 1
+                                          ? int.tryParse(startParts[1]) ?? 0
+                                          : 0);
+                                  horaFinal = TimeOfDay(
+                                      hour: int.tryParse(endParts.first) ?? 18,
+                                      minute: endParts.length > 1
+                                          ? int.tryParse(endParts[1]) ?? 0
+                                          : 0);
+                                  final hIni = horaInicial.hour;
+                                  final noturnoInicio =
+                                      (hIni >= 22 || hIni < 6);
+                                  String locHex = loc.colorHex
+                                      .replaceFirst(
+                                          RegExp(r'^0x', caseSensitive: false),
+                                          '')
+                                      .replaceFirst('#', '');
+                                  if (locHex.length > 6) {
+                                    locHex =
+                                        locHex.substring(locHex.length - 6);
+                                  }
+                                  preCadastroDiurnoHex6 =
+                                      noturnoInicio ? null : locHex;
+                                  selectedColorHex =
+                                      noturnoInicio ? _hexNoturno : locHex;
+                                  selecionouPreCadastro = true;
+                                  setModalState(() {});
+                                }
+                              },
+                              icon: const Icon(Icons.search_rounded, size: 20),
+                              label: const Text(
+                                  'Buscar na lista de plantÃµes recorrentes'),
+                              style: OutlinedButton.styleFrom(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14)),
+                              ),
+                            ),
+                          ),
+                        const SizedBox(height: 4),
+                        SwitchListTile(
+                          title: const Text(
+                              'Ativar controle financeiro das horas'),
+                          subtitle: const Text(
+                              'Ative para calcular e registrar o valor (Estado/MunicÃ­pio: PadrÃ£o GO; Particular: valor combinado).'),
+                          value: controleFinanceiroAtivo,
+                          onChanged: (v) =>
+                              setModalState(() => controleFinanceiroAtivo = v),
+                          activeThumbColor: Colors.green,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                        if (controleFinanceiroAtivo && !isCompromisso) ...[
+                          const SizedBox(height: 12),
+                          const Text('VÃ­nculo',
+                              style: TextStyle(fontWeight: FontWeight.w600)),
+                          Text(
+                              'Estado/MunicÃ­pio: PadrÃ£o GO. Particular: vigilantes/serviÃ§o privado â€” informe valor.',
+                              style: TextStyle(
+                                  fontSize: 11, color: Colors.grey.shade600)),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                  child: _buildVinculoChip(
+                                      ctx,
+                                      setModalState,
+                                      'state',
+                                      'Estado',
+                                      AppColors.vinculoEstado,
+                                      Icons.account_balance_rounded,
+                                      employerTypeConfig, () {
+                                employerTypeConfig = 'state';
+                                tipoCalculo = 'PadrÃ£o GO';
+                              })),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                  child: _buildVinculoChip(
+                                      ctx,
+                                      setModalState,
+                                      'municipality',
+                                      'MunicÃ­pio',
+                                      AppColors.vinculoMunicipio,
+                                      Icons.location_city_rounded,
+                                      employerTypeConfig, () {
+                                employerTypeConfig = 'municipality';
+                                tipoCalculo = 'PadrÃ£o GO';
+                              })),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                  child: _buildVinculoChip(
+                                      ctx,
+                                      setModalState,
+                                      'private',
+                                      'Particular',
+                                      AppColors.vinculoParticular,
+                                      Icons.person_rounded,
+                                      employerTypeConfig, () {
+                                employerTypeConfig = 'private';
+                                tipoCalculo = 'Personalizado';
+                              })),
+                            ],
+                          ),
+                        ],
+                        if (controleFinanceiroAtivo &&
+                            !isCompromisso &&
+                            employerTypeConfig == 'private') ...[
+                          const SizedBox(height: 16),
+                          const Text('Tipo de RemuneraÃ§Ã£o',
+                              style: TextStyle(fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              ChoiceChip(
+                                label: const Text('PadrÃ£o GO (Hora)'),
+                                selected: tipoCalculo == 'PadrÃ£o GO',
+                                onSelected: (_) => setModalState(
+                                    () => tipoCalculo = 'PadrÃ£o GO'),
+                                selectedColor: const Color(0xFF2962FF),
+                                labelStyle: TextStyle(
+                                    color: tipoCalculo == 'PadrÃ£o GO'
+                                        ? Colors.white
+                                        : Colors.black87),
+                              ),
+                              const SizedBox(width: 10),
+                              ChoiceChip(
+                                label: const Text('Personalizado (Dia)'),
+                                selected: tipoCalculo == 'Personalizado',
+                                onSelected: (_) => setModalState(
+                                    () => tipoCalculo = 'Personalizado'),
+                                selectedColor: const Color(0xFF2962FF),
+                                labelStyle: TextStyle(
+                                    color: tipoCalculo == 'Personalizado'
+                                        ? Colors.white
+                                        : Colors.black87),
+                              ),
+                            ],
+                          ),
+                          if (tipoCalculo == 'Personalizado') ...[
+                            const SizedBox(height: 12),
+                            BrlAmountTextField(
+                              controller: valorPersonalizadoCtrl,
+                              decoration: InputDecoration(
+                                labelText: 'Valor total / diÃ¡ria (R\$)',
+                                hintText: '0,00',
+                                filled: true,
+                                fillColor: Colors.grey.shade50,
+                                border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14)),
+                                enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    borderSide: BorderSide(
+                                        color: Colors.grey.shade300)),
+                              ),
+                            ),
+                          ],
+                        ],
+                        const SizedBox(height: 16),
+                        CheckboxListTile(
+                          value: isCompromisso,
+                          onChanged: (v) => setModalState(() {
+                            isCompromisso = v ?? false;
+                            if (isCompromisso) {
+                              selectedColorHex = _hexCompromisso;
+                              horaInicial = const TimeOfDay(hour: 8, minute: 0);
+                              horaFinal = const TimeOfDay(hour: 18, minute: 0);
+                              nomeCtrl.text =
+                                  ShiftLocation.fullNameWithSchedule(
+                                      ShiftLocation.baseNameFromFull(
+                                          nomeCtrl.text),
+                                      '08:00',
+                                      '18:00');
+                            }
+                          }),
+                          title: const Text(
+                              'Compromisso particular (folga, sem valor)'),
+                          controlAffinity: ListTileControlAffinity.leading,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                        if (isCompromisso) ...[
+                          const SizedBox(height: 12),
+                          const Text('HorÃ¡rio do compromisso',
+                              style: TextStyle(fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  icon: const Icon(Icons.access_time_rounded,
+                                      size: 18),
+                                  label: Text(
+                                      '${horaInicial.hour.toString().padLeft(2, '0')}:${horaInicial.minute.toString().padLeft(2, '0')}'),
+                                  onPressed: () async {
+                                    final t = await showTimePicker(
+                                        context: ctx, initialTime: horaInicial);
+                                    if (t != null) {
+                                      setModalState(() {
+                                        horaInicial = t;
+                                        final start =
+                                            '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+                                        final end =
+                                            '${horaFinal.hour.toString().padLeft(2, '0')}:${horaFinal.minute.toString().padLeft(2, '0')}';
+                                        final base =
+                                            ShiftLocation.baseNameFromFull(
+                                                nomeCtrl.text);
+                                        nomeCtrl.text =
+                                            ShiftLocation.fullNameWithSchedule(
+                                                base, start, end);
+                                      });
+                                    }
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  icon: const Icon(Icons.access_time_rounded,
+                                      size: 18),
+                                  label: Text(
+                                      '${horaFinal.hour.toString().padLeft(2, '0')}:${horaFinal.minute.toString().padLeft(2, '0')}'),
+                                  onPressed: () async {
+                                    final t = await showTimePicker(
+                                        context: ctx, initialTime: horaFinal);
+                                    if (t != null) {
+                                      setModalState(() {
+                                        horaFinal = t;
+                                        final start =
+                                            '${horaInicial.hour.toString().padLeft(2, '0')}:${horaInicial.minute.toString().padLeft(2, '0')}';
+                                        final end =
+                                            '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+                                        final base =
+                                            ShiftLocation.baseNameFromFull(
+                                                nomeCtrl.text);
+                                        nomeCtrl.text =
+                                            ShiftLocation.fullNameWithSchedule(
+                                                base, start, end);
+                                      });
+                                    }
+                                  },
                                 ),
                               ),
                             ],
                           ),
-                        )
-                      else
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 16),
-                          child: OutlinedButton.icon(
-                            onPressed: () async {
-                              final loc =
-                                  await showModalBottomSheet<ShiftLocation>(
-                                context: ctx,
-                                useSafeArea: true,
-                                useRootNavigator: true,
-                                barrierColor: Colors.black54,
-                                shape: const RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.vertical(
-                                        top: Radius.circular(24))),
-                                builder: (_) => DraggableScrollableSheet(
-                                  initialChildSize: 0.5,
-                                  expand: false,
-                                  builder: (__, scrollController) => ListView(
-                                    controller: scrollController,
-                                    padding: const EdgeInsets.all(20),
-                                    children: [
-                                      const Text('Buscar na lista de plantÃµes recorrentes',
-                                          style: TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.w700)),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                          'Escolha um plantÃ£o para preencher os dados automaticamente. Depois, basta marcar a data.',
-                                          style: TextStyle(
-                                              fontSize: 13,
-                                              color: Colors.grey.shade600)),
-                                      const SizedBox(height: 16),
-                                      ..._locations.map((l) => ListTile(
-                                            leading: Container(
-                                              width: 40,
-                                              height: 40,
-                                              decoration: BoxDecoration(
-                                                color: l.color,
-                                                borderRadius:
-                                                    BorderRadius.circular(10),
-                                                border: Border.all(
-                                                  color: l.color
-                                                      .withValues(alpha: 0.95),
-                                                ),
-                                                boxShadow: [
-                                                  BoxShadow(
-                                                    color: l.color.withValues(
-                                                        alpha: 0.35),
-                                                    blurRadius: 6,
-                                                    offset: const Offset(0, 2),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            title: Text(l.name),
-                                            subtitle: Text(
-                                                '${ShiftLocation.employerTypeLabel(l.employerType)} Â· ${l.startTime} - ${l.endTime}'),
-                                            onTap: () => Navigator.pop(_, l),
-                                          )),
-                                    ],
+                          const SizedBox(height: 8),
+                          Text(
+                              'Nome serÃ¡ exibido com o horÃ¡rio (ex: FOLGA 08:00 Ã€S 18:00). Edite o texto abaixo.',
+                              style: TextStyle(
+                                  fontSize: 11, color: Colors.grey.shade600)),
+                        ],
+                        if (!isCompromisso) ...[
+                          const SizedBox(height: 16),
+                          const Text('Dia e horÃ¡rio do plantÃ£o',
+                              style: TextStyle(fontWeight: FontWeight.w700)),
+                          const SizedBox(height: 4),
+                          Text(
+                              'Toque na data para alterar (retroativa ou futura). O plantÃ£o serÃ¡ lanÃ§ado na data escolhida.',
+                              style: TextStyle(
+                                  fontSize: 12, color: Colors.grey.shade600)),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: () async {
+                                      final picked =
+                                          await pickSingleDateWithHolidayCalendar(
+                                        context: ctx,
+                                        initialDate: dataEscala,
+                                        firstDate: DateTime(2020),
+                                        lastDate: DateTime(2030, 12, 31),
+                                      );
+                                      if (picked != null) {
+                                        setModalState(
+                                            () => dataEscala = picked);
+                                      }
+                                    },
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 12, horizontal: 12),
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                            color: Colors.grey.shade300),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.calendar_today_rounded,
+                                              size: 20,
+                                              color: Colors.grey.shade600),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                              DateFormat('dd/MM/yyyy')
+                                                  .format(dataEscala),
+                                              style: const TextStyle(
+                                                  fontWeight: FontWeight.w600)),
+                                          const Spacer(),
+                                          Icon(Icons.edit_calendar_rounded,
+                                              size: 18,
+                                              color: Colors.grey.shade600),
+                                        ],
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              );
-                              if (loc != null && ctx.mounted) {
-                                nomeCtrl.text =
-                                    ShiftLocation.fullNameWithSchedule(
-                                        loc.name, loc.startTime, loc.endTime);
-                                employerTypeConfig = loc.employerType.name;
-                                controleFinanceiroAtivo = loc.financialEnabled;
-                                isCompromisso = !loc.financialEnabled;
-                                // Particular + valor fixo: reconhecer por paymentType.fixed OU baseValue > 0 (evita nÃ£o calcular)
-                                final isParticularComValorFixo =
-                                    loc.employerType == EmployerType.private &&
-                                        (loc.paymentType == PaymentType.fixed ||
-                                            loc.baseValue > 0);
-                                tipoCalculo = isParticularComValorFixo
-                                    ? 'Personalizado'
-                                    : 'PadrÃ£o GO';
-                                if (isParticularComValorFixo &&
-                                    loc.baseValue > 0)
-                                  valorPersonalizadoCtrl.text =
-                                      CurrencyFormats.formatBRLInput(
-                                          loc.baseValue);
-                                final startParts = loc.startTime.split(':');
-                                final endParts = loc.endTime.split(':');
-                                horaInicial = TimeOfDay(
-                                    hour: int.tryParse(startParts.first) ?? 8,
-                                    minute: startParts.length > 1
-                                        ? int.tryParse(startParts[1]) ?? 0
-                                        : 0);
-                                horaFinal = TimeOfDay(
-                                    hour: int.tryParse(endParts.first) ?? 18,
-                                    minute: endParts.length > 1
-                                        ? int.tryParse(endParts[1]) ?? 0
-                                        : 0);
-                                final hIni = horaInicial.hour;
-                                final noturnoInicio = (hIni >= 22 || hIni < 6);
-                                String locHex = loc.colorHex
-                                    .replaceFirst(
-                                        RegExp(r'^0x', caseSensitive: false),
-                                        '')
-                                    .replaceFirst('#', '');
-                                if (locHex.length > 6)
-                                  locHex = locHex.substring(locHex.length - 6);
-                                preCadastroDiurnoHex6 =
-                                    noturnoInicio ? null : locHex;
-                                selectedColorHex =
-                                    noturnoInicio ? _hexNoturno : locHex;
-                                selecionouPreCadastro = true;
-                                setModalState(() {});
-                              }
-                            },
-                            icon: const Icon(Icons.search_rounded, size: 20),
-                            label: const Text('Buscar na lista de plantÃµes recorrentes'),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14)),
-                            ),
-                          ),
-                        ),
-                      const SizedBox(height: 4),
-                      SwitchListTile(
-                        title:
-                            const Text('Ativar controle financeiro das horas'),
-                        subtitle: const Text(
-                            'Ative para calcular e registrar o valor (Estado/MunicÃ­pio: PadrÃ£o GO; Particular: valor combinado).'),
-                        value: controleFinanceiroAtivo,
-                        onChanged: (v) =>
-                            setModalState(() => controleFinanceiroAtivo = v),
-                        activeColor: Colors.green,
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                      if (controleFinanceiroAtivo && !isCompromisso) ...[
-                        const SizedBox(height: 12),
-                        const Text('VÃ­nculo',
-                            style: TextStyle(fontWeight: FontWeight.w600)),
-                        Text(
-                            'Estado/MunicÃ­pio: PadrÃ£o GO. Particular: vigilantes/serviÃ§o privado â€” informe valor.',
-                            style: TextStyle(
-                                fontSize: 11, color: Colors.grey.shade600)),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                                child: _buildVinculoChip(
-                                    ctx,
-                                    setModalState,
-                                    'state',
-                                    'Estado',
-                                    AppColors.vinculoEstado,
-                                    Icons.account_balance_rounded,
-                                    employerTypeConfig, () {
-                              employerTypeConfig = 'state';
-                              tipoCalculo = 'PadrÃ£o GO';
-                            })),
-                            const SizedBox(width: 8),
-                            Expanded(
-                                child: _buildVinculoChip(
-                                    ctx,
-                                    setModalState,
-                                    'municipality',
-                                    'MunicÃ­pio',
-                                    AppColors.vinculoMunicipio,
-                                    Icons.location_city_rounded,
-                                    employerTypeConfig, () {
-                              employerTypeConfig = 'municipality';
-                              tipoCalculo = 'PadrÃ£o GO';
-                            })),
-                            const SizedBox(width: 8),
-                            Expanded(
-                                child: _buildVinculoChip(
-                                    ctx,
-                                    setModalState,
-                                    'private',
-                                    'Particular',
-                                    AppColors.vinculoParticular,
-                                    Icons.person_rounded,
-                                    employerTypeConfig, () {
-                              employerTypeConfig = 'private';
-                              tipoCalculo = 'Personalizado';
-                            })),
-                          ],
-                        ),
-                      ],
-                      if (controleFinanceiroAtivo &&
-                          !isCompromisso &&
-                          employerTypeConfig == 'private') ...[
-                        const SizedBox(height: 16),
-                        const Text('Tipo de RemuneraÃ§Ã£o',
-                            style: TextStyle(fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            ChoiceChip(
-                              label: const Text('PadrÃ£o GO (Hora)'),
-                              selected: tipoCalculo == 'PadrÃ£o GO',
-                              onSelected: (_) => setModalState(
-                                  () => tipoCalculo = 'PadrÃ£o GO'),
-                              selectedColor: const Color(0xFF2962FF),
-                              labelStyle: TextStyle(
-                                  color: tipoCalculo == 'PadrÃ£o GO'
-                                      ? Colors.white
-                                      : Colors.black87),
-                            ),
-                            const SizedBox(width: 10),
-                            ChoiceChip(
-                              label: const Text('Personalizado (Dia)'),
-                              selected: tipoCalculo == 'Personalizado',
-                              onSelected: (_) => setModalState(
-                                  () => tipoCalculo = 'Personalizado'),
-                              selectedColor: const Color(0xFF2962FF),
-                              labelStyle: TextStyle(
-                                  color: tipoCalculo == 'Personalizado'
-                                      ? Colors.white
-                                      : Colors.black87),
-                            ),
-                          ],
-                        ),
-                        if (tipoCalculo == 'Personalizado') ...[
-                          const SizedBox(height: 12),
-                          BrlAmountTextField(
-                            controller: valorPersonalizadoCtrl,
-                            decoration: InputDecoration(
-                              labelText: 'Valor total / diÃ¡ria (R\$)',
-                              hintText: '0,00',
-                              filled: true,
-                              fillColor: Colors.grey.shade50,
-                              border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(14)),
-                              enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                  borderSide:
-                                      BorderSide(color: Colors.grey.shade300)),
-                            ),
-                          ),
-                        ],
-                      ],
-                      const SizedBox(height: 16),
-                      CheckboxListTile(
-                        value: isCompromisso,
-                        onChanged: (v) => setModalState(() {
-                          isCompromisso = v ?? false;
-                          if (isCompromisso) {
-                            selectedColorHex = _hexCompromisso;
-                            horaInicial = const TimeOfDay(hour: 8, minute: 0);
-                            horaFinal = const TimeOfDay(hour: 18, minute: 0);
-                            nomeCtrl.text = ShiftLocation.fullNameWithSchedule(
-                                ShiftLocation.baseNameFromFull(nomeCtrl.text),
-                                '08:00',
-                                '18:00');
-                          }
-                        }),
-                        title: const Text(
-                            'Compromisso particular (folga, sem valor)'),
-                        controlAffinity: ListTileControlAffinity.leading,
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                      if (isCompromisso) ...[
-                        const SizedBox(height: 12),
-                        const Text('HorÃ¡rio do compromisso',
-                            style: TextStyle(fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                icon: const Icon(Icons.access_time_rounded,
-                                    size: 18),
-                                label: Text(
-                                    '${horaInicial.hour.toString().padLeft(2, '0')}:${horaInicial.minute.toString().padLeft(2, '0')}'),
-                                onPressed: () async {
-                                  final t = await showTimePicker(
-                                      context: ctx, initialTime: horaInicial);
-                                  if (t != null)
-                                    setModalState(() {
-                                      horaInicial = t;
-                                      final start =
-                                          '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-                                      final end =
-                                          '${horaFinal.hour.toString().padLeft(2, '0')}:${horaFinal.minute.toString().padLeft(2, '0')}';
-                                      final base =
-                                          ShiftLocation.baseNameFromFull(
-                                              nomeCtrl.text);
-                                      nomeCtrl.text =
-                                          ShiftLocation.fullNameWithSchedule(
-                                              base, start, end);
-                                    });
-                                },
                               ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                icon: const Icon(Icons.access_time_rounded,
-                                    size: 18),
-                                label: Text(
-                                    '${horaFinal.hour.toString().padLeft(2, '0')}:${horaFinal.minute.toString().padLeft(2, '0')}'),
-                                onPressed: () async {
-                                  final t = await showTimePicker(
-                                      context: ctx, initialTime: horaFinal);
-                                  if (t != null)
-                                    setModalState(() {
-                                      horaFinal = t;
-                                      final start =
-                                          '${horaInicial.hour.toString().padLeft(2, '0')}:${horaInicial.minute.toString().padLeft(2, '0')}';
-                                      final end =
-                                          '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-                                      final base =
-                                          ShiftLocation.baseNameFromFull(
-                                              nomeCtrl.text);
-                                      nomeCtrl.text =
-                                          ShiftLocation.fullNameWithSchedule(
-                                              base, start, end);
-                                    });
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                            'Nome serÃ¡ exibido com o horÃ¡rio (ex: FOLGA 08:00 Ã€S 18:00). Edite o texto abaixo.',
-                            style: TextStyle(
-                                fontSize: 11, color: Colors.grey.shade600)),
-                      ],
-                      if (!isCompromisso) ...[
-                        const SizedBox(height: 16),
-                        const Text('Dia e horÃ¡rio do plantÃ£o',
-                            style: TextStyle(fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 4),
-                        Text(
-                            'Toque na data para alterar (retroativa ou futura). O plantÃ£o serÃ¡ lanÃ§ado na data escolhida.',
-                            style: TextStyle(
-                                fontSize: 12, color: Colors.grey.shade600)),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Material(
-                                color: Colors.transparent,
-                                child: InkWell(
-                                  onTap: () async {
-                                    final picked =
-                                        await pickSingleDateWithHolidayCalendar(
-                                      context: ctx,
-                                      initialDate: dataEscala,
-                                      firstDate: DateTime(2020),
-                                      lastDate: DateTime(2030, 12, 31),
-                                    );
-                                    if (picked != null)
-                                      setModalState(() => dataEscala = picked);
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  icon: const Icon(Icons.access_time_rounded,
+                                      size: 18),
+                                  label: Text(
+                                      '${horaInicial.hour.toString().padLeft(2, '0')}:${horaInicial.minute.toString().padLeft(2, '0')}'),
+                                  onPressed: () async {
+                                    final t = await showTimePicker(
+                                        context: ctx, initialTime: horaInicial);
+                                    if (t != null) {
+                                      setModalState(() {
+                                        horaInicial = t;
+                                        final start =
+                                            '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+                                        final end =
+                                            '${horaFinal.hour.toString().padLeft(2, '0')}:${horaFinal.minute.toString().padLeft(2, '0')}';
+                                        final basePlantao =
+                                            ShiftLocation.baseNameFromFull(
+                                                nomeCtrl.text);
+                                        nomeCtrl.text =
+                                            ShiftLocation.fullNameWithSchedule(
+                                                basePlantao, start, end);
+                                        syncCorPorHorarioInicio();
+                                      });
+                                    }
                                   },
-                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  icon: const Icon(Icons.access_time_rounded,
+                                      size: 18),
+                                  label: Text(
+                                      '${horaFinal.hour.toString().padLeft(2, '0')}:${horaFinal.minute.toString().padLeft(2, '0')}'),
+                                  onPressed: () async {
+                                    final t = await showTimePicker(
+                                        context: ctx, initialTime: horaFinal);
+                                    if (t != null) {
+                                      setModalState(() {
+                                        horaFinal = t;
+                                        final start =
+                                            '${horaInicial.hour.toString().padLeft(2, '0')}:${horaInicial.minute.toString().padLeft(2, '0')}';
+                                        final end =
+                                            '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+                                        final basePlantao =
+                                            ShiftLocation.baseNameFromFull(
+                                                nomeCtrl.text);
+                                        nomeCtrl.text =
+                                            ShiftLocation.fullNameWithSchedule(
+                                                basePlantao, start, end);
+                                      });
+                                    }
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                          if ((employerTypeConfig != 'private' ||
+                                  tipoCalculo == 'PadrÃ£o GO') &&
+                              estimateRes != null) ...[
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2962FF)
+                                    .withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                    color: const Color(0xFF2962FF)
+                                        .withValues(alpha: 0.3)),
+                              ),
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text('Valor estimado desta frente:',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.w600)),
+                                  Text(CurrencyFormats.formatBRL(valorEstimado),
+                                      style: const TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w800,
+                                          color: Color(0xFF1A237E))),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
+                        const SizedBox(height: 12),
+                        FastTextField(
+                          controller: nomeCtrl,
+                          decoration: InputDecoration(
+                            labelText: isCompromisso
+                                ? 'Nome (base) * â€” horÃ¡rio completa automaticamente'
+                                : 'Nome do Compromisso / Escala *',
+                            border: const OutlineInputBorder(),
+                            hintText: isCompromisso
+                                ? 'EX: FOLGA, CULTO, REUNIÃƒO'
+                                : 'EX: PLANTÃƒO NOTURNO - GO',
+                          ),
+                          textCapitalization: TextCapitalization.characters,
+                          inputFormatters: [UpperCaseTextFormatter()],
+                          onSubmitted: (_) {
+                            if (isCompromisso) {
+                              final base =
+                                  ShiftLocation.baseNameFromFull(nomeCtrl.text);
+                              final start =
+                                  '${horaInicial.hour.toString().padLeft(2, '0')}:${horaInicial.minute.toString().padLeft(2, '0')}';
+                              final end =
+                                  '${horaFinal.hour.toString().padLeft(2, '0')}:${horaFinal.minute.toString().padLeft(2, '0')}';
+                              nomeCtrl.text =
+                                  ShiftLocation.fullNameWithSchedule(
+                                      base.isEmpty ? 'COMPROMISSO' : base,
+                                      start,
+                                      end);
+                              setModalState(() {});
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        const SizedBox(height: 14),
+                        const Text(
+                            'Cor no calendÃ¡rio (identifique lugar/tipo)',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w600, fontSize: 13)),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          height: 40,
+                          child: ListView(
+                            scrollDirection: Axis.horizontal,
+                            children: kColorPaletteHex.take(72).map((hex) {
+                              final isSelected = selectedColorHex
+                                      .toUpperCase()
+                                      .replaceFirst('#', '') ==
+                                  hex.replaceFirst('#', '').toUpperCase();
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () => setModalState(() =>
+                                      selectedColorHex =
+                                          hex.startsWith('#') ? hex : '#$hex'),
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        vertical: 12, horizontal: 12),
+                                    width: 40,
+                                    height: 40,
                                     decoration: BoxDecoration(
+                                      color: Color(0xFF000000 +
+                                          int.parse(hex.replaceFirst('#', ''),
+                                              radix: 16)),
+                                      shape: BoxShape.circle,
                                       border: Border.all(
-                                          color: Colors.grey.shade300),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.calendar_today_rounded,
-                                            size: 20,
-                                            color: Colors.grey.shade600),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                            DateFormat('dd/MM/yyyy')
-                                                .format(dataEscala),
-                                            style: const TextStyle(
-                                                fontWeight: FontWeight.w600)),
-                                        const Spacer(),
-                                        Icon(Icons.edit_calendar_rounded,
-                                            size: 18,
-                                            color: Colors.grey.shade600),
+                                          color: isSelected
+                                              ? Colors.white
+                                              : Colors.grey.shade300,
+                                          width: isSelected ? 3 : 1),
+                                      boxShadow: [
+                                        BoxShadow(
+                                            color: Colors.black26,
+                                            blurRadius: isSelected ? 6 : 2)
                                       ],
                                     ),
                                   ),
                                 ),
-                              ),
-                            ),
-                          ],
+                              );
+                            }).toList(),
+                          ),
                         ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                icon: const Icon(Icons.access_time_rounded,
-                                    size: 18),
-                                label: Text(
-                                    '${horaInicial.hour.toString().padLeft(2, '0')}:${horaInicial.minute.toString().padLeft(2, '0')}'),
-                                onPressed: () async {
-                                  final t = await showTimePicker(
-                                      context: ctx, initialTime: horaInicial);
-                                  if (t != null)
-                                    setModalState(() {
-                                      horaInicial = t;
-                                      final start =
-                                          '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-                                      final end =
-                                          '${horaFinal.hour.toString().padLeft(2, '0')}:${horaFinal.minute.toString().padLeft(2, '0')}';
-                                      final basePlantao =
-                                          ShiftLocation.baseNameFromFull(
-                                              nomeCtrl.text);
-                                      nomeCtrl.text =
-                                          ShiftLocation.fullNameWithSchedule(
-                                              basePlantao, start, end);
-                                      syncCorPorHorarioInicio();
-                                    });
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                icon: const Icon(Icons.access_time_rounded,
-                                    size: 18),
-                                label: Text(
-                                    '${horaFinal.hour.toString().padLeft(2, '0')}:${horaFinal.minute.toString().padLeft(2, '0')}'),
-                                onPressed: () async {
-                                  final t = await showTimePicker(
-                                      context: ctx, initialTime: horaFinal);
-                                  if (t != null)
-                                    setModalState(() {
-                                      horaFinal = t;
-                                      final start =
-                                          '${horaInicial.hour.toString().padLeft(2, '0')}:${horaInicial.minute.toString().padLeft(2, '0')}';
-                                      final end =
-                                          '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-                                      final basePlantao =
-                                          ShiftLocation.baseNameFromFull(
-                                              nomeCtrl.text);
-                                      nomeCtrl.text =
-                                          ShiftLocation.fullNameWithSchedule(
-                                              basePlantao, start, end);
-                                    });
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                        if ((employerTypeConfig != 'private' ||
-                                tipoCalculo == 'PadrÃ£o GO') &&
-                            estimateRes != null) ...[
-                          const SizedBox(height: 12),
+                        const SizedBox(height: 16),
+                        if (!isCompromisso) ...[
+                          const SizedBox(height: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 12),
+                                horizontal: 12, vertical: 8),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF2962FF).withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                  color:
-                                      const Color(0xFF2962FF).withOpacity(0.3)),
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.blue.shade100),
                             ),
                             child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text('Valor estimado desta frente:',
-                                    style:
-                                        TextStyle(fontWeight: FontWeight.w600)),
-                                Text(CurrencyFormats.formatBRL(valorEstimado),
-                                    style: const TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w800,
-                                        color: Color(0xFF1A237E))),
+                                Icon(Icons.info_outline_rounded,
+                                    size: 18, color: Colors.blue.shade700),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'PlantÃ£o serÃ¡ lanÃ§ado em ${DateFormat('dd/MM/yyyy').format(dataEscala)}. Valor calculado conforme dia e horÃ¡rio.',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.blue.shade900,
+                                        fontWeight: FontWeight.w500),
+                                  ),
+                                ),
                               ],
                             ),
                           ),
                         ],
-                      ],
-                      const SizedBox(height: 12),
-                      FastTextField(
-                        controller: nomeCtrl,
-                        decoration: InputDecoration(
-                          labelText: isCompromisso
-                              ? 'Nome (base) * â€” horÃ¡rio completa automaticamente'
-                              : 'Nome do Compromisso / Escala *',
-                          border: const OutlineInputBorder(),
-                          hintText: isCompromisso
-                              ? 'EX: FOLGA, CULTO, REUNIÃƒO'
-                              : 'EX: PLANTÃƒO NOTURNO - GO',
-                        ),
-                        textCapitalization: TextCapitalization.characters,
-                        inputFormatters: [UpperCaseTextFormatter()],
-                        onSubmitted: (_) {
-                          if (isCompromisso) {
-                            final base =
-                                ShiftLocation.baseNameFromFull(nomeCtrl.text);
-                            final start =
-                                '${horaInicial.hour.toString().padLeft(2, '0')}:${horaInicial.minute.toString().padLeft(2, '0')}';
-                            final end =
-                                '${horaFinal.hour.toString().padLeft(2, '0')}:${horaFinal.minute.toString().padLeft(2, '0')}';
-                            nomeCtrl.text = ShiftLocation.fullNameWithSchedule(
-                                base.isEmpty ? 'COMPROMISSO' : base,
-                                start,
-                                end);
-                            setModalState(() {});
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      const SizedBox(height: 14),
-                      const Text('Cor no calendÃ¡rio (identifique lugar/tipo)',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w600, fontSize: 13)),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        height: 40,
-                        child: ListView(
-                          scrollDirection: Axis.horizontal,
-                          children: kColorPaletteHex.take(72).map((hex) {
-                            final isSelected = selectedColorHex
-                                    .toUpperCase()
-                                    .replaceFirst('#', '') ==
-                                hex.replaceFirst('#', '').toUpperCase();
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTap: () => setModalState(() =>
-                                    selectedColorHex =
-                                        hex.startsWith('#') ? hex : '#$hex'),
-                                child: Container(
-                                  width: 40,
-                                  height: 40,
-                                  decoration: BoxDecoration(
-                                    color: Color(0xFF000000 +
-                                        int.parse(hex.replaceFirst('#', ''),
-                                            radix: 16)),
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                        color: isSelected
-                                            ? Colors.white
-                                            : Colors.grey.shade300,
-                                        width: isSelected ? 3 : 1),
-                                    boxShadow: [
-                                      BoxShadow(
-                                          color: Colors.black26,
-                                          blurRadius: isSelected ? 6 : 2)
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      if (!isCompromisso) ...[
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.blue.shade100),
+                        if (!selecionouPreCadastro && !isCompromisso)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Text(
+                                'Clique em "Buscar na lista de plantÃµes recorrentes" e escolha um plantÃ£o para salvar com valor. Ou marque "Compromisso particular" para sem valor.',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.orange.shade700)),
                           ),
-                          child: Row(
-                            children: [
-                              Icon(Icons.info_outline_rounded,
-                                  size: 18, color: Colors.blue.shade700),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'PlantÃ£o serÃ¡ lanÃ§ado em ${DateFormat('dd/MM/yyyy').format(dataEscala)}. Valor calculado conforme dia e horÃ¡rio.',
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.blue.shade900,
-                                      fontWeight: FontWeight.w500),
-                                ),
-                              ),
-                            ],
+                        if (selecionouPreCadastro || isCompromisso) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            'Lembretes usam o padrÃ£o de ConfiguraÃ§Ãµes â†’ NotificaÃ§Ãµes.',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              color: Colors.grey.shade600,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                        ),
-                      ],
-                      if (!selecionouPreCadastro && !isCompromisso)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Text(
-                              'Clique em "Buscar na lista de plantÃµes recorrentes" e escolha um plantÃ£o para salvar com valor. Ou marque "Compromisso particular" para sem valor.',
-                              style: TextStyle(
-                                  fontSize: 12, color: Colors.orange.shade700)),
-                        ),
-                      if (selecionouPreCadastro || isCompromisso) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          'Lembretes usam o padrÃ£o de ConfiguraÃ§Ãµes â†’ NotificaÃ§Ãµes.',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            color: Colors.grey.shade600,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 24),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 55,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                (selecionouPreCadastro || isCompromisso)
-                                    ? const Color(0xFF1A237E)
-                                    : Colors.grey,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(15)),
-                          ),
-                          onPressed: (selecionouPreCadastro || isCompromisso)
-                              ? () async {
-                                  final nome =
-                                      nomeCtrl.text.trim().toUpperCase();
-                                  final nomeBase =
-                                      ShiftLocation.baseNameFromFull(nome);
-                                  final faltando = <String>[];
-                                  if (nomeBase.isEmpty) {
-                                    faltando.add(isCompromisso
-                                        ? 'Nome (base)'
-                                        : 'Nome do compromisso/escala');
-                                  }
-                                  if (faltando.isNotEmpty) {
-                                    final texto = faltando.length == 1
-                                        ? 'NÃ£o foi possÃ­vel salvar. Preencha: ${faltando.single} (obrigatÃ³rio).'
-                                        : 'NÃ£o foi possÃ­vel salvar. Campos obrigatÃ³rios: ${faltando.join(' e ')}.';
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text(texto)));
-                                    return;
-                                  }
-                                  double totalValue = 0;
-                                  double hoursDay = 0, hoursNight = 0;
-                                  String start =
-                                      '${horaInicial.hour.toString().padLeft(2, '0')}:${horaInicial.minute.toString().padLeft(2, '0')}';
-                                  String end =
-                                      '${horaFinal.hour.toString().padLeft(2, '0')}:${horaFinal.minute.toString().padLeft(2, '0')}';
-                                  final nomeComHorario =
-                                      ShiftLocation.fullNameWithSchedule(
-                                          nomeBase, start, end);
-                                  double dayRate = 0, nightRate = 0;
-                                  if (isCompromisso ||
-                                      !controleFinanceiroAtivo) {
-                                    totalValue = 0;
-                                  } else if (employerTypeConfig == 'private' &&
-                                      tipoCalculo == 'Personalizado') {
-                                    totalValue = CurrencyFormats.parseBRLInput(
-                                            valorPersonalizadoCtrl.text) ??
-                                        0;
-                                  } else {
-                                    // PadrÃ£o GO: usa dia + hora inicial/final selecionados
-                                    final startDt = DateTime(
-                                        dataEscala.year,
-                                        dataEscala.month,
-                                        dataEscala.day,
-                                        horaInicial.hour,
-                                        horaInicial.minute);
-                                    var endDt = DateTime(
-                                        dataEscala.year,
-                                        dataEscala.month,
-                                        dataEscala.day,
-                                        horaFinal.hour,
-                                        horaFinal.minute);
-                                    if (endDt.isBefore(startDt) ||
-                                        endDt.isAtSameMomentAs(startDt))
-                                      endDt =
-                                          endDt.add(const Duration(days: 1));
-                                    final res = await ScaleRatesService()
-                                        .computeShiftForUid(
-                                      uid: _userDocId,
-                                      start: startDt,
-                                      end: endDt,
-                                      entryDate: dataEscala,
-                                    );
-                                    final rates = await ScaleRatesService()
-                                        .getRatesForServiceDay(
-                                            _userDocId, dataEscala);
-                                    totalValue = res['total'] ?? 0;
-                                    hoursDay = res['hoursDay'] ?? 0;
-                                    hoursNight = res['hoursNight'] ?? 0;
-                                    dayRate = rates.diurnoForWeekday(
-                                        ScaleRates.weekdayToIndex(
-                                            dataEscala.weekday));
-                                    nightRate = rates.noturnoForWeekday(
-                                        ScaleRates.weekdayToIndex(
-                                            dataEscala.weekday));
-                                  }
-                                  // Cor escolhida na paleta (ou padrÃ£o por tipo)
-                                  final colorHex =
-                                      selectedColorHex.startsWith('#')
-                                          ? selectedColorHex
-                                          : '#$selectedColorHex';
-                                  // Lembretes: opcionalmente personalizados neste formulÃ¡rio (campo reminderLeads na escala).
-                                  // PlantÃ£o retroativo: data no passado = usuÃ¡rio esqueceu de lanÃ§ar â€” marcar jÃ¡ realizado
-                                  final hoje = DateTime(DateTime.now().year,
-                                      DateTime.now().month, DateTime.now().day);
-                                  final isRetroativo =
-                                      dataEscala.isBefore(hoje);
-                                  // Iniciais nÃ£o sÃ£o mais campo de entrada; manter apenas auto-geraÃ§Ã£o
-                                  // para compatibilidade com dados antigos e notificaÃ§Ãµes.
-                                  final autoAbbrev =
-                                      ShiftLocation.abbreviationFromName(
-                                          nomeBase);
-                                  final abbrevFinal = autoAbbrev.isNotEmpty
-                                      ? autoAbbrev.substring(
-                                          0, autoAbbrev.length.clamp(1, 6))
-                                      : '';
-                                  final entry = ScaleEntry(
-                                    date: dataEscala,
-                                    start: start,
-                                    end: end,
-                                    dayRate: dayRate,
-                                    nightRate: nightRate,
-                                    hoursDay: hoursDay,
-                                    hoursNight: hoursNight,
-                                    totalValue: totalValue,
-                                    label: nomeComHorario,
-                                    abbreviation: abbrevFinal.isNotEmpty
-                                        ? abbrevFinal
-                                        : null,
-                                    colorHex: colorHex,
-                                    paid: isRetroativo,
-                                    isCompromisso: isCompromisso,
-                                    employerType: employerTypeConfig,
-                                    reminderLeads: null,
-                                    notificationSoundId: null,
-                                    notificationDeliveryMode: null,
-                                  );
-                                  try {
-                                    HapticFeedback.lightImpact();
-                                    final createdDoc =
-                                        await _scales.add(entry.toMap());
-                                    unawaited(
-                                      AgendaNotificationRescheduleHelper
-                                          .afterScaleSave(
-                                        userDocId: _userDocId,
-                                        scaleRef: createdDoc,
-                                        newDate: dataEscala,
-                                        newStartHHmm: start,
-                                      ),
-                                    );
-                                    final startDt = DateTime(
-                                        dataEscala.year,
-                                        dataEscala.month,
-                                        dataEscala.day,
-                                        horaInicial.hour,
-                                        horaInicial.minute);
-                                    var endDt = DateTime(
-                                        dataEscala.year,
-                                        dataEscala.month,
-                                        dataEscala.day,
-                                        horaFinal.hour,
-                                        horaFinal.minute);
-                                    if (endDt.isBefore(startDt) ||
-                                        endDt.isAtSameMomentAs(startDt)) {
-                                      endDt =
-                                          endDt.add(const Duration(days: 1));
+                        ],
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 55,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor:
+                                  (selecionouPreCadastro || isCompromisso)
+                                      ? const Color(0xFF1A237E)
+                                      : Colors.grey,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(15)),
+                            ),
+                            onPressed: (selecionouPreCadastro || isCompromisso)
+                                ? () async {
+                                    final nome =
+                                        nomeCtrl.text.trim().toUpperCase();
+                                    final nomeBase =
+                                        ShiftLocation.baseNameFromFull(nome);
+                                    final faltando = <String>[];
+                                    if (nomeBase.isEmpty) {
+                                      faltando.add(isCompromisso
+                                          ? 'Nome (base)'
+                                          : 'Nome do compromisso/escala');
                                     }
-                                    await _syncAutoLancamentoViradaMes(
-                                      sourceId: createdDoc.id,
-                                      sourceDate: dataEscala,
-                                      startDt: startDt,
-                                      endDt: endDt,
-                                      financeiroAtivo: controleFinanceiroAtivo,
-                                      isCompromisso: isCompromisso,
-                                      nome: nomeComHorario,
+                                    if (faltando.isNotEmpty) {
+                                      final texto = faltando.length == 1
+                                          ? 'NÃ£o foi possÃ­vel salvar. Preencha: ${faltando.single} (obrigatÃ³rio).'
+                                          : 'NÃ£o foi possÃ­vel salvar. Campos obrigatÃ³rios: ${faltando.join(' e ')}.';
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                              SnackBar(content: Text(texto)));
+                                      return;
+                                    }
+                                    double totalValue = 0;
+                                    double hoursDay = 0, hoursNight = 0;
+                                    String start =
+                                        '${horaInicial.hour.toString().padLeft(2, '0')}:${horaInicial.minute.toString().padLeft(2, '0')}';
+                                    String end =
+                                        '${horaFinal.hour.toString().padLeft(2, '0')}:${horaFinal.minute.toString().padLeft(2, '0')}';
+                                    final nomeComHorario =
+                                        ShiftLocation.fullNameWithSchedule(
+                                            nomeBase, start, end);
+                                    double dayRate = 0, nightRate = 0;
+                                    if (isCompromisso ||
+                                        !controleFinanceiroAtivo) {
+                                      totalValue = 0;
+                                    } else if (employerTypeConfig ==
+                                            'private' &&
+                                        tipoCalculo == 'Personalizado') {
+                                      totalValue =
+                                          CurrencyFormats.parseBRLInput(
+                                                  valorPersonalizadoCtrl
+                                                      .text) ??
+                                              0;
+                                    } else {
+                                      // PadrÃ£o GO: usa dia + hora inicial/final selecionados
+                                      final startDt = DateTime(
+                                          dataEscala.year,
+                                          dataEscala.month,
+                                          dataEscala.day,
+                                          horaInicial.hour,
+                                          horaInicial.minute);
+                                      var endDt = DateTime(
+                                          dataEscala.year,
+                                          dataEscala.month,
+                                          dataEscala.day,
+                                          horaFinal.hour,
+                                          horaFinal.minute);
+                                      if (endDt.isBefore(startDt) ||
+                                          endDt.isAtSameMomentAs(startDt)) {
+                                        endDt =
+                                            endDt.add(const Duration(days: 1));
+                                      }
+                                      final res = await ScaleRatesService()
+                                          .computeShiftForUid(
+                                        uid: _userDocId,
+                                        start: startDt,
+                                        end: endDt,
+                                        entryDate: dataEscala,
+                                      );
+                                      final rates = await ScaleRatesService()
+                                          .getRatesForServiceDay(
+                                              _userDocId, dataEscala);
+                                      totalValue = res['total'] ?? 0;
+                                      hoursDay = res['hoursDay'] ?? 0;
+                                      hoursNight = res['hoursNight'] ?? 0;
+                                      dayRate = rates.diurnoForWeekday(
+                                          ScaleRates.weekdayToIndex(
+                                              dataEscala.weekday));
+                                      nightRate = rates.noturnoForWeekday(
+                                          ScaleRates.weekdayToIndex(
+                                              dataEscala.weekday));
+                                    }
+                                    // Cor escolhida na paleta (ou padrÃ£o por tipo)
+                                    final colorHex =
+                                        selectedColorHex.startsWith('#')
+                                            ? selectedColorHex
+                                            : '#$selectedColorHex';
+                                    // Lembretes: opcionalmente personalizados neste formulÃ¡rio (campo reminderLeads na escala).
+                                    // PlantÃ£o retroativo: data no passado = usuÃ¡rio esqueceu de lanÃ§ar â€” marcar jÃ¡ realizado
+                                    final hoje = DateTime(
+                                        DateTime.now().year,
+                                        DateTime.now().month,
+                                        DateTime.now().day);
+                                    final isRetroativo =
+                                        dataEscala.isBefore(hoje);
+                                    // Iniciais nÃ£o sÃ£o mais campo de entrada; manter apenas auto-geraÃ§Ã£o
+                                    // para compatibilidade com dados antigos e notificaÃ§Ãµes.
+                                    final autoAbbrev =
+                                        ShiftLocation.abbreviationFromName(
+                                            nomeBase);
+                                    final abbrevFinal = autoAbbrev.isNotEmpty
+                                        ? autoAbbrev.substring(
+                                            0, autoAbbrev.length.clamp(1, 6))
+                                        : '';
+                                    final entry = ScaleEntry(
+                                      date: dataEscala,
+                                      start: start,
+                                      end: end,
+                                      dayRate: dayRate,
+                                      nightRate: nightRate,
+                                      hoursDay: hoursDay,
+                                      hoursNight: hoursNight,
+                                      totalValue: totalValue,
+                                      label: nomeComHorario,
                                       abbreviation: abbrevFinal.isNotEmpty
                                           ? abbrevFinal
                                           : null,
                                       colorHex: colorHex,
+                                      paid: isRetroativo,
+                                      isCompromisso: isCompromisso,
                                       employerType: employerTypeConfig,
+                                      reminderLeads: null,
+                                      notificationSoundId: null,
+                                      notificationDeliveryMode: null,
                                     );
-                                    // Gerar prÃ©-cadastro: salva em locations para o usuÃ¡rio escolher em outras datas
-                                    final locHex = colorHex.startsWith('#')
-                                        ? colorHex
-                                        : '#$colorHex';
-                                    final paymentType = (employerTypeConfig ==
-                                                'private' &&
-                                            tipoCalculo == 'Personalizado' &&
-                                            !isCompromisso &&
-                                            controleFinanceiroAtivo)
-                                        ? PaymentType.fixed
-                                        : PaymentType.perHour;
-                                    final baseVal = (employerTypeConfig ==
-                                                'private' &&
-                                            tipoCalculo == 'Personalizado' &&
-                                            !isCompromisso)
-                                        ? (CurrencyFormats.parseBRLInput(
-                                                valorPersonalizadoCtrl.text) ??
-                                            0)
-                                        : 0.0;
-                                    // Usar mesmas iniciais da escala para o prÃ©-cadastro (frente de serviÃ§o)
-                                    final locMap = <String, dynamic>{
-                                      'name': nomeComHorario,
-                                      'abbreviation': abbrevFinal.isNotEmpty
-                                          ? abbrevFinal
-                                          : ShiftLocation.abbreviationFromName(
-                                              nomeBase),
-                                      'colorHex': locHex,
-                                      'startTime': start,
-                                      'endTime': end,
-                                      'notifyEnabled': true,
-                                      'financialEnabled':
-                                          controleFinanceiroAtivo &&
-                                              !isCompromisso,
-                                      'paymentType': paymentType.name,
-                                      'employerType': employerTypeConfig,
-                                      'baseValue': baseVal,
-                                      'bonus': 0,
-                                      'discount': 0,
-                                      'nightDifferentialEnabled': false,
-                                      'nightDifferentialPercent': 20,
-                                      'nightStart': '22:00',
-                                      'nightEnd': '05:00',
-                                      'sortOrder': _locations.length,
-                                    };
-                                    final existing = _locations
-                                        .where((l) =>
-                                            l.name.trim().toLowerCase() ==
-                                            nomeComHorario.trim().toLowerCase())
-                                        .firstOrNull;
-                                    if (existing?.id != null) {
-                                      await _locationsRef
-                                          .doc(existing!.id)
-                                          .update(locMap);
-                                    } else {
-                                      await _locationsRef.add(locMap);
-                                    }
-                                    if (mounted) {
-                                      _loadLocations();
-                                      setState(() {
-                                        _selectedDay = dataEscala;
-                                        _focusedDay = dataEscala;
-                                      });
-                                      _ensureScalesStreamBound();
-                                    }
-                                    // Mostrar opÃ§Ã£o: Novo PlantÃ£o (voltar ao calendÃ¡rio) ou Finalizar (fechar e voltar ao calendÃ¡rio)
-                                    if (ctx.mounted) {
-                                      await showDialog<void>(
-                                        context: ctx,
-                                        barrierDismissible: false,
-                                        builder: (dialogContext) => AlertDialog(
-                                          title: const Row(
-                                            children: [
-                                              Icon(Icons.check_circle_rounded,
-                                                  color: AppColors.success,
-                                                  size: 28),
-                                              SizedBox(width: 12),
-                                              Text('PlantÃ£o salvo'),
-                                            ],
-                                          ),
-                                          content: const Text(
-                                            'PlantÃ£o salvo na agenda e lista de plantÃµes recorrentes atualizada. Na prÃ³xima vez, clique na data e escolha este plantÃ£o.',
-                                            style: TextStyle(height: 1.4),
-                                          ),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () {
-                                                Navigator.pop(dialogContext);
-                                                if (ctx.mounted)
-                                                  Navigator.pop(ctx);
-                                              },
-                                              child: const Text('Novo PlantÃ£o'),
-                                            ),
-                                            FilledButton(
-                                              onPressed: () {
-                                                Navigator.pop(dialogContext);
-                                                if (ctx.mounted)
-                                                  Navigator.pop(ctx);
-                                              },
-                                              child: const Text('Finalizar'),
-                                            ),
-                                          ],
+                                    try {
+                                      HapticFeedback.lightImpact();
+                                      final createdDoc =
+                                          await _scales.add(entry.toMap());
+                                      unawaited(
+                                        AgendaNotificationRescheduleHelper
+                                            .afterScaleSave(
+                                          userDocId: _userDocId,
+                                          scaleRef: createdDoc,
+                                          newDate: dataEscala,
+                                          newStartHHmm: start,
                                         ),
                                       );
+                                      final startDt = DateTime(
+                                          dataEscala.year,
+                                          dataEscala.month,
+                                          dataEscala.day,
+                                          horaInicial.hour,
+                                          horaInicial.minute);
+                                      var endDt = DateTime(
+                                          dataEscala.year,
+                                          dataEscala.month,
+                                          dataEscala.day,
+                                          horaFinal.hour,
+                                          horaFinal.minute);
+                                      if (endDt.isBefore(startDt) ||
+                                          endDt.isAtSameMomentAs(startDt)) {
+                                        endDt =
+                                            endDt.add(const Duration(days: 1));
+                                      }
+                                      await _syncAutoLancamentoViradaMes(
+                                        sourceId: createdDoc.id,
+                                        sourceDate: dataEscala,
+                                        startDt: startDt,
+                                        endDt: endDt,
+                                        financeiroAtivo:
+                                            controleFinanceiroAtivo,
+                                        isCompromisso: isCompromisso,
+                                        nome: nomeComHorario,
+                                        abbreviation: abbrevFinal.isNotEmpty
+                                            ? abbrevFinal
+                                            : null,
+                                        colorHex: colorHex,
+                                        employerType: employerTypeConfig,
+                                      );
+                                      // Gerar prÃ©-cadastro: salva em locations para o usuÃ¡rio escolher em outras datas
+                                      final locHex = colorHex.startsWith('#')
+                                          ? colorHex
+                                          : '#$colorHex';
+                                      final paymentType = (employerTypeConfig ==
+                                                  'private' &&
+                                              tipoCalculo == 'Personalizado' &&
+                                              !isCompromisso &&
+                                              controleFinanceiroAtivo)
+                                          ? PaymentType.fixed
+                                          : PaymentType.perHour;
+                                      final baseVal = (employerTypeConfig ==
+                                                  'private' &&
+                                              tipoCalculo == 'Personalizado' &&
+                                              !isCompromisso)
+                                          ? (CurrencyFormats.parseBRLInput(
+                                                  valorPersonalizadoCtrl
+                                                      .text) ??
+                                              0)
+                                          : 0.0;
+                                      // Usar mesmas iniciais da escala para o prÃ©-cadastro (frente de serviÃ§o)
+                                      final locMap = <String, dynamic>{
+                                        'name': nomeComHorario,
+                                        'abbreviation': abbrevFinal.isNotEmpty
+                                            ? abbrevFinal
+                                            : ShiftLocation
+                                                .abbreviationFromName(nomeBase),
+                                        'colorHex': locHex,
+                                        'startTime': start,
+                                        'endTime': end,
+                                        'notifyEnabled': true,
+                                        'financialEnabled':
+                                            controleFinanceiroAtivo &&
+                                                !isCompromisso,
+                                        'paymentType': paymentType.name,
+                                        'employerType': employerTypeConfig,
+                                        'baseValue': baseVal,
+                                        'bonus': 0,
+                                        'discount': 0,
+                                        'nightDifferentialEnabled': false,
+                                        'nightDifferentialPercent': 20,
+                                        'nightStart': '22:00',
+                                        'nightEnd': '05:00',
+                                        'sortOrder': _locations.length,
+                                      };
+                                      final existing = _locations
+                                          .where((l) =>
+                                              l.name.trim().toLowerCase() ==
+                                              nomeComHorario
+                                                  .trim()
+                                                  .toLowerCase())
+                                          .firstOrNull;
+                                      if (existing?.id != null) {
+                                        await _locationsRef
+                                            .doc(existing!.id)
+                                            .update(locMap);
+                                      } else {
+                                        await _locationsRef.add(locMap);
+                                      }
+                                      if (mounted) {
+                                        _loadLocations();
+                                        setState(() {
+                                          _selectedDay = dataEscala;
+                                          _focusedDay = dataEscala;
+                                        });
+                                        _ensureScalesStreamBound();
+                                      }
+                                      // Mostrar opÃ§Ã£o: Novo PlantÃ£o (voltar ao calendÃ¡rio) ou Finalizar (fechar e voltar ao calendÃ¡rio)
+                                      if (ctx.mounted) {
+                                        await showDialog<void>(
+                                          context: ctx,
+                                          barrierDismissible: false,
+                                          builder: (dialogContext) =>
+                                              AlertDialog(
+                                            title: const Row(
+                                              children: [
+                                                Icon(Icons.check_circle_rounded,
+                                                    color: AppColors.success,
+                                                    size: 28),
+                                                SizedBox(width: 12),
+                                                Text('PlantÃ£o salvo'),
+                                              ],
+                                            ),
+                                            content: const Text(
+                                              'PlantÃ£o salvo na agenda e lista de plantÃµes recorrentes atualizada. Na prÃ³xima vez, clique na data e escolha este plantÃ£o.',
+                                              style: TextStyle(height: 1.4),
+                                            ),
+                                            actions: [
+                                              TextButton(
+                                                onPressed: () {
+                                                  Navigator.pop(dialogContext);
+                                                  if (ctx.mounted) {
+                                                    Navigator.pop(ctx);
+                                                  }
+                                                },
+                                                child:
+                                                    const Text('Novo PlantÃ£o'),
+                                              ),
+                                              FilledButton(
+                                                onPressed: () {
+                                                  Navigator.pop(dialogContext);
+                                                  if (ctx.mounted) {
+                                                    Navigator.pop(ctx);
+                                                  }
+                                                },
+                                                child: const Text('Finalizar'),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }
+                                    } catch (e) {
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(SnackBar(
+                                                content: Text(
+                                                    'Erro ao salvar: ${e.toString().split('\n').first}')));
+                                      }
                                     }
-                                  } catch (e) {
-                                    if (mounted)
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(SnackBar(
-                                              content: Text(
-                                                  'Erro ao salvar: ${e.toString().split('\n').first}')));
                                   }
-                                }
-                              : null,
-                          child: const Text('Salvar na Agenda',
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold)),
+                                : null,
+                            child: const Text('Salvar na Agenda',
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold)),
+                          ),
                         ),
-                      ),
-                    ],
-                ),
-              ),
-            );
-          },
-        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
           );
         },
       ),
@@ -12466,23 +12589,27 @@ class _CalendarDayNPartsPainter extends CustomPainter {
     double t = double.infinity;
     if (dx > 1e-6) {
       final tRight = (w - cx) / dx;
-      if (tRight > 0 && (cy + tRight * dy) >= 0 && (cy + tRight * dy) <= h)
+      if (tRight > 0 && (cy + tRight * dy) >= 0 && (cy + tRight * dy) <= h) {
         t = math.min(t, tRight);
+      }
     }
     if (dx < -1e-6) {
       final tLeft = -cx / dx;
-      if (tLeft > 0 && (cy + tLeft * dy) >= 0 && (cy + tLeft * dy) <= h)
+      if (tLeft > 0 && (cy + tLeft * dy) >= 0 && (cy + tLeft * dy) <= h) {
         t = math.min(t, tLeft);
+      }
     }
     if (dy > 1e-6) {
       final tBottom = (h - cy) / dy;
-      if (tBottom > 0 && (cx + tBottom * dx) >= 0 && (cx + tBottom * dx) <= w)
+      if (tBottom > 0 && (cx + tBottom * dx) >= 0 && (cx + tBottom * dx) <= w) {
         t = math.min(t, tBottom);
+      }
     }
     if (dy < -1e-6) {
       final tTop = -cy / dy;
-      if (tTop > 0 && (cx + tTop * dx) >= 0 && (cx + tTop * dx) <= w)
+      if (tTop > 0 && (cx + tTop * dx) >= 0 && (cx + tTop * dx) <= w) {
         t = math.min(t, tTop);
+      }
     }
     if (t == double.infinity || t <= 0) t = 1;
     return Offset(dx * t, dy * t);

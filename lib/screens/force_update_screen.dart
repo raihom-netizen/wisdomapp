@@ -109,7 +109,7 @@ class _ForceUpdateScreenState extends State<ForceUpdateScreen> {
                         : 'Toque em "Atualizar agora" para abrir a Google Play Store e instalar a versão mais recente.',
                     style: TextStyle(
                       fontSize: 14,
-                      color: AppColors.textSecondary.withOpacity(0.9),
+                      color: AppColors.textSecondary.withValues(alpha: 0.9),
                       height: 1.3,
                     ),
                     textAlign: TextAlign.center,

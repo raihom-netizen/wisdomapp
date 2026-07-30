@@ -297,7 +297,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
     if (toClose.isEmpty) return;
     _agendaAutoCloseDebounce?.cancel();
-    _agendaAutoCloseDebounce = Timer(const Duration(milliseconds: 600), () async {
+    _agendaAutoCloseDebounce =
+        Timer(const Duration(milliseconds: 600), () async {
       if (!mounted) return;
       final batch = <String>[];
       for (final id in toClose) {
@@ -373,7 +374,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   /// Reconstrói agregados mensais no servidor (uma vez por sessão se ainda não migrado).
   Future<void> _ensureFinanceOpeningBucketsRebuildOnce() async {
-    await FinanceOpeningBalanceService.ensureServerBucketsRebuildIfNeeded(widget.uid);
+    await FinanceOpeningBalanceService.ensureServerBucketsRebuildIfNeeded(
+        widget.uid);
   }
 
   /// Fim do período para a lista "Plantões a tirar" — sempre do dia de hoje para frente.
@@ -505,8 +507,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   String _escalasSectionPeriodLabel() {
-    if (_escalasSectionPeriod == null || _escalasSectionPeriod == 'Geral')
+    if (_escalasSectionPeriod == null || _escalasSectionPeriod == 'Geral') {
       return _selectedPeriod;
+    }
     return _escalasSectionPeriod!;
   }
 
@@ -698,7 +701,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       mostrarAvisoSeLicencaInativa(context, widget.profile);
       return;
     }
-    final result = await Navigator.of(context, rootNavigator: true).push<Map<String, dynamic>>(
+    final result = await Navigator.of(context, rootNavigator: true)
+        .push<Map<String, dynamic>>(
       MaterialPageRoute(
         builder: (_) => NovoLancamentoPage(
           uid: _userFsId,
@@ -711,7 +715,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
     if (result == null || !mounted) return;
     try {
-      final saveResult = await TransactionSaveService.saveFromNovoLancamentoResult(
+      final saveResult =
+          await TransactionSaveService.saveFromNovoLancamentoResult(
         uid: _userFsId,
         data: result,
         context: context,
@@ -2832,15 +2837,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       initialPeriod: _agendaCardPeriod,
       initialCustomStart: _agendaCardCustomStart,
       initialCustomEnd: _agendaCardCustomEnd,
-      onVerTudoNaAgenda: widget.onNavigateTo != null
-          ? () => widget.onNavigateTo!(7)
-          : null,
+      onVerTudoNaAgenda:
+          widget.onNavigateTo != null ? () => widget.onNavigateTo!(7) : null,
       buildTile: (ctx, doc, isAudiencia) => AgendaOpenItemCard(
         doc: doc,
         isAudiencia: isAudiencia,
         profile: widget.profile,
-        onEdit: () =>
-            _showEditReminderFromDashboard(context, doc, isAudiencia),
+        onEdit: () => _showEditReminderFromDashboard(context, doc, isAudiencia),
         onDelete: () async {
           await deleteAgendaReminder(
             context: ctx,
@@ -2888,13 +2891,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         result: result,
       );
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(msg)));
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content:
-              Text('Erro ao atualizar: ${e.toString().split('\n').first}'),
+          content: Text('Erro ao atualizar: ${e.toString().split('\n').first}'),
         ));
       }
     }
@@ -2922,13 +2925,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         userDocId: _userFsId,
       );
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(msg)));
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content:
-              Text('Erro ao atualizar: ${e.toString().split('\n').first}'),
+          content: Text('Erro ao atualizar: ${e.toString().split('\n').first}'),
         ));
       }
     }
@@ -3144,87 +3147,87 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(12),
-                            onTap: () =>
-                                _showCompromissosAudienciasAbertoSheet(
-                              context,
-                              filter:
-                                  AgendaAbertoFilter.apenasAudiencias,
-                            ),
-                            child: AgendaResumoCountCard(
-                              icon: Icons.gavel_rounded,
-                              label: 'Audiências',
-                              count: audiencias,
-                              palette: AgendaResumoCountPalette.audiencia(),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(12),
-                            onTap: () =>
-                                _showCompromissosAudienciasAbertoSheet(
-                              context,
-                              filter:
-                                  AgendaAbertoFilter.apenasCompromissos,
-                            ),
-                            child: AgendaResumoCountCard(
-                              icon: Icons.person_outline_rounded,
-                              label: 'Compromissos',
-                              count: compromissos,
-                              palette: AgendaResumoCountPalette.compromisso(),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: () => _showCompromissosAudienciasAbertoSheet(
-                            context,
-                            filter: AgendaAbertoFilter.todos,
-                          ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        const SizedBox(height: 2),
+                        Row(
                           children: [
-                            Icon(Icons.touch_app_rounded,
-                                size: 14,
-                                color: AppColors.primary),
-                            const SizedBox(width: 6),
                             Expanded(
-                              child: Text(
-                                'Toque em cada cartão para ver só audiências ou só compromissos (link da sala e anexo). Toque aqui para ver ambos.',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textSecondary,
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(12),
+                                  onTap: () =>
+                                      _showCompromissosAudienciasAbertoSheet(
+                                    context,
+                                    filter: AgendaAbertoFilter.apenasAudiencias,
+                                  ),
+                                  child: AgendaResumoCountCard(
+                                    icon: Icons.gavel_rounded,
+                                    label: 'Audiências',
+                                    count: audiencias,
+                                    palette:
+                                        AgendaResumoCountPalette.audiencia(),
+                                  ),
                                 ),
-                                maxLines: 3,
-                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(12),
+                                  onTap: () =>
+                                      _showCompromissosAudienciasAbertoSheet(
+                                    context,
+                                    filter:
+                                        AgendaAbertoFilter.apenasCompromissos,
+                                  ),
+                                  child: AgendaResumoCountCard(
+                                    icon: Icons.person_outline_rounded,
+                                    label: 'Compromissos',
+                                    count: compromissos,
+                                    palette:
+                                        AgendaResumoCountPalette.compromisso(),
+                                  ),
+                                ),
                               ),
                             ),
                           ],
                         ),
-                      ),
-                    ),
-                  ),
+                        const SizedBox(height: 10),
+                        Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: () => _showCompromissosAudienciasAbertoSheet(
+                              context,
+                              filter: AgendaAbertoFilter.todos,
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(Icons.touch_app_rounded,
+                                      size: 14, color: AppColors.primary),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      'Toque em cada cartão para ver só audiências ou só compromissos (link da sala e anexo). Toque aqui para ver ambos.',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                      maxLines: 3,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -3526,7 +3529,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _ensureDashboardOpeningBalance(DateTime limiteAnterior) {
-    final key = '${limiteAnterior.year}-${limiteAnterior.month}-${limiteAnterior.day}';
+    final key =
+        '${limiteAnterior.year}-${limiteAnterior.month}-${limiteAnterior.day}';
     if (_dashboardOpeningBalancePeriodKey == key &&
         _dashboardOpeningBalanceCached != null) {
       return;
@@ -3661,241 +3665,241 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final saldoAnterior = _dashboardOpeningBalanceCached ?? 0.0;
     final saldoAcumulado = saldoAnterior + saldoPeriodo;
     return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF14532D), Color(0xFF166534), Color(0xFF15803D)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(_kDashSurfaceRadius),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.saldoPositive.withValues(alpha: 0.32),
-                blurRadius: 16,
-                offset: const Offset(0, 4),
-              ),
-            ],
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF14532D), Color(0xFF166534), Color(0xFF15803D)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(_kDashSurfaceRadius),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.saldoPositive.withValues(alpha: 0.32),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      periodLabel,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white.withValues(alpha: 0.95),
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                    ),
+              Expanded(
+                child: Text(
+                  periodLabel,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white.withValues(alpha: 0.95),
                   ),
-                  IconButton(
-                    tooltip: _hideSensitiveBalances
-                        ? 'Mostrar valores'
-                        : 'Ocultar valores',
-                    onPressed: () async {
-                      final v = !_hideSensitiveBalances;
-                      await SensitiveBalancePreferences.set(v);
-                      if (mounted) setState(() => _hideSensitiveBalances = v);
-                    },
-                    icon: Icon(
-                      _hideSensitiveBalances
-                          ? Icons.visibility_outlined
-                          : Icons.visibility_off_outlined,
-                      color: Colors.white.withValues(alpha: 0.95),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              _summaryCard(
-                label: 'Saldo de abertura',
-                value: saldoAnterior,
-                labelAndValueColor: saldoAnterior >= 0
-                    ? AppColors.saldoPositive
-                    : AppColors.saldoNegative,
-                hint: 'Toque para gráficos',
-                hideAmount: _hideSensitiveBalances,
-                onTap: () => _openDashboardFinanceInsight(
-                  context,
-                  scope: FinanceInsightScope.balance,
-                  rangeStart: rangeStart,
-                  rangeEnd: rangeEnd,
-                  openingBalanceHint: saldoAnterior,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
               ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: _summaryCard(
-                      label: 'Receitas',
-                      value: receitasVal,
-                      labelAndValueColor: AppColors.saldoPositive,
-                      hint: 'Toque para gráficos',
-                      hideAmount: _hideSensitiveBalances,
-                      onTap: () => _openDashboardFinanceInsight(
-                        context,
-                        scope: FinanceInsightScope.balance,
-                        rangeStart: rangeStart,
-                        rangeEnd: rangeEnd,
-                        openingBalanceHint: saldoAnterior,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _summaryCard(
-                      label: 'Despesas pagas',
-                      value: despesasVal,
-                      labelAndValueColor: AppColors.saldoNegative,
-                      hint: despesasPendentesCount > 0
-                          ? '$despesasPendentesCount pendente(s) · Toque para lançamentos'
-                          : 'Toque para lançamentos',
-                      hideAmount: _hideSensitiveBalances,
-                      onTap: () => _openDashboardFinanceInsight(
-                        context,
-                        scope: FinanceInsightScope.balance,
-                        rangeStart: rangeStart,
-                        rangeEnd: rangeEnd,
-                        openingBalanceHint: saldoAnterior,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: saldoAcumulado < 0
-                        ? _summaryCardSaldoNegativo(
-                            saldoAcumulado,
-                            hideAmount: _hideSensitiveBalances,
-                            onTap: () => _openDashboardFinanceInsight(
-                              context,
-                              scope: FinanceInsightScope.balance,
-                              rangeStart: rangeStart,
-                              rangeEnd: rangeEnd,
-                              openingBalanceHint: saldoAnterior,
-                            ),
-                          )
-                        : _summaryCard(
-                            label: 'Saldo (acum.)',
-                            value: saldoAcumulado,
-                            labelAndValueColor: AppColors.saldoPositive,
-                            hint: 'Toque para gráficos',
-                            hideAmount: _hideSensitiveBalances,
-                            onTap: () => _openDashboardFinanceInsight(
-                              context,
-                              scope: FinanceInsightScope.balance,
-                              rangeStart: rangeStart,
-                              rangeEnd: rangeEnd,
-                              openingBalanceHint: saldoAnterior,
-                            ),
-                          ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () => _openDashboardAccountsSaldoSheet(
-                      context, rangeStart, rangeEnd),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 14),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.9), width: 1),
-                      boxShadow: [
-                        BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.08),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2))
-                      ],
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                AppColors.primary.withValues(alpha: 0.85),
-                                AppColors.accent.withValues(alpha: 0.75)
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(Icons.pie_chart_outline_rounded,
-                              color: Colors.white, size: 22),
-                        ),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Saldo por contas',
-                                style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w900,
-                                    color: Color(0xFF14532D)),
-                              ),
-                              Text(
-                                'Corrente, poupança e cartões — toque para ver',
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.textSecondary),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Icon(Icons.chevron_right_rounded,
-                            color: Colors.grey.shade600),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: widget.profile.hasActiveLicense
-                      ? () => _openDashboardPdfStyleSheet(
-                            context,
-                            rangeStart,
-                            rangeEnd,
-                            cachedDocs: const <QueryDocumentSnapshot<Map<String, dynamic>>>[],
-                            openingBalanceHint: saldoAnterior,
-                          )
-                      : () =>
-                          mostrarAvisoSeLicencaInativa(context, widget.profile),
-                  icon: const Icon(Icons.picture_as_pdf_rounded, size: 20),
-                  label: const Text('Exportar PDF'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFFE65100),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 12, horizontal: 16),
-                  ),
+              IconButton(
+                tooltip: _hideSensitiveBalances
+                    ? 'Mostrar valores'
+                    : 'Ocultar valores',
+                onPressed: () async {
+                  final v = !_hideSensitiveBalances;
+                  await SensitiveBalancePreferences.set(v);
+                  if (mounted) setState(() => _hideSensitiveBalances = v);
+                },
+                icon: Icon(
+                  _hideSensitiveBalances
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
+                  color: Colors.white.withValues(alpha: 0.95),
                 ),
               ),
             ],
           ),
-        );
+          const SizedBox(height: 8),
+          _summaryCard(
+            label: 'Saldo de abertura',
+            value: saldoAnterior,
+            labelAndValueColor: saldoAnterior >= 0
+                ? AppColors.saldoPositive
+                : AppColors.saldoNegative,
+            hint: 'Toque para gráficos',
+            hideAmount: _hideSensitiveBalances,
+            onTap: () => _openDashboardFinanceInsight(
+              context,
+              scope: FinanceInsightScope.balance,
+              rangeStart: rangeStart,
+              rangeEnd: rangeEnd,
+              openingBalanceHint: saldoAnterior,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _summaryCard(
+                  label: 'Receitas',
+                  value: receitasVal,
+                  labelAndValueColor: AppColors.saldoPositive,
+                  hint: 'Toque para gráficos',
+                  hideAmount: _hideSensitiveBalances,
+                  onTap: () => _openDashboardFinanceInsight(
+                    context,
+                    scope: FinanceInsightScope.balance,
+                    rangeStart: rangeStart,
+                    rangeEnd: rangeEnd,
+                    openingBalanceHint: saldoAnterior,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _summaryCard(
+                  label: 'Despesas pagas',
+                  value: despesasVal,
+                  labelAndValueColor: AppColors.saldoNegative,
+                  hint: despesasPendentesCount > 0
+                      ? '$despesasPendentesCount pendente(s) · Toque para lançamentos'
+                      : 'Toque para lançamentos',
+                  hideAmount: _hideSensitiveBalances,
+                  onTap: () => _openDashboardFinanceInsight(
+                    context,
+                    scope: FinanceInsightScope.balance,
+                    rangeStart: rangeStart,
+                    rangeEnd: rangeEnd,
+                    openingBalanceHint: saldoAnterior,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: saldoAcumulado < 0
+                    ? _summaryCardSaldoNegativo(
+                        saldoAcumulado,
+                        hideAmount: _hideSensitiveBalances,
+                        onTap: () => _openDashboardFinanceInsight(
+                          context,
+                          scope: FinanceInsightScope.balance,
+                          rangeStart: rangeStart,
+                          rangeEnd: rangeEnd,
+                          openingBalanceHint: saldoAnterior,
+                        ),
+                      )
+                    : _summaryCard(
+                        label: 'Saldo (acum.)',
+                        value: saldoAcumulado,
+                        labelAndValueColor: AppColors.saldoPositive,
+                        hint: 'Toque para gráficos',
+                        hideAmount: _hideSensitiveBalances,
+                        onTap: () => _openDashboardFinanceInsight(
+                          context,
+                          scope: FinanceInsightScope.balance,
+                          rangeStart: rangeStart,
+                          rangeEnd: rangeEnd,
+                          openingBalanceHint: saldoAnterior,
+                        ),
+                      ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => _openDashboardAccountsSaldoSheet(
+                  context, rangeStart, rangeEnd),
+              child: Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.9), width: 1),
+                  boxShadow: [
+                    BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.08),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2))
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            AppColors.primary.withValues(alpha: 0.85),
+                            AppColors.accent.withValues(alpha: 0.75)
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.pie_chart_outline_rounded,
+                          color: Colors.white, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Saldo por contas',
+                            style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF14532D)),
+                          ),
+                          Text(
+                            'Corrente, poupança e cartões — toque para ver',
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(Icons.chevron_right_rounded,
+                        color: Colors.grey.shade600),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: widget.profile.hasActiveLicense
+                  ? () => _openDashboardPdfStyleSheet(
+                        context,
+                        rangeStart,
+                        rangeEnd,
+                        cachedDocs: const <QueryDocumentSnapshot<
+                            Map<String, dynamic>>>[],
+                        openingBalanceHint: saldoAnterior,
+                      )
+                  : () => mostrarAvisoSeLicencaInativa(context, widget.profile),
+              icon: const Icon(Icons.picture_as_pdf_rounded, size: 20),
+              label: const Text('Exportar PDF'),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFE65100),
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Quadro azul claro: receitas pendentes. Respeita preferências de receitas fixas (igual Financeiro).
@@ -3903,134 +3907,141 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return StreamBuilder<List<FinanceAccount>>(
       stream: FinanceAccountsService().streamAccounts(_userFsId),
       builder: (context, accSnap) {
-        final ccIds = FinanceAccountBalanceUtils.creditCardAccountIds(accSnap.data ?? const []);
+        final ccIds = FinanceAccountBalanceUtils.creditCardAccountIds(
+            accSnap.data ?? const []);
         return StreamBuilder<Map<String, dynamic>>(
-      stream: FixedIncomePreferencesService().watch(_userFsId),
-      builder: (context, prefsSnap) {
-        final showInPending = prefsSnap.data?['showInPending'] as bool? ?? true;
-        final monthsAhead =
-            (prefsSnap.data?['pendingMonthsAhead'] as int?)?.clamp(1, 12) ??
-                AppBusinessRules.pendingMonthsAheadDefault;
-        final limitDate = DateTime(
-            DateTime.now().year, DateTime.now().month + monthsAhead, 1);
-        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: financeTransactionsPendingSnapshots(uid: _userFsId, type: 'income'),
-          builder: (context, snap) {
-            if (snap.hasError) {
-              return _dashboardFinanceFirestoreErrorBanner(() {
-                if (mounted) setState(() {});
-              });
-            }
-            double totalPendentes = 0;
-            final listPendentes = <Map<String, dynamic>>[];
-            for (final doc in snap.data?.docs ?? []) {
-              final d = Map<String, dynamic>.from(doc.data());
-              d['id'] = doc.id;
-              final type = (d['type'] ?? 'expense').toString();
-              final status = (d['status'] ?? 'paid').toString();
-              if (type != 'income' || status == 'paid') continue;
-              if (FinanceAccountBalanceUtils.isOnCreditCardAccount(d, ccIds)) continue;
-              if (!showInPending &&
-                  (d['fixedIncomeId'] ?? '').toString().isNotEmpty) continue;
-              final dateTs = d['date'];
-              if (dateTs is Timestamp) {
-                final dt = dateTs.toDate();
-                if (dt.isAfter(limitDate)) continue;
-              }
-              final amount = (d['amount'] ?? 0).toDouble().abs();
-              totalPendentes += amount;
-              listPendentes.add(d);
-            }
-            listPendentes.sort((a, b) {
-              final ta = (a['date'] as Timestamp?)?.toDate();
-              final tb = (b['date'] as Timestamp?)?.toDate();
-              if (ta == null || tb == null) return 0;
-              return ta.compareTo(tb);
-            });
-            const blueLight = Color(0xFF0EA5E9);
-            const blueLightDark = Color(0xFF0284C7);
-            return Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () =>
-                    _abrirListaReceitasPendentes(context, listPendentes),
-                borderRadius: BorderRadius.circular(16),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        blueLight,
-                        blueLight.withOpacity(0.9),
-                        blueLightDark
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
+          stream: FixedIncomePreferencesService().watch(_userFsId),
+          builder: (context, prefsSnap) {
+            final showInPending =
+                prefsSnap.data?['showInPending'] as bool? ?? true;
+            final monthsAhead =
+                (prefsSnap.data?['pendingMonthsAhead'] as int?)?.clamp(1, 12) ??
+                    AppBusinessRules.pendingMonthsAheadDefault;
+            final limitDate = DateTime(
+                DateTime.now().year, DateTime.now().month + monthsAhead, 1);
+            return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: financeTransactionsPendingSnapshots(
+                  uid: _userFsId, type: 'income'),
+              builder: (context, snap) {
+                if (snap.hasError) {
+                  return _dashboardFinanceFirestoreErrorBanner(() {
+                    if (mounted) setState(() {});
+                  });
+                }
+                double totalPendentes = 0;
+                final listPendentes = <Map<String, dynamic>>[];
+                for (final doc in snap.data?.docs ?? []) {
+                  final d = Map<String, dynamic>.from(doc.data());
+                  d['id'] = doc.id;
+                  final type = (d['type'] ?? 'expense').toString();
+                  final status = (d['status'] ?? 'paid').toString();
+                  if (type != 'income' || status == 'paid') continue;
+                  if (FinanceAccountBalanceUtils.isOnCreditCardAccount(
+                      d, ccIds)) continue;
+                  if (!showInPending &&
+                      (d['fixedIncomeId'] ?? '').toString().isNotEmpty)
+                    continue;
+                  final dateTs = d['date'];
+                  if (dateTs is Timestamp) {
+                    final dt = dateTs.toDate();
+                    if (dt.isAfter(limitDate)) continue;
+                  }
+                  final amount = (d['amount'] ?? 0).toDouble().abs();
+                  totalPendentes += amount;
+                  listPendentes.add(d);
+                }
+                listPendentes.sort((a, b) {
+                  final ta = (a['date'] as Timestamp?)?.toDate();
+                  final tb = (b['date'] as Timestamp?)?.toDate();
+                  if (ta == null || tb == null) return 0;
+                  return ta.compareTo(tb);
+                });
+                const blueLight = Color(0xFF0EA5E9);
+                const blueLightDark = Color(0xFF0284C7);
+                return Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () =>
+                        _abrirListaReceitasPendentes(context, listPendentes),
                     borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                          color: blueLight.withOpacity(0.35),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4))
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.schedule_rounded,
-                            color: Colors.white, size: 24),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text('Receitas pendentes',
-                                style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w800,
-                                    color:
-                                        Colors.white.withValues(alpha: 0.98))),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${listPendentes.length} lançamento(s) em aberto · Toque para ver',
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.white.withValues(alpha: 0.85)),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 16),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            blueLight,
+                            blueLight.withOpacity(0.9),
+                            blueLightDark
                           ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
                         ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                              color: blueLight.withOpacity(0.35),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4))
+                        ],
                       ),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          SensitiveBalancePreferences.formatBrl(totalPendentes,
-                              hidden: _hideSensitiveBalances),
-                          style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w900,
-                              color: Colors.white),
-                        ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.schedule_rounded,
+                                color: Colors.white, size: 24),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text('Receitas pendentes',
+                                    style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w800,
+                                        color: Colors.white
+                                            .withValues(alpha: 0.98))),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${listPendentes.length} lançamento(s) em aberto · Toque para ver',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color:
+                                          Colors.white.withValues(alpha: 0.85)),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              SensitiveBalancePreferences.formatBrl(
+                                  totalPendentes,
+                                  hidden: _hideSensitiveBalances),
+                              style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.white),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
             );
           },
         );
-      },
-    );
       },
     );
   }
@@ -4040,132 +4051,139 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return StreamBuilder<List<FinanceAccount>>(
       stream: FinanceAccountsService().streamAccounts(_userFsId),
       builder: (context, accSnap) {
-        final ccIds = FinanceAccountBalanceUtils.creditCardAccountIds(accSnap.data ?? const []);
+        final ccIds = FinanceAccountBalanceUtils.creditCardAccountIds(
+            accSnap.data ?? const []);
         return StreamBuilder<Map<String, dynamic>>(
-      stream: FixedExpensePreferencesService().watch(_userFsId),
-      builder: (context, prefsSnap) {
-        final showInPending = prefsSnap.data?['showInPending'] as bool? ?? true;
-        final monthsAhead =
-            (prefsSnap.data?['pendingMonthsAhead'] as int?)?.clamp(1, 12) ??
-                AppBusinessRules.pendingMonthsAheadDefault;
-        final limitDate = DateTime(
-            DateTime.now().year, DateTime.now().month + monthsAhead, 1);
-        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: financeTransactionsPendingSnapshots(uid: _userFsId, type: 'expense'),
-          builder: (context, snap) {
-            if (snap.hasError) {
-              return _dashboardFinanceFirestoreErrorBanner(() {
-                if (mounted) setState(() {});
-              });
-            }
-            double totalPendentes = 0;
-            final listPendentes = <Map<String, dynamic>>[];
-            for (final doc in snap.data?.docs ?? []) {
-              final d = Map<String, dynamic>.from(doc.data());
-              d['id'] = doc.id;
-              final type = (d['type'] ?? 'expense').toString();
-              final status = (d['status'] ?? 'paid').toString();
-              if (type == 'income' || status == 'paid') continue;
-              if (FinanceAccountBalanceUtils.isOnCreditCardAccount(d, ccIds)) continue;
-              if (!showInPending &&
-                  (d['fixedExpenseId'] ?? '').toString().isNotEmpty) continue;
-              final dateTs = d['date'];
-              if (dateTs is Timestamp) {
-                final dt = dateTs.toDate();
-                if (dt.isAfter(limitDate)) continue;
-              }
-              final amount = (d['amount'] ?? 0).toDouble().abs();
-              totalPendentes += amount;
-              listPendentes.add(d);
-            }
-            listPendentes.sort((a, b) {
-              final ta = (a['date'] as Timestamp?)?.toDate();
-              final tb = (b['date'] as Timestamp?)?.toDate();
-              if (ta == null || tb == null) return 0;
-              return ta.compareTo(tb);
-            });
-            return Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () =>
-                    _abrirListaDespesasPendentes(context, listPendentes),
-                borderRadius: BorderRadius.circular(16),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        AppColors.logoOrange,
-                        AppColors.logoOrange.withOpacity(0.85),
-                        const Color(0xFFEA580C),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
+          stream: FixedExpensePreferencesService().watch(_userFsId),
+          builder: (context, prefsSnap) {
+            final showInPending =
+                prefsSnap.data?['showInPending'] as bool? ?? true;
+            final monthsAhead =
+                (prefsSnap.data?['pendingMonthsAhead'] as int?)?.clamp(1, 12) ??
+                    AppBusinessRules.pendingMonthsAheadDefault;
+            final limitDate = DateTime(
+                DateTime.now().year, DateTime.now().month + monthsAhead, 1);
+            return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: financeTransactionsPendingSnapshots(
+                  uid: _userFsId, type: 'expense'),
+              builder: (context, snap) {
+                if (snap.hasError) {
+                  return _dashboardFinanceFirestoreErrorBanner(() {
+                    if (mounted) setState(() {});
+                  });
+                }
+                double totalPendentes = 0;
+                final listPendentes = <Map<String, dynamic>>[];
+                for (final doc in snap.data?.docs ?? []) {
+                  final d = Map<String, dynamic>.from(doc.data());
+                  d['id'] = doc.id;
+                  final type = (d['type'] ?? 'expense').toString();
+                  final status = (d['status'] ?? 'paid').toString();
+                  if (type == 'income' || status == 'paid') continue;
+                  if (FinanceAccountBalanceUtils.isOnCreditCardAccount(
+                      d, ccIds)) continue;
+                  if (!showInPending &&
+                      (d['fixedExpenseId'] ?? '').toString().isNotEmpty)
+                    continue;
+                  final dateTs = d['date'];
+                  if (dateTs is Timestamp) {
+                    final dt = dateTs.toDate();
+                    if (dt.isAfter(limitDate)) continue;
+                  }
+                  final amount = (d['amount'] ?? 0).toDouble().abs();
+                  totalPendentes += amount;
+                  listPendentes.add(d);
+                }
+                listPendentes.sort((a, b) {
+                  final ta = (a['date'] as Timestamp?)?.toDate();
+                  final tb = (b['date'] as Timestamp?)?.toDate();
+                  if (ta == null || tb == null) return 0;
+                  return ta.compareTo(tb);
+                });
+                return Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () =>
+                        _abrirListaDespesasPendentes(context, listPendentes),
                     borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                          color: AppColors.logoOrange.withOpacity(0.35),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4))
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.schedule_rounded,
-                            color: Colors.white, size: 24),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text('Despesas pendentes',
-                                style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w800,
-                                    color:
-                                        Colors.white.withValues(alpha: 0.98))),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${listPendentes.length} lançamento(s) em aberto · Toque para ver',
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.white.withValues(alpha: 0.85)),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 16),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            AppColors.logoOrange,
+                            AppColors.logoOrange.withOpacity(0.85),
+                            const Color(0xFFEA580C),
                           ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
                         ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                              color: AppColors.logoOrange.withOpacity(0.35),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4))
+                        ],
                       ),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          SensitiveBalancePreferences.formatBrl(totalPendentes,
-                              hidden: _hideSensitiveBalances),
-                          style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w900,
-                              color: Colors.white),
-                        ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.schedule_rounded,
+                                color: Colors.white, size: 24),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text('Despesas pendentes',
+                                    style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w800,
+                                        color: Colors.white
+                                            .withValues(alpha: 0.98))),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${listPendentes.length} lançamento(s) em aberto · Toque para ver',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color:
+                                          Colors.white.withValues(alpha: 0.85)),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              SensitiveBalancePreferences.formatBrl(
+                                  totalPendentes,
+                                  hidden: _hideSensitiveBalances),
+                              style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.white),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
             );
           },
         );
-      },
-    );
       },
     );
   }
@@ -4178,16 +4196,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final accounts = accSnap.data ?? const <FinanceAccount>[];
         final ccIds = FinanceAccountBalanceUtils.creditCardAccountIds(accounts);
         return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: financeTransactionsPendingSnapshots(uid: _userFsId, type: 'expense'),
+          stream: financeTransactionsPendingSnapshots(
+              uid: _userFsId, type: 'expense'),
           builder: (context, snap) {
             final docs = snap.data?.docs ?? const [];
-            final faturaByCard = FinanceAccountBalanceUtils.faturaAbertaByCardId(
+            final faturaByCard =
+                FinanceAccountBalanceUtils.faturaAbertaByCardId(
               docs,
               creditCardIds: ccIds,
             );
-            final total = FinanceAccountBalanceUtils.totalFaturaEmAberto(faturaByCard);
-            final count = FinanceAccountBalanceUtils.countPendingExpensesOnCreditCards(docs, ccIds);
-            final cards = FinanceAccountBalanceUtils.creditCardProducts(accounts);
+            final total =
+                FinanceAccountBalanceUtils.totalFaturaEmAberto(faturaByCard);
+            final count =
+                FinanceAccountBalanceUtils.countPendingExpensesOnCreditCards(
+                    docs, ccIds);
+            final cards =
+                FinanceAccountBalanceUtils.creditCardProducts(accounts);
             if (cards.isEmpty) return const SizedBox.shrink();
             return FinanceFaturaEmAbertoBand(
               totalFatura: total,
@@ -4198,7 +4222,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   SensitiveBalancePreferences.formatBrl(v, hidden: hidden),
               onTap: snap.hasError
                   ? () {}
-                  : () => _openFaturaEmAbertoFromDashboard(context, faturaByCard, accounts),
+                  : () => _openFaturaEmAbertoFromDashboard(
+                      context, faturaByCard, accounts),
             );
           },
         );
@@ -4206,7 +4231,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  FinanceFaturaSheetHandlers _dashboardFaturaHandlers() => FinanceFaturaSheetHandlers(
+  FinanceFaturaSheetHandlers _dashboardFaturaHandlers() =>
+      FinanceFaturaSheetHandlers(
         onConfirmFaturaPayment: _confirmarPagamentoFaturaCartaoDashboard,
         onEditTransaction: (c, docId, current, type) async {
           final e = Map<String, dynamic>.from(current);
@@ -4306,7 +4332,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Erro ao pagar fatura: ${e.toString().split('\n').first}'),
+          content:
+              Text('Erro ao pagar fatura: ${e.toString().split('\n').first}'),
           backgroundColor: AppColors.error,
         ),
       );
@@ -4503,7 +4530,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final ts = d['date'];
       if (ts is! Timestamp) continue;
       final date = ts.toDate();
-      final effectiveDate = FinanceLineOpening.effectiveDateTimeFromMap(d) ?? date;
+      final effectiveDate =
+          FinanceLineOpening.effectiveDateTimeFromMap(d) ?? date;
       if (!effectiveDate.isBefore(start)) continue;
       final isPaid = (d['status'] ?? 'paid').toString() == 'paid';
       if (!isPaid) continue;
@@ -4625,8 +4653,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         maxChildSize: 0.92,
         expand: false,
         builder: (ctx, scrollController) => Container(
-          decoration: financePremiumSheetDecoration(surfaceTint: AppColors.primary),
-          child: StreamBuilder<List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
+          decoration:
+              financePremiumSheetDecoration(surfaceTint: AppColors.primary),
+          child:
+              StreamBuilder<List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
             stream: financeTransactionsPeriodDocs(
               uid: _userFsId,
               rangeStart: rangeStart,
@@ -4642,7 +4672,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 periodStart: periodStart,
                 loadAccounts: true,
               );
-              return FutureBuilder<({double total, Map<String, double> byAccount})>(
+              return FutureBuilder<
+                  ({double total, Map<String, double> byAccount})>(
                 future: FinanceOpeningBalanceService.load(
                   uid: widget.uid,
                   periodStart: periodStart,
@@ -4654,8 +4685,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     openSnap.data?.byAccount ?? const <String, double>{},
                   );
                   final openingTotal = openSnap.data?.total ?? 0.0;
-                  final netById =
-                      _netByFinanceAccountInPeriod(periodDocs, rangeStart, rangeEnd);
+                  final netById = _netByFinanceAccountInPeriod(
+                      periodDocs, rangeStart, rangeEnd);
                   final mergedById =
                       _mergeOpeningAndPeriodByAccount(openingById, netById);
                   var sumOpeningAssigned = 0.0;
@@ -4670,449 +4701,599 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   final trailingSaldoTiles =
                       (showOrphanOpening ? 1 : 0) + (showPeriodOrphan ? 1 : 0);
                   final docs = periodDocs;
-              return StreamBuilder<List<FinanceAccount>>(
-                stream: FinanceAccountsService().streamAccounts(_userFsId),
-                builder: (context, accSnap) {
-                  final accounts = accSnap.data ?? const <FinanceAccount>[];
-                  final ccIds =
-                      FinanceAccountBalanceUtils.creditCardAccountIds(accounts);
-                  // Diferencia "ainda carregando do servidor" de "realmente
-                  // sem contas cadastradas". Sem isso o usuário via "Cadastre
-                  // contas em Financeiro" mesmo quando tinha contas — só não
-                  // tinham chegado ainda do servidor.
-                  final accountsLoading = !accSnap.hasData &&
-                      accSnap.connectionState == ConnectionState.waiting;
-                  return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                    stream: financeTransactionsPendingSnapshots(
-                      uid: _userFsId,
-                      type: 'expense',
-                    ),
-                    builder: (context, pendingSnap) {
-                      final pendingDocs =
-                          pendingSnap.data?.docs ?? const [];
-                      final faturaByCard =
-                          FinanceAccountBalanceUtils.faturaAbertaByCardId(
-                        pendingDocs,
-                        creditCardIds: ccIds,
-                      );
-                      return Column(
-                    children: [
-                      FinancePremiumSheetHeader(
-                        title: 'Saldo por contas',
-                        subtitle:
-                            'Conta corrente: lançamentos e gráficos · Cartão: fatura em aberto',
-                        icon: Icons.account_balance_wallet_rounded,
-                        iconGradient: const [
-                          AppColors.deepBlueDark,
-                          AppColors.primary,
-                          AppColors.accent,
-                        ],
-                        onBack: () => Navigator.pop(ctx),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(18),
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFFE65100), Color(0xFFFF7043), AppColors.logoOrange],
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFFE65100).withValues(alpha: 0.35),
-                                blurRadius: 14,
-                                offset: const Offset(0, 5),
-                              ),
-                            ],
-                          ),
-                          child: FilledButton.icon(
-                            onPressed: widget.profile.hasActiveLicense
-                                ? () => _openDashboardPdfStyleSheet(
-                                      ctx,
-                                      rangeStart,
-                                      rangeEnd,
-                                      cachedDocs: docs,
-                                      openingBalanceHint: openingTotal,
-                                    )
-                                : () => mostrarAvisoSeLicencaInativa(ctx, widget.profile),
-                            icon: const Icon(Icons.picture_as_pdf_rounded, size: 22),
-                            label: const Text('Exportar PDF (período do painel)'),
-                            style: FilledButton.styleFrom(
-                              minimumSize: const Size.fromHeight(50),
-                              backgroundColor: Colors.transparent,
-                              shadowColor: Colors.transparent,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                            ),
-                          ),
+                  return StreamBuilder<List<FinanceAccount>>(
+                    stream: FinanceAccountsService().streamAccounts(_userFsId),
+                    builder: (context, accSnap) {
+                      final accounts = accSnap.data ?? const <FinanceAccount>[];
+                      final ccIds =
+                          FinanceAccountBalanceUtils.creditCardAccountIds(
+                              accounts);
+                      // Diferencia "ainda carregando do servidor" de "realmente
+                      // sem contas cadastradas". Sem isso o usuário via "Cadastre
+                      // contas em Financeiro" mesmo quando tinha contas — só não
+                      // tinham chegado ainda do servidor.
+                      final accountsLoading = !accSnap.hasData &&
+                          accSnap.connectionState == ConnectionState.waiting;
+                      return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                        stream: financeTransactionsPendingSnapshots(
+                          uid: _userFsId,
+                          type: 'expense',
                         ),
-                      ),
-                      Expanded(
-                        child: accountsLoading
-                            ? ListView(
-                                controller: scrollController,
-                                padding:
-                                    const EdgeInsets.fromLTRB(20, 8, 20, 24),
-                                children: [
-                                  for (var i = 0; i < 4; i++)
-                                    Padding(
-                                      padding: const EdgeInsets.only(bottom: 12),
-                                      child: Container(
-                                        height: 64,
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey.shade200,
-                                          borderRadius: BorderRadius.circular(14),
-                                        ),
-                                      ),
-                                    ),
-                                  Text(
-                                    'Carregando suas contas…',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey.shade600),
-                                  ),
+                        builder: (context, pendingSnap) {
+                          final pendingDocs =
+                              pendingSnap.data?.docs ?? const [];
+                          final faturaByCard =
+                              FinanceAccountBalanceUtils.faturaAbertaByCardId(
+                            pendingDocs,
+                            creditCardIds: ccIds,
+                          );
+                          return Column(
+                            children: [
+                              FinancePremiumSheetHeader(
+                                title: 'Saldo por contas',
+                                subtitle:
+                                    'Conta corrente: lançamentos e gráficos · Cartão: fatura em aberto',
+                                icon: Icons.account_balance_wallet_rounded,
+                                iconGradient: const [
+                                  AppColors.deepBlueDark,
+                                  AppColors.primary,
+                                  AppColors.accent,
                                 ],
-                              )
-                            : accounts.isEmpty
-                            ? ListView(
-                                controller: scrollController,
+                                onBack: () => Navigator.pop(ctx),
+                              ),
+                              Padding(
                                 padding:
-                                    const EdgeInsets.fromLTRB(20, 8, 20, 24),
-                                children: [
-                                  Text(
-                                    'Cadastre contas em Financeiro → Bancos e cartões.',
-                                    style: TextStyle(
-                                        fontSize: 14,
-                                        color: Colors.grey.shade700,
-                                        height: 1.35),
-                                  ),
-                                  if (widget.onNavigateTo != null) ...[
-                                    const SizedBox(height: 12),
-                                    FilledButton.icon(
-                                      onPressed: () {
-                                        Navigator.pop(ctx);
-                                        widget.onNavigateTo!(1);
-                                      },
-                                      icon:
-                                          const Icon(Icons.open_in_new_rounded),
-                                      label: const Text('Abrir Financeiro'),
+                                    const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(18),
+                                    gradient: const LinearGradient(
+                                      colors: [
+                                        Color(0xFFE65100),
+                                        Color(0xFFFF7043),
+                                        AppColors.logoOrange
+                                      ],
                                     ),
-                                  ],
-                                ],
-                              )
-                            : ListView.builder(
-                                controller: scrollController,
-                                padding: EdgeInsets.fromLTRB(16, 0, 16,
-                                    16 + MediaQuery.paddingOf(context).bottom),
-                                itemCount: accounts.length + trailingSaldoTiles,
-                                itemBuilder: (_, i) {
-                                  if (i >= accounts.length) {
-                                    final idx = i - accounts.length;
-                                    if (showOrphanOpening && idx == 0) {
-                                      return Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 10),
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 14, vertical: 12),
-                                          decoration: BoxDecoration(
-                                            borderRadius:
-                                                BorderRadius.circular(16),
-                                            border: Border.all(
-                                                color: Colors.amber.shade300),
-                                            color: Colors.amber.shade50,
-                                          ),
-                                          child: Row(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Icon(Icons.info_outline_rounded,
-                                                  color: Colors.amber.shade900,
-                                                  size: 22),
-                                              const SizedBox(width: 10),
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      'Saldo de abertura sem conta',
-                                                      style: TextStyle(
-                                                        fontWeight:
-                                                            FontWeight.w900,
-                                                        fontSize: 14,
-                                                        color: Colors
-                                                            .grey.shade900,
-                                                      ),
-                                                    ),
-                                                    const SizedBox(height: 4),
-                                                    Text(
-                                                      'Parte do saldo de abertura veio de lançamentos antigos sem banco/cartão vinculado. '
-                                                      'Atribua conta nesses lançamentos no Financeiro para o total por banco fechar com o saldo acumulado.',
-                                                      style: TextStyle(
-                                                          fontSize: 12,
-                                                          height: 1.35,
-                                                          color: Colors
-                                                              .grey.shade800),
-                                                    ),
-                                                    const SizedBox(height: 8),
-                                                    Text(
-                                                      CurrencyFormats.formatBRL(
-                                                          orphanOpening),
-                                                      style: TextStyle(
-                                                        fontWeight:
-                                                            FontWeight.w900,
-                                                        fontSize: 15,
-                                                        color: orphanOpening >=
-                                                                0
-                                                            ? AppColors
-                                                                .saldoPositive
-                                                            : AppColors
-                                                                .saldoNegative,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                    if (showPeriodOrphan &&
-                                        idx == (showOrphanOpening ? 1 : 0)) {
-                                      return Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 10),
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 14, vertical: 12),
-                                          decoration: BoxDecoration(
-                                            borderRadius:
-                                                BorderRadius.circular(16),
-                                            border: Border.all(
-                                                color: Colors.blue.shade200),
-                                            color: Colors.blue.shade50,
-                                          ),
-                                          child: Row(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Icon(Icons.link_off_rounded,
-                                                  color: Colors.blue.shade900,
-                                                  size: 22),
-                                              const SizedBox(width: 10),
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      'Período sem conta vinculada',
-                                                      style: TextStyle(
-                                                        fontWeight:
-                                                            FontWeight.w900,
-                                                        fontSize: 14,
-                                                        color: Colors
-                                                            .grey.shade900,
-                                                      ),
-                                                    ),
-                                                    const SizedBox(height: 4),
-                                                    Text(
-                                                      'Há receitas ou despesas pagas neste período sem banco/cartão. '
-                                                      'Esse valor entra no «Saldo (acum.)» do painel e não aparece nas linhas acima até você atribuir conta.',
-                                                      style: TextStyle(
-                                                          fontSize: 12,
-                                                          height: 1.35,
-                                                          color: Colors
-                                                              .grey.shade800),
-                                                    ),
-                                                    const SizedBox(height: 8),
-                                                    Text(
-                                                      CurrencyFormats.formatBRL(
-                                                          periodOrphan),
-                                                      style: TextStyle(
-                                                        fontWeight:
-                                                            FontWeight.w900,
-                                                        fontSize: 15,
-                                                        color: periodOrphan >= 0
-                                                            ? AppColors
-                                                                .saldoPositive
-                                                            : AppColors
-                                                                .saldoNegative,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                    return const SizedBox.shrink();
-                                  }
-                                  final a = accounts[i];
-                                  final p = a.preset;
-                                  final c1 = p?.color1 ?? AppColors.primary;
-                                  final c2 = p?.color2 ?? AppColors.primary;
-                                  final net = mergedById[a.id] ?? 0;
-                                  final isCard = a.isCreditCardProduct;
-                                  final fatura = faturaByCard[a.id] ?? 0;
-                                  final displayAmount = isCard ? fatura : net;
-                                  final pendingOnCard = isCard && fatura > 0.0001;
-                                  return Padding(
-                                    padding: const EdgeInsets.only(bottom: 12),
-                                    child: FinancePremiumAccountCard(
-                                      leading: Container(
-                                        width: 48,
-                                        height: 48,
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(14),
-                                          gradient: LinearGradient(
-                                            colors: [c1, c2],
-                                            begin: Alignment.topLeft,
-                                            end: Alignment.bottomRight,
-                                          ),
-                                        ),
-                                        alignment: Alignment.center,
-                                        child: FinanceBankBrandThumb(
-                                          preset: p,
-                                          size: 36,
-                                          onBrandGradient: true,
-                                          fallbackIcon: p?.icon ?? Icons.account_balance_wallet_rounded,
-                                        ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(0xFFE65100)
+                                            .withValues(alpha: 0.35),
+                                        blurRadius: 14,
+                                        offset: const Offset(0, 5),
                                       ),
-                                      title: a.displayName,
-                                      subtitle: isCard
-                                          ? (pendingOnCard
-                                              ? 'Cartão · fatura em aberto'
-                                              : 'Cartão · sem lançamentos na fatura')
-                                          : a.productTypeLabel,
-                                      balanceText:
-                                          CurrencyFormats.formatBRL(displayAmount),
-                                      balanceColor: isCard
-                                          ? AppColors.financeDespesa
-                                          : (net >= 0
-                                              ? AppColors.saldoPositive
-                                              : AppColors.saldoNegative),
-                                      gradient: [c1, c2],
-                                      onTap: () async {
-                                        if (isCard) {
-                                          _openDashboardCreditCardFaturaSheet(
-                                            ctx,
-                                            a,
-                                            accounts,
-                                          );
-                                          return;
-                                        }
-                                        final from = DateTime(rangeStart.year,
-                                            rangeStart.month, rangeStart.day);
-                                        final to = DateTime(
-                                            rangeEnd.year,
-                                            rangeEnd.month,
-                                            rangeEnd.day,
-                                            23,
-                                            59,
-                                            59);
-                                        await showModalBottomSheet<void>(
-                                          context: ctx,
-                                          isScrollControlled: true,
-                                          useSafeArea: true,
-                                          backgroundColor: Colors.white,
-                                          builder: (_) => FinanceInsightSheet(
-                                            uid: _userFsId,
-                                            initialScope:
-                                                FinanceInsightScope.balance,
-                                            initialFrom: from,
-                                            initialTo: to,
-                                            statusFilter: 'paid',
-                                            search: '',
-                                            financeAccountFilterId: a.id,
-                                            financeAccountFilterLabel:
-                                                a.displayName,
-                                            openingBalanceHint:
-                                                openingById[a.id],
-                                            openingByAccountHint: openingById,
-                                            onEdit:
-                                                (docId, current, type) async {
-                                              final e =
-                                                  Map<String, dynamic>.from(
-                                                      current);
-                                              e['id'] = docId;
-                                              if (type == 'income') {
-                                                await _editarReceitaDashboard(
-                                                    context, e);
-                                              } else {
-                                                await _editarLancamentoDashboard(
-                                                    context, e);
-                                              }
-                                            },
-                                            onDelete: (docId) =>
-                                                _excluirLancamentoDashboard(
-                                                    context, docId),
-                                          ),
-                                        );
-                                      },
-                                      trailing: Row(
-                                        mainAxisSize: MainAxisSize.min,
+                                    ],
+                                  ),
+                                  child: FilledButton.icon(
+                                    onPressed: widget.profile.hasActiveLicense
+                                        ? () => _openDashboardPdfStyleSheet(
+                                              ctx,
+                                              rangeStart,
+                                              rangeEnd,
+                                              cachedDocs: docs,
+                                              openingBalanceHint: openingTotal,
+                                            )
+                                        : () => mostrarAvisoSeLicencaInativa(
+                                            ctx, widget.profile),
+                                    icon: const Icon(
+                                        Icons.picture_as_pdf_rounded,
+                                        size: 22),
+                                    label: const Text(
+                                        'Exportar PDF (período do painel)'),
+                                    style: FilledButton.styleFrom(
+                                      minimumSize: const Size.fromHeight(50),
+                                      backgroundColor: Colors.transparent,
+                                      shadowColor: Colors.transparent,
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(18)),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: accountsLoading
+                                    ? ListView(
+                                        controller: scrollController,
+                                        padding: const EdgeInsets.fromLTRB(
+                                            20, 8, 20, 24),
                                         children: [
-                                          Column(
-                                            crossAxisAlignment: CrossAxisAlignment.end,
-                                            mainAxisAlignment: MainAxisAlignment.center,
+                                          for (var i = 0; i < 4; i++)
+                                            Padding(
+                                              padding: const EdgeInsets.only(
+                                                  bottom: 12),
+                                              child: Container(
+                                                height: 64,
+                                                decoration: BoxDecoration(
+                                                  color: Colors.grey.shade200,
+                                                  borderRadius:
+                                                      BorderRadius.circular(14),
+                                                ),
+                                              ),
+                                            ),
+                                          Text(
+                                            'Carregando suas contas…',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey.shade600),
+                                          ),
+                                        ],
+                                      )
+                                    : accounts.isEmpty
+                                        ? ListView(
+                                            controller: scrollController,
+                                            padding: const EdgeInsets.fromLTRB(
+                                                20, 8, 20, 24),
                                             children: [
                                               Text(
-                                                isCard ? 'Ver fatura' : 'Gráficos',
+                                                'Cadastre contas em Financeiro → Bancos e cartões.',
                                                 style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: isCard
-                                                      ? AppColors.financeDespesa
-                                                      : AppColors.primary,
-                                                  fontWeight: FontWeight.w800,
-                                                ),
+                                                    fontSize: 14,
+                                                    color: Colors.grey.shade700,
+                                                    height: 1.35),
                                               ),
+                                              if (widget.onNavigateTo !=
+                                                  null) ...[
+                                                const SizedBox(height: 12),
+                                                FilledButton.icon(
+                                                  onPressed: () {
+                                                    Navigator.pop(ctx);
+                                                    widget.onNavigateTo!(1);
+                                                  },
+                                                  icon: const Icon(Icons
+                                                      .open_in_new_rounded),
+                                                  label: const Text(
+                                                      'Abrir Financeiro'),
+                                                ),
+                                              ],
                                             ],
-                                          ),
-                                          if (!isCard && widget.onNavigateTo != null)
-                                            IconButton(
-                                              tooltip: 'Ver lançamentos desta conta no Financeiro',
-                                              onPressed: () {
-                                                FinanceShellNavigation.requestOpenFinanceiro(accountId: a.id);
-                                                Navigator.pop(ctx);
-                                                widget.onNavigateTo!(1);
-                                              },
-                                              icon: const Icon(Icons.receipt_long_rounded, color: AppColors.primary, size: 22),
-                                            ),
-                                          if (!isCard)
-                                            IconButton(
-                                              tooltip: 'Exportar PDF desta conta',
-                                              onPressed: widget.profile.hasActiveLicense
-                                                  ? () => _openDashboardPdfStyleSheet(
+                                          )
+                                        : ListView.builder(
+                                            controller: scrollController,
+                                            padding: EdgeInsets.fromLTRB(
+                                                16,
+                                                0,
+                                                16,
+                                                16 +
+                                                    MediaQuery.paddingOf(
+                                                            context)
+                                                        .bottom),
+                                            itemCount: accounts.length +
+                                                trailingSaldoTiles,
+                                            itemBuilder: (_, i) {
+                                              if (i >= accounts.length) {
+                                                final idx = i - accounts.length;
+                                                if (showOrphanOpening &&
+                                                    idx == 0) {
+                                                  return Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                            bottom: 10),
+                                                    child: Container(
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                          horizontal: 14,
+                                                          vertical: 12),
+                                                      decoration: BoxDecoration(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(16),
+                                                        border: Border.all(
+                                                            color: Colors.amber
+                                                                .shade300),
+                                                        color: Colors
+                                                            .amber.shade50,
+                                                      ),
+                                                      child: Row(
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
+                                                        children: [
+                                                          Icon(
+                                                              Icons
+                                                                  .info_outline_rounded,
+                                                              color: Colors
+                                                                  .amber
+                                                                  .shade900,
+                                                              size: 22),
+                                                          const SizedBox(
+                                                              width: 10),
+                                                          Expanded(
+                                                            child: Column(
+                                                              crossAxisAlignment:
+                                                                  CrossAxisAlignment
+                                                                      .start,
+                                                              children: [
+                                                                Text(
+                                                                  'Saldo de abertura sem conta',
+                                                                  style:
+                                                                      TextStyle(
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w900,
+                                                                    fontSize:
+                                                                        14,
+                                                                    color: Colors
+                                                                        .grey
+                                                                        .shade900,
+                                                                  ),
+                                                                ),
+                                                                const SizedBox(
+                                                                    height: 4),
+                                                                Text(
+                                                                  'Parte do saldo de abertura veio de lançamentos antigos sem banco/cartão vinculado. '
+                                                                  'Atribua conta nesses lançamentos no Financeiro para o total por banco fechar com o saldo acumulado.',
+                                                                  style: TextStyle(
+                                                                      fontSize:
+                                                                          12,
+                                                                      height:
+                                                                          1.35,
+                                                                      color: Colors
+                                                                          .grey
+                                                                          .shade800),
+                                                                ),
+                                                                const SizedBox(
+                                                                    height: 8),
+                                                                Text(
+                                                                  CurrencyFormats
+                                                                      .formatBRL(
+                                                                          orphanOpening),
+                                                                  style:
+                                                                      TextStyle(
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w900,
+                                                                    fontSize:
+                                                                        15,
+                                                                    color: orphanOpening >=
+                                                                            0
+                                                                        ? AppColors
+                                                                            .saldoPositive
+                                                                        : AppColors
+                                                                            .saldoNegative,
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  );
+                                                }
+                                                if (showPeriodOrphan &&
+                                                    idx ==
+                                                        (showOrphanOpening
+                                                            ? 1
+                                                            : 0)) {
+                                                  return Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                            bottom: 10),
+                                                    child: Container(
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                          horizontal: 14,
+                                                          vertical: 12),
+                                                      decoration: BoxDecoration(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(16),
+                                                        border: Border.all(
+                                                            color: Colors
+                                                                .blue.shade200),
+                                                        color:
+                                                            Colors.blue.shade50,
+                                                      ),
+                                                      child: Row(
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
+                                                        children: [
+                                                          Icon(
+                                                              Icons
+                                                                  .link_off_rounded,
+                                                              color: Colors.blue
+                                                                  .shade900,
+                                                              size: 22),
+                                                          const SizedBox(
+                                                              width: 10),
+                                                          Expanded(
+                                                            child: Column(
+                                                              crossAxisAlignment:
+                                                                  CrossAxisAlignment
+                                                                      .start,
+                                                              children: [
+                                                                Text(
+                                                                  'Período sem conta vinculada',
+                                                                  style:
+                                                                      TextStyle(
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w900,
+                                                                    fontSize:
+                                                                        14,
+                                                                    color: Colors
+                                                                        .grey
+                                                                        .shade900,
+                                                                  ),
+                                                                ),
+                                                                const SizedBox(
+                                                                    height: 4),
+                                                                Text(
+                                                                  'Há receitas ou despesas pagas neste período sem banco/cartão. '
+                                                                  'Esse valor entra no «Saldo (acum.)» do painel e não aparece nas linhas acima até você atribuir conta.',
+                                                                  style: TextStyle(
+                                                                      fontSize:
+                                                                          12,
+                                                                      height:
+                                                                          1.35,
+                                                                      color: Colors
+                                                                          .grey
+                                                                          .shade800),
+                                                                ),
+                                                                const SizedBox(
+                                                                    height: 8),
+                                                                Text(
+                                                                  CurrencyFormats
+                                                                      .formatBRL(
+                                                                          periodOrphan),
+                                                                  style:
+                                                                      TextStyle(
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w900,
+                                                                    fontSize:
+                                                                        15,
+                                                                    color: periodOrphan >=
+                                                                            0
+                                                                        ? AppColors
+                                                                            .saldoPositive
+                                                                        : AppColors
+                                                                            .saldoNegative,
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  );
+                                                }
+                                                return const SizedBox.shrink();
+                                              }
+                                              final a = accounts[i];
+                                              final p = a.preset;
+                                              final c1 = p?.color1 ??
+                                                  AppColors.primary;
+                                              final c2 = p?.color2 ??
+                                                  AppColors.primary;
+                                              final net = mergedById[a.id] ?? 0;
+                                              final isCard =
+                                                  a.isCreditCardProduct;
+                                              final fatura =
+                                                  faturaByCard[a.id] ?? 0;
+                                              final displayAmount =
+                                                  isCard ? fatura : net;
+                                              final pendingOnCard =
+                                                  isCard && fatura > 0.0001;
+                                              return Padding(
+                                                padding: const EdgeInsets.only(
+                                                    bottom: 12),
+                                                child:
+                                                    FinancePremiumAccountCard(
+                                                  leading: Container(
+                                                    width: 48,
+                                                    height: 48,
+                                                    decoration: BoxDecoration(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              14),
+                                                      gradient: LinearGradient(
+                                                        colors: [c1, c2],
+                                                        begin:
+                                                            Alignment.topLeft,
+                                                        end: Alignment
+                                                            .bottomRight,
+                                                      ),
+                                                    ),
+                                                    alignment: Alignment.center,
+                                                    child:
+                                                        FinanceBankBrandThumb(
+                                                      preset: p,
+                                                      size: 36,
+                                                      onBrandGradient: true,
+                                                      fallbackIcon: p?.icon ??
+                                                          Icons
+                                                              .account_balance_wallet_rounded,
+                                                    ),
+                                                  ),
+                                                  title: a.displayName,
+                                                  subtitle: isCard
+                                                      ? (pendingOnCard
+                                                          ? 'Cartão · fatura em aberto'
+                                                          : 'Cartão · sem lançamentos na fatura')
+                                                      : a.productTypeLabel,
+                                                  balanceText:
+                                                      CurrencyFormats.formatBRL(
+                                                          displayAmount),
+                                                  balanceColor: isCard
+                                                      ? AppColors.financeDespesa
+                                                      : (net >= 0
+                                                          ? AppColors
+                                                              .saldoPositive
+                                                          : AppColors
+                                                              .saldoNegative),
+                                                  gradient: [c1, c2],
+                                                  onTap: () async {
+                                                    if (isCard) {
+                                                      _openDashboardCreditCardFaturaSheet(
                                                         ctx,
-                                                        rangeStart,
-                                                        rangeEnd,
-                                                        financeAccountId: a.id,
-                                                        cachedDocs: docs,
-                                                        openingBalanceHint: openingById[a.id] ?? 0.0,
-                                                      )
-                                                  : () => mostrarAvisoSeLicencaInativa(ctx, widget.profile),
-                                              icon: const Icon(Icons.picture_as_pdf_outlined, color: Color(0xFFE65100), size: 22),
-                                            ),
-                                          Icon(Icons.chevron_right_rounded, color: Colors.grey.shade500),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
+                                                        a,
+                                                        accounts,
+                                                      );
+                                                      return;
+                                                    }
+                                                    final from = DateTime(
+                                                        rangeStart.year,
+                                                        rangeStart.month,
+                                                        rangeStart.day);
+                                                    final to = DateTime(
+                                                        rangeEnd.year,
+                                                        rangeEnd.month,
+                                                        rangeEnd.day,
+                                                        23,
+                                                        59,
+                                                        59);
+                                                    await showModalBottomSheet<
+                                                        void>(
+                                                      context: ctx,
+                                                      isScrollControlled: true,
+                                                      useSafeArea: true,
+                                                      backgroundColor:
+                                                          Colors.white,
+                                                      builder: (_) =>
+                                                          FinanceInsightSheet(
+                                                        uid: _userFsId,
+                                                        initialScope:
+                                                            FinanceInsightScope
+                                                                .balance,
+                                                        initialFrom: from,
+                                                        initialTo: to,
+                                                        statusFilter: 'paid',
+                                                        search: '',
+                                                        financeAccountFilterId:
+                                                            a.id,
+                                                        financeAccountFilterLabel:
+                                                            a.displayName,
+                                                        openingBalanceHint:
+                                                            openingById[a.id],
+                                                        openingByAccountHint:
+                                                            openingById,
+                                                        onEdit: (docId, current,
+                                                            type) async {
+                                                          final e = Map<String,
+                                                                  dynamic>.from(
+                                                              current);
+                                                          e['id'] = docId;
+                                                          if (type ==
+                                                              'income') {
+                                                            await _editarReceitaDashboard(
+                                                                context, e);
+                                                          } else {
+                                                            await _editarLancamentoDashboard(
+                                                                context, e);
+                                                          }
+                                                        },
+                                                        onDelete: (docId) =>
+                                                            _excluirLancamentoDashboard(
+                                                                context, docId),
+                                                      ),
+                                                    );
+                                                  },
+                                                  trailing: Row(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Column(
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .end,
+                                                        mainAxisAlignment:
+                                                            MainAxisAlignment
+                                                                .center,
+                                                        children: [
+                                                          Text(
+                                                            isCard
+                                                                ? 'Ver fatura'
+                                                                : 'Gráficos',
+                                                            style: TextStyle(
+                                                              fontSize: 11,
+                                                              color: isCard
+                                                                  ? AppColors
+                                                                      .financeDespesa
+                                                                  : AppColors
+                                                                      .primary,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w800,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                      if (!isCard &&
+                                                          widget.onNavigateTo !=
+                                                              null)
+                                                        IconButton(
+                                                          tooltip:
+                                                              'Ver lançamentos desta conta no Financeiro',
+                                                          onPressed: () {
+                                                            FinanceShellNavigation
+                                                                .requestOpenFinanceiro(
+                                                                    accountId:
+                                                                        a.id);
+                                                            Navigator.pop(ctx);
+                                                            widget.onNavigateTo!(
+                                                                1);
+                                                          },
+                                                          icon: const Icon(
+                                                              Icons
+                                                                  .receipt_long_rounded,
+                                                              color: AppColors
+                                                                  .primary,
+                                                              size: 22),
+                                                        ),
+                                                      if (!isCard)
+                                                        IconButton(
+                                                          tooltip:
+                                                              'Exportar PDF desta conta',
+                                                          onPressed: widget
+                                                                  .profile
+                                                                  .hasActiveLicense
+                                                              ? () =>
+                                                                  _openDashboardPdfStyleSheet(
+                                                                    ctx,
+                                                                    rangeStart,
+                                                                    rangeEnd,
+                                                                    financeAccountId:
+                                                                        a.id,
+                                                                    cachedDocs:
+                                                                        docs,
+                                                                    openingBalanceHint:
+                                                                        openingById[a.id] ??
+                                                                            0.0,
+                                                                  )
+                                                              : () => mostrarAvisoSeLicencaInativa(
+                                                                  ctx,
+                                                                  widget
+                                                                      .profile),
+                                                          icon: const Icon(
+                                                              Icons
+                                                                  .picture_as_pdf_outlined,
+                                                              color: Color(
+                                                                  0xFFE65100),
+                                                              size: 22),
+                                                        ),
+                                                      Icon(
+                                                          Icons
+                                                              .chevron_right_rounded,
+                                                          color: Colors
+                                                              .grey.shade500),
+                                                    ],
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                          ),
                               ),
-                      ),
-                    ],
-                  );
+                            ],
+                          );
+                        },
+                      );
                     },
                   );
-                },
-              );
                 },
               );
             },
@@ -5401,7 +5582,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(isIncome ? 'Recebimento confirmado.' : 'Pagamento confirmado.'),
+        content: Text(
+            isIncome ? 'Recebimento confirmado.' : 'Pagamento confirmado.'),
         behavior: SnackBarBehavior.floating,
       ));
     } catch (e) {
@@ -5414,9 +5596,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _confirmarPagamentoDashboard(
-      BuildContext context, String docId) =>
+          BuildContext context, String docId) =>
       _confirmarLancamentoPendenteDashboard(context, docId);
-
 
   /// Abre sheet com receitas pendentes (todas, sem filtro). Inclui modo Selecionar e excluir em lote.
   Future<void> _abrirListaReceitasPendentes(
@@ -5635,7 +5816,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _confirmarRecebimentoDashboard(
-      BuildContext context, String docId) =>
+          BuildContext context, String docId) =>
       _confirmarLancamentoPendenteDashboard(context, docId);
 
   /// Abre sheet só com despesas pendentes (todas, sem filtro). Inclui modo Selecionar e excluir em lote.
@@ -6162,7 +6343,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return prefix + partial;
   }
 
-  Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>> _dashboardTransactionsStream(
+  Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
+      _dashboardTransactionsStream(
     DateTime rangeStart,
     DateTime rangeEnd,
   ) {
@@ -6655,9 +6837,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final amount = (d['amount'] ?? 0).toDouble().abs();
       final type = (d['type'] ?? 'expense').toString();
       if (type == 'income') {
-        catMerger.addAmount(incomeByCategory, cat, amount, emptyLabel: 'Outros');
+        catMerger.addAmount(incomeByCategory, cat, amount,
+            emptyLabel: 'Outros');
       } else {
-        catMerger.addAmount(expenseByCategory, cat, amount, emptyLabel: 'Outros');
+        catMerger.addAmount(expenseByCategory, cat, amount,
+            emptyLabel: 'Outros');
       }
     }
     return FinanceCategoryChartsSuite(
@@ -6903,7 +7087,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          const Text('Crie objetivos no módulo Objetivos Financeiros e acompanhe aqui.',
+          const Text(
+              'Crie objetivos no módulo Objetivos Financeiros e acompanhe aqui.',
               style: TextStyle(color: Colors.white70, fontSize: 12)),
           if (widget.onNavigateTo != null) ...[
             const SizedBox(height: 16),
@@ -8844,7 +9029,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     fontWeight: FontWeight.w800, color: Color(0xFF1A237E))),
           IconButton(
             icon: const Icon(Icons.edit_outlined, size: 22),
-            onPressed: () => _editarItemEscalaNoPainel(e, sheetContext: context),
+            onPressed: () =>
+                _editarItemEscalaNoPainel(e, sheetContext: context),
             tooltip: 'Editar',
             style: IconButton.styleFrom(
               foregroundColor: AppColors.primary,
@@ -10138,7 +10324,8 @@ class _DashboardPendingListSheetContentState
     final bottomPadding = MediaQuery.paddingOf(context).bottom;
     final width = MediaQuery.sizeOf(context).width;
     final useTwoRowHeader = width < 500 || _selectionMode;
-    final sortedList = FinanceFaturaTransactionSort.sortedMaps(widget.list, _sortMode);
+    final sortedList =
+        FinanceFaturaTransactionSort.sortedMaps(widget.list, _sortMode);
     return Container(
       decoration: const BoxDecoration(
           color: Colors.white,

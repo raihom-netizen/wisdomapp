@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../services/theme.dart';
 import '../theme/app_colors.dart';
 import '../services/scale_notifications_service.dart';
 
@@ -50,8 +49,9 @@ class _ScaleNotificationsConfigScreenState extends State<ScaleNotificationsConfi
         if (leads is List && leads.isNotEmpty) {
           final first = leads.first;
           final m = first is num ? first.toInt() : int.tryParse(first.toString());
-          if (m != null && kReminderLeadOptions.any((o) => o['minutes'] == m)) _reminderMinutes = m;
-          else if (m != null) _reminderMinutes = m;
+          if (m != null && kReminderLeadOptions.any((o) => o['minutes'] == m)) {
+            _reminderMinutes = m;
+          } else if (m != null) _reminderMinutes = m;
         }
         if (_reminderMinutes == 0 || !kReminderLeadOptions.any((o) => o['minutes'] == _reminderMinutes)) {
           final m = d['scaleReminderMinutes'];
@@ -140,7 +140,7 @@ class _ScaleNotificationsConfigScreenState extends State<ScaleNotificationsConfi
                       Switch(
                         value: _reminderEnabled,
                         onChanged: (v) => setState(() => _reminderEnabled = v),
-                        activeColor: AppColors.primary,
+                        activeThumbColor: AppColors.primary,
                       ),
                     ],
                   ),
@@ -158,7 +158,7 @@ class _ScaleNotificationsConfigScreenState extends State<ScaleNotificationsConfi
                       Switch(
                         value: _emailReminderEnabled,
                         onChanged: (v) => setState(() => _emailReminderEnabled = v),
-                        activeColor: AppColors.primary,
+                        activeThumbColor: AppColors.primary,
                       ),
                     ],
                   ),

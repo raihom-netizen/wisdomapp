@@ -12,8 +12,6 @@ import '../utils/debounced_text_controller.dart';
 import '../utils/user_export_csv_save.dart';
 import '../widgets/brl_amount_text_field.dart';
 import '../widgets/module_header_premium.dart';
-import '../widgets/admin/admin_page_shell.dart';
-import '../utils/admin_responsive.dart';
 
 class _PromoEmailRecipient {
   final String uid;
@@ -622,7 +620,7 @@ class _PromoUserPickerDialogState extends State<_PromoUserPickerDialog> {
                       SizedBox(
                         width: 200,
                         child: DropdownButtonFormField<String>(
-                          value: _planFilter,
+                          initialValue: _planFilter,
                           decoration: const InputDecoration(
                             labelText: 'Plano',
                             border: OutlineInputBorder(),
@@ -1532,7 +1530,7 @@ class _PromoEditorDialogState extends State<_PromoEditorDialog> {
                           ),
                           const SizedBox(height: 12),
                           DropdownButtonFormField<String>(
-                            value: _planCode,
+                            initialValue: _planCode,
                             decoration: const InputDecoration(
                               labelText: 'Plano (tier)',
                               border: OutlineInputBorder(),
@@ -1544,7 +1542,7 @@ class _PromoEditorDialogState extends State<_PromoEditorDialog> {
                           ),
                           const SizedBox(height: 12),
                           DropdownButtonFormField<int>(
-                            value: _durationDays,
+                            initialValue: _durationDays,
                             decoration: const InputDecoration(
                               labelText: 'Extensão da licença após pagamento',
                               border: OutlineInputBorder(),

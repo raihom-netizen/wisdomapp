@@ -25,7 +25,8 @@ class _InstallPwaCardState extends State<InstallPwaCard> {
   @override
   Widget build(BuildContext context) {
     if (!widget.visible) return const SizedBox.shrink();
-    if (PwaInstall.supported && PwaInstall.isInstalled) return const SizedBox.shrink();
+    if (PwaInstall.supported && PwaInstall.isInstalled)
+      return const SizedBox.shrink();
     if (!PwaInstall.supported) return const SizedBox.shrink();
     if (!PwaInstall.isIos && !PwaInstall.canPrompt) {
       return const SizedBox.shrink();
@@ -47,7 +48,10 @@ class _InstallPwaCardState extends State<InstallPwaCard> {
               end: Alignment.bottomRight,
             ),
             boxShadow: const [
-              BoxShadow(blurRadius: 16, offset: Offset(0, 8), color: Color(0x22000000)),
+              BoxShadow(
+                  blurRadius: 16,
+                  offset: Offset(0, 8),
+                  color: Color(0x22000000)),
             ],
           ),
           child: Row(
@@ -56,7 +60,7 @@ class _InstallPwaCardState extends State<InstallPwaCard> {
                 width: 46,
                 height: 46,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.20),
+                  color: Colors.white.withValues(alpha: 0.20),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 clipBehavior: Clip.antiAlias,
@@ -65,7 +69,9 @@ class _InstallPwaCardState extends State<InstallPwaCard> {
                   width: 46,
                   height: 46,
                   fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => const Icon(Icons.install_mobile_rounded, color: Colors.white),
+                  errorBuilder: (_, __, ___) => const Icon(
+                      Icons.install_mobile_rounded,
+                      color: Colors.white),
                 ),
               ),
               const SizedBox(width: 12),
@@ -85,14 +91,16 @@ class _InstallPwaCardState extends State<InstallPwaCard> {
                     SizedBox(height: 4),
                     Text(
                       'Abre como um app pelo ícone na tela inicial — mais rápido no dia a dia. Android/Chrome: um toque; iPhone: passo a passo no Safari.',
-                      style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.25),
+                      style: TextStyle(
+                          color: Colors.white70, fontSize: 12, height: 1.25),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 10),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
@@ -109,10 +117,12 @@ class _InstallPwaCardState extends State<InstallPwaCard> {
               if (widget.onDismiss != null) ...[
                 const SizedBox(width: 4),
                 IconButton(
-                  icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 22),
+                  icon: const Icon(Icons.close_rounded,
+                      color: Colors.white70, size: 22),
                   onPressed: widget.onDismiss,
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                  constraints:
+                      const BoxConstraints(minWidth: 36, minHeight: 36),
                 ),
               ],
             ],
@@ -142,7 +152,8 @@ class _InstallPwaCardState extends State<InstallPwaCard> {
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 12),
-                _step('1', 'Toque no botão "Compartilhar" do Safari (quadrado com seta pra cima).'),
+                _step('1',
+                    'Toque no botão "Compartilhar" do Safari (quadrado com seta pra cima).'),
                 _step('2', 'Role e toque em "Adicionar à Tela de Início".'),
                 _step('3', 'Confirme em "Adicionar".'),
                 const SizedBox(height: 10),
@@ -176,7 +187,10 @@ class _InstallPwaCardState extends State<InstallPwaCard> {
             ),
             child: Text(
               n,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14),
             ),
           ),
           const SizedBox(width: 10),
@@ -203,7 +217,8 @@ class _InstallPwaCardState extends State<InstallPwaCard> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Instalação ainda não disponível. Aguarde e tente novamente.'),
+            content: Text(
+                'Instalação ainda não disponível. Aguarde e tente novamente.'),
           ),
         );
       }

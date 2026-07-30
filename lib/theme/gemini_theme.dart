@@ -143,7 +143,7 @@ class GeminiTheme {
       colorScheme: ColorScheme.light(
         primary: primaryColor,
         onPrimary: Colors.white,
-        secondary: primaryColor.withOpacity(0.8),
+        secondary: primaryColor.withValues(alpha: 0.8),
         onSecondary: Colors.white,
         surface: surface,
         onSurface: textPrimary,
@@ -259,7 +259,7 @@ class GeminiTheme {
       colorScheme: ColorScheme.dark(
         primary: primaryColor,
         onPrimary: Colors.white,
-        secondary: primaryColor.withOpacity(0.8),
+        secondary: primaryColor.withValues(alpha: 0.8),
         onSecondary: Colors.white,
         surface: _darkSurface,
         onSurface: _darkTextPrimary,
@@ -370,12 +370,12 @@ class GeminiTheme {
       borderRadius: BorderRadius.circular(cardRadius),
       boxShadow: [
         BoxShadow(
-          color: primary.withOpacity(0.06),
+          color: primary.withValues(alpha: 0.06),
           blurRadius: 20,
           offset: const Offset(0, 8),
         ),
         BoxShadow(
-          color: Colors.black.withOpacity(0.03),
+          color: Colors.black.withValues(alpha: 0.03),
           blurRadius: 10,
           offset: const Offset(0, 2),
         ),

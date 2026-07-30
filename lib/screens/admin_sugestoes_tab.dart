@@ -8,7 +8,6 @@ import '../utils/debounced_text_controller.dart';
 import '../widgets/fast_text_field.dart';
 import '../widgets/module_header_premium.dart';
 import '../widgets/admin/admin_page_shell.dart';
-import '../utils/admin_responsive.dart';
 
 /// Módulo admin: sugestões e críticas — abas Abertos/Respondidos, filtros, seleção e exclusão.
 class AdminSugestoesTab extends StatefulWidget {
@@ -334,7 +333,7 @@ class _AdminSugestoesTabState extends State<AdminSugestoesTab>
             builder: (context, c) {
               final narrow = c.maxWidth < 400;
               final period = DropdownButtonFormField<String>(
-                value: _periodFilter,
+                initialValue: _periodFilter,
                 decoration: const InputDecoration(
                   labelText: 'Período',
                   border: OutlineInputBorder(),

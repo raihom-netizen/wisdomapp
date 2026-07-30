@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import 'anexo_viewer_screen.dart';
 import '../utils/anexo_viewer_helper.dart';
 import '../utils/url_launcher_helper.dart';
 import '../utils/premium_upgrade.dart';

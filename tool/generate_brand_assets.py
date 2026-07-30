@@ -1,4 +1,4 @@
-"""Gera ícones WISDOMAPP a partir de assets/images/logo_divulgacao.png.
+"""Gera ícones WISDOMAPP a partir de assets/images/logo_icon_atualizada_4k.png.
 
 Uso:
   python tool/generate_brand_assets.py
@@ -17,6 +17,7 @@ from PIL import Image, ImageDraw, ImageFilter
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / "assets" / "images"
 SRC_CANDIDATES = [
+    ASSETS / "logo_icon_atualizada_4k.png",
     ASSETS / "logo_divulgacao.png",
     ASSETS / "logo_divulgacao" / "logo.png",
     ASSETS / "logo_divulgacao" / "logo_divulgacao.png",
@@ -36,7 +37,7 @@ PUSH_THEMES = {
     "folga": (124, 58, 237),
 }
 
-WEB_BG = (10, 31, 86, 255)  # #0A1F56
+WEB_BG = (0, 0, 0, 255)  # preto — escudo dourado da arte 4K
 
 
 def resolve_source() -> Path:
@@ -44,7 +45,7 @@ def resolve_source() -> Path:
         if p.is_file():
             return p
     raise FileNotFoundError(
-        "Coloque logo_divulgacao.png em assets/images/ — candidatos: "
+        "Coloque logo_icon_atualizada_4k.png em assets/images/ — candidatos: "
         + ", ".join(str(c) for c in SRC_CANDIDATES)
     )
 
@@ -192,6 +193,15 @@ def main() -> None:
     emblem_path = WEB_ICONS / "wisdomapp_emblem.png"
     final_icon.save(emblem_path, "PNG", optimize=True)
     print(f"Gerado: {emblem_path}")
+
+    logo_web = WEB_ICONS / "wisdomapp_logo.png"
+    src.save(logo_web, "PNG", optimize=True)
+    print(f"Gerado: {logo_web}")
+
+    web_assets_icon = ROOT / "web" / "assets" / "images" / "icon.png"
+    web_assets_icon.parent.mkdir(parents=True, exist_ok=True)
+    final_icon.save(web_assets_icon, "PNG", optimize=True)
+    print(f"Gerado: {web_assets_icon}")
 
     for size, name in [(192, "Icon-192.png"), (512, "Icon-512.png")]:
         save_web_png(no_bg, WEB_ICONS / name, size, maskable=False)

@@ -1,5 +1,6 @@
 /// Naturezas padrão para ocorrências (produtividade) — Anexo I da Portaria 24ª CIPM.
 /// O usuário pode editar e adicionar conforme sua unidade.
+library;
 
 class OcorrenciaNatureza {
   final String id;

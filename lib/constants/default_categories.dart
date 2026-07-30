@@ -10,6 +10,7 @@
 /// ——— RECEITAS ———
 /// Salários, Horas extras, Bônus, Investimentos, Freelance, Aluguel recebido,
 /// Venda, Rendimentos, Comissão.
+library;
 
 // ==================== DESPESAS ====================
 const List<String> kDefaultExpenseCategories = [

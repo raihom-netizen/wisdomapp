@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -6,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -33,11 +35,23 @@ import '../widgets/module_header_premium.dart';
 
 /// Arquivo escolhido no admin (imagem ou vídeo) antes do upload.
 class _PickedMedia {
-  const _PickedMedia({required this.bytes, required this.mime, this.name});
+  const _PickedMedia({
+    this.bytes,
+    this.file,
+    required this.mime,
+    this.name,
+    this.sizeBytes,
+  });
 
-  final Uint8List bytes;
+  final Uint8List? bytes;
+  final File? file;
   final String mime;
   final String? name;
+  final int? sizeBytes;
+
+  int get effectiveSize => sizeBytes ?? bytes?.lengthInBytes ?? 0;
+
+  bool get isFile => file != null;
 }
 
 class AdminCursosTab extends StatefulWidget {
@@ -89,7 +103,14 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
 
   Future<void> _afterContentMutation({String? snack}) async {
     await _reloadCourseVideos();
-    unawaited(CourseVideosCacheService.instance.ensureLoaded(forceServer: true));
+    try {
+      // Só conclui a publicação depois de atualizar o catálogo compartilhado.
+      // Assim o conteúdo já aparece ao abrir o módulo Cursos do usuário.
+      await CourseVideosCacheService.instance.ensureLoaded(forceServer: true);
+    } catch (_) {
+      // O documento já foi gravado; uma falha de cache não deve duplicá-lo
+      // caso o administrador tente publicar novamente.
+    }
     if (snack != null) _snack(snack);
   }
 
@@ -114,7 +135,8 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
     }
   }
 
-  Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> _fetchCourseVideos() async {
+  Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
+      _fetchCourseVideos() async {
     return _courseFirestoreOp(() async {
       final snap = await FirebaseFirestore.instance
           .collection('course_videos')
@@ -282,9 +304,13 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
   ) {
     var list = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(docs);
     if (_gridTab == 1) {
-      list = list.where((d) => (d.data()['type'] ?? 'curso').toString() == 'curso').toList();
+      list = list
+          .where((d) => (d.data()['type'] ?? 'curso').toString() == 'curso')
+          .toList();
     } else if (_gridTab == 2) {
-      list = list.where((d) => (d.data()['type'] ?? '').toString() == 'dica').toList();
+      list = list
+          .where((d) => (d.data()['type'] ?? '').toString() == 'dica')
+          .toList();
     }
 
     final q = _searchCtrl.text.trim().toLowerCase();
@@ -306,7 +332,9 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
         final ts = d.data()['createdAt'];
         if (ts is! Timestamp) return false;
         final dt = ts.toDate();
-        return dt.year == now.year && dt.month == now.month && dt.day == now.day;
+        return dt.year == now.year &&
+            dt.month == now.month &&
+            dt.day == now.day;
       }).toList();
     } else if (_dateFilter == 'week') {
       final start = now.subtract(const Duration(days: 7));
@@ -333,51 +361,170 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
     return list;
   }
 
-  Future<void> _pickMp4Videos() async {
+  Future<void> _pickMp4Videos({VoidCallback? onStateChanged}) async {
     try {
-      final remaining = CourseMediaUrlResolver.maxCourseVideos - _pickedVideos.length;
+      final remaining =
+          CourseMediaUrlResolver.maxCourseVideos - _pickedVideos.length;
       if (remaining <= 0) {
-        _snack('Máximo de ${CourseMediaUrlResolver.maxCourseVideos} vídeos por curso.');
+        _snack(
+            'Máximo de ${CourseMediaUrlResolver.maxCourseVideos} vídeos por curso.');
         return;
       }
+      final isWeb = kIsWeb;
       final pick = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['mp4', 'mov', 'webm'],
-        withData: true,
+        withData: isWeb,
         allowMultiple: true,
       );
       if (pick == null || pick.files.isEmpty) return;
       final added = <_PickedMedia>[];
       for (final f in pick.files) {
         if (added.length >= remaining) break;
-        final bytes = f.bytes;
-        if (bytes == null || bytes.isEmpty) continue;
-        if (bytes.lengthInBytes > CourseVideoFileService.maxBytes) {
-          _snack('${f.name}: acima de 250 MB — ignorado.');
-          continue;
-        }
         var ext = (f.extension ?? 'mp4').toLowerCase();
         final mime = ext == 'webm'
             ? 'video/webm'
             : (ext == 'mov' ? 'video/quicktime' : 'video/mp4');
-        added.add(_PickedMedia(bytes: bytes, mime: mime, name: f.name));
+        if (isWeb) {
+          final bytes = f.bytes;
+          if (bytes == null || bytes.isEmpty) continue;
+          if (bytes.lengthInBytes > CourseVideoFileService.maxBytes) {
+            _snack('${f.name}: acima de 250 MB — ignorado.');
+            continue;
+          }
+          added.add(_PickedMedia(
+              bytes: bytes,
+              mime: mime,
+              name: f.name,
+              sizeBytes: bytes.lengthInBytes));
+        } else {
+          final path = f.path;
+          if (path == null) continue;
+          final file = File(path);
+          final size = await file.length();
+          if (size > CourseVideoFileService.maxBytes) {
+            _snack('${f.name}: acima de 250 MB — ignorado.');
+            continue;
+          }
+          added.add(_PickedMedia(
+              file: file, mime: mime, name: f.name, sizeBytes: size));
+        }
       }
       if (added.isEmpty) return;
       setState(() => _pickedVideos.addAll(added));
+      onStateChanged?.call();
     } catch (e) {
       _snack('Erro ao selecionar vídeo: $e');
     }
   }
 
-  void _clearPickedVideos() {
+  /// Grava vídeo diretamente da câmera (resolve o bug de “não finaliza”).
+  Future<void> _recordVideoFromCamera({VoidCallback? onStateChanged}) async {
+    try {
+      final remaining =
+          CourseMediaUrlResolver.maxCourseVideos - _pickedVideos.length;
+      if (remaining <= 0) {
+        _snack(
+            'Máximo de ${CourseMediaUrlResolver.maxCourseVideos} vídeos por curso.');
+        return;
+      }
+      final picker = ImagePicker();
+      final video = await picker.pickVideo(
+        source: ImageSource.camera,
+        maxDuration: const Duration(minutes: 10),
+      );
+      if (video == null) return;
+      final file = File(video.path);
+      final size = await file.length();
+      if (size > CourseVideoFileService.maxBytes) {
+        _snack('Vídeo acima de 250 MB — ignorado.');
+        return;
+      }
+      final ext = video.path.toLowerCase().endsWith('.mov') ? 'mov' : 'mp4';
+      final mime = ext == 'mov' ? 'video/quicktime' : 'video/mp4';
+      setState(() => _pickedVideos.add(_PickedMedia(
+            file: file,
+            mime: mime,
+            name: video.name,
+            sizeBytes: size,
+          )));
+      onStateChanged?.call();
+    } catch (e) {
+      _snack('Erro ao gravar vídeo: $e');
+    }
+  }
+
+  /// Mostra opções: galeria ou câmera (na web pula direto para galeria).
+  Future<void> _addVideoWithChoice({VoidCallback? onStateChanged}) async {
+    if (!mounted) return;
+    if (kIsWeb) {
+      await _pickMp4Videos(onStateChanged: onStateChanged);
+      return;
+    }
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(99),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Adicionar vídeo',
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              leading:
+                  const Icon(Icons.videocam_rounded, color: Color(0xFF2563EB)),
+              title: const Text('Gravar com a câmera',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: const Text('Grava até 10 min direto no app'),
+              onTap: () => Navigator.pop(ctx, 'camera'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_open_rounded,
+                  color: Color(0xFF7C3AED)),
+              title: const Text('Escolher da galeria',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: const Text('MP4, MOV ou WebM (até 250 MB)'),
+              onTap: () => Navigator.pop(ctx, 'gallery'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == 'camera') {
+      await _recordVideoFromCamera(onStateChanged: onStateChanged);
+    } else if (choice == 'gallery') {
+      await _pickMp4Videos(onStateChanged: onStateChanged);
+    }
+  }
+
+  void _clearPickedVideos({VoidCallback? onStateChanged}) {
     setState(() {
       _pickedVideos.clear();
       _uploadProgress = 0;
     });
+    onStateChanged?.call();
   }
 
-  void _removePickedVideo(int index) {
+  void _removePickedVideo(int index, {VoidCallback? onStateChanged}) {
     setState(() => _pickedVideos.removeAt(index));
+    onStateChanged?.call();
   }
 
   Future<List<CourseMediaUploadResult>> _uploadPickedVideos(
@@ -388,14 +535,27 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
     final out = <CourseMediaUploadResult>[];
     for (var i = 0; i < _pickedVideos.length; i++) {
       final p = _pickedVideos[i];
-      final result = await CourseVideoFileService.uploadVideo(
-        bytes: p.bytes,
-        mimeType: p.mime,
-        docId: docId,
-        index: startIndex + i,
-        onProgress: onProgress,
-      );
-      out.add(result);
+      void reportVideoProgress(double progress) {
+        if (_pickedVideos.isEmpty) return;
+        onProgress?.call((i + progress) / _pickedVideos.length);
+      }
+
+      if (p.isFile) {
+        out.add(await CourseVideoFileService.uploadVideoFile(
+          file: p.file!,
+          docId: docId,
+          index: startIndex + i,
+          onProgress: reportVideoProgress,
+        ));
+      } else {
+        out.add(await CourseVideoFileService.uploadVideo(
+          bytes: p.bytes!,
+          mimeType: p.mime,
+          docId: docId,
+          index: startIndex + i,
+          onProgress: reportVideoProgress,
+        ));
+      }
     }
     return out;
   }
@@ -455,7 +615,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       final p = _pickedImages[i];
       out.add(
         await CourseVideoImageService.uploadCover(
-          bytes: p.bytes,
+          bytes: p.bytes!,
           mimeType: p.mime,
           docId: docId,
           index: startIndex + i,
@@ -474,7 +634,9 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
         title: const Text('Excluir selecionados?'),
         content: Text('Remove $n item(ns) permanentemente.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar')),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
@@ -542,7 +704,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
     }
   }
 
-  Future<bool> _publishVideo() async {
+  Future<bool> _publishVideo({VoidCallback? onStateChanged}) async {
     if (_savingVideo) return false;
     final title = _titleCtrl.text.trim();
     if (title.isEmpty) {
@@ -572,10 +734,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       final body = _bodyTextCtrl.text.trim();
       final desc = _descriptionCtrl.text.trim();
       final linkOk = linkRaw.isNotEmpty;
-      if (body.isEmpty &&
-          desc.isEmpty &&
-          _pickedImages.isEmpty &&
-          !linkOk) {
+      if (body.isEmpty && desc.isEmpty && _pickedImages.isEmpty && !linkOk) {
         _snack('Informe texto, imagem ou link para a dica.');
         return false;
       }
@@ -586,11 +745,16 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       return false;
     }
 
-    setState(() => _savingVideo = true);
+    setState(() {
+      _savingVideo = true;
+      _uploadProgress = 0;
+    });
+    onStateChanged?.call();
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
       final email = FirebaseAuth.instance.currentUser?.email?.trim() ?? '';
-      final docRef = FirebaseFirestore.instance.collection('course_videos').doc();
+      final docRef =
+          FirebaseFirestore.instance.collection('course_videos').doc();
       final validityFields = CourseVideoValidity.firestoreFields(
         permanent: _validityPermanent,
         expiresAt: _expiresAtDate,
@@ -615,10 +779,13 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
 
         if (hasMp4) {
           setState(() => _uploadProgress = 0);
+          onStateChanged?.call();
           final uploads = await _uploadPickedVideos(
             docRef.id,
             onProgress: (p) {
-              if (mounted) setState(() => _uploadProgress = p);
+              if (!mounted) return;
+              setState(() => _uploadProgress = p);
+              onStateChanged?.call();
             },
           );
           videoFields = CourseMediaUrlResolver.videoFieldsFromUploads(uploads);
@@ -687,29 +854,29 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
         await AdminCourseFirestoreBridge.upsertCourseVideo(
           docId: docRef.id,
           data: CourseMediaUrlResolver.finalizeImageFields({
-                'title': title,
-                'description': desc,
-                'bodyText': body,
-                'type': 'dica',
-                'source': source,
-                if (linkUrl != null) ...{
-                  'linkUrl': linkUrl,
-                  'externalUrl': linkUrl,
-                },
-                if (videoId != null) ...{
-                  'videoUrl': linkUrl,
-                  'youtubeUrl': linkUrl,
-                  'youtubeVideoId': videoId,
-                },
-                ...imageFields,
-                if (ytThumb != null) 'thumbnailUrl': ytThumb,
-                'published': _published,
-                ...validityFields,
-                'authorUid': uid,
-                'authorEmail': email,
-                'createdAt': FieldValue.serverTimestamp(),
-                'updatedAt': FieldValue.serverTimestamp(),
-              }),
+            'title': title,
+            'description': desc,
+            'bodyText': body,
+            'type': 'dica',
+            'source': source,
+            if (linkUrl != null) ...{
+              'linkUrl': linkUrl,
+              'externalUrl': linkUrl,
+            },
+            if (videoId != null) ...{
+              'videoUrl': linkUrl,
+              'youtubeUrl': linkUrl,
+              'youtubeVideoId': videoId,
+            },
+            ...imageFields,
+            if (ytThumb != null) 'thumbnailUrl': ytThumb,
+            'published': _published,
+            ...validityFields,
+            'authorUid': uid,
+            'authorEmail': email,
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          }),
           create: true,
         );
       }
@@ -724,7 +891,8 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
         _validityPermanent = true;
         _expiresAtDate = null;
       });
-      await _afterContentMutation(snack: 'Conteúdo publicado — já aparece no módulo Cursos.');
+      await _afterContentMutation(
+          snack: 'Conteúdo publicado — já aparece no módulo Cursos.');
       return true;
     } catch (e) {
       _snack('Erro ao publicar: ${_formatPublishError(e)}');
@@ -735,6 +903,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
           _savingVideo = false;
           _uploadProgress = 0;
         });
+        onStateChanged?.call();
       }
     }
   }
@@ -753,6 +922,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
     bool removeImages = false,
     List<_PickedMedia> newVideos = const [],
     bool removeVideos = false,
+    void Function(double progress)? onUploadProgress,
   }) async {
     if (title.isEmpty) {
       _snack('Informe o título.');
@@ -771,10 +941,12 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       final existingData = existing.data() ?? {};
 
       if (removeVideos) {
-        await CourseMediaStorageCleanup.deleteMediaFromDoc(existingData, videos: true);
+        await CourseMediaStorageCleanup.deleteMediaFromDoc(existingData,
+            videos: true);
       }
       if (removeImages) {
-        await CourseMediaStorageCleanup.deleteMediaFromDoc(existingData, images: true);
+        await CourseMediaStorageCleanup.deleteMediaFromDoc(existingData,
+            images: true);
       }
 
       final patch = <String, dynamic>{
@@ -788,6 +960,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
           permanent: validityPermanent,
           expiresAt: expiresAtDate,
           forUpdate: true,
+          deleteValue: AdminCourseFirestoreBridge.cfDelete,
         ),
       };
 
@@ -795,24 +968,47 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       for (var i = 0; i < newImages.length; i++) {
         uploadedImages.add(
           await CourseVideoImageService.uploadCover(
-            bytes: newImages[i].bytes,
+            bytes: newImages[i].bytes!,
             mimeType: newImages[i].mime,
             docId: docId,
-            index: CourseMediaUrlResolver.collectHttpUrls(existingData).length + i,
+            index:
+                CourseMediaUrlResolver.collectHttpUrls(existingData).length + i,
           ),
         );
       }
 
       List<CourseMediaUploadResult> uploadedVideos = [];
       for (var i = 0; i < newVideos.length; i++) {
-        uploadedVideos.add(
-          await CourseVideoFileService.uploadVideo(
-            bytes: newVideos[i].bytes,
-            mimeType: newVideos[i].mime,
-            docId: docId,
-            index: CourseMediaUrlResolver.collectVideoEntries(existingData).length + i,
-          ),
-        );
+        final v = newVideos[i];
+        void reportProgress(double progress) {
+          if (newVideos.isEmpty) return;
+          onUploadProgress?.call((i + progress) / newVideos.length);
+        }
+
+        if (v.isFile) {
+          uploadedVideos.add(
+            await CourseVideoFileService.uploadVideoFile(
+              file: v.file!,
+              docId: docId,
+              index: CourseMediaUrlResolver.collectVideoEntries(existingData)
+                      .length +
+                  i,
+              onProgress: reportProgress,
+            ),
+          );
+        } else {
+          uploadedVideos.add(
+            await CourseVideoFileService.uploadVideo(
+              bytes: v.bytes!,
+              mimeType: v.mime,
+              docId: docId,
+              index: CourseMediaUrlResolver.collectVideoEntries(existingData)
+                      .length +
+                  i,
+              onProgress: reportProgress,
+            ),
+          );
+        }
       }
 
       if (type == 'curso') {
@@ -821,9 +1017,9 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
         var thumbUrl = (existingData['thumbnailUrl'] ?? '').toString();
 
         if (removeVideos) {
-          patch['mp4Url'] = FieldValue.delete();
-          patch['mp4Urls'] = FieldValue.delete();
-          patch['mp4StoragePath'] = FieldValue.delete();
+          patch['mp4Url'] = AdminCourseFirestoreBridge.cfDelete;
+          patch['mp4Urls'] = AdminCourseFirestoreBridge.cfDelete;
+          patch['mp4StoragePath'] = AdminCourseFirestoreBridge.cfDelete;
         } else if (uploadedVideos.isNotEmpty) {
           patch.addAll(CourseMediaUrlResolver.mergeVideoFields(
             existing: existingData,
@@ -844,26 +1040,27 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
             thumbUrl = YoutubeUrlHelper.thumbnailUrl(videoId);
           }
         } else {
-          patch['videoUrl'] = FieldValue.delete();
-          patch['youtubeUrl'] = FieldValue.delete();
-          patch['youtubeVideoId'] = FieldValue.delete();
+          patch['videoUrl'] = AdminCourseFirestoreBridge.cfDelete;
+          patch['youtubeUrl'] = AdminCourseFirestoreBridge.cfDelete;
+          patch['youtubeVideoId'] = AdminCourseFirestoreBridge.cfDelete;
         }
 
         final hasMp4 = removeVideos
             ? false
             : (uploadedVideos.isNotEmpty ||
-                CourseMediaUrlResolver.collectVideoEntries(existingData).isNotEmpty);
+                CourseMediaUrlResolver.collectVideoEntries(existingData)
+                    .isNotEmpty);
         if (!hasMp4 && videoId == null) {
           _snack('Informe vídeo MP4 ou link YouTube.');
           return false;
         }
 
         if (removeImages) {
-          patch['imageUrl'] = FieldValue.delete();
-          patch['coverUrl'] = FieldValue.delete();
-          patch['imageUrls'] = FieldValue.delete();
-          patch['imageStoragePaths'] = FieldValue.delete();
-          patch['coverStoragePath'] = FieldValue.delete();
+          patch['imageUrl'] = AdminCourseFirestoreBridge.cfDelete;
+          patch['coverUrl'] = AdminCourseFirestoreBridge.cfDelete;
+          patch['imageUrls'] = AdminCourseFirestoreBridge.cfDelete;
+          patch['imageStoragePaths'] = AdminCourseFirestoreBridge.cfDelete;
+          patch['coverStoragePath'] = AdminCourseFirestoreBridge.cfDelete;
         } else if (uploadedImages.isNotEmpty) {
           patch.addAll(CourseMediaUrlResolver.mergeImageFields(
             existing: existingData,
@@ -886,7 +1083,8 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
           patch,
           existing: existingData,
           explicitThumb: thumbUrl,
-          youtubeThumb: videoId != null ? YoutubeUrlHelper.thumbnailUrl(videoId) : null,
+          youtubeThumb:
+              videoId != null ? YoutubeUrlHelper.thumbnailUrl(videoId) : null,
         );
       } else {
         String? linkUrl;
@@ -907,24 +1105,24 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
             patch['youtubeUrl'] = linkUrl;
             patch['youtubeVideoId'] = videoId;
           } else {
-            patch['videoUrl'] = FieldValue.delete();
-            patch['youtubeUrl'] = FieldValue.delete();
-            patch['youtubeVideoId'] = FieldValue.delete();
+            patch['videoUrl'] = AdminCourseFirestoreBridge.cfDelete;
+            patch['youtubeUrl'] = AdminCourseFirestoreBridge.cfDelete;
+            patch['youtubeVideoId'] = AdminCourseFirestoreBridge.cfDelete;
           }
         } else {
-          patch['linkUrl'] = FieldValue.delete();
-          patch['externalUrl'] = FieldValue.delete();
-          patch['videoUrl'] = FieldValue.delete();
-          patch['youtubeUrl'] = FieldValue.delete();
-          patch['youtubeVideoId'] = FieldValue.delete();
+          patch['linkUrl'] = AdminCourseFirestoreBridge.cfDelete;
+          patch['externalUrl'] = AdminCourseFirestoreBridge.cfDelete;
+          patch['videoUrl'] = AdminCourseFirestoreBridge.cfDelete;
+          patch['youtubeUrl'] = AdminCourseFirestoreBridge.cfDelete;
+          patch['youtubeVideoId'] = AdminCourseFirestoreBridge.cfDelete;
         }
 
         if (removeImages) {
-          patch['imageUrl'] = FieldValue.delete();
-          patch['coverUrl'] = FieldValue.delete();
-          patch['imageUrls'] = FieldValue.delete();
-          patch['imageStoragePaths'] = FieldValue.delete();
-          patch['coverStoragePath'] = FieldValue.delete();
+          patch['imageUrl'] = AdminCourseFirestoreBridge.cfDelete;
+          patch['coverUrl'] = AdminCourseFirestoreBridge.cfDelete;
+          patch['imageUrls'] = AdminCourseFirestoreBridge.cfDelete;
+          patch['imageStoragePaths'] = AdminCourseFirestoreBridge.cfDelete;
+          patch['coverStoragePath'] = AdminCourseFirestoreBridge.cfDelete;
         } else if (uploadedImages.isNotEmpty) {
           patch.addAll(CourseMediaUrlResolver.mergeImageFields(
             existing: existingData,
@@ -933,24 +1131,32 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
           ));
         }
 
-        final imageUrl = (patch['imageUrl'] as String?) ??
-            (removeImages
+        final patchedImageUrl = patch['imageUrl'];
+        final imageUrl = (patchedImageUrl is String &&
+                patchedImageUrl != AdminCourseFirestoreBridge.cfDelete)
+            ? patchedImageUrl
+            : (removeImages
                 ? null
                 : (CourseMediaUrlResolver.collectHttpUrls(existingData).isEmpty
                     ? null
-                    : CourseMediaUrlResolver.collectHttpUrls(existingData).first));
+                    : CourseMediaUrlResolver.collectHttpUrls(existingData)
+                        .first));
         patch['source'] = videoId != null
             ? 'youtube'
             : (imageUrl != null && linkUrl != null)
                 ? 'image_link'
-                : (imageUrl != null ? 'image' : (linkUrl != null ? 'link' : 'text'));
+                : (imageUrl != null
+                    ? 'image'
+                    : (linkUrl != null ? 'link' : 'text'));
         _applyThumbnailPatch(
           patch,
           existing: existingData,
           explicitThumb: imageUrl,
           youtubeThumb: ytThumb,
         );
-        if (imageUrl != null && imageUrl.isNotEmpty) patch['coverUrl'] = imageUrl;
+        if (imageUrl != null && imageUrl.isNotEmpty) {
+          patch['coverUrl'] = imageUrl;
+        }
       }
 
       await AdminCourseFirestoreBridge.upsertCourseVideo(
@@ -988,7 +1194,9 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
             'Remove do módulo Cursos e apaga arquivos no Storage. Esta ação não pode ser desfeita.',
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancelar')),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
               style: FilledButton.styleFrom(backgroundColor: Colors.red),
@@ -1015,13 +1223,21 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
     }
   }
 
-  Future<void> _openEditSheet(QueryDocumentSnapshot<Map<String, dynamic>> doc) async {
+  Future<void> _openEditSheet(
+      QueryDocumentSnapshot<Map<String, dynamic>> doc) async {
     final data = doc.data();
-    final titleCtrl = TextEditingController(text: (data['title'] ?? '').toString());
-    final descCtrl = TextEditingController(text: (data['description'] ?? '').toString());
-    final bodyCtrl = TextEditingController(text: (data['bodyText'] ?? '').toString());
+    final titleCtrl =
+        TextEditingController(text: (data['title'] ?? '').toString());
+    final descCtrl =
+        TextEditingController(text: (data['description'] ?? '').toString());
+    final bodyCtrl =
+        TextEditingController(text: (data['bodyText'] ?? '').toString());
     final urlCtrl = TextEditingController(
-      text: (data['linkUrl'] ?? data['externalUrl'] ?? data['youtubeUrl'] ?? data['videoUrl'] ?? '')
+      text: (data['linkUrl'] ??
+              data['externalUrl'] ??
+              data['youtubeUrl'] ??
+              data['videoUrl'] ??
+              '')
           .toString(),
     );
     var type = (data['type'] ?? 'curso').toString();
@@ -1037,6 +1253,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
     var removeImages = false;
     var removeVideos = false;
     var saving = false;
+    var editUploadProgress = 0.0;
 
     if (!mounted) return;
     await showModalBottomSheet<void>(
@@ -1046,15 +1263,21 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setLocal) {
-            final accent = type == 'dica' ? const Color(0xFFF59E0B) : const Color(0xFF2563EB);
-            final accent2 = type == 'dica' ? const Color(0xFFD97706) : const Color(0xFF1D4ED8);
+            final accent = type == 'dica'
+                ? const Color(0xFFF59E0B)
+                : const Color(0xFF2563EB);
+            final accent2 = type == 'dica'
+                ? const Color(0xFFD97706)
+                : const Color(0xFF1D4ED8);
             final isDica = type == 'dica';
             final navBottom = MediaQuery.viewPaddingOf(ctx).bottom;
             return Padding(
-              padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
+              padding:
+                  EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
               child: Container(
                 margin: EdgeInsets.fromLTRB(10, 0, 10, 10 + navBottom),
-                constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.94),
+                constraints: BoxConstraints(
+                    maxHeight: MediaQuery.sizeOf(ctx).height * 0.94),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF8FAFC),
                   borderRadius: BorderRadius.circular(24),
@@ -1073,10 +1296,14 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                       padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
                       child: CourseContentSheetHeader(
                         title: 'EDITAR CONTEÚDO',
-                        subtitle: isDica ? 'Dica · módulo Cursos' : 'Curso · módulo Cursos',
+                        subtitle: isDica
+                            ? 'Dica · módulo Cursos'
+                            : 'Curso · módulo Cursos',
                         accent: accent,
                         accent2: accent2,
-                        icon: isDica ? Icons.lightbulb_rounded : Icons.school_rounded,
+                        icon: isDica
+                            ? Icons.lightbulb_rounded
+                            : Icons.school_rounded,
                         onBack: saving ? () {} : () => Navigator.pop(ctx),
                       ),
                     ),
@@ -1086,306 +1313,596 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                      FastTextField(controller: titleCtrl, decoration: _fieldDeco('Título', accent: accent)),
-                      const SizedBox(height: 10),
-                      FastTextField(
-                        controller: descCtrl,
-                        decoration: _fieldDeco('Resumo curto', accent: accent),
-                        kind: FastTextFieldKind.multiline,
-                        maxLines: 3,
-                      ),
-                      if (isDica) ...[
-                        const SizedBox(height: 10),
-                        FastTextField(
-                          controller: bodyCtrl,
-                          decoration: _fieldDeco(
-                            'Texto completo da dica',
-                            hint: 'Conteúdo maior exibido ao abrir a dica…',
-                            accent: accent,
-                          ),
-                          kind: FastTextFieldKind.multiline,
-                          maxLines: 8,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Galeria de fotos (até ${CourseMediaUrlResolver.maxGalleryPhotos})',
-                          style: TextStyle(fontWeight: FontWeight.w800, color: accent),
-                        ),
-                        const SizedBox(height: 8),
-                        if (!removeImages && CourseMediaUrlResolver.hasResolvableImage(existingData))
-                          CoursePhotoGallery(data: existingData, height: 180),
-                        for (var i = 0; i < editImages.length; i++)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: CourseImagePreview(
-                              bytes: editImages[i].bytes,
-                              maxHeight: 120,
-                              subtitle: editImages[i].name ?? 'Nova foto',
-                            ),
-                          ),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            OutlinedButton.icon(
-                              onPressed: () async {
-                                final pick = await FilePicker.platform.pickFiles(
-                                  type: FileType.custom,
-                                  allowedExtensions: ['jpg', 'jpeg', 'png', 'webp'],
-                                  withData: true,
-                                  allowMultiple: true,
-                                );
-                                if (pick == null || pick.files.isEmpty) return;
-                                setLocal(() {
-                                  removeImages = false;
-                                  for (final f in pick.files) {
-                                    if (editImages.length >= CourseMediaUrlResolver.maxGalleryPhotos) break;
-                                    final bytes = f.bytes;
-                                    if (bytes == null) continue;
-                                    var ext = (f.extension ?? 'jpg').toLowerCase();
-                                    if (ext == 'jpeg') ext = 'jpg';
-                                    editImages.add(_PickedMedia(
-                                      bytes: bytes,
-                                      mime: ext == 'png'
-                                          ? 'image/png'
-                                          : (ext == 'webp' ? 'image/webp' : 'image/jpeg'),
-                                      name: f.name,
-                                    ));
-                                  }
-                                });
-                              },
-                              icon: const Icon(Icons.add_photo_alternate_rounded, size: 18),
-                              label: const Text('Adicionar fotos'),
-                            ),
-                            if (!removeImages && CourseMediaUrlResolver.hasResolvableImage(existingData))
-                              OutlinedButton.icon(
-                                onPressed: () => setLocal(() => removeImages = true),
-                                icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                                label: const Text('Remover galeria'),
-                              ),
-                          ],
-                        ),
-                      ] else ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          'Vídeos MP4 (até ${CourseMediaUrlResolver.maxCourseVideos})',
-                          style: TextStyle(fontWeight: FontWeight.w800, color: accent),
-                        ),
-                        const SizedBox(height: 6),
-                        if (!removeVideos)
-                          for (final v in CourseMediaUrlResolver.collectVideoEntries(existingData))
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: CourseVideoFilePreview(
-                                fileName: v.label ?? 'Vídeo publicado',
-                                sizeBytes: 0,
+                            FastTextField(
+                                controller: titleCtrl,
+                                decoration:
+                                    _fieldDeco('Título', accent: accent)),
+                            const SizedBox(height: 10),
+                            FastTextField(
+                              controller: descCtrl,
+                              decoration: _fieldDeco(
+                                isDica
+                                    ? 'Resumo curto'
+                                    : 'Descrição completa do curso',
+                                hint: isDica
+                                    ? null
+                                    : 'Explique o conteúdo, objetivo e o que o aluno aprenderá.',
                                 accent: accent,
                               ),
+                              kind: FastTextFieldKind.multiline,
+                              maxLines: isDica ? 3 : 8,
                             ),
-                        for (var i = 0; i < editVideos.length; i++)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: CourseVideoFilePreview(
-                              fileName: editVideos[i].name ?? 'video_${i + 1}.mp4',
-                              sizeBytes: editVideos[i].bytes.lengthInBytes,
-                              accent: accent,
-                              onRemove: () => setLocal(() => editVideos.removeAt(i)),
-                            ),
-                          ),
-                        Wrap(
-                          spacing: 8,
-                          children: [
-                            OutlinedButton.icon(
-                              onPressed: () async {
-                                final pick = await FilePicker.platform.pickFiles(
-                                  type: FileType.custom,
-                                  allowedExtensions: ['mp4', 'mov', 'webm'],
-                                  withData: true,
-                                  allowMultiple: true,
-                                );
-                                if (pick == null || pick.files.isEmpty) return;
-                                setLocal(() {
-                                  removeVideos = false;
-                                  for (final f in pick.files) {
-                                    if (editVideos.length >= CourseMediaUrlResolver.maxCourseVideos) break;
-                                    final bytes = f.bytes;
-                                    if (bytes == null || bytes.isEmpty) continue;
-                                    var ext = (f.extension ?? 'mp4').toLowerCase();
-                                    editVideos.add(_PickedMedia(
-                                      bytes: bytes,
-                                      mime: ext == 'webm'
-                                          ? 'video/webm'
-                                          : (ext == 'mov' ? 'video/quicktime' : 'video/mp4'),
-                                      name: f.name,
-                                    ));
-                                  }
-                                });
-                              },
-                              icon: const Icon(Icons.upload_file_rounded, size: 18),
-                              label: const Text('Adicionar vídeos'),
-                            ),
-                            if (!removeVideos &&
-                                CourseMediaUrlResolver.collectVideoEntries(existingData).isNotEmpty)
-                              OutlinedButton.icon(
-                                onPressed: () => setLocal(() => removeVideos = true),
-                                icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                                label: const Text('Remover vídeos'),
+                            if (isDica) ...[
+                              const SizedBox(height: 10),
+                              FastTextField(
+                                controller: bodyCtrl,
+                                decoration: _fieldDeco(
+                                  'Texto completo da dica',
+                                  hint:
+                                      'Conteúdo maior exibido ao abrir a dica…',
+                                  accent: accent,
+                                ),
+                                kind: FastTextFieldKind.multiline,
+                                maxLines: 8,
                               ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Capa / galeria (até ${CourseMediaUrlResolver.maxGalleryPhotos} fotos)',
-                          style: TextStyle(fontWeight: FontWeight.w800, color: accent),
-                        ),
-                        const SizedBox(height: 8),
-                        if (!removeImages && CourseMediaUrlResolver.hasResolvableImage(existingData))
-                          CoursePhotoGallery(data: existingData, height: 140),
-                        OutlinedButton.icon(
-                          onPressed: () async {
-                            final pick = await FilePicker.platform.pickFiles(
-                              type: FileType.custom,
-                              allowedExtensions: ['jpg', 'jpeg', 'png', 'webp'],
-                              withData: true,
-                              allowMultiple: true,
-                            );
-                            if (pick == null || pick.files.isEmpty) return;
-                            setLocal(() {
-                              removeImages = false;
-                              for (final f in pick.files) {
-                                if (editImages.length >= CourseMediaUrlResolver.maxGalleryPhotos) break;
-                                final bytes = f.bytes;
-                                if (bytes == null) continue;
-                                var ext = (f.extension ?? 'jpg').toLowerCase();
-                                if (ext == 'jpeg') ext = 'jpg';
-                                editImages.add(_PickedMedia(
-                                  bytes: bytes,
-                                  mime: ext == 'png' ? 'image/png' : 'image/jpeg',
-                                  name: f.name,
-                                ));
-                              }
-                            });
-                          },
-                          icon: const Icon(Icons.image_rounded, size: 18),
-                          label: const Text('Adicionar capa / fotos'),
-                        ),
-                      ],
-                      const SizedBox(height: 10),
-                      FastTextField(
-                        controller: urlCtrl,
-                        decoration: _fieldDeco(
-                          isDica ? 'Link (YouTube ou site)' : 'Link YouTube (opcional)',
-                          hint: isDica
-                              ? 'https://youtube.com/… ou https://seusite.com/…'
-                              : 'https://www.youtube.com/watch?v=...',
-                          accent: accent,
-                        ),
-                        kind: FastTextFieldKind.url,
-                      ),
-                      const SizedBox(height: 12),
-                      _TypePillSelector(value: type, onChanged: (v) => setLocal(() => type = v)),
-                      const SizedBox(height: 8),
-                      _buildValiditySection(
-                        permanent: validityPermanent,
-                        expiresAt: expiresAtDate,
-                        onPermanentChanged: (v) => setLocal(() {
-                          validityPermanent = v;
-                          if (v) expiresAtDate = null;
-                        }),
-                        onDateChanged: (d) => setLocal(() => expiresAtDate = d),
-                        accent: accent,
-                      ),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Publicado no módulo Cursos'),
-                        value: published,
-                        activeThumbColor: accent,
-                        onChanged: (v) => setLocal(() => published = v),
-                      ),
-                      const SizedBox(height: 8),
-                      FilledButton.icon(
-                        onPressed: saving
-                            ? null
-                            : () async {
-                                setLocal(() => saving = true);
-                                final ok = await _saveEditedVideo(
-                                  doc.id,
-                                  title: titleCtrl.text.trim(),
-                                  description: descCtrl.text.trim(),
-                                  bodyText: bodyCtrl.text.trim(),
-                                  linkRaw: urlCtrl.text.trim(),
-                                  type: type,
-                                  published: published,
-                                  validityPermanent: validityPermanent,
-                                  expiresAtDate: expiresAtDate,
-                                  newImages: List<_PickedMedia>.from(editImages),
-                                  removeImages: removeImages,
-                                  newVideos: List<_PickedMedia>.from(editVideos),
-                                  removeVideos: removeVideos,
-                                );
-                                if (!ctx.mounted) return;
-                                if (ok) {
-                                  Navigator.pop(ctx);
-                                  if (mounted) {
-                                    _snack('Alterações salvas.');
-                                  }
-                                } else {
-                                  setLocal(() => saving = false);
-                                }
-                              },
-                        icon: saving
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                              )
-                            : const Icon(Icons.save_rounded),
-                        label: Text(saving ? 'Salvando…' : 'Salvar alterações'),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: accent,
-                          minimumSize: const Size(double.infinity, 48),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      OutlinedButton.icon(
-                        onPressed: saving
-                            ? null
-                            : () async {
-                                final confirm = await showDialog<bool>(
-                                  context: ctx,
-                                  builder: (dCtx) => AlertDialog(
-                                    title: Text('Excluir ${isDica ? 'dica' : 'curso'}?'),
-                                    content: const Text(
-                                      'Remove permanentemente do módulo Cursos e apaga arquivos no Storage.',
+                              const SizedBox(height: 12),
+                              Text(
+                                'Galeria de fotos (até ${CourseMediaUrlResolver.maxGalleryPhotos})',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w800, color: accent),
+                              ),
+                              const SizedBox(height: 8),
+                              if (!removeImages &&
+                                  CourseMediaUrlResolver.hasResolvableImage(
+                                      existingData))
+                                CoursePhotoGallery(
+                                    data: existingData, height: 180),
+                              for (var i = 0; i < editImages.length; i++)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: CourseImagePreview(
+                                    bytes: editImages[i].bytes,
+                                    maxHeight: 120,
+                                    subtitle: editImages[i].name ?? 'Nova foto',
+                                  ),
+                                ),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  OutlinedButton.icon(
+                                    onPressed: () async {
+                                      final pick =
+                                          await FilePicker.platform.pickFiles(
+                                        type: FileType.custom,
+                                        allowedExtensions: [
+                                          'jpg',
+                                          'jpeg',
+                                          'png',
+                                          'webp'
+                                        ],
+                                        withData: true,
+                                        allowMultiple: true,
+                                      );
+                                      if (pick == null || pick.files.isEmpty) {
+                                        return;
+                                      }
+                                      setLocal(() {
+                                        removeImages = false;
+                                        for (final f in pick.files) {
+                                          if (editImages.length >=
+                                              CourseMediaUrlResolver
+                                                  .maxGalleryPhotos) {
+                                            break;
+                                          }
+                                          final bytes = f.bytes;
+                                          if (bytes == null) continue;
+                                          var ext = (f.extension ?? 'jpg')
+                                              .toLowerCase();
+                                          if (ext == 'jpeg') ext = 'jpg';
+                                          editImages.add(_PickedMedia(
+                                            bytes: bytes,
+                                            mime: ext == 'png'
+                                                ? 'image/png'
+                                                : (ext == 'webp'
+                                                    ? 'image/webp'
+                                                    : 'image/jpeg'),
+                                            name: f.name,
+                                          ));
+                                        }
+                                      });
+                                    },
+                                    icon: const Icon(
+                                        Icons.add_photo_alternate_rounded,
+                                        size: 18),
+                                    label: const Text('Adicionar fotos'),
+                                  ),
+                                  if (!removeImages &&
+                                      CourseMediaUrlResolver.hasResolvableImage(
+                                          existingData))
+                                    OutlinedButton.icon(
+                                      onPressed: () =>
+                                          setLocal(() => removeImages = true),
+                                      icon: const Icon(
+                                          Icons.delete_outline_rounded,
+                                          size: 18),
+                                      label: const Text('Remover galeria'),
                                     ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(dCtx, false),
-                                        child: const Text('Cancelar'),
+                                ],
+                              ),
+                            ] else ...[
+                              const SizedBox(height: 14),
+                              // Seção de vídeo estilo YouTube (edição)
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF0F0F0F),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                      color:
+                                          Colors.white.withValues(alpha: 0.08)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(5),
+                                          decoration: BoxDecoration(
+                                            color: Colors.red
+                                                .withValues(alpha: 0.15),
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
+                                          child: const Icon(
+                                              Icons.smart_display_rounded,
+                                              color: Color(0xFFEF4444),
+                                              size: 18),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'Vídeos do curso',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 10),
+                                    if (!removeVideos) ...[
+                                      for (final v in CourseMediaUrlResolver
+                                          .collectVideoEntries(existingData))
+                                        Padding(
+                                          padding:
+                                              const EdgeInsets.only(bottom: 6),
+                                          child: Container(
+                                            padding: const EdgeInsets.all(8),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF1A1A1A),
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                Icon(Icons.videocam_rounded,
+                                                    color: Colors.white
+                                                        .withValues(alpha: 0.5),
+                                                    size: 18),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                  child: Text(
+                                                    v.label ??
+                                                        'Vídeo publicado',
+                                                    style: const TextStyle(
+                                                        color: Colors.white70,
+                                                        fontSize: 12,
+                                                        fontWeight:
+                                                            FontWeight.w600),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                    for (var i = 0; i < editVideos.length; i++)
+                                      Padding(
+                                        padding:
+                                            const EdgeInsets.only(bottom: 6),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF1A1A1A),
+                                            borderRadius:
+                                                BorderRadius.circular(10),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.movie_rounded,
+                                                  color: accent.withValues(
+                                                      alpha: 0.7),
+                                                  size: 18),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Text(
+                                                  editVideos[i].name ??
+                                                      'video_${i + 1}.mp4',
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: const TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w700),
+                                                ),
+                                              ),
+                                              InkWell(
+                                                onTap: () => setLocal(() =>
+                                                    editVideos.removeAt(i)),
+                                                child: const Padding(
+                                                  padding: EdgeInsets.all(4),
+                                                  child: Icon(
+                                                      Icons.close_rounded,
+                                                      color: Colors.white54,
+                                                      size: 16),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
                                       ),
-                                      FilledButton(
-                                        onPressed: () => Navigator.pop(dCtx, true),
-                                        style: FilledButton.styleFrom(backgroundColor: Colors.red),
-                                        child: const Text('Excluir'),
+                                    if (saving && editVideos.isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(99),
+                                        child: LinearProgressIndicator(
+                                          value: editUploadProgress > 0
+                                              ? editUploadProgress
+                                              : null,
+                                          minHeight: 6,
+                                          color: const Color(0xFFEF4444),
+                                          backgroundColor: Colors.white12,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        editUploadProgress > 0
+                                            ? 'Enviando vídeo… ${(editUploadProgress * 100).toStringAsFixed(0)}%'
+                                            : 'Preparando vídeo para envio…',
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(
+                                          color: Color(0xFFEF4444),
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 11,
+                                        ),
                                       ),
                                     ],
-                                  ),
-                                );
-                                if (confirm != true) return;
-                                if (ctx.mounted) Navigator.pop(ctx);
-                                await _deleteVideo(doc.id, skipConfirm: true);
-                              },
-                        icon: const Icon(Icons.delete_forever_rounded),
-                        label: Text('Excluir ${isDica ? 'dica' : 'curso'}'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.red.shade700,
-                          side: BorderSide(color: Colors.red.shade300),
-                          minimumSize: const Size(double.infinity, 46),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        ),
-                      ),
-                    ],
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: _buildVideoActionButton(
+                                            icon: Icons.videocam_rounded,
+                                            label: 'Gravar vídeo',
+                                            color: const Color(0xFFEF4444),
+                                            onTap: () async {
+                                              final picker = ImagePicker();
+                                              final video =
+                                                  await picker.pickVideo(
+                                                source: ImageSource.camera,
+                                                maxDuration:
+                                                    const Duration(minutes: 10),
+                                              );
+                                              if (video == null) return;
+                                              final file = File(video.path);
+                                              final size = await file.length();
+                                              final ext = video.path
+                                                      .toLowerCase()
+                                                      .endsWith('.mov')
+                                                  ? 'mov'
+                                                  : 'mp4';
+                                              final mime = ext == 'mov'
+                                                  ? 'video/quicktime'
+                                                  : 'video/mp4';
+                                              setLocal(() {
+                                                removeVideos = false;
+                                                editVideos.add(_PickedMedia(
+                                                  file: file,
+                                                  mime: mime,
+                                                  name: video.name,
+                                                  sizeBytes: size,
+                                                ));
+                                              });
+                                            },
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: _buildVideoActionButton(
+                                            icon: Icons.upload_file_rounded,
+                                            label: 'Arquivo',
+                                            color: const Color(0xFF3B82F6),
+                                            onTap: () async {
+                                              final pick = await FilePicker
+                                                  .platform
+                                                  .pickFiles(
+                                                type: FileType.custom,
+                                                allowedExtensions: [
+                                                  'mp4',
+                                                  'mov',
+                                                  'webm'
+                                                ],
+                                                withData: kIsWeb,
+                                                allowMultiple: true,
+                                              );
+                                              if (pick == null ||
+                                                  pick.files.isEmpty) {
+                                                return;
+                                              }
+                                              setLocal(() {
+                                                removeVideos = false;
+                                                for (final f in pick.files) {
+                                                  if (editVideos.length >=
+                                                      CourseMediaUrlResolver
+                                                          .maxCourseVideos) {
+                                                    break;
+                                                  }
+                                                  var ext =
+                                                      (f.extension ?? 'mp4')
+                                                          .toLowerCase();
+                                                  final mime = ext == 'webm'
+                                                      ? 'video/webm'
+                                                      : (ext == 'mov'
+                                                          ? 'video/quicktime'
+                                                          : 'video/mp4');
+                                                  if (kIsWeb) {
+                                                    final bytes = f.bytes;
+                                                    if (bytes == null) continue;
+                                                    editVideos.add(_PickedMedia(
+                                                      bytes: bytes,
+                                                      mime: mime,
+                                                      name: f.name,
+                                                      sizeBytes:
+                                                          bytes.lengthInBytes,
+                                                    ));
+                                                  } else {
+                                                    final path = f.path;
+                                                    if (path == null) continue;
+                                                    editVideos.add(_PickedMedia(
+                                                      file: File(path),
+                                                      mime: mime,
+                                                      name: f.name,
+                                                    ));
+                                                  }
+                                                }
+                                              });
+                                            },
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    if (!removeVideos &&
+                                        CourseMediaUrlResolver
+                                                .collectVideoEntries(
+                                                    existingData)
+                                            .isNotEmpty) ...[
+                                      const SizedBox(height: 8),
+                                      _buildVideoActionButton(
+                                        icon: Icons.delete_sweep_rounded,
+                                        label: 'Remover vídeos existentes',
+                                        color: Colors.red.shade400,
+                                        onTap: () =>
+                                            setLocal(() => removeVideos = true),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Capa / galeria (até ${CourseMediaUrlResolver.maxGalleryPhotos} fotos)',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w800, color: accent),
+                              ),
+                              const SizedBox(height: 8),
+                              if (!removeImages &&
+                                  CourseMediaUrlResolver.hasResolvableImage(
+                                      existingData))
+                                CoursePhotoGallery(
+                                    data: existingData, height: 140),
+                              OutlinedButton.icon(
+                                onPressed: () async {
+                                  final pick =
+                                      await FilePicker.platform.pickFiles(
+                                    type: FileType.custom,
+                                    allowedExtensions: [
+                                      'jpg',
+                                      'jpeg',
+                                      'png',
+                                      'webp'
+                                    ],
+                                    withData: true,
+                                    allowMultiple: true,
+                                  );
+                                  if (pick == null || pick.files.isEmpty) {
+                                    return;
+                                  }
+                                  setLocal(() {
+                                    removeImages = false;
+                                    for (final f in pick.files) {
+                                      if (editImages.length >=
+                                          CourseMediaUrlResolver
+                                              .maxGalleryPhotos) {
+                                        break;
+                                      }
+                                      final bytes = f.bytes;
+                                      if (bytes == null) continue;
+                                      var ext =
+                                          (f.extension ?? 'jpg').toLowerCase();
+                                      if (ext == 'jpeg') ext = 'jpg';
+                                      editImages.add(_PickedMedia(
+                                        bytes: bytes,
+                                        mime: ext == 'png'
+                                            ? 'image/png'
+                                            : 'image/jpeg',
+                                        name: f.name,
+                                      ));
+                                    }
+                                  });
+                                },
+                                icon: const Icon(Icons.image_rounded, size: 18),
+                                label: const Text('Adicionar capa / fotos'),
+                              ),
+                            ],
+                            const SizedBox(height: 10),
+                            FastTextField(
+                              controller: urlCtrl,
+                              decoration: _fieldDeco(
+                                isDica
+                                    ? 'Link (YouTube ou site)'
+                                    : 'Link YouTube (opcional)',
+                                hint: isDica
+                                    ? 'https://youtube.com/… ou https://seusite.com/…'
+                                    : 'https://www.youtube.com/watch?v=...',
+                                accent: accent,
+                              ),
+                              kind: FastTextFieldKind.url,
+                            ),
+                            const SizedBox(height: 12),
+                            _TypePillSelector(
+                                value: type,
+                                onChanged: (v) => setLocal(() => type = v)),
+                            const SizedBox(height: 8),
+                            _buildValiditySection(
+                              permanent: validityPermanent,
+                              expiresAt: expiresAtDate,
+                              onPermanentChanged: (v) => setLocal(() {
+                                validityPermanent = v;
+                                if (v) expiresAtDate = null;
+                              }),
+                              onDateChanged: (d) =>
+                                  setLocal(() => expiresAtDate = d),
+                              accent: accent,
+                            ),
+                            SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text('Publicado no módulo Cursos'),
+                              value: published,
+                              activeThumbColor: accent,
+                              onChanged: (v) => setLocal(() => published = v),
+                            ),
+                            const SizedBox(height: 8),
+                            FilledButton.icon(
+                              onPressed: saving
+                                  ? null
+                                  : () async {
+                                      setLocal(() {
+                                        saving = true;
+                                        editUploadProgress = 0;
+                                      });
+                                      final ok = await _saveEditedVideo(
+                                        doc.id,
+                                        title: titleCtrl.text.trim(),
+                                        description: descCtrl.text.trim(),
+                                        bodyText: bodyCtrl.text.trim(),
+                                        linkRaw: urlCtrl.text.trim(),
+                                        type: type,
+                                        published: published,
+                                        validityPermanent: validityPermanent,
+                                        expiresAtDate: expiresAtDate,
+                                        newImages:
+                                            List<_PickedMedia>.from(editImages),
+                                        removeImages: removeImages,
+                                        newVideos:
+                                            List<_PickedMedia>.from(editVideos),
+                                        removeVideos: removeVideos,
+                                        onUploadProgress: (progress) {
+                                          if (ctx.mounted) {
+                                            setLocal(() =>
+                                                editUploadProgress = progress);
+                                          }
+                                        },
+                                      );
+                                      if (!ctx.mounted) return;
+                                      if (ok) {
+                                        Navigator.pop(ctx);
+                                        if (mounted) {
+                                          _snack('Alterações salvas.');
+                                        }
+                                      } else {
+                                        setLocal(() => saving = false);
+                                      }
+                                    },
+                              icon: saving
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2, color: Colors.white),
+                                    )
+                                  : const Icon(Icons.save_rounded),
+                              label: Text(
+                                  saving ? 'Salvando…' : 'Salvar alterações'),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: accent,
+                                minimumSize: const Size(double.infinity, 48),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14)),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            OutlinedButton.icon(
+                              onPressed: saving
+                                  ? null
+                                  : () async {
+                                      final confirm = await showDialog<bool>(
+                                        context: ctx,
+                                        builder: (dCtx) => AlertDialog(
+                                          title: Text(
+                                              'Excluir ${isDica ? 'dica' : 'curso'}?'),
+                                          content: const Text(
+                                            'Remove permanentemente do módulo Cursos e apaga arquivos no Storage.',
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(dCtx, false),
+                                              child: const Text('Cancelar'),
+                                            ),
+                                            FilledButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(dCtx, true),
+                                              style: FilledButton.styleFrom(
+                                                  backgroundColor: Colors.red),
+                                              child: const Text('Excluir'),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                      if (confirm != true) return;
+                                      if (ctx.mounted) Navigator.pop(ctx);
+                                      await _deleteVideo(doc.id,
+                                          skipConfirm: true);
+                                    },
+                              icon: const Icon(Icons.delete_forever_rounded),
+                              label:
+                                  Text('Excluir ${isDica ? 'dica' : 'curso'}'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.red.shade700,
+                                side: BorderSide(color: Colors.red.shade300),
+                                minimumSize: const Size(double.infinity, 46),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14)),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -1417,7 +1934,9 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
   }) {
     final merged = <String, dynamic>{...existing};
     patch.forEach((key, value) {
+      // Ignora deleções (FieldValue ou sentinel da Cloud Function).
       if (value is FieldValue) return;
+      if (value == AdminCourseFirestoreBridge.cfDelete) return;
       merged[key] = value;
     });
     final urls = CourseMediaUrlResolver.collectHttpUrls(merged);
@@ -1435,7 +1954,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       patch['thumbnailUrl'] = yt;
       return;
     }
-    patch['thumbnailUrl'] = FieldValue.delete();
+    patch['thumbnailUrl'] = AdminCourseFirestoreBridge.cfDelete;
   }
 
   String _formatPublishError(Object e) {
@@ -1459,19 +1978,25 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
   String? _videoId(Map<String, dynamic> data) {
     final stored = (data['youtubeVideoId'] ?? '').toString().trim();
     if (stored.isNotEmpty) return stored;
-    final link = (data['linkUrl'] ?? data['externalUrl'] ?? data['youtubeUrl'] ?? data['videoUrl'] ?? '')
+    final link = (data['linkUrl'] ??
+            data['externalUrl'] ??
+            data['youtubeUrl'] ??
+            data['videoUrl'] ??
+            '')
         .toString();
     return YoutubeUrlHelper.extractVideoId(link);
   }
 
-  String? _thumbUrl(Map<String, dynamic> data) => CourseThumbResolver.resolveBest(data);
+  String? _thumbUrl(Map<String, dynamic> data) =>
+      CourseThumbResolver.resolveBest(data);
 
   String? _mp4Url(Map<String, dynamic> data) {
     final u = (data['mp4Url'] ?? '').toString().trim();
     return u.isEmpty ? null : u;
   }
 
-  Future<void> _openContentPreview(QueryDocumentSnapshot<Map<String, dynamic>> doc) async {
+  Future<void> _openContentPreview(
+      QueryDocumentSnapshot<Map<String, dynamic>> doc) async {
     final data = CourseMediaUrlResolver.enrichWithDocId(doc.data(), doc.id);
     final type = (data['type'] ?? 'curso').toString();
     if (CourseMediaUrlResolver.collectVideoEntries(data).isNotEmpty ||
@@ -1480,7 +2005,8 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       await openCourseVideoFromData(context, data: data);
       return;
     }
-    final link = (data['linkUrl'] ?? data['externalUrl'] ?? '').toString().trim();
+    final link =
+        (data['linkUrl'] ?? data['externalUrl'] ?? '').toString().trim();
     if (link.isNotEmpty && CourseContentLinkHelper.isValidHttpUrl(link)) {
       final uri = Uri.parse(link.startsWith('http') ? link : 'https://$link');
       if (await canLaunchUrl(uri)) {
@@ -1509,14 +2035,19 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
               padding: const EdgeInsets.all(20),
               children: [
                 Text((data['title'] ?? '').toString(),
-                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w900, fontSize: 18)),
                 if (CourseMediaUrlResolver.hasResolvableImage(data)) ...[
                   const SizedBox(height: 12),
                   CoursePhotoGallery(data: data, height: 240),
                 ],
                 if (body.isNotEmpty) ...[
                   const SizedBox(height: 14),
-                  Text(body, style: TextStyle(fontSize: 14, height: 1.5, color: Colors.grey.shade800)),
+                  Text(body,
+                      style: TextStyle(
+                          fontSize: 14,
+                          height: 1.5,
+                          color: Colors.grey.shade800)),
                 ],
               ],
             ),
@@ -1529,7 +2060,10 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance.collection('app_config').doc(_configDoc).snapshots(),
+      stream: FirebaseFirestore.instance
+          .collection('app_config')
+          .doc(_configDoc)
+          .snapshots(),
       builder: (context, cfgSnap) {
         _hydrateConfig(cfgSnap.data?.data());
 
@@ -1537,7 +2071,8 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
           return ListView(
             padding: const EdgeInsets.all(24),
             children: [
-              Text('Erro: $_courseDocsError', style: const TextStyle(color: Colors.red)),
+              Text('Erro: $_courseDocsError',
+                  style: const TextStyle(color: Colors.red)),
               const SizedBox(height: 12),
               FilledButton.icon(
                 onPressed: _reloadCourseVideos,
@@ -1557,127 +2092,135 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
         final syncing = _courseDocsLoading && _courseDocs.isEmpty;
 
         return ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-              children: [
-                const ModuleHeaderPremium(
-                  title: 'Cursos em vídeo',
-                  icon: Icons.ondemand_video_rounded,
-                  subtitle:
-                      'Publique aulas e dicas. O app exibe somente o que estiver marcado como publicado.',
-                ),
-                const SizedBox(height: 16),
-                _buildConfigCard(),
-                const SizedBox(height: 16),
-                _buildNewContentLauncher(),
-                const SizedBox(height: 22),
-                _buildGridToolbar(allCount, cursosCount, dicasCount),
-                const SizedBox(height: 12),
-                Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0F0F0F),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                  ),
-                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+          children: [
+            const ModuleHeaderPremium(
+              title: 'Cursos em vídeo',
+              icon: Icons.ondemand_video_rounded,
+              subtitle:
+                  'Publique aulas e dicas. O app exibe somente o que estiver marcado como publicado.',
+            ),
+            const SizedBox(height: 16),
+            _buildConfigCard(),
+            const SizedBox(height: 16),
+            _buildNewContentLauncher(),
+            const SizedBox(height: 22),
+            _buildGridToolbar(allCount, cursosCount, dicasCount),
+            const SizedBox(height: 12),
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F0F0F),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+              ),
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
                     children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.video_library_rounded, color: Colors.white, size: 22),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'Biblioteca (${docs.length}${docs.length != allCount ? ' / $allCount' : ''})',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 16,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                          if (_selectionMode) ...[
-                            TextButton.icon(
-                              onPressed: docs.isEmpty
-                                  ? null
-                                  : () => setState(() {
-                                        if (_selectedIds.length == docs.length) {
-                                          _selectedIds.clear();
-                                        } else {
-                                          _selectedIds
-                                            ..clear()
-                                            ..addAll(docs.map((d) => d.id));
-                                        }
-                                      }),
-                              icon: Icon(
-                                _selectedIds.length == docs.length && docs.isNotEmpty
-                                    ? Icons.deselect_rounded
-                                    : Icons.select_all_rounded,
-                                size: 18,
-                              ),
-                              label: Text(
-                                _selectedIds.length == docs.length && docs.isNotEmpty
-                                    ? 'Desmarcar'
-                                    : 'Todos',
-                              ),
-                              style: TextButton.styleFrom(foregroundColor: Colors.white70),
-                            ),
-                            TextButton(
-                              onPressed: () => setState(() {
-                                _selectionMode = false;
-                                _selectedIds.clear();
-                              }),
-                              child: const Text('Cancelar', style: TextStyle(color: Colors.white70)),
-                            ),
-                          ] else
-                            IconButton(
-                              tooltip: 'Seleção em lote',
-                              onPressed: () => setState(() => _selectionMode = true),
-                              icon: const Icon(Icons.checklist_rounded, color: Colors.white70),
-                            ),
-                        ],
-                      ),
-                      if (syncing)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: LinearProgressIndicator(
-                            minHeight: 2,
-                            color: Colors.red.shade400,
-                            backgroundColor: Colors.white12,
+                      const Icon(Icons.video_library_rounded,
+                          color: Colors.white, size: 22),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Biblioteca (${docs.length}${docs.length != allCount ? ' / $allCount' : ''})',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 16,
+                            color: Colors.white,
                           ),
                         ),
-                      const SizedBox(height: 12),
-                      if (docs.isEmpty)
-                        _emptyGrid(syncing)
-                      else
-                        _buildVideoGrid(docs),
-                      if (_selectionMode && _selectedIds.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 12),
-                          child: Row(
-                            children: [
-                              Text(
-                                '${_selectedIds.length} selecionado(s)',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const Spacer(),
-                              FilledButton.icon(
-                                onPressed: _deleteSelected,
-                                icon: const Icon(Icons.delete_sweep_rounded),
-                                label: const Text('Excluir selecionados'),
-                                style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
-                              ),
-                            ],
+                      ),
+                      if (_selectionMode) ...[
+                        TextButton.icon(
+                          onPressed: docs.isEmpty
+                              ? null
+                              : () => setState(() {
+                                    if (_selectedIds.length == docs.length) {
+                                      _selectedIds.clear();
+                                    } else {
+                                      _selectedIds
+                                        ..clear()
+                                        ..addAll(docs.map((d) => d.id));
+                                    }
+                                  }),
+                          icon: Icon(
+                            _selectedIds.length == docs.length &&
+                                    docs.isNotEmpty
+                                ? Icons.deselect_rounded
+                                : Icons.select_all_rounded,
+                            size: 18,
                           ),
+                          label: Text(
+                            _selectedIds.length == docs.length &&
+                                    docs.isNotEmpty
+                                ? 'Desmarcar'
+                                : 'Todos',
+                          ),
+                          style: TextButton.styleFrom(
+                              foregroundColor: Colors.white70),
+                        ),
+                        TextButton(
+                          onPressed: () => setState(() {
+                            _selectionMode = false;
+                            _selectedIds.clear();
+                          }),
+                          child: const Text('Cancelar',
+                              style: TextStyle(color: Colors.white70)),
+                        ),
+                      ] else
+                        IconButton(
+                          tooltip: 'Seleção em lote',
+                          onPressed: () =>
+                              setState(() => _selectionMode = true),
+                          icon: const Icon(Icons.checklist_rounded,
+                              color: Colors.white70),
                         ),
                     ],
                   ),
-                ),
-              ],
-            );
+                  if (syncing)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: LinearProgressIndicator(
+                        minHeight: 2,
+                        color: Colors.red.shade400,
+                        backgroundColor: Colors.white12,
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                  if (docs.isEmpty)
+                    _emptyGrid(syncing)
+                  else
+                    _buildVideoGrid(docs),
+                  if (_selectionMode && _selectedIds.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Row(
+                        children: [
+                          Text(
+                            '${_selectedIds.length} selecionado(s)',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const Spacer(),
+                          FilledButton.icon(
+                            onPressed: _deleteSelected,
+                            icon: const Icon(Icons.delete_sweep_rounded),
+                            label: const Text('Excluir selecionados'),
+                            style: FilledButton.styleFrom(
+                                backgroundColor: Colors.red.shade700),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        );
       },
     );
   }
@@ -1761,7 +2304,8 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       ),
       child: Column(
         children: [
-          Icon(Icons.video_library_outlined, size: 48, color: Colors.grey.shade500),
+          Icon(Icons.video_library_outlined,
+              size: 48, color: Colors.grey.shade500),
           const SizedBox(height: 12),
           Text(
             syncing ? 'A carregar…' : 'Nenhum vídeo na biblioteca.',
@@ -1777,7 +2321,8 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
     );
   }
 
-  Widget _buildVideoGrid(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
+  Widget _buildVideoGrid(
+      List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
     return LayoutBuilder(
       builder: (context, c) {
         final w = c.maxWidth;
@@ -1787,9 +2332,10 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: crossCount,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: crossCount >= 3 ? 0.78 : (crossCount == 2 ? 0.82 : 0.92),
+            mainAxisSpacing: 14,
+            crossAxisSpacing: 14,
+            childAspectRatio:
+                crossCount >= 3 ? 0.72 : (crossCount == 2 ? 0.76 : 0.82),
           ),
           itemCount: docs.length,
           itemBuilder: (context, i) {
@@ -1802,27 +2348,27 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
               hasMp4: _mp4Url(data) != null,
               selectionMode: _selectionMode,
               selected: _selectedIds.contains(docs[i].id),
-            onTap: () {
-              if (_selectionMode) {
-                setState(() {
-                  if (_selectedIds.contains(docs[i].id)) {
-                    _selectedIds.remove(docs[i].id);
-                  } else {
-                    _selectedIds.add(docs[i].id);
-                  }
-                });
-              } else {
-                _openContentPreview(docs[i]);
-              }
-            },
-            onLongPress: () => setState(() {
-              _selectionMode = true;
-              _selectedIds.add(docs[i].id);
-            }),
-            onPreview: () => _openContentPreview(docs[i]),
-            onEdit: () => _openEditSheet(docs[i]),
-            onTogglePublished: (v) => _togglePublished(docs[i].id, v),
-            onDelete: () => _deleteVideo(docs[i].id),
+              onTap: () {
+                if (_selectionMode) {
+                  setState(() {
+                    if (_selectedIds.contains(docs[i].id)) {
+                      _selectedIds.remove(docs[i].id);
+                    } else {
+                      _selectedIds.add(docs[i].id);
+                    }
+                  });
+                } else {
+                  _openContentPreview(docs[i]);
+                }
+              },
+              onLongPress: () => setState(() {
+                _selectionMode = true;
+                _selectedIds.add(docs[i].id);
+              }),
+              onPreview: () => _openContentPreview(docs[i]),
+              onEdit: () => _openEditSheet(docs[i]),
+              onTogglePublished: (v) => _togglePublished(docs[i].id, v),
+              onDelete: () => _deleteVideo(docs[i].id),
             );
           },
         );
@@ -1858,7 +2404,9 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
             ),
           ),
           const SizedBox(height: 12),
-          FastTextField(controller: _heroTitleCtrl, decoration: _fieldDeco('Título do hero')),
+          FastTextField(
+              controller: _heroTitleCtrl,
+              decoration: _fieldDeco('Título do hero')),
           const SizedBox(height: 8),
           FastTextField(
             controller: _heroMessageCtrl,
@@ -1888,13 +2436,16 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
             onPressed: _savingConfig ? null : _saveModuleConfig,
             icon: _savingConfig
                 ? const SizedBox(
-                    width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.save_rounded),
             label: Text(_savingConfig ? 'Salvando…' : 'Salvar configuração'),
             style: FilledButton.styleFrom(
               backgroundColor: const Color(0xFF475569),
               minimumSize: const Size(double.infinity, 46),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
             ),
           ),
         ],
@@ -1909,68 +2460,103 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
-        final accent = _type == 'dica' ? const Color(0xFFF59E0B) : const Color(0xFF2563EB);
-        final accent2 = _type == 'dica' ? const Color(0xFFD97706) : const Color(0xFF1D4ED8);
-        final navBottom = MediaQuery.viewPaddingOf(ctx).bottom;
-        return Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
-          child: Container(
-            margin: EdgeInsets.fromLTRB(10, 0, 10, 10 + navBottom),
-            constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.94),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
-                  child: CourseContentSheetHeader(
-                    title: 'NOVO CONTEÚDO',
-                    subtitle: _type == 'dica' ? 'Publicar dica' : 'Publicar curso',
-                    accent: accent,
-                    accent2: accent2,
-                    icon: _type == 'dica' ? Icons.lightbulb_rounded : Icons.school_rounded,
-                    onBack: _savingVideo ? () {} : () => Navigator.pop(ctx),
-                  ),
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            final accent = _type == 'dica'
+                ? const Color(0xFFF59E0B)
+                : const Color(0xFF2563EB);
+            final accent2 = _type == 'dica'
+                ? const Color(0xFFD97706)
+                : const Color(0xFF1D4ED8);
+            final navBottom = MediaQuery.viewPaddingOf(ctx).bottom;
+            return Padding(
+              padding:
+                  EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
+              child: Container(
+                margin: EdgeInsets.fromLTRB(10, 0, 10, 10 + navBottom),
+                constraints: BoxConstraints(
+                    maxHeight: MediaQuery.sizeOf(ctx).height * 0.94),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: accent.withValues(alpha: 0.2),
+                      blurRadius: 28,
+                      offset: const Offset(0, -4),
+                    ),
+                  ],
                 ),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-                    child: _buildPublishFormColumn(),
-                  ),
-                ),
-                Padding(
-                  padding: EdgeInsets.fromLTRB(16, 0, 16, 12 + navBottom),
-                  child: FilledButton.icon(
-                    onPressed: _savingVideo
-                        ? null
-                        : () async {
-                            final ok = await _publishVideo();
-                            if (ok && ctx.mounted) Navigator.pop(ctx);
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
+                      child: CourseContentSheetHeader(
+                        title: 'NOVO CONTEÚDO',
+                        subtitle: _type == 'dica'
+                            ? 'Publicar dica'
+                            : 'Publicar curso',
+                        accent: accent,
+                        accent2: accent2,
+                        icon: _type == 'dica'
+                            ? Icons.lightbulb_rounded
+                            : Icons.school_rounded,
+                        onBack: _savingVideo ? () {} : () => Navigator.pop(ctx),
+                      ),
+                    ),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+                        child: _buildPublishFormColumn(
+                          onStateChanged: () {
+                            if (ctx.mounted) setSheetState(() {});
                           },
-                    icon: _savingVideo
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : Icon(_type == 'dica' ? Icons.lightbulb_rounded : Icons.smart_display_rounded),
-                    label: Text(
-                      _savingVideo
-                          ? 'Publicando…'
-                          : (_type == 'dica' ? 'Publicar dica' : 'Publicar curso'),
+                        ),
+                      ),
                     ),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: accent,
-                      minimumSize: const Size(double.infinity, 52),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(16, 0, 16, 12 + navBottom),
+                      child: FilledButton.icon(
+                        onPressed: _savingVideo
+                            ? null
+                            : () async {
+                                final ok = await _publishVideo(
+                                  onStateChanged: () {
+                                    if (ctx.mounted) setSheetState(() {});
+                                  },
+                                );
+                                if (ok && ctx.mounted) Navigator.pop(ctx);
+                              },
+                        icon: _savingVideo
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white),
+                              )
+                            : Icon(_type == 'dica'
+                                ? Icons.lightbulb_rounded
+                                : Icons.smart_display_rounded),
+                        label: Text(
+                          _savingVideo
+                              ? 'Enviando e publicando…'
+                              : (_type == 'dica'
+                                  ? 'Gravar e publicar dica'
+                                  : 'Gravar e publicar curso'),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: accent,
+                          minimumSize: const Size(double.infinity, 52),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14)),
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );
@@ -1981,14 +2567,14 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
         gradient: const LinearGradient(
-          colors: [Color(0xFF2563EB), Color(0xFF7C3AED), Color(0xFFF59E0B)],
+          colors: [Color(0xFF0F0F0F), Color(0xFF1A1A2E), Color(0xFF16213E)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF2563EB).withValues(alpha: 0.35),
-            blurRadius: 18,
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 20,
             offset: const Offset(0, 8),
           ),
         ],
@@ -1997,265 +2583,602 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 26),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Criar curso ou dica',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 17,
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFEF4444), Color(0xFFDC2626)],
                   ),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(Icons.add_rounded,
+                    color: Colors.white, size: 28),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Criar curso ou dica',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 17,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Vídeo da câmera, MP4, YouTube, galeria e validade',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.65),
+                        fontWeight: FontWeight.w500,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Vídeos MP4, galeria de fotos, YouTube e validade — tudo num painel rápido.',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.92),
-              fontWeight: FontWeight.w600,
-              fontSize: 12,
-              height: 1.35,
-            ),
-          ),
-          const SizedBox(height: 14),
-          FilledButton.icon(
-            onPressed: _openCreateSheet,
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: const Color(0xFF2563EB),
-              minimumSize: const Size(double.infinity, 48),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            ),
-            icon: const Icon(Icons.add_rounded),
-            label: const Text(
-              'Abrir editor de publicação',
-              style: TextStyle(fontWeight: FontWeight.w900),
-            ),
+          const SizedBox(height: 16),
+          // Quick action buttons
+          Row(
+            children: [
+              Expanded(
+                child: _buildQuickAction(
+                  icon: Icons.videocam_rounded,
+                  label: 'Curso com vídeo',
+                  color: const Color(0xFFEF4444),
+                  onTap: () {
+                    setState(() => _type = 'curso');
+                    _openCreateSheet();
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildQuickAction(
+                  icon: Icons.lightbulb_rounded,
+                  label: 'Dica rápida',
+                  color: const Color(0xFFF59E0B),
+                  onTap: () {
+                    setState(() => _type = 'dica');
+                    _openCreateSheet();
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildQuickAction(
+                  icon: Icons.auto_awesome_rounded,
+                  label: 'Editor completo',
+                  color: const Color(0xFF7C3AED),
+                  onTap: _openCreateSheet,
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildPublishFormColumn() {
-    final accent = _type == 'dica' ? const Color(0xFFF59E0B) : const Color(0xFF2563EB);
+  Widget _buildQuickAction({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withValues(alpha: 0.25)),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: color, size: 22),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 10.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPublishFormColumn({VoidCallback? onStateChanged}) {
+    final accent =
+        _type == 'dica' ? const Color(0xFFF59E0B) : const Color(0xFF2563EB);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-          FastTextField(
-            controller: _titleCtrl,
-            decoration: _fieldDeco('Título', accent: accent),
+        FastTextField(
+          controller: _titleCtrl,
+          decoration: _fieldDeco('Título', accent: accent),
+        ),
+        const SizedBox(height: 10),
+        FastTextField(
+          controller: _descriptionCtrl,
+          decoration: _fieldDeco(
+            _type == 'dica'
+                ? 'Resumo curto (opcional)'
+                : 'Descrição completa do curso',
+            hint: _type == 'curso'
+                ? 'Explique o conteúdo, objetivo e o que o aluno aprenderá.'
+                : null,
+            accent: accent,
           ),
+          kind: FastTextFieldKind.multiline,
+          maxLines: _type == 'dica' ? 3 : 8,
+        ),
+        if (_type == 'dica') ...[
           const SizedBox(height: 10),
           FastTextField(
-            controller: _descriptionCtrl,
+            controller: _bodyTextCtrl,
             decoration: _fieldDeco(
-              _type == 'dica' ? 'Resumo curto (opcional)' : 'Descrição do curso',
+              'Texto completo da dica',
+              hint: 'Conteúdo maior — exibido ao abrir a dica no app.',
               accent: accent,
             ),
             kind: FastTextFieldKind.multiline,
-            maxLines: _type == 'dica' ? 3 : 4,
+            maxLines: 8,
           ),
-          if (_type == 'dica') ...[
-            const SizedBox(height: 10),
-            FastTextField(
-              controller: _bodyTextCtrl,
-              decoration: _fieldDeco(
-                'Texto completo da dica',
-                hint: 'Conteúdo maior — exibido ao abrir a dica no app.',
-                accent: accent,
-              ),
-              kind: FastTextFieldKind.multiline,
-              maxLines: 8,
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'Galeria de fotos (até ${CourseMediaUrlResolver.maxGalleryPhotos})',
-              style: TextStyle(fontWeight: FontWeight.w800, color: accent),
-            ),
-            const SizedBox(height: 8),
-            if (_pickedImages.isNotEmpty)
-              SizedBox(
-                height: 110,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _pickedImages.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 8),
-                  itemBuilder: (_, i) {
-                    final p = _pickedImages[i];
-                    return Stack(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.memory(
-                            p.bytes,
-                            width: 110,
-                            height: 110,
-                            fit: BoxFit.cover,
+          const SizedBox(height: 10),
+          Text(
+            'Galeria de fotos (até ${CourseMediaUrlResolver.maxGalleryPhotos})',
+            style: TextStyle(fontWeight: FontWeight.w800, color: accent),
+          ),
+          const SizedBox(height: 8),
+          if (_pickedImages.isNotEmpty)
+            SizedBox(
+              height: 110,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _pickedImages.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (_, i) {
+                  final p = _pickedImages[i];
+                  return Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.memory(
+                          p.bytes!,
+                          width: 110,
+                          height: 110,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      Positioned(
+                        top: 4,
+                        right: 4,
+                        child: CircleAvatar(
+                          radius: 12,
+                          backgroundColor: Colors.black54,
+                          child: InkWell(
+                            onTap: _savingVideo
+                                ? null
+                                : () => _removePickedImage(i),
+                            child: const Icon(Icons.close_rounded,
+                                size: 14, color: Colors.white),
                           ),
                         ),
-                        Positioned(
-                          top: 4,
-                          right: 4,
-                          child: CircleAvatar(
-                            radius: 12,
-                            backgroundColor: Colors.black54,
-                            child: InkWell(
-                              onTap: _savingVideo ? null : () => _removePickedImage(i),
-                              child: const Icon(Icons.close_rounded, size: 14, color: Colors.white),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: _savingVideo ? null : _pickCoverImages,
+                icon: const Icon(Icons.add_photo_alternate_rounded, size: 18),
+                label: Text(
+                  _pickedImages.isEmpty
+                      ? 'Adicionar fotos'
+                      : 'Adicionar (${_pickedImages.length}/${CourseMediaUrlResolver.maxGalleryPhotos})',
+                ),
+              ),
+              if (_pickedImages.isNotEmpty)
+                OutlinedButton.icon(
+                  onPressed: _savingVideo ? null : _clearPickedImages,
+                  icon: const Icon(Icons.clear_all_rounded, size: 18),
+                  label: const Text('Limpar fotos'),
+                ),
+            ],
+          ),
+        ] else ...[
+          const SizedBox(height: 14),
+          // ── Seção de vídeo estilo YouTube ──
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F0F0F),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.smart_display_rounded,
+                          color: Color(0xFFEF4444), size: 20),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Vídeos do curso',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 14,
                             ),
                           ),
+                          Text(
+                            'Até ${CourseMediaUrlResolver.maxCourseVideos} vídeos · MP4, MOV ou câmera',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.6),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                      child: Text(
+                        '${_pickedVideos.length}/${CourseMediaUrlResolver.maxCourseVideos}',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // Vídeos adicionados — cards estilo YouTube
+                if (_pickedVideos.isNotEmpty) ...[
+                  for (var i = 0; i < _pickedVideos.length; i++)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: _buildYouTubeStyleCard(
+                        i,
+                        accent,
+                        onStateChanged: onStateChanged,
+                      ),
+                    ),
+                ],
+                // Progresso visível desde a preparação até concluir o upload.
+                if (_savingVideo && _pickedVideos.isNotEmpty) ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(99),
+                    child: LinearProgressIndicator(
+                      value: _uploadProgress > 0 ? _uploadProgress : null,
+                      minHeight: 6,
+                      color: const Color(0xFFEF4444),
+                      backgroundColor: Colors.white12,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _uploadProgress > 0
+                        ? 'Enviando vídeo… ${(_uploadProgress * 100).toStringAsFixed(0)}%'
+                        : 'Preparando vídeo para envio…',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFFEF4444),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                // Botões de ação
+                if (!_savingVideo) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildVideoActionButton(
+                          icon: Icons.videocam_rounded,
+                          label: 'Gravar vídeo',
+                          color: const Color(0xFFEF4444),
+                          onTap: () => _addVideoWithChoice(
+                            onStateChanged: onStateChanged,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildVideoActionButton(
+                          icon: Icons.upload_file_rounded,
+                          label: 'Arquivo',
+                          color: const Color(0xFF3B82F6),
+                          onTap: () => _pickMp4Videos(
+                            onStateChanged: onStateChanged,
+                          ),
+                        ),
+                      ),
+                      if (_pickedVideos.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        _buildVideoActionButton(
+                          icon: Icons.delete_sweep_rounded,
+                          label: 'Limpar',
+                          color: Colors.grey.shade600,
+                          onTap: () => _clearPickedVideos(
+                            onStateChanged: onStateChanged,
+                          ),
+                          compact: true,
                         ),
                       ],
-                    );
-                  },
-                ),
-              ),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: _savingVideo ? null : _pickCoverImages,
-                  icon: const Icon(Icons.add_photo_alternate_rounded, size: 18),
-                  label: Text(
-                    _pickedImages.isEmpty
-                        ? 'Adicionar fotos'
-                        : 'Adicionar (${_pickedImages.length}/${CourseMediaUrlResolver.maxGalleryPhotos})',
+                    ],
                   ),
-                ),
-                if (_pickedImages.isNotEmpty)
-                  OutlinedButton.icon(
-                    onPressed: _savingVideo ? null : _clearPickedImages,
-                    icon: const Icon(Icons.clear_all_rounded, size: 18),
-                    label: const Text('Limpar fotos'),
-                  ),
+                ],
               ],
             ),
-          ] else ...[
-            const SizedBox(height: 12),
-            Text('Vídeos MP4 (até ${CourseMediaUrlResolver.maxCourseVideos})',
-                style: TextStyle(fontWeight: FontWeight.w900, color: accent)),
-            const SizedBox(height: 4),
-            Text(
-              'Envie um ou mais arquivos. Link YouTube abaixo é opcional.',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-            ),
-            const SizedBox(height: 8),
-            for (var i = 0; i < _pickedVideos.length; i++)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: CourseVideoFilePreview(
-                  fileName: _pickedVideos[i].name ?? 'video_${i + 1}.mp4',
-                  sizeBytes: _pickedVideos[i].bytes.lengthInBytes,
-                  accent: accent,
-                  busy: _savingVideo,
-                  onRemove: _savingVideo ? null : () => _removePickedVideo(i),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Capa / galeria (até ${CourseMediaUrlResolver.maxGalleryPhotos} fotos)',
+            style: TextStyle(fontWeight: FontWeight.w800, color: accent),
+          ),
+          const SizedBox(height: 8),
+          if (_pickedImages.isNotEmpty)
+            SizedBox(
+              height: 100,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _pickedImages.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (_, i) => ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.memory(
+                    _pickedImages[i].bytes!,
+                    width: 100,
+                    height: 100,
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: _savingVideo ? null : _pickMp4Videos,
-              icon: const Icon(Icons.upload_file_rounded, size: 20),
-              label: Text(
-                _pickedVideos.isEmpty
-                    ? 'Escolher vídeos MP4'
-                    : 'Adicionar vídeo (${_pickedVideos.length}/${CourseMediaUrlResolver.maxCourseVideos})',
-              ),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 46),
-                side: BorderSide(color: accent),
-              ),
             ),
-            if (_savingVideo && _uploadProgress > 0) ...[
-              const SizedBox(height: 10),
-              LinearProgressIndicator(
-                value: _uploadProgress,
-                minHeight: 6,
-                borderRadius: BorderRadius.circular(99),
-                color: accent,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Enviando… ${(_uploadProgress * 100).toStringAsFixed(0)}%',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: accent),
-              ),
-            ],
-            const SizedBox(height: 10),
-            Text(
-              'Capa / galeria (até ${CourseMediaUrlResolver.maxGalleryPhotos} fotos)',
-              style: TextStyle(fontWeight: FontWeight.w800, color: accent),
+          OutlinedButton.icon(
+            onPressed: _savingVideo ? null : _pickCoverImages,
+            icon: const Icon(Icons.image_rounded, size: 18),
+            label: const Text('Adicionar capa / fotos'),
+          ),
+        ],
+        const SizedBox(height: 10),
+        FastTextField(
+          controller: _youtubeCtrl,
+          decoration: _fieldDeco(
+            _type == 'dica'
+                ? 'Link — YouTube ou site (opcional)'
+                : 'Link YouTube (opcional)',
+            hint: _type == 'dica'
+                ? 'https://youtube.com/… ou https://seusite.com/…'
+                : 'https://www.youtube.com/watch?v=...',
+            accent: accent,
+          ),
+          kind: FastTextFieldKind.url,
+        ),
+        const SizedBox(height: 12),
+        _TypePillSelector(
+          value: _type,
+          onChanged: _savingVideo ? (_) {} : (v) => setState(() => _type = v),
+        ),
+        const SizedBox(height: 10),
+        _buildValiditySection(
+          permanent: _validityPermanent,
+          expiresAt: _expiresAtDate,
+          onPermanentChanged: (v) => setState(() {
+            _validityPermanent = v;
+            if (v) _expiresAtDate = null;
+          }),
+          onDateChanged: (d) => setState(() => _expiresAtDate = d),
+          accent: accent,
+          enabled: !_savingVideo,
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Publicado'),
+          subtitle: const Text('Desligado = oculto no módulo Cursos.'),
+          value: _published,
+          activeThumbColor: _type == 'dica'
+              ? const Color(0xFFF59E0B)
+              : const Color(0xFF2563EB),
+          onChanged:
+              _savingVideo ? null : (v) => setState(() => _published = v),
+        ),
+      ],
+    );
+  }
+
+  /// Card estilo YouTube para vídeo selecionado (create/edit).
+  Widget _buildYouTubeStyleCard(
+    int index,
+    Color accent, {
+    VoidCallback? onStateChanged,
+  }) {
+    final v = _pickedVideos[index];
+    final name = v.name ?? 'video_${index + 1}.mp4';
+    final sizeMB = (v.effectiveSize / (1024 * 1024)).toStringAsFixed(1);
+    final ext = name.split('.').last.toUpperCase();
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      padding: const EdgeInsets.all(10),
+      child: Row(
+        children: [
+          // Thumbnail placeholder estilo YouTube
+          Container(
+            width: 72,
+            height: 44,
+            decoration: BoxDecoration(
+              color: const Color(0xFF282828),
+              borderRadius: BorderRadius.circular(8),
             ),
-            const SizedBox(height: 8),
-            if (_pickedImages.isNotEmpty)
-              SizedBox(
-                height: 100,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _pickedImages.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 8),
-                  itemBuilder: (_, i) => ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: Image.memory(
-                      _pickedImages[i].bytes,
-                      width: 100,
-                      height: 100,
-                      fit: BoxFit.cover,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Icon(Icons.videocam_rounded,
+                    color: Colors.white.withValues(alpha: 0.5), size: 22),
+                Positioned(
+                  bottom: 2,
+                  right: 2,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: Colors.black87,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      ext,
+                      style: const TextStyle(
+                        fontSize: 8,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white70,
+                      ),
                     ),
                   ),
                 ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$sizeMB MB',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.5),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (!_savingVideo)
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => _removePickedVideo(
+                  index,
+                  onStateChanged: onStateChanged,
+                ),
+                customBorder: const CircleBorder(),
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Icon(
+                    Icons.close_rounded,
+                    color: Colors.white.withValues(alpha: 0.5),
+                    size: 18,
+                  ),
+                ),
               ),
-            OutlinedButton.icon(
-              onPressed: _savingVideo ? null : _pickCoverImages,
-              icon: const Icon(Icons.image_rounded, size: 18),
-              label: const Text('Adicionar capa / fotos'),
             ),
-          ],
-          const SizedBox(height: 10),
-          FastTextField(
-            controller: _youtubeCtrl,
-            decoration: _fieldDeco(
-              _type == 'dica' ? 'Link — YouTube ou site (opcional)' : 'Link YouTube (opcional)',
-              hint: _type == 'dica'
-                  ? 'https://youtube.com/… ou https://seusite.com/…'
-                  : 'https://www.youtube.com/watch?v=...',
-              accent: accent,
-            ),
-            kind: FastTextFieldKind.url,
-          ),
-          const SizedBox(height: 12),
-          _TypePillSelector(
-            value: _type,
-            onChanged: _savingVideo ? (_) {} : (v) => setState(() => _type = v),
-          ),
-          const SizedBox(height: 10),
-          _buildValiditySection(
-            permanent: _validityPermanent,
-            expiresAt: _expiresAtDate,
-            onPermanentChanged: (v) => setState(() {
-              _validityPermanent = v;
-              if (v) _expiresAtDate = null;
-            }),
-            onDateChanged: (d) => setState(() => _expiresAtDate = d),
-            accent: accent,
-            enabled: !_savingVideo,
-          ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Publicado'),
-            subtitle: const Text('Desligado = oculto no módulo Cursos.'),
-            value: _published,
-            activeThumbColor: _type == 'dica' ? const Color(0xFFF59E0B) : const Color(0xFF2563EB),
-            onChanged: _savingVideo ? null : (v) => setState(() => _published = v),
-          ),
         ],
+      ),
+    );
+  }
+
+  /// Botão de ação de vídeo (Gravar / Arquivo / Limpar).
+  Widget _buildVideoActionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+    bool compact = false,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            vertical: 12,
+            horizontal: compact ? 10 : 14,
+          ),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withValues(alpha: 0.25)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: color, size: 18),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -2324,13 +3247,16 @@ class _Pill extends StatelessWidget {
             gradient: selected ? LinearGradient(colors: gradient) : null,
             color: selected ? null : Colors.white,
             border: Border.all(
-              color: selected ? Colors.transparent : gradient.first.withValues(alpha: 0.35),
+              color: selected
+                  ? Colors.transparent
+                  : gradient.first.withValues(alpha: 0.35),
             ),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 18, color: selected ? Colors.white : gradient.first),
+              Icon(icon,
+                  size: 18, color: selected ? Colors.white : gradient.first),
               const SizedBox(width: 6),
               Text(
                 label,
@@ -2444,7 +3370,8 @@ class _VideoGridCard extends StatelessWidget {
     final previewText = body.isNotEmpty ? body : description;
     final type = (data['type'] ?? 'curso').toString();
     final published = data['published'] != false;
-    final (accent, accent2) = CourseContentCardHeader.colorsFor(type: type, index: index);
+    final (accent, accent2) =
+        CourseContentCardHeader.colorsFor(type: type, index: index);
     final created = data['createdAt'];
     var dateLabel = '';
     if (created is Timestamp) {
@@ -2453,7 +3380,8 @@ class _VideoGridCard extends StatelessWidget {
 
     final hasThumb = CourseThumbResolver.hasVisualThumb(data);
     final isVideo = CourseThumbResolver.isVideoContent(data);
-    final thumbFit = CourseThumbResolver.isDicaPhoto(data) ? BoxFit.contain : BoxFit.cover;
+    final thumbFit =
+        CourseThumbResolver.isDicaPhoto(data) ? BoxFit.contain : BoxFit.cover;
 
     final sourceLabel = hasMp4
         ? (videoId != null ? 'MP4+YT' : 'MP4')
@@ -2466,46 +3394,31 @@ class _VideoGridCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
-        borderRadius: BorderRadius.circular(14),
-        child: Ink(
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
+            color: const Color(0xFF0F0F0F),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: selected ? accent : accent.withValues(alpha: 0.18),
+              color: selected
+                  ? accent.withValues(alpha: 0.8)
+                  : Colors.white.withValues(alpha: 0.06),
               width: selected ? 2 : 1,
             ),
             boxShadow: [
               BoxShadow(
-                color: accent.withValues(alpha: 0.12),
+                color: Colors.black.withValues(alpha: 0.3),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
             ],
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(13),
+            borderRadius: BorderRadius.circular(15),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                CourseContentCardHeader(
-                  compact: true,
-                  title: title,
-                  subtitle: dateLabel.isNotEmpty ? dateLabel : null,
-                  accent: accent,
-                  accent2: accent2,
-                  icon: CourseContentCardHeader.iconForType(type),
-                  topBadges: [
-                    CourseContentCardHeader.badge(
-                      published ? 'PUBLICADO' : 'OCULTO',
-                      bg: published
-                          ? const Color(0xFF16A34A)
-                          : Colors.black.withValues(alpha: 0.35),
-                    ),
-                    CourseContentCardHeader.badge(type.toUpperCase()),
-                    CourseContentCardHeader.badge(sourceLabel),
-                  ],
-                ),
+                // Thumbnail area — 16:9 YouTube style
                 AspectRatio(
                   aspectRatio: 16 / 9,
                   child: Stack(
@@ -2516,54 +3429,120 @@ class _VideoGridCard extends StatelessWidget {
                           data,
                           fit: thumbFit,
                           fallback: _thumbFallback(accent, accent2),
-                          showPlayButton: isVideo || videoId != null || hasMp4,
-                          playIconSize: 48,
+                          showPlayButton: false,
                         )
                       else
                         _thumbFallback(accent, accent2),
+                      // Dark gradient overlay at bottom
+                      Positioned(
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        child: Container(
+                          height: 40,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.transparent,
+                                Colors.black.withValues(alpha: 0.7)
+                              ],
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Play button overlay
                       Material(
                         color: Colors.transparent,
                         child: InkWell(
                           onTap: onPreview,
-                          child: hasThumb
-                              ? const SizedBox.expand()
-                              : Center(
-                                  child: Icon(
-                                    hasMp4
+                          child: Center(
+                            child: Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.6),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                hasThumb &&
+                                        (isVideo || videoId != null || hasMp4)
+                                    ? Icons.play_arrow_rounded
+                                    : (hasMp4
                                         ? Icons.movie_rounded
                                         : (type == 'dica' && videoId == null
                                             ? Icons.article_rounded
-                                            : Icons.play_circle_fill_rounded),
-                                    color: Colors.white.withValues(alpha: 0.95),
-                                    size: 48,
-                                  ),
-                                ),
+                                            : Icons.play_arrow_rounded)),
+                                color: Colors.white,
+                                size: 32,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
+                      // Top badges
+                      Positioned(
+                        top: 8,
+                        left: 8,
+                        child: Row(
+                          children: [
+                            _badgeChip(
+                              published ? 'PUBLICADO' : 'OCULTO',
+                              bg: published
+                                  ? const Color(0xFF16A34A)
+                                  : Colors.black.withValues(alpha: 0.6),
+                            ),
+                            const SizedBox(width: 4),
+                            _badgeChip(type.toUpperCase()),
+                            if (sourceLabel != 'VÍDEO' &&
+                                sourceLabel != 'DICA') ...[
+                              const SizedBox(width: 4),
+                              _badgeChip(sourceLabel),
+                            ],
+                          ],
+                        ),
+                      ),
+                      // Selection checkbox
                       if (selectionMode)
                         Positioned(
                           top: 8,
                           right: 8,
                           child: CircleAvatar(
                             radius: 14,
-                            backgroundColor:
-                                selected ? accent : Colors.white,
+                            backgroundColor: selected ? accent : Colors.black54,
                             child: Icon(
-                              selected ? Icons.check_rounded : Icons.circle_outlined,
+                              selected
+                                  ? Icons.check_rounded
+                                  : Icons.circle_outlined,
                               size: 18,
-                              color: selected ? Colors.white : Colors.grey.shade500,
+                              color: selected ? Colors.white : Colors.white70,
                             ),
                           ),
                         ),
                     ],
                   ),
                 ),
+                // Info area
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                    padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Title
+                        Text(
+                          title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13.5,
+                            height: 1.25,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        // Description/preview text
                         if (previewText.isNotEmpty)
                           Expanded(
                             child: Text(
@@ -2571,48 +3550,55 @@ class _VideoGridCard extends StatelessWidget {
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                fontSize: 11.5,
-                                height: 1.35,
-                                color: Colors.grey.shade700,
+                                fontSize: 11,
+                                height: 1.3,
+                                color: Colors.white.withValues(alpha: 0.5),
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
                           )
                         else
                           const Spacer(),
-                        const SizedBox(height: 6),
+                        // Bottom row: chips + actions
                         Row(
                           children: [
                             _miniChip(
                               validityLabel,
-                              expired ? const Color(0xFFDC2626) : const Color(0xFF64748B),
+                              expired
+                                  ? const Color(0xFFDC2626)
+                                  : const Color(0xFF94A3B8),
                             ),
-                            const Spacer(),
-                            IconButton(
-                              tooltip: 'Editar',
-                              visualDensity: VisualDensity.compact,
-                              icon: Icon(Icons.edit_rounded,
-                                  color: accent.withValues(alpha: 0.85), size: 18),
-                              onPressed: onEdit,
-                            ),
-                            IconButton(
-                              tooltip: published ? 'Ocultar' : 'Publicar',
-                              visualDensity: VisualDensity.compact,
-                              icon: Icon(
-                                published
-                                    ? Icons.visibility_off_outlined
-                                    : Icons.visibility_rounded,
-                                color: Colors.grey.shade600,
-                                size: 18,
+                            if (dateLabel.isNotEmpty) ...[
+                              const SizedBox(width: 6),
+                              Text(
+                                dateLabel,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.white.withValues(alpha: 0.35),
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
-                              onPressed: () => onTogglePublished(!published),
+                            ],
+                            const Spacer(),
+                            _actionIcon(
+                              Icons.edit_rounded,
+                              accent.withValues(alpha: 0.85),
+                              onEdit,
+                              'Editar',
                             ),
-                            IconButton(
-                              tooltip: 'Excluir',
-                              visualDensity: VisualDensity.compact,
-                              icon: Icon(Icons.delete_outline_rounded,
-                                  color: Colors.red.shade400, size: 18),
-                              onPressed: onDelete,
+                            _actionIcon(
+                              published
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_rounded,
+                              Colors.white.withValues(alpha: 0.5),
+                              () => onTogglePublished(!published),
+                              published ? 'Ocultar' : 'Publicar',
+                            ),
+                            _actionIcon(
+                              Icons.delete_outline_rounded,
+                              Colors.red.shade400.withValues(alpha: 0.8),
+                              onDelete,
+                              'Excluir',
                             ),
                           ],
                         ),
@@ -2628,13 +3614,55 @@ class _VideoGridCard extends StatelessWidget {
     );
   }
 
+  Widget _badgeChip(String text, {Color? bg}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: bg ?? Colors.black.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w900,
+          color: Colors.white,
+          letterSpacing: 0.3,
+        ),
+      ),
+    );
+  }
+
+  Widget _actionIcon(
+      IconData icon, Color color, VoidCallback onPressed, String tooltip) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        customBorder: const CircleBorder(),
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: Icon(icon, color: color, size: 17),
+        ),
+      ),
+    );
+  }
+
   Widget _thumbFallback(Color a, Color b) {
     return Container(
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [a, b]),
+        gradient: LinearGradient(
+          colors: [a.withValues(alpha: 0.7), b.withValues(alpha: 0.7)],
+        ),
       ),
-      child: const Center(
-        child: Icon(Icons.ondemand_video_rounded, color: Colors.white70, size: 40),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.ondemand_video_rounded,
+                color: Colors.white.withValues(alpha: 0.6), size: 36),
+          ],
+        ),
       ),
     );
   }
@@ -2643,7 +3671,7 @@ class _VideoGridCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(

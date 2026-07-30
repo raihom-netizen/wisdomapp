@@ -310,7 +310,7 @@ class _LinkUtilFormScreenState extends State<_LinkUtilFormScreen> {
     final color = item.color;
     final isActive = selected ||
         (_iconeSelecionado.icon.codePoint == item.icon.codePoint &&
-            _iconeSelecionado.color.value == item.color.value);
+            _iconeSelecionado.color.toARGB32() == item.color.toARGB32());
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => setState(() {
@@ -421,7 +421,7 @@ class _LinkUtilFormScreenState extends State<_LinkUtilFormScreen> {
       bool found = false;
       for (int i = 0; i < iconesModernos.length; i++) {
         if (iconesModernos[i].icon.codePoint == item.iconCodePoint &&
-            iconesModernos[i].color.value == item.iconColorValue) {
+            iconesModernos[i].color.toARGB32() == item.iconColorValue) {
           idx = i;
           found = true;
           break;
@@ -430,7 +430,7 @@ class _LinkUtilFormScreenState extends State<_LinkUtilFormScreen> {
       if (!found) {
         for (int i = 0; i < iconesColoridos.length; i++) {
           if (iconesColoridos[i].icon.codePoint == item.iconCodePoint &&
-              iconesColoridos[i].color.value == item.iconColorValue) {
+              iconesColoridos[i].color.toARGB32() == item.iconColorValue) {
             idx = i;
             found = true;
             break;
@@ -493,7 +493,7 @@ class _LinkUtilFormScreenState extends State<_LinkUtilFormScreen> {
       url: url,
       iconIndex: _iconeSelecionado.linkUtilIconIndex,
       iconCodePoint: _iconeSelecionado.icon.codePoint,
-      iconColorValue: _iconeSelecionado.color.value,
+      iconColorValue: _iconeSelecionado.color.toARGB32(),
       subLinks: subLinks,
       isFavorite: widget.item?.isFavorite ?? false,
     ));
@@ -679,7 +679,7 @@ class _IconPickerSheetState extends State<_IconPickerSheet> {
   bool _itemMatches(CustomIconData item, CustomIconData? selected) {
     if (selected == null) return false;
     return item.icon.codePoint == selected.icon.codePoint &&
-        item.color.value == selected.color.value;
+        item.color.toARGB32() == selected.color.toARGB32();
   }
 
   @override

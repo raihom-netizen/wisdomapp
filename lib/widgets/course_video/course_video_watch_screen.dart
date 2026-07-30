@@ -155,7 +155,7 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
         .toList();
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFF0F0F0F),
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
@@ -171,7 +171,7 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
               _title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
             ),
             actions: [
               IconButton(
@@ -195,7 +195,8 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
                         fit: StackFit.expand,
                         children: [
                           CourseVideoPlayerShell(
-                            embedKey: ValueKey('${_youtubeId ?? ''}|${_mp4Url ?? ''}'),
+                            embedKey: ValueKey(
+                                '${_youtubeId ?? ''}|${_mp4Url ?? ''}'),
                             posterData: widget.data,
                             youtubeVideoId: _youtubeId,
                             mp4Url: _mp4Url,
@@ -214,7 +215,8 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
                                 borderRadius: BorderRadius.circular(999),
                                 child: const Padding(
                                   padding: EdgeInsets.all(8),
-                                  child: Icon(Icons.fullscreen_rounded, color: Colors.white, size: 22),
+                                  child: Icon(Icons.fullscreen_rounded,
+                                      color: Colors.white, size: 22),
                                 ),
                               ),
                             ),
@@ -229,43 +231,50 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
           ),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Title
                   Text(
                     _title,
                     style: const TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 17,
                       height: 1.25,
-                      color: Color(0xFF0F0F0F),
+                      color: Colors.white,
                     ),
                   ),
-                  if (widget.mp4Label != null && widget.mp4Label!.trim().isNotEmpty) ...[
-                    const SizedBox(height: 6),
+                  if (widget.mp4Label != null &&
+                      widget.mp4Label!.trim().isNotEmpty) ...[
+                    const SizedBox(height: 4),
                     Text(
                       widget.mp4Label!,
                       style: TextStyle(
-                        color: Colors.grey.shade600,
+                        color: Colors.grey.shade500,
                         fontWeight: FontWeight.w600,
-                        fontSize: 13,
+                        fontSize: 12,
                       ),
                     ),
                   ],
                   const SizedBox(height: 10),
+                  // Speed controls
+                  _SpeedControlBar(accent: _accent),
+                  const SizedBox(height: 12),
+                  // Channel info
                   Row(
                     children: [
                       Container(
-                        width: 40,
-                        height: 40,
+                        width: 36,
+                        height: 36,
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [_accent, _accent.withValues(alpha: 0.75)],
                           ),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.school_rounded, color: Colors.white, size: 22),
+                        child: const Icon(Icons.school_rounded,
+                            color: Colors.white, size: 20),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -275,15 +284,18 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
                             Text(
                               _typeLabel,
                               style: const TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13,
+                                color: Colors.white,
                               ),
                             ),
                             Text(
-                              _youtubeId != null ? 'YouTube · até 4K' : 'HD · MP4',
+                              _youtubeId != null
+                                  ? 'YouTube · até 4K'
+                                  : 'HD · MP4',
                               style: TextStyle(
                                 color: Colors.grey.shade600,
-                                fontSize: 12,
+                                fontSize: 11,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -291,34 +303,35 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF0F0F0F),
+                          color: const Color(0xFFFF0000),
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: const Text(
                           'Wisdom',
                           style: TextStyle(
                             color: Colors.white,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12,
                           ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 14),
+                  // Quality badge
                   if (_youtubeId != null)
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.only(top: 10),
                       child: Row(
                         children: [
-                          Icon(Icons.hd_rounded, size: 18, color: _accent),
-                          const SizedBox(width: 6),
+                          Icon(Icons.hd_rounded, size: 16, color: _accent),
+                          const SizedBox(width: 4),
                           Text(
                             'Qualidade até 4K no player',
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: 11,
                               fontWeight: FontWeight.w700,
                               color: Colors.grey.shade600,
                             ),
@@ -326,16 +339,18 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
                         ],
                       ),
                     ),
+                  // Description
                   if (_description.isNotEmpty) ...[
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 12),
                     GestureDetector(
-                      onTap: () => setState(() => _descExpanded = !_descExpanded),
+                      onTap: () =>
+                          setState(() => _descExpanded = !_descExpanded),
                       child: Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF2F2F2),
-                          borderRadius: BorderRadius.circular(12),
+                          color: const Color(0xFF1A1A1A),
+                          borderRadius: BorderRadius.circular(10),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -343,11 +358,12 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
                             Text(
                               _description,
                               maxLines: _descExpanded ? null : 3,
-                              overflow: _descExpanded ? null : TextOverflow.ellipsis,
+                              overflow:
+                                  _descExpanded ? null : TextOverflow.ellipsis,
                               style: TextStyle(
-                                color: Colors.grey.shade800,
+                                color: Colors.grey.shade300,
                                 height: 1.45,
-                                fontSize: 14,
+                                fontSize: 13,
                               ),
                             ),
                             const SizedBox(height: 4),
@@ -355,7 +371,8 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
                               _descExpanded ? 'Mostrar menos' : 'Mostrar mais',
                               style: const TextStyle(
                                 fontWeight: FontWeight.w800,
-                                fontSize: 13,
+                                fontSize: 12,
+                                color: Colors.white,
                               ),
                             ),
                           ],
@@ -370,13 +387,13 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
           if (related.isNotEmpty) ...[
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
                 child: Text(
                   'Próximos vídeos',
                   style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 16,
-                    color: Colors.grey.shade900,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    color: Colors.white,
                   ),
                 ),
               ),
@@ -458,19 +475,20 @@ class _RelatedVideoTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final title = (data['title'] ?? 'Vídeo').toString();
     final type = (data['type'] ?? 'curso').toString();
-    final accent = type == 'dica' ? const Color(0xFFF59E0B) : const Color(0xFF2563EB);
+    final accent =
+        type == 'dica' ? const Color(0xFFF59E0B) : const Color(0xFF2563EB);
 
     return Material(
-      color: Colors.white,
+      color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               ClipRRect(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(8),
                 child: SizedBox(
                   width: 168,
                   height: 94,
@@ -478,10 +496,12 @@ class _RelatedVideoTile extends StatelessWidget {
                     data,
                     fit: BoxFit.cover,
                     fallback: Container(
-                      color: accent.withValues(alpha: 0.2),
-                      child: Icon(Icons.play_circle_fill_rounded, color: accent, size: 40),
+                      color: const Color(0xFF272727),
+                      child: Icon(Icons.play_circle_fill_rounded,
+                          color: accent, size: 36),
                     ),
                     showPlayButton: true,
+                    playIconSize: 32,
                   ),
                 ),
               ),
@@ -495,9 +515,10 @@ class _RelatedVideoTile extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
                         height: 1.25,
+                        color: Colors.white,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -505,17 +526,104 @@ class _RelatedVideoTile extends StatelessWidget {
                       type == 'dica' ? 'Dica Wisdom' : 'Wisdom Cursos',
                       style: TextStyle(
                         color: Colors.grey.shade600,
-                        fontSize: 12,
+                        fontSize: 11,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
                 ),
               ),
-              Icon(Icons.more_vert_rounded, color: Colors.grey.shade500, size: 20),
+              Icon(Icons.more_vert_rounded,
+                  color: Colors.grey.shade700, size: 20),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Barra de controle de velocidade estilo YouTube.
+class _SpeedControlBar extends StatefulWidget {
+  const _SpeedControlBar({required this.accent});
+  final Color accent;
+
+  @override
+  State<_SpeedControlBar> createState() => _SpeedControlBarState();
+}
+
+class _SpeedControlBarState extends State<_SpeedControlBar> {
+  double _speed = 1.0;
+
+  static const _speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+
+  String _speedLabel(double s) {
+    if (s == 1.0) return 'Normal';
+    return '${s}x';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 36,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.speed_rounded, size: 16, color: widget.accent),
+          const SizedBox(width: 6),
+          Text(
+            'Velocidade:',
+            style: TextStyle(
+              color: Colors.grey.shade500,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final s in _speeds)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: GestureDetector(
+                        onTap: () => setState(() => _speed = s),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _speed == s
+                                ? widget.accent.withValues(alpha: 0.2)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(6),
+                            border: _speed == s
+                                ? Border.all(color: widget.accent, width: 1)
+                                : null,
+                          ),
+                          child: Text(
+                            _speedLabel(s),
+                            style: TextStyle(
+                              color: _speed == s
+                                  ? widget.accent
+                                  : Colors.grey.shade600,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -538,8 +646,8 @@ class _VideoPickerSheet extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -547,7 +655,11 @@ class _VideoPickerSheet extends StatelessWidget {
         children: [
           Text(
             'Escolha o vídeo · $title',
-            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+              color: Colors.white,
+            ),
           ),
           const SizedBox(height: 12),
           for (var i = 0; i < videos.length; i++)
@@ -555,16 +667,21 @@ class _VideoPickerSheet extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 8),
               child: ListTile(
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  side: BorderSide(color: Colors.grey.shade200),
+                  borderRadius: BorderRadius.circular(10),
                 ),
+                tileColor: const Color(0xFF272727),
                 leading: CircleAvatar(
-                  backgroundColor: const Color(0xFF2563EB).withValues(alpha: 0.12),
-                  child: Icon(Icons.play_arrow_rounded, color: Colors.blue.shade700),
+                  backgroundColor:
+                      const Color(0xFFFF0000).withValues(alpha: 0.15),
+                  child: const Icon(Icons.play_arrow_rounded,
+                      color: Color(0xFFFF0000)),
                 ),
                 title: Text(
                   videos[i].label ?? 'Vídeo ${i + 1}',
-                  style: const TextStyle(fontWeight: FontWeight.w800),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
                 ),
                 onTap: () => onPick(
                   videos[i].url,

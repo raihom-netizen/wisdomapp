@@ -1443,8 +1443,8 @@ class RelatorioService {
           cell(c.titulo, fs: 7),
           cell('${c.qtdJaTirado}', align: pw.TextAlign.right),
           cell('${c.qtdATirar}', align: pw.TextAlign.right),
-          cell('${_fmtH(c.horasJaTirado)}', align: pw.TextAlign.right),
-          cell('${_fmtH(c.horasATirar)}', align: pw.TextAlign.right),
+          cell(_fmtH(c.horasJaTirado), align: pw.TextAlign.right),
+          cell(_fmtH(c.horasATirar), align: pw.TextAlign.right),
           cell(vFmt(c, c.valorJaRecebido), align: pw.TextAlign.right),
           cell(vFmt(c, c.valorATirar), align: pw.TextAlign.right),
           cell('$qTot', align: pw.TextAlign.right),
@@ -2003,8 +2003,9 @@ class RelatorioService {
   static String _reminderDatePdf(dynamic v) {
     if (v == null) return '';
     DateTime d;
-    if (v is Timestamp) d = v.toDate();
-    else if (v is DateTime) d = v;
+    if (v is Timestamp) {
+      d = v.toDate();
+    } else if (v is DateTime) d = v;
     else return v.toString();
     return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
   }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -6,16 +7,15 @@ import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import '../models/user_profile.dart';
-import '../screens/audiencia_form_page.dart';
 import '../screens/compromisso_form_page.dart';
 import '../constants/currency_formats.dart';
 import '../models/finance_account.dart';
-import '../services/audiencia_reminder_service.dart';
 import '../services/compromisso_reminder_service.dart';
 import '../services/finance_accounts_service.dart';
 import '../services/fixed_expense_preferences_service.dart';
 import '../services/fixed_income_preferences_service.dart';
 import '../services/apple_calendar_sync_service.dart';
+import '../services/agenda_calendar_week_start_preferences.dart';
 import '../services/google_calendar_sync_service.dart';
 import '../services/relatorio_service.dart';
 import 'report_preview_screen.dart';
@@ -29,8 +29,6 @@ import '../utils/finance_transactions_realtime.dart';
 import '../widgets/finance_transfer_bottom_sheet.dart';
 import '../utils/firestore_user_doc_id.dart';
 import '../utils/premium_upgrade.dart';
-import '../widgets/agenda_finance_pending_item_card.dart';
-import '../widgets/agenda_open_item_card.dart';
 import '../widgets/finance_transaction_edit_dialog.dart';
 import '../widgets/agenda_pdf_export_sheet.dart';
 import '../widgets/external_calendar_integration_panel.dart';
@@ -38,7 +36,97 @@ import '../widgets/agenda/agenda_bulk_clear_confirm_dialog.dart';
 import '../widgets/agenda/agenda_bulk_clear_toolbar.dart';
 import '../widgets/shell_keyboard_bottom_pad.dart';
 
-enum _AgendaMesAba { financeiro, particular }
+enum _AgendaMesAba { todos, financeiro, particular }
+
+/// Divide a célula do dia em N cores (padrão Controle Total):
+/// 1 cor = preenchimento total · 2 cores = diagonal · 3+ = fatias em leque.
+class _CalendarDayNPartsPainter extends CustomPainter {
+  final List<Color> colors;
+
+  _CalendarDayNPartsPainter({required this.colors});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (colors.isEmpty) return;
+    if (colors.length == 1) {
+      canvas.drawRect(Offset.zero & size, Paint()..color = colors.first);
+      return;
+    }
+    if (colors.length == 2) {
+      // Diagonal: topo-esquerda / base-direita
+      final pathTopLeft = Path()
+        ..moveTo(0, 0)
+        ..lineTo(size.width, 0)
+        ..lineTo(0, size.height)
+        ..close();
+      canvas.drawPath(pathTopLeft, Paint()..color = colors[0]);
+      final pathBottomRight = Path()
+        ..moveTo(size.width, 0)
+        ..lineTo(size.width, size.height)
+        ..lineTo(0, size.height)
+        ..close();
+      canvas.drawPath(pathBottomRight, Paint()..color = colors[1]);
+      return;
+    }
+    // 3+ cores: fatias angulares a partir do centro (fracionamento em leque)
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+    final n = colors.length;
+    const startAngle = -math.pi / 2; // topo (-90°)
+    for (var i = 0; i < n; i++) {
+      final angle1 = startAngle + (i * 2 * math.pi / n);
+      final angle2 = startAngle + ((i + 1) * 2 * math.pi / n);
+      final p1 = _rayRectIntersection(cx, cy, angle1, size.width, size.height);
+      final p2 = _rayRectIntersection(cx, cy, angle2, size.width, size.height);
+      final path = Path()
+        ..moveTo(cx, cy)
+        ..lineTo(cx + p1.dx, cy + p1.dy)
+        ..lineTo(cx + p2.dx, cy + p2.dy)
+        ..close();
+      canvas.save();
+      canvas.clipRect(Offset.zero & size);
+      canvas.drawPath(path, Paint()..color = colors[i]);
+      canvas.restore();
+    }
+  }
+
+  /// Interseção do raio (centro cx,cy + ângulo) com a borda do retângulo [0,w]x[0,h].
+  Offset _rayRectIntersection(
+      double cx, double cy, double angle, double w, double h) {
+    final dx = math.cos(angle);
+    final dy = math.sin(angle);
+    double t = double.infinity;
+    if (dx > 1e-6) {
+      final tRight = (w - cx) / dx;
+      if (tRight > 0 && (cy + tRight * dy) >= 0 && (cy + tRight * dy) <= h) {
+        t = math.min(t, tRight);
+      }
+    }
+    if (dx < -1e-6) {
+      final tLeft = -cx / dx;
+      if (tLeft > 0 && (cy + tLeft * dy) >= 0 && (cy + tLeft * dy) <= h) {
+        t = math.min(t, tLeft);
+      }
+    }
+    if (dy > 1e-6) {
+      final tBottom = (h - cy) / dy;
+      if (tBottom > 0 && (cx + tBottom * dx) >= 0 && (cx + tBottom * dx) <= w) {
+        t = math.min(t, tBottom);
+      }
+    }
+    if (dy < -1e-6) {
+      final tTop = -cy / dy;
+      if (tTop > 0 && (cx + tTop * dx) >= 0 && (cx + tTop * dx) <= w) {
+        t = math.min(t, tTop);
+      }
+    }
+    if (t == double.infinity || t <= 0) t = 1;
+    return Offset(dx * t, dy * t);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
 
 /// Módulo **Agenda** WISDOMAPP — calendário premium (padrão Controle Total),
 /// resumo do dia, feriados e grid de compromissos com edição/exclusão.
@@ -67,16 +155,21 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
 
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
+  // 1º toque em dia preenchido mostra o resumo; 2º toque abre inclusão (CT).
+  DateTime? _filledDayPrimedForAdd;
   Set<DateTime> _googleBusyDays = {};
   Set<DateTime> _appleBusyDays = {};
   Map<DateTime, List<GoogleCalendarEventItem>> _googleEventsByDay = {};
   Map<DateTime, List<AppleCalendarEventItem>> _appleEventsByDay = {};
   bool _googleSyncLoading = false;
   bool _googleEnabled = false;
+  bool _appleEnabled = false;
   StreamSubscription<bool>? _googleEnabledSub;
   int _streamGeneration = 0;
   int _mesAbaIndex = 0;
   bool _bulkClearLoading = false;
+  StartingDayOfWeek _calendarWeekStart =
+      AgendaCalendarWeekStartPreferences.defaultValue;
 
   _AgendaMesAba get _mesAba => _AgendaMesAba.values[_mesAbaIndex];
 
@@ -85,7 +178,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
   @override
   void initState() {
     super.initState();
-    _selectedDay = DateTime.now();
+    _selectedDay = _dayKey(DateTime.now());
+    unawaited(_loadCalendarWeekStart());
     unawaited(GoogleCalendarSyncService.completeWebOAuthReturnIfNeeded());
     unawaited(_bootstrapGoogleCalendar());
     unawaited(_bootstrapAppleCalendar());
@@ -107,12 +201,33 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
   }
 
   @override
+  void didUpdateWidget(covariant WisdomAgendaScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Padrão Controle Total: sempre que o usuário entra novamente no módulo,
+    // hoje fica selecionado e o resumo do dia já aparece abaixo do calendário.
+    if (!oldWidget.isShellVisible && widget.isShellVisible) {
+      _filledDayPrimedForAdd = null;
+      _applyTodaySelection();
+    }
+    if (oldWidget.uid != widget.uid) {
+      _calendarWeekStart = AgendaCalendarWeekStartPreferences.defaultValue;
+      unawaited(_loadCalendarWeekStart());
+    }
+  }
+
+  @override
   void dispose() {
     _googleEnabledSub?.cancel();
     super.dispose();
   }
 
   void _retryStream() => setState(() => _streamGeneration++);
+
+  Future<void> _loadCalendarWeekStart() async {
+    final value = await AgendaCalendarWeekStartPreferences.load(_userDocId);
+    if (!mounted || value == _calendarWeekStart) return;
+    setState(() => _calendarWeekStart = value);
+  }
 
   Future<void> _bootstrapGoogleCalendar() async {
     if (_userDocId.isEmpty) return;
@@ -133,7 +248,12 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
       return;
     }
     if (!await AppleCalendarSyncService.isEnabled(_userDocId)) {
-      if (mounted) setState(() => _appleBusyDays = {});
+      if (mounted) {
+        setState(() {
+          _appleBusyDays = {};
+          _appleEnabled = false;
+        });
+      }
       return;
     }
     final events = await AppleCalendarSyncService.fetchEventsForMonth(
@@ -145,6 +265,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
       setState(() {
         _appleEventsByDay = byDay;
         _appleBusyDays = byDay.keys.toSet();
+        _appleEnabled = true;
       });
     }
   }
@@ -213,7 +334,10 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
 
   (DateTime, DateTime) _weekBounds(DateTime anchor) {
     final d = _dayKey(anchor);
-    final start = d.subtract(Duration(days: d.weekday - 1));
+    final offset = _calendarWeekStart == StartingDayOfWeek.sunday
+        ? d.weekday % 7
+        : d.weekday - 1;
+    final start = d.subtract(Duration(days: offset));
     final end = start.add(const Duration(days: 6));
     return (start, end);
   }
@@ -377,7 +501,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
   ) {
     final start = DateTime(_focusedDay.year, _focusedDay.month, 1);
-    final end = DateTime(_focusedDay.year, _focusedDay.month + 1, 0, 23, 59, 59);
+    final end =
+        DateTime(_focusedDay.year, _focusedDay.month + 1, 0, 23, 59, 59);
     final items = <Map<String, dynamic>>[];
     for (final doc in docs) {
       final data = doc.data();
@@ -392,7 +517,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
       if (da == null || db == null) return 0;
       final cmp = da.compareTo(db);
       if (cmp != 0) return cmp;
-      return (a['time'] ?? '').toString().compareTo((b['time'] ?? '').toString());
+      return (a['time'] ?? '')
+          .toString()
+          .compareTo((b['time'] ?? '').toString());
     });
     return items;
   }
@@ -418,7 +545,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
       if (da == null || db == null) return 0;
       final cmp = da.compareTo(db);
       if (cmp != 0) return cmp;
-      return (a['time'] ?? '').toString().compareTo((b['time'] ?? '').toString());
+      return (a['time'] ?? '')
+          .toString()
+          .compareTo((b['time'] ?? '').toString());
     });
     return items;
   }
@@ -484,7 +613,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
       if (da == null || db == null) return 0;
       final cmp = da.compareTo(db);
       if (cmp != 0) return cmp;
-      return (a['time'] ?? '').toString().compareTo((b['time'] ?? '').toString());
+      return (a['time'] ?? '')
+          .toString()
+          .compareTo((b['time'] ?? '').toString());
     });
     return out;
   }
@@ -492,9 +623,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
   String _periodoLabel(DateTime start, DateTime end) {
     final sameMonth =
         start.year == end.year && start.month == end.month && start.day == 1;
-    if (sameMonth &&
-        end.day ==
-            DateTime(end.year, end.month + 1, 0).day) {
+    if (sameMonth && end.day == DateTime(end.year, end.month + 1, 0).day) {
       final raw = DateFormat("MMMM 'de' y", 'pt_BR').format(start);
       return raw[0].toUpperCase() + raw.substring(1);
     }
@@ -525,30 +654,37 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     return out;
   }
 
-  ({Color? fillColor, bool googleOnly}) _dayVisualCombined(
+  ({List<Color> colors, bool googleOnly}) _dayVisualCombined(
     DateTime day,
     Map<DateTime, List<QueryDocumentSnapshot<Map<String, dynamic>>>> byDay,
     Map<DateTime, List<AgendaFinancePendingItem>> financeByDay,
   ) {
     final key = _dayKey(day);
-    final financeColor = _financeMarkerColor(day, financeByDay);
-    final items = byDay[key] ?? [];
-    final localColor = items.isNotEmpty
-        ? _colorFromHex(items.first.data()['colorHex']?.toString())
-        : null;
-    if (localColor != null) {
-      return (fillColor: localColor, googleOnly: false);
+    // Todas as cores do dia (cada compromisso + financeiro), sem repetir —
+    // dias com mais de um compromisso dividem as cores (padrão Controle Total).
+    final colors = <Color>[];
+    for (final doc in byDay[key] ?? const []) {
+      final c = _colorFromHex(doc.data()['colorHex']?.toString());
+      if (!colors.any((x) => x.toARGB32() == c.toARGB32())) {
+        colors.add(c);
+      }
     }
-    if (financeColor != null) {
-      return (fillColor: financeColor, googleOnly: false);
+    final financeColor = _financeMarkerColor(day, financeByDay);
+    if (financeColor != null &&
+        !colors.any((x) => x.toARGB32() == financeColor.toARGB32())) {
+      colors.add(financeColor);
+    }
+    if (colors.isNotEmpty) {
+      return (colors: colors, googleOnly: false);
     }
     if (_googleBusyDays.contains(key) || _appleBusyDays.contains(key)) {
-      return (fillColor: null, googleOnly: true);
+      return (colors: const [], googleOnly: true);
     }
-    return (fillColor: null, googleOnly: false);
+    return (colors: const [], googleOnly: false);
   }
 
   Widget _buildModernMesAbas({required bool isNarrow}) {
+    const todosColor = Color(0xFF6366F1);
     const financeColor = Color(0xFFF97316);
     const particularColor = Color(0xFF12B5A5);
     return Column(
@@ -559,10 +695,22 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
           decoration: BoxDecoration(
             color: const Color(0xFFF1F5F9),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.deepBlue.withValues(alpha: 0.08)),
+            border:
+                Border.all(color: AppColors.deepBlue.withValues(alpha: 0.08)),
           ),
           child: Row(
             children: [
+              Expanded(
+                child: _mesAbaChip(
+                  label: 'Todos',
+                  icon: Icons.dashboard_rounded,
+                  selected: _mesAba == _AgendaMesAba.todos,
+                  color: todosColor,
+                  compact: isNarrow,
+                  onTap: () => setState(() => _mesAbaIndex = 0),
+                ),
+              ),
+              const SizedBox(width: 4),
               Expanded(
                 child: _mesAbaChip(
                   label: 'Financeiros',
@@ -570,7 +718,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                   selected: _mesAba == _AgendaMesAba.financeiro,
                   color: financeColor,
                   compact: isNarrow,
-                  onTap: () => setState(() => _mesAbaIndex = 0),
+                  onTap: () => setState(() => _mesAbaIndex = 1),
                 ),
               ),
               const SizedBox(width: 4),
@@ -581,7 +729,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                   selected: _mesAba == _AgendaMesAba.particular,
                   color: particularColor,
                   compact: isNarrow,
-                  onTap: () => setState(() => _mesAbaIndex = 1),
+                  onTap: () => setState(() => _mesAbaIndex = 2),
                 ),
               ),
             ],
@@ -590,7 +738,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
         Padding(
           padding: const EdgeInsets.only(top: 6, bottom: 4, left: 4),
           child: Text(
-            'Filtra o resumo do dia e o resumo do mês (financeiro ou particular).',
+            'Filtra o resumo do dia e o resumo do mês (todos, financeiro ou particular).',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
@@ -681,12 +829,15 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     final opts = await AgendaPdfExportSheet.show(
       context,
       focusedDay: _focusedDay,
-      initialFilter: _mesAba == _AgendaMesAba.financeiro
-          ? AgendaPdfContentFilter.financeiro
-          : AgendaPdfContentFilter.particular,
+      initialFilter: switch (_mesAba) {
+        _AgendaMesAba.todos => AgendaPdfContentFilter.todos,
+        _AgendaMesAba.financeiro => AgendaPdfContentFilter.financeiro,
+        _AgendaMesAba.particular => AgendaPdfContentFilter.particular,
+      },
     );
     if (opts == null || !context.mounted) return;
-    await _exportarPdf(context, allDocs, financeByDay: financeByDay, opts: opts);
+    await _exportarPdf(context, allDocs,
+        financeByDay: financeByDay, opts: opts);
   }
 
   Future<void> _exportarPdf(
@@ -899,76 +1050,11 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     }
   }
 
-  Future<void> _openAudienciaForm({
-    required BuildContext context,
-    DateTime? initialDate,
-    QueryDocumentSnapshot<Map<String, dynamic>>? existing,
-  }) async {
-    if (!widget.profile.hasActiveLicense) {
-      mostrarAvisoSeLicencaInativa(context, widget.profile);
-      return;
-    }
-    final result = await Navigator.of(context).push<AudienciaFormResult?>(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (_) => AudienciaFormPage(
-          profile: widget.profile,
-          hasActiveLicense: widget.profile.hasActiveLicense,
-          existingDoc: existing,
-          initialDate: initialDate,
-        ),
-      ),
-    );
-    if (result == null || !context.mounted) return;
-
-    try {
-      if (existing != null) {
-        final msg = await AudienciaReminderService.update(
-          userDocId: _userDocId,
-          doc: existing,
-          result: result,
-        );
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-        }
-      } else {
-        await AudienciaReminderService.create(
-          userDocId: _userDocId,
-          result: result,
-        );
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Audiência salva.')),
-          );
-        }
-      }
-      if (mounted) {
-        setState(() => _selectedDay = _dayKey(result.date));
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Erro ao gravar: ${e.toString().split('\n').first}',
-            ),
-          ),
-        );
-      }
-    }
-  }
-
   Future<void> _openAgendaReminderByDoc({
     required BuildContext context,
     required QueryDocumentSnapshot<Map<String, dynamic>> doc,
   }) async {
-    final isAud =
-        (doc.data()['type'] ?? 'compromisso').toString() == 'audiencia';
-    if (isAud) {
-      await _openAudienciaForm(context: context, existing: doc);
-    } else {
-      await _openAgendaReminderByDoc(context: context, doc: doc);
-    }
+    await _openCompromissoForm(context: context, existing: doc);
   }
 
   /// Abre formulário direto na data (sem segundo seletor).
@@ -979,45 +1065,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     }
     setState(() => _selectedDay = _dayKey(day));
     if (!mounted) return;
-    final choice = await showModalBottomSheet<String>(
-      context: context,
-      useSafeArea: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'O que deseja adicionar?',
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
-              ),
-              const SizedBox(height: 12),
-              ListTile(
-                leading: const Icon(Icons.event_rounded, color: AppColors.primary),
-                title: const Text('Compromisso particular'),
-                onTap: () => Navigator.pop(ctx, 'compromisso'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.gavel_rounded, color: Color(0xFF1A237E)),
-                title: const Text('Audiência'),
-                onTap: () => Navigator.pop(ctx, 'audiencia'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (!mounted || choice == null) return;
-    if (choice == 'audiencia') {
-      await _openAudienciaForm(context: context, initialDate: day);
-    } else {
-      await _openCompromissoForm(context: context, initialDate: day);
-    }
+    await _openCompromissoForm(context: context, initialDate: day);
   }
 
   Future<QueryDocumentSnapshot<Map<String, dynamic>>?> _selecionarCompromisso(
@@ -1062,7 +1110,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                         color: AppColors.primary.withValues(alpha: 0.2),
                       ),
                     ),
-                    leading: Icon(Icons.event_rounded, color: AppColors.primary),
+                    leading:
+                        Icon(Icons.event_rounded, color: AppColors.primary),
                     title: Text(
                       title,
                       style: const TextStyle(fontWeight: FontWeight.w800),
@@ -1230,9 +1279,12 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
   }) async {
     if (items.isEmpty && financePending.isEmpty && googleEvents.isEmpty) return;
 
-    final onlyLocal = items.isNotEmpty && financePending.isEmpty && googleEvents.isEmpty;
-    final onlyFinance = financePending.isNotEmpty && items.isEmpty && googleEvents.isEmpty;
-    final onlyGoogle = googleEvents.isNotEmpty && items.isEmpty && financePending.isEmpty;
+    final onlyLocal =
+        items.isNotEmpty && financePending.isEmpty && googleEvents.isEmpty;
+    final onlyFinance =
+        financePending.isNotEmpty && items.isEmpty && googleEvents.isEmpty;
+    final onlyGoogle =
+        googleEvents.isNotEmpty && items.isEmpty && financePending.isEmpty;
 
     if (onlyLocal) {
       final doc = await _selecionarCompromisso(context, items);
@@ -1275,7 +1327,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
               ),
               const SizedBox(height: 12),
               ListTile(
-                leading: const Icon(Icons.event_rounded, color: AppColors.primary),
+                leading:
+                    const Icon(Icons.event_rounded, color: AppColors.primary),
                 title: const Text('Compromisso particular'),
                 onTap: () => Navigator.pop(ctx, 'compromisso'),
               ),
@@ -1448,7 +1501,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
               ),
               const SizedBox(height: 12),
               ListTile(
-                leading: const Icon(Icons.event_rounded, color: AppColors.primary),
+                leading:
+                    const Icon(Icons.event_rounded, color: AppColors.primary),
                 title: const Text('Compromisso particular'),
                 onTap: () => Navigator.pop(ctx, 'compromisso'),
               ),
@@ -1602,7 +1656,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
         SnackBar(content: Text('Dia atualizado (${parts.join(' · ')}).')),
       );
       if (_googleEnabled) unawaited(_refreshGoogleDays());
-    } else if (items.isEmpty && googleEvents.isEmpty && financePending.isNotEmpty) {
+    } else if (items.isEmpty &&
+        googleEvents.isEmpty &&
+        financePending.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Lançamentos mantidos no Financeiro.'),
@@ -1611,7 +1667,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     }
   }
 
-  Future<int> _deleteFinancePendingBatch(List<AgendaFinancePendingItem> items) async {
+  Future<int> _deleteFinancePendingBatch(
+      List<AgendaFinancePendingItem> items) async {
     if (items.isEmpty) return 0;
     final col = FirebaseFirestore.instance
         .collection('users')
@@ -1622,7 +1679,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
       try {
         final pairId = (item.data['transferPairId'] ?? '').toString().trim();
         if (pairId.isNotEmpty) {
-          final pairSnap = await col.where('transferPairId', isEqualTo: pairId).get();
+          final pairSnap =
+              await col.where('transferPairId', isEqualTo: pairId).get();
           for (final pairDoc in pairSnap.docs) {
             await pairDoc.reference.delete();
             removed++;
@@ -1680,9 +1738,10 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
       mostrarAvisoSeLicencaInativa(context, widget.profile);
       return;
     }
-    final desc = (item.data['description'] ?? item.data['category'] ?? 'Lançamento')
-        .toString()
-        .trim();
+    final desc =
+        (item.data['description'] ?? item.data['category'] ?? 'Lançamento')
+            .toString()
+            .trim();
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1857,7 +1916,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                     children: [
                       IconButton(
                         onPressed: () => Navigator.pop(ctx),
-                        icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+                        icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                            size: 18),
                       ),
                       const Spacer(),
                       TextButton(
@@ -1870,7 +1930,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                     ],
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 12, horizontal: 14),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
@@ -1913,11 +1974,17 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                       const SizedBox(width: 8),
                       _menuActionButton(
                         icon: Icons.edit_rounded,
-                        label: items.isNotEmpty && financePending.isEmpty && googleEvents.isEmpty
+                        label: items.isNotEmpty &&
+                                financePending.isEmpty &&
+                                googleEvents.isEmpty
                             ? 'Editar compromisso'
-                            : financePending.isNotEmpty && items.isEmpty && googleEvents.isEmpty
+                            : financePending.isNotEmpty &&
+                                    items.isEmpty &&
+                                    googleEvents.isEmpty
                                 ? 'Editar lançamento'
-                                : googleEvents.isNotEmpty && items.isEmpty && financePending.isEmpty
+                                : googleEvents.isNotEmpty &&
+                                        items.isEmpty &&
+                                        financePending.isEmpty
                                     ? 'Editar Google'
                                     : 'Editar',
                         color: const Color(0xFF0EA5E9),
@@ -1950,7 +2017,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                       fullWidth: true,
                       onTap: () {
                         Navigator.pop(ctx);
-                        unawaited(_removerUmCompromissoDoDia(items, googleEvents));
+                        unawaited(
+                            _removerUmCompromissoDoDia(items, googleEvents));
                       },
                     ),
                   ],
@@ -1974,7 +2042,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                       ));
                     },
                   ),
-                  if (items.isNotEmpty || googleEvents.isNotEmpty || financePending.isNotEmpty) ...[
+                  if (items.isNotEmpty ||
+                      googleEvents.isNotEmpty ||
+                      financePending.isNotEmpty) ...[
                     const SizedBox(height: 20),
                     const Divider(height: 1),
                     const SizedBox(height: 14),
@@ -1990,87 +2060,92 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                     ),
                     if (items.isNotEmpty)
                       ...items.map((doc) {
-                      final data = doc.data();
-                      final color = _colorFromHex(data['colorHex']?.toString());
-                      final title = (data['title'] ?? 'Compromisso').toString();
-                      final time = (data['time'] ?? '').toString();
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Material(
-                          color: Colors.transparent,
-                          borderRadius: BorderRadius.circular(12),
-                          child: InkWell(
+                        final data = doc.data();
+                        final color =
+                            _colorFromHex(data['colorHex']?.toString());
+                        final title =
+                            (data['title'] ?? 'Compromisso').toString();
+                        final time = (data['time'] ?? '').toString();
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Material(
+                            color: Colors.transparent,
                             borderRadius: BorderRadius.circular(12),
-                            onTap: () async {
-                              Navigator.pop(ctx);
-                              await _openAgendaReminderByDoc(
-                                context: context,
-                                doc: doc,
-                              );
-                            },
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 8,
-                                horizontal: 4,
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 5,
-                                    height: 44,
-                                    decoration: BoxDecoration(
-                                      color: color,
-                                      borderRadius: BorderRadius.circular(4),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: () async {
+                                Navigator.pop(ctx);
+                                await _openAgendaReminderByDoc(
+                                  context: context,
+                                  doc: doc,
+                                );
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                  horizontal: 4,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 5,
+                                      height: 44,
+                                      decoration: BoxDecoration(
+                                        color: color,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          title,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w900,
-                                            fontSize: 15,
-                                          ),
-                                        ),
-                                        if (time.isNotEmpty)
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
                                           Text(
-                                            time,
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w700,
-                                              color: AppColors.primary,
+                                            title,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: 15,
                                             ),
                                           ),
-                                      ],
+                                          if (time.isNotEmpty)
+                                            Text(
+                                              time,
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w700,
+                                                color: AppColors.primary,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  IconButton(
-                                    tooltip: 'Remover',
-                                    visualDensity: VisualDensity.compact,
-                                    icon: Icon(
-                                      Icons.delete_outline_rounded,
-                                      color: Colors.red.shade700,
-                                      size: 22,
+                                    IconButton(
+                                      tooltip: 'Remover',
+                                      visualDensity: VisualDensity.compact,
+                                      icon: Icon(
+                                        Icons.delete_outline_rounded,
+                                        color: Colors.red.shade700,
+                                        size: 22,
+                                      ),
+                                      onPressed: () {
+                                        Navigator.pop(ctx);
+                                        unawaited(
+                                            _confirmRemoverCompromissoLocal(
+                                                doc));
+                                      },
                                     ),
-                                    onPressed: () {
-                                      Navigator.pop(ctx);
-                                      unawaited(_confirmRemoverCompromissoLocal(doc));
-                                    },
-                                  ),
-                                  Icon(
-                                    Icons.chevron_right_rounded,
-                                    color: Colors.grey.shade500,
-                                  ),
-                                ],
+                                    Icon(
+                                      Icons.chevron_right_rounded,
+                                      color: Colors.grey.shade500,
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      );
-                    }),
+                        );
+                      }),
                     if (googleEvents.isNotEmpty)
                       ...googleEvents.map((event) {
                         return Padding(
@@ -2138,7 +2213,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                                       ),
                                       onPressed: () {
                                         Navigator.pop(ctx);
-                                        unawaited(_confirmRemoverGoogleEvent(event));
+                                        unawaited(
+                                            _confirmRemoverGoogleEvent(event));
                                       },
                                     ),
                                     Icon(
@@ -2155,10 +2231,11 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                     if (financePending.isNotEmpty)
                       ...financePending.map((item) {
                         final data = item.data;
-                        final desc =
-                            (data['description'] ?? data['category'] ?? 'Lançamento')
-                                .toString()
-                                .trim();
+                        final desc = (data['description'] ??
+                                data['category'] ??
+                                'Lançamento')
+                            .toString()
+                            .trim();
                         final amount =
                             ((data['amount'] ?? 0) as num).toDouble().abs();
                         final label = item.isIncome ? 'Receita' : 'Despesa';
@@ -2283,7 +2360,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
   }
 
   Future<void> _confirmDeleteGoogleEvent(GoogleCalendarEventItem event) async {
-    final isRecurring = event.isRecurringInstance || event.isLikelyReadOnlyGoogleEvent;
+    final isRecurring =
+        event.isRecurringInstance || event.isLikelyReadOnlyGoogleEvent;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -2311,7 +2389,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
       ),
     );
     if (ok != true || !mounted) return;
-    final deletedOnGoogle = await CompromissoReminderService.deleteGoogleOnlyEvent(
+    final deletedOnGoogle =
+        await CompromissoReminderService.deleteGoogleOnlyEvent(
       userDocId: _userDocId,
       googleEventId: event.id,
       recurringEventId: event.recurringEventId,
@@ -2419,10 +2498,12 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                                   });
                                 },
                                 title: Text(event.title),
-                                subtitle: Text('${event.horarioLabel} · Google'),
+                                subtitle:
+                                    Text('${event.horarioLabel} · Google'),
                                 secondary: const Icon(
                                   Icons.event_rounded,
-                                  color: GoogleCalendarSyncService.googleEventColor,
+                                  color: GoogleCalendarSyncService
+                                      .googleEventColor,
                                 ),
                               );
                             }),
@@ -2432,9 +2513,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                     ),
                     const SizedBox(height: 8),
                     FilledButton(
-                      onPressed: anySelected
-                          ? () => Navigator.pop(ctx, true)
-                          : null,
+                      onPressed:
+                          anySelected ? () => Navigator.pop(ctx, true) : null,
                       style: FilledButton.styleFrom(
                         backgroundColor: Colors.red,
                         minimumSize: const Size(double.infinity, 48),
@@ -2467,7 +2547,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
       } catch (_) {}
     }
 
-    for (final event in googleEvents.where((e) => selectedGoogle.contains(e.id))) {
+    for (final event
+        in googleEvents.where((e) => selectedGoogle.contains(e.id))) {
       await CompromissoReminderService.deleteGoogleOnlyEvent(
         userDocId: _userDocId,
         googleEventId: event.id,
@@ -2486,7 +2567,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
         parts.add('$removedGoogle Google');
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Removido${parts.length == 1 && removedLocal + removedGoogle == 1 ? '' : 's'}: ${parts.join(' · ')}.')),
+        SnackBar(
+            content: Text(
+                'Removido${parts.length == 1 && removedLocal + removedGoogle == 1 ? '' : 's'}: ${parts.join(' · ')}.')),
       );
       if (_googleEnabled) unawaited(_refreshGoogleDays());
     }
@@ -2520,13 +2603,15 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
               const SizedBox(height: 12),
               if (items.isNotEmpty || googleEvents.isNotEmpty) ...[
                 ListTile(
-                  leading: const Icon(Icons.delete_sweep_rounded, color: Colors.red),
+                  leading:
+                      const Icon(Icons.delete_sweep_rounded, color: Colors.red),
                   title: const Text('Remover todos do dia'),
                   subtitle: const Text('Compromissos locais e Google Calendar'),
                   onTap: () => Navigator.pop(ctx, 'all'),
                 ),
                 ListTile(
-                  leading: const Icon(Icons.checklist_rounded, color: AppColors.primary),
+                  leading: const Icon(Icons.checklist_rounded,
+                      color: AppColors.primary),
                   title: const Text('Selecionar quais remover'),
                   onTap: () => Navigator.pop(ctx, 'select'),
                 ),
@@ -2614,25 +2699,73 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     );
   }
 
+  /// Pequeno selo "HOJE" acima do dia atual — destaque garantido mesmo com
+  /// célula colorida (padrão Controle Total).
+  Widget _todayBadge() {
+    return Positioned(
+      top: -4,
+      right: -2,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: Colors.white, width: 1.4),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF6366F1).withValues(alpha: 0.55),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: const Text(
+          'HOJE',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+            fontSize: 8.5,
+            letterSpacing: 0.6,
+            height: 1.0,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Envolve a célula do dia atual com o selo "HOJE" acima (Controle Total).
+  Widget _withTodayBadge(Widget cell) {
+    return Stack(
+      alignment: Alignment.center,
+      clipBehavior: Clip.none,
+      children: [cell, _todayBadge()],
+    );
+  }
+
   Widget _dayCell({
     required DateTime day,
     required bool isToday,
     required bool isSelected,
     required bool isHoliday,
-    required Color? fillColor,
+    required List<Color> fillColors,
     required bool googleOnly,
     required bool isNarrow,
   }) {
     final numSize = _dayNumFontSize(isNarrow);
     final redDay = isHoliday || _isWeekend(day);
-    final hasFill = fillColor != null || googleOnly;
-    final borderColor = fillColor ??
-        (googleOnly
+    final hasFill = fillColors.isNotEmpty || googleOnly;
+    final borderColor = fillColors.isNotEmpty
+        ? fillColors.first
+        : (googleOnly
             ? GoogleCalendarSyncService.googleEventColor
             : AppColors.primary);
 
     if (isSelected && !hasFill) {
-      return AnimatedContainer(
+      final cell = AnimatedContainer(
         duration: const Duration(milliseconds: 250),
         margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 2),
         decoration: BoxDecoration(
@@ -2667,52 +2800,118 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
           ),
         ),
       );
+      return isToday ? _withTodayBadge(cell) : cell;
     }
 
     if (isToday && !hasFill) {
-      return AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 2),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.primary, width: 2.5),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primary.withValues(alpha: 0.18),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              '${day.day}',
-              style: TextStyle(
-                color: redDay ? const Color(0xFFE53935) : AppColors.primary,
-                fontWeight: FontWeight.w900,
-                fontSize: numSize,
+      return _withTodayBadge(
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 2),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.primary, width: 2.5),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.18),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
               ),
-            ),
-            Text(
-              'Hoje',
-              style: TextStyle(
-                color: AppColors.primary,
-                fontWeight: FontWeight.w800,
-                fontSize: 10,
+            ],
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                '${day.day}',
+                style: TextStyle(
+                  color: redDay ? const Color(0xFFE53935) : AppColors.primary,
+                  fontWeight: FontWeight.w900,
+                  fontSize: numSize,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
 
+    // 2+ compromissos: divide a célula pelas cores (padrão Controle Total).
+    if (fillColors.length >= 2) {
+      final cell = AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 2),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected
+                ? Colors.white
+                : (isToday
+                    ? AppColors.primary
+                    : fillColors.first.withValues(alpha: 0.9)),
+            width: (isSelected || isToday) ? 2.5 : 1.2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: fillColors.first.withValues(alpha: 0.35),
+              blurRadius: isSelected ? 8 : 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10.5),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _CalendarDayNPartsPainter(colors: fillColors),
+                ),
+              ),
+              Text(
+                '${day.day}',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  fontSize: numSize * (fillColors.length > 3 ? 0.84 : 0.92),
+                  shadows: const [
+                    Shadow(
+                      color: Colors.black54,
+                      blurRadius: 4,
+                      offset: Offset(0, 1),
+                    ),
+                  ],
+                ),
+              ),
+              if (isSelected)
+                Positioned(
+                  top: 4,
+                  right: 4,
+                  child: Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppColors.primary, width: 1.5),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+      return isToday ? _withTodayBadge(cell) : cell;
+    }
+
     if (hasFill) {
-      final c = fillColor ?? GoogleCalendarSyncService.googleEventColor;
-      return AnimatedContainer(
+      final c = fillColors.isNotEmpty
+          ? fillColors.first
+          : GoogleCalendarSyncService.googleEventColor;
+      final cell = AnimatedContainer(
         duration: const Duration(milliseconds: 250),
         margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 2),
         alignment: Alignment.center,
@@ -2724,8 +2923,12 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
           ),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? Colors.white : borderColor.withValues(alpha: 0.9),
-            width: isSelected ? 2.5 : 1.2,
+            color: isSelected
+                ? Colors.white
+                : (isToday
+                    ? AppColors.primary
+                    : borderColor.withValues(alpha: 0.9)),
+            width: isSelected ? 2.5 : (isToday ? 2.5 : 1.2),
           ),
           boxShadow: [
             BoxShadow(
@@ -2749,8 +2952,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                     fontSize: numSize * 0.92,
                   ),
                 ),
-                if (googleOnly && fillColor == null)
-                  const Icon(Icons.cloud_rounded, color: Colors.white70, size: 10),
+                if (googleOnly && fillColors.isEmpty)
+                  const Icon(Icons.cloud_rounded,
+                      color: Colors.white70, size: 10),
               ],
             ),
             if (isSelected)
@@ -2770,6 +2974,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
           ],
         ),
       );
+      return isToday ? _withTodayBadge(cell) : cell;
     }
 
     return Center(
@@ -2790,8 +2995,373 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
   ) {
     final items = financeByDay[_dayKey(day)];
     if (items == null || items.isEmpty) return null;
+    // Cor escolhida no lançamento («Cor no calendário») tem prioridade sobre o padrão.
+    for (final e in items) {
+      final hex = (e.data['calendarColorHex'] ?? '').toString().trim();
+      if (hex.isNotEmpty) return _colorFromHex(hex);
+    }
     if (items.any((e) => !e.isIncome)) return const Color(0xFFF97316);
     return const Color(0xFF0EA5E9);
+  }
+
+  /// Volta o calendário para o dia de hoje com 1 clique (padrão Controle Total).
+  void _applyTodaySelection() {
+    final hoje = DateTime.now();
+    final norm = _dayKey(hoje);
+    final changedMonth =
+        _focusedDay.year != hoje.year || _focusedDay.month != hoje.month;
+    setState(() {
+      _focusedDay = norm;
+      _selectedDay = norm;
+      _filledDayPrimedForAdd = null;
+    });
+    if (changedMonth) {
+      unawaited(_refreshGoogleDays());
+      unawaited(_refreshAppleDays());
+    }
+  }
+
+  /// Botão «Hoje / Voltar para hoje» acima do calendário — copiado do
+  /// Controle Total: ao navegar por outros meses, 1 clique volta para hoje.
+  Widget _buildVoltarHojeButton({required bool isNarrow}) {
+    final hoje = DateTime.now();
+    final noMesAtual =
+        _focusedDay.year == hoje.year && _focusedDay.month == hoje.month;
+    final label = noMesAtual ? 'Hoje' : 'Voltar para hoje';
+    return Align(
+      alignment: Alignment.center,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: isNarrow ? 132 : 148,
+              maxWidth: isNarrow ? 186 : 210,
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: _applyTodaySelection,
+                child: Ink(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isNarrow ? 10 : 12,
+                    vertical: isNarrow ? 8 : 9,
+                  ),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: AppColors.logoGradient,
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.22),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.today_rounded,
+                        size: isNarrow ? 16.0 : 18.0,
+                        color: Colors.white,
+                      ),
+                      SizedBox(width: isNarrow ? 6 : 8),
+                      Flexible(
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: isNarrow ? 11.5 : 12.5,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.2,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          SizedBox(width: isNarrow ? 8 : 10),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: _openCalendarWeekStartSettings,
+              child: Ink(
+                width: isNarrow ? 40 : 44,
+                height: isNarrow ? 40 : 44,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      AppColors.primary.withValues(alpha: 0.92),
+                      AppColors.deepBlue.withValues(alpha: 0.88),
+                    ],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.22),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  Icons.calendar_view_week_rounded,
+                  size: isNarrow ? 20 : 22,
+                  color: Colors.white,
+                  semanticLabel: 'Configurar início da semana',
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openCalendarWeekStartSettings() async {
+    var draft = _calendarWeekStart;
+    final selected = await showModalBottomSheet<StartingDayOfWeek>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) => Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 42,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade400,
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(9),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.view_week_rounded,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Início da semana no calendário',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Fechar',
+                        onPressed: () => Navigator.pop(sheetContext),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  _calendarWeekStartOption(
+                    selected: draft == StartingDayOfWeek.sunday,
+                    title: 'Domingo',
+                    subtitle: 'Padrão — DOM a SAB',
+                    labels: const [
+                      'DOM',
+                      'SEG',
+                      'TER',
+                      'QUA',
+                      'QUI',
+                      'SEX',
+                      'SAB'
+                    ],
+                    accent: const Color(0xFFE65100),
+                    onTap: () =>
+                        setSheetState(() => draft = StartingDayOfWeek.sunday),
+                  ),
+                  const SizedBox(height: 10),
+                  _calendarWeekStartOption(
+                    selected: draft == StartingDayOfWeek.monday,
+                    title: 'Segunda-feira',
+                    subtitle: 'SEG a DOM',
+                    labels: const [
+                      'SEG',
+                      'TER',
+                      'QUA',
+                      'QUI',
+                      'SEX',
+                      'SAB',
+                      'DOM'
+                    ],
+                    accent: AppColors.primary,
+                    onTap: () =>
+                        setSheetState(() => draft = StartingDayOfWeek.monday),
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: () => Navigator.pop(sheetContext, draft),
+                    icon: const Icon(Icons.check_rounded),
+                    label: const Text('Aplicar'),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48),
+                      backgroundColor: AppColors.primary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (selected == null || !mounted || selected == _calendarWeekStart) {
+      return;
+    }
+    setState(() => _calendarWeekStart = selected);
+    await AgendaCalendarWeekStartPreferences.save(
+      _userDocId,
+      startsOnSunday: selected == StartingDayOfWeek.sunday,
+    );
+  }
+
+  Widget _calendarWeekStartOption({
+    required bool selected,
+    required String title,
+    required String subtitle,
+    required List<String> labels,
+    required Color accent,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: selected
+                ? accent.withValues(alpha: 0.12)
+                : Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: selected
+                  ? accent.withValues(alpha: 0.65)
+                  : Colors.grey.shade300,
+              width: selected ? 2 : 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    selected
+                        ? Icons.radio_button_checked_rounded
+                        : Icons.radio_button_off_rounded,
+                    color: selected ? accent : Colors.grey.shade500,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.deepBlue,
+                          ),
+                        ),
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.deepBlue.withValues(alpha: 0.65),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: labels
+                    .map(
+                      (label) => Expanded(
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 2),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(9),
+                          ),
+                          child: Text(
+                            label,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                              color: label == 'SAB' || label == 'DOM'
+                                  ? const Color(0xFFD32F2F)
+                                  : AppColors.deepBlue,
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildCalendar(
@@ -2807,7 +3377,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
       focusedDay: _focusedDay,
       selectedDayPredicate: (d) => _isSameDay(_selectedDay, d),
       calendarFormat: CalendarFormat.month,
-      startingDayOfWeek: StartingDayOfWeek.monday,
+      startingDayOfWeek: _calendarWeekStart,
       availableGestures: AvailableGestures.horizontalSwipe,
       holidayPredicate: (day) {
         final key = _dayKey(day);
@@ -2824,8 +3394,10 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
           letterSpacing: -0.4,
           color: const Color(0xFF0F172A),
         ),
-        leftChevronIcon: const Icon(Icons.chevron_left_rounded, color: AppColors.primary),
-        rightChevronIcon: const Icon(Icons.chevron_right_rounded, color: AppColors.primary),
+        leftChevronIcon:
+            const Icon(Icons.chevron_left_rounded, color: AppColors.primary),
+        rightChevronIcon:
+            const Icon(Icons.chevron_right_rounded, color: AppColors.primary),
         headerPadding: EdgeInsets.symmetric(vertical: isNarrow ? 6 : 10),
       ),
       daysOfWeekHeight: isNarrow ? 30 : 32,
@@ -2856,32 +3428,34 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
       onPageChanged: (focused) {
         setState(() => _focusedDay = focused);
         unawaited(_refreshGoogleDays());
+        unawaited(_refreshAppleDays());
       },
       eventLoader: (day) => byDay[_dayKey(day)] ?? [],
       onDaySelected: (selected, focused) {
+        final key = _dayKey(selected);
+        final items = byDay[key] ?? [];
+        final financeForDay =
+            financeByDay[key] ?? const <AgendaFinancePendingItem>[];
+        final allDocs = byDay.values.expand((e) => e);
+        final googleForDay = _externalGoogleEventsForDay(selected, allDocs);
+        final vazio =
+            items.isEmpty && financeForDay.isEmpty && googleForDay.isEmpty;
+        // 1º toque em dia preenchido: seleciona e mostra o resumo abaixo;
+        // 2º toque no mesmo dia: abre a inclusão de mais compromissos (CT).
+        final segundoToque = !vazio &&
+            _filledDayPrimedForAdd != null &&
+            _isSameDay(_filledDayPrimedForAdd, selected);
         setState(() {
           _selectedDay = selected;
           _focusedDay = focused;
+          _filledDayPrimedForAdd = vazio ? null : key;
         });
         if (!widget.profile.hasActiveLicense) {
           mostrarAvisoSeLicencaInativa(context, widget.profile);
           return;
         }
-        final key = _dayKey(selected);
-        final items = byDay[key] ?? [];
-        final financeForDay = financeByDay[key] ?? const <AgendaFinancePendingItem>[];
-        final allDocs = byDay.values.expand((e) => e);
-        final googleForDay = _externalGoogleEventsForDay(selected, allDocs);
-        if (items.isEmpty && financeForDay.isEmpty && googleForDay.isEmpty) {
+        if (vazio || segundoToque) {
           unawaited(_adicionarNaData(selected));
-        } else {
-          _mostrarMenuDiaAgenda(
-            context,
-            selected,
-            items,
-            financePending: financeForDay,
-            googleEvents: googleForDay,
-          );
         }
       },
       calendarBuilders: CalendarBuilders(
@@ -2896,9 +3470,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                 fontSize: isNarrow ? 11 : 10.5,
                 fontWeight: FontWeight.w900,
                 letterSpacing: 0.2,
-                color: isWeekend
-                    ? Colors.red.shade700
-                    : const Color(0xFF455A64),
+                color:
+                    isWeekend ? Colors.red.shade700 : const Color(0xFF455A64),
               ),
             ),
           );
@@ -2910,7 +3483,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
             isToday: true,
             isSelected: _isSameDay(_selectedDay, day),
             isHoliday: _isHolidayDay(day, holidayKeys),
-            fillColor: visual.fillColor,
+            fillColors: visual.colors,
             googleOnly: visual.googleOnly,
             isNarrow: isNarrow,
           );
@@ -2923,20 +3496,20 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
             isToday: _isSameDay(DateTime.now(), day),
             isSelected: true,
             isHoliday: _isHolidayDay(day, holidayKeys),
-            fillColor: visual.fillColor,
+            fillColors: visual.colors,
             googleOnly: visual.googleOnly,
             isNarrow: isNarrow,
           );
         },
         holidayBuilder: (context, day, _) {
           final visual = _dayVisualCombined(day, byDay, financeByDay);
-          if (visual.fillColor != null || visual.googleOnly) return null;
+          if (visual.colors.isNotEmpty || visual.googleOnly) return null;
           return _dayCell(
             day: day,
             isToday: _isSameDay(DateTime.now(), day),
             isSelected: _isSameDay(_selectedDay, day),
             isHoliday: true,
-            fillColor: null,
+            fillColors: const [],
             googleOnly: false,
             isNarrow: isNarrow,
           );
@@ -2944,7 +3517,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
         defaultBuilder: (context, day, _) {
           final visual = _dayVisualCombined(day, byDay, financeByDay);
           final isHol = _isHolidayDay(day, holidayKeys);
-          if (visual.fillColor != null ||
+          if (visual.colors.isNotEmpty ||
               visual.googleOnly ||
               _isSameDay(DateTime.now(), day) ||
               isHol) {
@@ -2953,7 +3526,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
               isToday: _isSameDay(DateTime.now(), day),
               isSelected: _isSameDay(_selectedDay, day),
               isHoliday: isHol,
-              fillColor: visual.fillColor,
+              fillColors: visual.colors,
               googleOnly: visual.googleOnly,
               isNarrow: isNarrow,
             );
@@ -3020,13 +3593,26 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                     ],
                   ),
                 ),
+                IconButton(
+                  tooltip: 'Mais opções do dia',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => _mostrarMenuDiaAgenda(
+                    context,
+                    day,
+                    items,
+                    financePending: [...incomePending, ...expensePending],
+                    googleEvents: googleOnly,
+                  ),
+                  icon: const Icon(
+                    Icons.more_horiz_rounded,
+                    color: AppColors.deepBlue,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 12),
             if (_mesAba == _AgendaMesAba.financeiro) ...[
-              if (items.isEmpty &&
-                  incomePending.isEmpty &&
-                  expensePending.isEmpty)
+              if (incomePending.isEmpty && expensePending.isEmpty)
                 Text(
                   'Nenhum lançamento financeiro pendente neste dia.',
                   style: TextStyle(
@@ -3042,92 +3628,44 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                 for (final item in expensePending)
                   _resumoFinancePendingLinha(item),
               ],
-            ] else if (items.isEmpty &&
-                googleOnly.isEmpty &&
-                expensePending.isEmpty &&
-                incomePending.isEmpty)
-              Text(
-                'Nenhum compromisso particular neste dia.',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade700,
-                  height: 1.35,
-                ),
-              )
-            else ...[
-              ...items.map((doc) {
-                final data = doc.data();
-                final color = _colorFromHex(data['colorHex']?.toString());
-                final title = (data['title'] ?? 'Compromisso').toString();
-                final time = (data['time'] ?? '').toString();
-                final end = (data['endTime'] ?? '').toString();
-                final notes = (data['notes'] ?? '').toString().trim();
-                final horario = end.isNotEmpty ? '$time – $end' : time;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 5,
-                        height: 42,
-                        decoration: BoxDecoration(
-                          color: color,
-                          borderRadius: BorderRadius.circular(4),
-                          boxShadow: [
-                            BoxShadow(
-                              color: color.withValues(alpha: 0.35),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              title,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 16,
-                                color: Color(0xFF1A237E),
-                              ),
-                            ),
-                            if (horario.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                horario,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.primary,
-                                ),
-                              ),
-                            ],
-                            if (notes.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                notes,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey.shade700,
-                                  height: 1.35,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ],
+            ] else if (_mesAba == _AgendaMesAba.particular) ...[
+              if (items.isEmpty && googleOnly.isEmpty)
+                Text(
+                  'Nenhum compromisso particular neste dia.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade700,
+                    height: 1.35,
                   ),
-                );
-              }),
-              ...googleOnly.map(_resumoGoogleEventLinha),
+                )
+              else ...[
+                ...items.map(_resumoCompromissoLinha),
+                ...googleOnly.map(_resumoGoogleEventLinha),
+              ],
+            ] else ...[
+              // Aba «Todos»: particulares + Google + financeiro juntos.
+              if (items.isEmpty &&
+                  googleOnly.isEmpty &&
+                  incomePending.isEmpty &&
+                  expensePending.isEmpty)
+                Text(
+                  'Nenhum compromisso ou lançamento neste dia.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade700,
+                    height: 1.35,
+                  ),
+                )
+              else ...[
+                ...items.map(_resumoCompromissoLinha),
+                ...googleOnly.map(_resumoGoogleEventLinha),
+                for (final item in incomePending)
+                  _resumoFinancePendingLinha(item),
+                for (final item in expensePending)
+                  _resumoFinancePendingLinha(item),
+              ],
             ],
             const SizedBox(height: 4),
             FilledButton.icon(
@@ -3144,6 +3682,101 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Linha do resumo do dia para compromisso local, com editar/excluir (CT).
+  Widget _resumoCompromissoLinha(
+      QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data();
+    final color = _colorFromHex(data['colorHex']?.toString());
+    final title = (data['title'] ?? 'Compromisso').toString();
+    final time = (data['time'] ?? '').toString();
+    final end = (data['endTime'] ?? '').toString();
+    final notes = (data['notes'] ?? '').toString().trim();
+    final horario = end.isNotEmpty ? '$time – $end' : time;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 5,
+            height: 42,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(4),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.35),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 16,
+                    color: Color(0xFF1A237E),
+                  ),
+                ),
+                if (horario.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    horario,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ],
+                if (notes.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    notes,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade700,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Editar',
+            visualDensity: VisualDensity.compact,
+            onPressed: () =>
+                unawaited(_openAgendaReminderByDoc(context: context, doc: doc)),
+            icon: const Icon(
+              Icons.edit_rounded,
+              size: 20,
+              color: Color(0xFF0EA5E9),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Excluir',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => unawaited(_confirmRemoverCompromissoLocal(doc)),
+            icon: const Icon(
+              Icons.delete_outline_rounded,
+              size: 20,
+              color: Color(0xFFEF4444),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -3188,7 +3821,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
                         color: color.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(6),
@@ -3232,6 +3866,27 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
               ],
             ),
           ),
+          IconButton(
+            tooltip: 'Editar (importa do Google)',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => unawaited(
+                _openCompromissoForm(context: context, googleEvent: event)),
+            icon: const Icon(
+              Icons.edit_rounded,
+              size: 20,
+              color: Color(0xFF0EA5E9),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Excluir',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => unawaited(_confirmRemoverGoogleEvent(event)),
+            icon: const Icon(
+              Icons.delete_outline_rounded,
+              size: 20,
+              color: Color(0xFFEF4444),
+            ),
+          ),
         ],
       ),
     );
@@ -3243,7 +3898,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     final isIncome = item.isIncome;
     final gradient = isIncome ? incomeGradient : expenseGradient;
     final data = item.data;
-    final desc = (data['description'] ?? data['category'] ?? '').toString().trim();
+    final desc =
+        (data['description'] ?? data['category'] ?? '').toString().trim();
     final title = desc.isEmpty
         ? (isIncome ? 'Receita pendente' : 'Despesa pendente')
         : desc;
@@ -3296,6 +3952,26 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
               ],
             ),
           ),
+          IconButton(
+            tooltip: 'Editar',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => unawaited(_editFinancePending(item)),
+            icon: const Icon(
+              Icons.edit_rounded,
+              size: 20,
+              color: Color(0xFF0EA5E9),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Excluir',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => unawaited(_deleteFinancePending(item)),
+            icon: const Icon(
+              Icons.delete_outline_rounded,
+              size: 20,
+              color: Color(0xFFEF4444),
+            ),
+          ),
         ],
       ),
     );
@@ -3305,85 +3981,95 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
     Map<DateTime, List<AgendaFinancePendingItem>> financeByDay,
   ) {
+    if (_mesAba == _AgendaMesAba.financeiro) {
+      return _buildMesGridFinanceiro(financeByDay);
+    }
+    if (_mesAba == _AgendaMesAba.particular) {
+      return _buildMesGridParticular(docs);
+    }
+    // Aba «Todos»: resumo do mês particular + financeiro em sequência.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildMesGridParticular(docs),
+        const SizedBox(height: 12),
+        _buildMesGridFinanceiro(financeByDay),
+      ],
+    );
+  }
+
+  Widget _buildMesGridFinanceiro(
+    Map<DateTime, List<AgendaFinancePendingItem>> financeByDay,
+  ) {
     final tituloMes = _focusedMonthTitle();
     var cardIndex = 0;
-
-    if (_mesAba == _AgendaMesAba.financeiro) {
-      final monthItems = <AgendaFinancePendingItem>[];
-      for (final entry in financeByDay.entries) {
-        final day = entry.key;
-        if (day.year != _focusedDay.year || day.month != _focusedDay.month) {
-          continue;
-        }
-        monthItems.addAll(entry.value);
+    final monthItems = <AgendaFinancePendingItem>[];
+    for (final entry in financeByDay.entries) {
+      final day = entry.key;
+      if (day.year != _focusedDay.year || day.month != _focusedDay.month) {
+        continue;
       }
-      monthItems.sort((a, b) {
-        final da = agendaFinanceEffectiveDay(a.data);
-        final db = agendaFinanceEffectiveDay(b.data);
-        if (da == null || db == null) return 0;
-        return da.compareTo(db);
-      });
-      if (monthItems.isEmpty) {
-        return _premiumCardShell(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              'Nenhum compromisso financeiro pendente em $tituloMes.',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey.shade700,
-              ),
-            ),
-          ),
-        );
-      }
+      monthItems.addAll(entry.value);
+    }
+    monthItems.sort((a, b) {
+      final da = agendaFinanceEffectiveDay(a.data);
+      final db = agendaFinanceEffectiveDay(b.data);
+      if (da == null || db == null) return 0;
+      return da.compareTo(db);
+    });
+    if (monthItems.isEmpty) {
       return _premiumCardShell(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              AgendaModernUI.sectionHeader(
-                title: 'Resumo do mês',
-                subtitle:
-                    'Financeiro · ${monthItems.length} lançamento${monthItems.length == 1 ? '' : 's'} · $tituloMes',
-                icon: Icons.payments_outlined,
-                color: const Color(0xFFF97316),
-              ),
-              ...monthItems.map((item) {
-                final idx = cardIndex++;
-                final day = agendaFinanceEffectiveDay(item.data);
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (day != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4, bottom: 6),
-                        child: Text(
-                          DateFormat('EEEE, dd/MM', 'pt_BR').format(day),
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                      ),
-                    AgendaFinancePendingItemCard(
-                      item: item,
-                      index: idx,
-                      onEdit: () => _editFinancePending(item),
-                      onDelete: () => _deleteFinancePending(item),
-                    ),
-                  ],
-                );
-              }),
-            ],
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            'Nenhum compromisso financeiro pendente em $tituloMes.',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade700,
+            ),
           ),
         ),
       );
     }
+    return _premiumCardShell(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AgendaModernUI.sectionHeader(
+              title: 'Resumo do mês',
+              subtitle:
+                  'Financeiro · ${monthItems.length} lançamento${monthItems.length == 1 ? '' : 's'} · $tituloMes',
+              icon: Icons.payments_outlined,
+              color: const Color(0xFFF97316),
+            ),
+            ...monthItems.map((item) {
+              final idx = cardIndex++;
+              final day = agendaFinanceEffectiveDay(item.data);
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (day != null) _mesCardDataLabel(day),
+                  AgendaModernFadeIn(
+                    index: idx,
+                    child: _mesCardFinance(item),
+                  ),
+                ],
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
 
+  Widget _buildMesGridParticular(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) {
+    final tituloMes = _focusedMonthTitle();
+    var cardIndex = 0;
     final monthItems = _itemsForFocusedMonth(docs);
     final googleMonth = _googleParticularForMonth(docs);
     final total = monthItems.length + googleMonth.length;
@@ -3424,37 +4110,15 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
               final id = (row['id'] ?? '').toString();
               final doc = docsById[id];
               if (doc == null) return const SizedBox.shrink();
-              final isAud =
-                  (doc.data()['type'] ?? 'compromisso').toString() == 'audiencia';
               final idx = cardIndex++;
               final date = CompromissoReminderService.dateFromDoc(row);
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (date != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4, bottom: 6),
-                      child: Text(
-                        DateFormat('EEEE, dd/MM', 'pt_BR').format(date),
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                    ),
+                  if (date != null) _mesCardDataLabel(date),
                   AgendaModernFadeIn(
                     index: idx,
-                    child: AgendaOpenItemCard(
-                      doc: doc,
-                      isAudiencia: isAud,
-                      profile: widget.profile,
-                      onEdit: () => _openAgendaReminderByDoc(
-                        context: context,
-                        doc: doc,
-                      ),
-                      onDelete: () => _confirmDelete(doc),
-                    ),
+                    child: _mesCardCompromisso(doc),
                   ),
                 ],
               );
@@ -3463,6 +4127,20 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
               (e) => _buildGoogleEventCard(e, cardIndex++),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _mesCardDataLabel(DateTime day) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 6),
+      child: Text(
+        DateFormat('EEEE, dd/MM', 'pt_BR').format(day),
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          color: Colors.grey.shade600,
         ),
       ),
     );
@@ -3599,6 +4277,669 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Card moderno do compromisso particular no resumo do mês, com rodapé
+  /// de ações Editar · Detalhes · Excluir (padrão Controle Total).
+  Widget _mesCardCompromisso(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data();
+    final accent = _colorFromHex(data['colorHex']?.toString());
+    final title = (data['title'] ?? 'Compromisso').toString();
+    final time = (data['time'] ?? '').toString();
+    final end = (data['endTime'] ?? '').toString();
+    final notes = (data['notes'] ?? '').toString().trim();
+    final horario = end.isNotEmpty ? '$time – $end' : time;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.white, accent.withValues(alpha: 0.06)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: accent.withValues(alpha: 0.28)),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withValues(alpha: 0.14),
+            blurRadius: 12,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(9),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [accent, accent.withValues(alpha: 0.75)],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: accent.withValues(alpha: 0.35),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.event_note_rounded,
+                    size: 18,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
+                          color: Color(0xFF1A237E),
+                        ),
+                      ),
+                      if (horario.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            Icon(Icons.schedule_rounded,
+                                size: 13, color: accent),
+                            const SizedBox(width: 4),
+                            Text(
+                              horario,
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w800,
+                                color: accent,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (notes.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                notes,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade700,
+                  height: 1.35,
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            _mesCardRodapeAcoes(
+              onEditar: () => unawaited(
+                  _openAgendaReminderByDoc(context: context, doc: doc)),
+              onDetalhes: () => _mostrarDetalhesCompromisso(doc),
+              onExcluir: () => unawaited(_confirmDelete(doc)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Card moderno do lançamento financeiro pendente no resumo do mês.
+  Widget _mesCardFinance(AgendaFinancePendingItem item) {
+    const incomeGradient = [Color(0xFF0EA5E9), Color(0xFF0284C7)];
+    const expenseGradient = [Color(0xFFF97316), Color(0xFFEA580C)];
+    final isIncome = item.isIncome;
+    final gradient = isIncome ? incomeGradient : expenseGradient;
+    final accent = gradient.last;
+    final data = item.data;
+    final desc =
+        (data['description'] ?? data['category'] ?? '').toString().trim();
+    final title = desc.isEmpty
+        ? (isIncome ? 'Receita pendente' : 'Despesa pendente')
+        : desc;
+    final amount = ((data['amount'] ?? 0) as num).toDouble().abs();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.white, accent.withValues(alpha: 0.06)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: accent.withValues(alpha: 0.28)),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withValues(alpha: 0.14),
+            blurRadius: 12,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(9),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: gradient),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: accent.withValues(alpha: 0.35),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    isIncome
+                        ? Icons.trending_up_rounded
+                        : Icons.trending_down_rounded,
+                    size: 18,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
+                          color: Color(0xFF1A237E),
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        isIncome ? 'Receita pendente' : 'Despesa pendente',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: accent,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  CurrencyFormats.formatBRL(amount),
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                    color: accent,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _mesCardRodapeAcoes(
+              onEditar: () => unawaited(_editFinancePending(item)),
+              onDetalhes: () => _mostrarDetalhesFinance(item),
+              onExcluir: () => unawaited(_deleteFinancePending(item)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Rodapé padrão dos cards do mês: Editar · Detalhes · Excluir alinhados.
+  Widget _mesCardRodapeAcoes({
+    required VoidCallback onEditar,
+    required VoidCallback onDetalhes,
+    required VoidCallback onExcluir,
+  }) {
+    return Row(
+      children: [
+        _mesCardAcao(
+          icon: Icons.edit_rounded,
+          label: 'Editar',
+          color: const Color(0xFF0EA5E9),
+          onTap: onEditar,
+        ),
+        const SizedBox(width: 8),
+        _mesCardAcao(
+          icon: Icons.visibility_rounded,
+          label: 'Detalhes',
+          color: const Color(0xFF8B5CF6),
+          onTap: onDetalhes,
+        ),
+        const SizedBox(width: 8),
+        _mesCardAcao(
+          icon: Icons.delete_outline_rounded,
+          label: 'Excluir',
+          color: const Color(0xFFEF4444),
+          onTap: onExcluir,
+        ),
+      ],
+    );
+  }
+
+  Widget _mesCardAcao({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 4),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: color.withValues(alpha: 0.30)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 16, color: color),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                      color: color,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Bottom sheet moderno com os detalhes do compromisso + ações.
+  void _mostrarDetalhesCompromisso(
+      QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data();
+    final accent = _colorFromHex(data['colorHex']?.toString());
+    final title = (data['title'] ?? 'Compromisso').toString();
+    final date = CompromissoReminderService.dateFromDoc(data);
+    final time = (data['time'] ?? '').toString();
+    final end = (data['endTime'] ?? '').toString();
+    final notes = (data['notes'] ?? '').toString().trim();
+    final horario = end.isNotEmpty ? '$time – $end' : time;
+    showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 42,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [accent, accent.withValues(alpha: 0.75)],
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Icon(
+                        Icons.event_note_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Detalhes do compromisso',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.55,
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            title,
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w900,
+                              color: AppColors.textPrimary,
+                              height: 1.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                if (date != null)
+                  _detalheLinha(
+                    Icons.calendar_month_rounded,
+                    'Data',
+                    DateFormat('EEEE, dd/MM/yyyy', 'pt_BR').format(date),
+                    accent,
+                  ),
+                if (horario.isNotEmpty)
+                  _detalheLinha(
+                      Icons.schedule_rounded, 'Horário', horario, accent),
+                if (notes.isNotEmpty)
+                  _detalheLinha(
+                      Icons.notes_rounded, 'Anotações', notes, accent),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          unawaited(_openAgendaReminderByDoc(
+                              context: context, doc: doc));
+                        },
+                        icon: const Icon(Icons.edit_rounded, size: 18),
+                        label: const Text(
+                          'Editar',
+                          style: TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF0EA5E9),
+                          minimumSize: const Size(0, 46),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          unawaited(_confirmDelete(doc));
+                        },
+                        icon:
+                            const Icon(Icons.delete_outline_rounded, size: 18),
+                        label: const Text(
+                          'Excluir',
+                          style: TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFFEF4444),
+                          side: const BorderSide(color: Color(0xFFEF4444)),
+                          minimumSize: const Size(0, 46),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Bottom sheet moderno com os detalhes do lançamento financeiro + ações.
+  void _mostrarDetalhesFinance(AgendaFinancePendingItem item) {
+    const incomeGradient = [Color(0xFF0EA5E9), Color(0xFF0284C7)];
+    const expenseGradient = [Color(0xFFF97316), Color(0xFFEA580C)];
+    final isIncome = item.isIncome;
+    final gradient = isIncome ? incomeGradient : expenseGradient;
+    final accent = gradient.last;
+    final data = item.data;
+    final desc = (data['description'] ?? '').toString().trim();
+    final category = (data['category'] ?? '').toString().trim();
+    final title = desc.isEmpty
+        ? (category.isEmpty
+            ? (isIncome ? 'Receita pendente' : 'Despesa pendente')
+            : category)
+        : desc;
+    final amount = ((data['amount'] ?? 0) as num).toDouble().abs();
+    final day = agendaFinanceEffectiveDay(data);
+    showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 42,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(colors: gradient),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(
+                        isIncome
+                            ? Icons.trending_up_rounded
+                            : Icons.trending_down_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Detalhes do lançamento',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.55,
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            title,
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w900,
+                              color: AppColors.textPrimary,
+                              height: 1.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _detalheLinha(
+                  isIncome
+                      ? Icons.trending_up_rounded
+                      : Icons.trending_down_rounded,
+                  'Tipo',
+                  isIncome ? 'Receita pendente' : 'Despesa pendente',
+                  accent,
+                ),
+                _detalheLinha(
+                  Icons.attach_money_rounded,
+                  'Valor',
+                  CurrencyFormats.formatBRL(amount),
+                  accent,
+                ),
+                if (day != null)
+                  _detalheLinha(
+                    Icons.calendar_month_rounded,
+                    'Data',
+                    DateFormat('EEEE, dd/MM/yyyy', 'pt_BR').format(day),
+                    accent,
+                  ),
+                if (category.isNotEmpty)
+                  _detalheLinha(
+                      Icons.category_rounded, 'Categoria', category, accent),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          unawaited(_editFinancePending(item));
+                        },
+                        icon: const Icon(Icons.edit_rounded, size: 18),
+                        label: const Text(
+                          'Editar',
+                          style: TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF0EA5E9),
+                          minimumSize: const Size(0, 46),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          unawaited(_deleteFinancePending(item));
+                        },
+                        icon:
+                            const Icon(Icons.delete_outline_rounded, size: 18),
+                        label: const Text(
+                          'Excluir',
+                          style: TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFFEF4444),
+                          side: const BorderSide(color: Color(0xFFEF4444)),
+                          minimumSize: const Size(0, 46),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Linha de detalhe (ícone + rótulo + valor) das folhas de detalhes.
+  Widget _detalheLinha(IconData icon, String label, String value, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, size: 16, color: color),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.5,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -3755,10 +5096,12 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     final _ = _streamGeneration;
 
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: financeTransactionsPendingSnapshots(uid: _userDocId, type: 'income'),
+      stream:
+          financeTransactionsPendingSnapshots(uid: _userDocId, type: 'income'),
       builder: (context, incomePendingSnap) {
         return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: financeTransactionsPendingSnapshots(uid: _userDocId, type: 'expense'),
+          stream: financeTransactionsPendingSnapshots(
+              uid: _userDocId, type: 'expense'),
           builder: (context, expensePendingSnap) {
             return StreamBuilder<Map<String, dynamic>>(
               stream: FixedIncomePreferencesService().watch(_userDocId),
@@ -3767,22 +5110,29 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                   stream: FixedExpensePreferencesService().watch(_userDocId),
                   builder: (context, expensePrefsSnap) {
                     return StreamBuilder<List<FinanceAccount>>(
-                      stream: FinanceAccountsService().streamAccounts(_userDocId),
+                      stream:
+                          FinanceAccountsService().streamAccounts(_userDocId),
                       builder: (context, accSnap) {
-                        final ccIds = FinanceAccountBalanceUtils.creditCardAccountIds(
+                        final ccIds =
+                            FinanceAccountBalanceUtils.creditCardAccountIds(
                           accSnap.data ?? const [],
                         );
                         final showFixedIncome =
-                            incomePrefsSnap.data?['showInPending'] as bool? ?? true;
+                            incomePrefsSnap.data?['showInPending'] as bool? ??
+                                true;
                         final showFixedExpense =
-                            expensePrefsSnap.data?['showInPending'] as bool? ?? true;
+                            expensePrefsSnap.data?['showInPending'] as bool? ??
+                                true;
                         final monthsAhead = [
-                          (incomePrefsSnap.data?['pendingMonthsAhead'] as int?) ??
+                          (incomePrefsSnap.data?['pendingMonthsAhead']
+                                  as int?) ??
                               defaultAgendaFinancePendingMonthsAhead(),
-                          (expensePrefsSnap.data?['pendingMonthsAhead'] as int?) ??
+                          (expensePrefsSnap.data?['pendingMonthsAhead']
+                                  as int?) ??
                               defaultAgendaFinancePendingMonthsAhead(),
                         ].reduce((a, b) => a > b ? a : b).clamp(1, 12);
-                        final limitDate = agendaFinancePendingLimitDate(monthsAhead);
+                        final limitDate =
+                            agendaFinancePendingLimitDate(monthsAhead);
 
                         final incomePendingAll = filterAgendaFinancePending(
                           docs: incomePendingSnap.data?.docs ?? const [],
@@ -3798,10 +5148,11 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                           showFixedInPending: showFixedExpense,
                           limitDate: limitDate,
                         );
-                        final financeByDay =
-                            _mergeFinanceByDay(incomePendingAll, expensePendingAll);
-                        final selectedKey =
-                            _selectedDay != null ? _dayKey(_selectedDay!) : null;
+                        final financeByDay = _mergeFinanceByDay(
+                            incomePendingAll, expensePendingAll);
+                        final selectedKey = _selectedDay != null
+                            ? _dayKey(_selectedDay!)
+                            : null;
                         final selectedIncome = selectedKey == null
                             ? const <AgendaFinancePendingItem>[]
                             : filterAgendaFinancePending(
@@ -3823,7 +5174,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                                 onlyDay: _selectedDay,
                               );
 
-                        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                        return StreamBuilder<
+                            QuerySnapshot<Map<String, dynamic>>>(
                           key: ValueKey(
                               'agenda-rem-${_focusedDay.year}-$_streamGeneration'),
                           stream: _remindersPeriodStream(),
@@ -3860,215 +5212,231 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     required List<AgendaFinancePendingItem> selectedIncomePending,
     required List<AgendaFinancePendingItem> selectedExpensePending,
   }) {
-        if (snap.hasError) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.cloud_off_rounded,
-                      size: 48, color: Colors.grey.shade500),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Não foi possível carregar a agenda.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Toque abaixo para tentar novamente.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
-                  ),
-                  const SizedBox(height: 16),
-                  FilledButton.icon(
-                    onPressed: _retryStream,
-                    icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('Tentar novamente'),
-                  ),
-                ],
+    if (snap.hasError) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.cloud_off_rounded,
+                  size: 48, color: Colors.grey.shade500),
+              const SizedBox(height: 12),
+              const Text(
+                'Não foi possível carregar a agenda.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
               ),
-            ),
-          );
-        }
-
-        final docs = _filterCompromissos(snap.data?.docs ?? []);
-        final byDay = _groupByDay(docs);
-        final selectedItems = _selectedDay != null
-            ? (byDay[_dayKey(_selectedDay!)] ??
-                <QueryDocumentSnapshot<Map<String, dynamic>>>[])
-            : <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-        final googleOnly = _selectedDay != null && _googleEnabled
-            ? GoogleCalendarSyncService.externalEventsForDay(
-                day: _selectedDay!,
-                googleEvents: _googleEventsByDay.values.expand((e) => e).toList(),
-                linkedGoogleEventIds: _linkedGoogleEventIds(docs),
-              )
-            : <GoogleCalendarEventItem>[];
-
-        final scroll = widget.shellScrollController ?? ScrollController();
-
-        return ShellKeyboardBottomPad(
-          child: CustomScrollView(
-            controller: scroll,
-            slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    isNarrow ? 8 : 12,
-                    8,
-                    isNarrow ? 8 : 12,
-                    24,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 14,
-                        ),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: AppColors.logoGradient,
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight,
-                          ),
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.primary.withValues(alpha: 0.28),
-                              blurRadius: 12,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: const Text(
-                          'Agenda — compromissos e financeiro pendente',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 17,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      if (_userDocId.isNotEmpty)
-                        ExternalCalendarIntegrationPanel(
-                          userDocId: _userDocId,
-                          compact: true,
-                          onGoogleChanged: () {
-                            unawaited(_refreshGoogleDays());
-                            setState(() {});
-                          },
-                          onAppleChanged: () {
-                            unawaited(_refreshAppleDays());
-                            setState(() {});
-                          },
-                        ),
-                      const SizedBox(height: 10),
-                      Container(
-                        padding: EdgeInsets.fromLTRB(
-                          isNarrow ? 10 : 14,
-                          isNarrow ? 8 : 12,
-                          isNarrow ? 10 : 14,
-                          isNarrow ? 12 : 16,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(isNarrow ? 22 : 28),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.06),
-                              blurRadius: 20,
-                              offset: const Offset(0, 8),
-                            ),
-                            BoxShadow(
-                              color: AppColors.primary.withValues(alpha: 0.04),
-                              blurRadius: 24,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          children: [
-                            if (_googleSyncLoading)
-                              const Padding(
-                                padding: EdgeInsets.only(bottom: 8),
-                                child: LinearProgressIndicator(minHeight: 2),
-                              ),
-                            _buildCalendar(byDay, holidayKeys, isNarrow, financeByDay),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Icon(Icons.info_outline_rounded,
-                                    size: 14, color: Colors.grey.shade600),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    'Calendário com todos os compromissos: '
-                                    'azul/laranja = financeiro · cores = particulares · '
-                                    'nuvem = Google Calendar · vermelho = fim de semana/feriado.',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.grey.shade700,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      if (_bulkClearLoading)
-                        const Padding(
-                          padding: EdgeInsets.only(bottom: 6),
-                          child: LinearProgressIndicator(minHeight: 2),
-                        ),
-                      AgendaBulkClearToolbar(
-                        enabled: !_bulkClearLoading && _userDocId.isNotEmpty,
-                        onClearWeek: _onClearWeek,
-                        onClearMonth: _onClearMonth,
-                        onClearPeriod: _onClearPeriod,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildRodapeFeriadosMes(
-                        docs,
-                        financeByDay: financeByDay,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildModernMesAbas(isNarrow: isNarrow),
-                      if (_selectedDay != null) ...[
-                        const SizedBox(height: 12),
-                        _buildRodapeTotalDia(
-                          selectedItems,
-                          incomePending: selectedIncomePending,
-                          expensePending: selectedExpensePending,
-                          googleOnly: googleOnly,
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      _buildMesGridModerno(docs, financeByDay),
-                      const SizedBox(height: 8),
-                      if (_googleEnabled)
-                        Text(
-                          'Calendário Google ativo — compromissos locais sincronizam automaticamente.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
+              const SizedBox(height: 8),
+              Text(
+                'Toque abaixo para tentar novamente.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: _retryStream,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Tentar novamente'),
               ),
             ],
           ),
-        );
+        ),
+      );
+    }
+
+    final docs = _filterCompromissos(snap.data?.docs ?? []);
+    final byDay = _groupByDay(docs);
+    final selectedItems = _selectedDay != null
+        ? (byDay[_dayKey(_selectedDay!)] ??
+            <QueryDocumentSnapshot<Map<String, dynamic>>>[])
+        : <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+    final googleOnly = _selectedDay != null && _googleEnabled
+        ? GoogleCalendarSyncService.externalEventsForDay(
+            day: _selectedDay!,
+            googleEvents: _googleEventsByDay.values.expand((e) => e).toList(),
+            linkedGoogleEventIds: _linkedGoogleEventIds(docs),
+          )
+        : <GoogleCalendarEventItem>[];
+
+    final scroll = widget.shellScrollController ?? ScrollController();
+
+    return ShellKeyboardBottomPad(
+      child: CustomScrollView(
+        controller: scroll,
+        slivers: [
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                isNarrow ? 8 : 12,
+                8,
+                isNarrow ? 8 : 12,
+                24,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: AppColors.logoGradient,
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primary.withValues(alpha: 0.28),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: const Text(
+                      'Agenda — compromissos e financeiro pendente',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 17,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  if (_userDocId.isNotEmpty)
+                    ExternalCalendarSyncCollapsedButton(
+                      googleActive: _googleEnabled,
+                      appleActive: _appleEnabled,
+                      onTap: () async {
+                        await Navigator.of(context).push<void>(
+                          MaterialPageRoute(
+                            fullscreenDialog: true,
+                            builder: (_) => ExternalCalendarSyncScreen(
+                              userDocId: _userDocId,
+                              onGoogleChanged: () {
+                                unawaited(_refreshGoogleDays());
+                                if (mounted) setState(() {});
+                              },
+                              onAppleChanged: () {
+                                unawaited(_refreshAppleDays());
+                                if (mounted) setState(() {});
+                              },
+                            ),
+                          ),
+                        );
+                        // Ao retornar, garante estado/chip atualizados.
+                        unawaited(_refreshGoogleDays());
+                        unawaited(_refreshAppleDays());
+                      },
+                    ),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: EdgeInsets.fromLTRB(
+                      isNarrow ? 10 : 14,
+                      isNarrow ? 8 : 12,
+                      isNarrow ? 10 : 14,
+                      isNarrow ? 12 : 16,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(isNarrow ? 22 : 28),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.06),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                        BoxShadow(
+                          color: AppColors.primary.withValues(alpha: 0.04),
+                          blurRadius: 24,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        if (_googleSyncLoading)
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 8),
+                            child: LinearProgressIndicator(minHeight: 2),
+                          ),
+                        _buildVoltarHojeButton(isNarrow: isNarrow),
+                        SizedBox(height: isNarrow ? 6 : 8),
+                        _buildCalendar(
+                            byDay, holidayKeys, isNarrow, financeByDay),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Icon(Icons.info_outline_rounded,
+                                size: 14, color: Colors.grey.shade600),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                'Calendário com todos os compromissos: '
+                                'azul/laranja = financeiro · cores = particulares · '
+                                'nuvem = Google Calendar · vermelho = fim de semana/feriado.',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (_bulkClearLoading)
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 6),
+                      child: LinearProgressIndicator(minHeight: 2),
+                    ),
+                  AgendaBulkClearToolbar(
+                    enabled: !_bulkClearLoading && _userDocId.isNotEmpty,
+                    onClearWeek: _onClearWeek,
+                    onClearMonth: _onClearMonth,
+                    onClearPeriod: _onClearPeriod,
+                  ),
+                  const SizedBox(height: 8),
+                  _buildModernMesAbas(isNarrow: isNarrow),
+                  if (_selectedDay != null) ...[
+                    const SizedBox(height: 4),
+                    _buildRodapeTotalDia(
+                      selectedItems,
+                      incomePending: selectedIncomePending,
+                      expensePending: selectedExpensePending,
+                      googleOnly: googleOnly,
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  _buildMesGridModerno(docs, financeByDay),
+                  const SizedBox(height: 12),
+                  _buildRodapeFeriadosMes(
+                    docs,
+                    financeByDay: financeByDay,
+                  ),
+                  const SizedBox(height: 8),
+                  if (_googleEnabled)
+                    Text(
+                      'Calendário Google ativo — compromissos locais sincronizam automaticamente.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

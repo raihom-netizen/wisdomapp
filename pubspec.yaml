@@ -1,7 +1,7 @@
 name: controle_total_premium
 description: "WISDOMAPP — Sabedoria financeira baseada nos princípios bíblicos."
 publish_to: 'none'
-version: 10.04.0+21
+version: 10.05.0+24
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -13,6 +13,7 @@ dependencies:
     sdk: flutter
 
   cupertino_icons: ^1.0.8
+  characters: ^1.3.0
 
   # Firebase
   firebase_core: ^3.6.0
@@ -57,8 +58,8 @@ dependencies:
   get: ^4.7.3
   google_generative_ai: ^0.4.7
   home_widget: ^0.9.0
-  in_app_purchase: ^3.2.3
-  in_app_purchase_storekit: ^0.4.8+1
+  in_app_purchase: ^3.3.0
+  in_app_purchase_storekit: ^0.4.11
   google_mlkit_text_recognition: ^0.15.1
   pdfrx: ^2.2.24
   uuid: ^4.5.3
@@ -67,6 +68,7 @@ dependencies:
   # Premium: áudios configuráveis em notificações (sons próprios por categoria
   # Escala/Compromisso/Audiência/Financeiro). Veja `notification_sound_preferences.dart`.
   audioplayers: ^6.1.0
+  flutter_native_contact_picker: ^0.0.12
 
 dev_dependencies:
   flutter_test:

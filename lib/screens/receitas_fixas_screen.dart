@@ -17,7 +17,10 @@ import '../services/user_categories_service.dart';
 import '../utils/date_picker_a11y.dart';
 import '../utils/firestore_user_doc_id.dart';
 import '../widgets/brl_amount_text_field.dart';
-const EdgeInsets _kFixedFlowKeyboardScrollPad = EdgeInsets.fromLTRB(0, 0, 0, 260);
+import '../widgets/finance_calendar_color_picker.dart';
+
+const EdgeInsets _kFixedFlowKeyboardScrollPad =
+    EdgeInsets.fromLTRB(0, 0, 0, 260);
 
 InputDecoration _fixedFlowPremiumInputDeco({
   required String labelText,
@@ -35,8 +38,11 @@ InputDecoration _fixedFlowPremiumInputDeco({
     fillColor: const Color(0xFFF8FAFC),
     isDense: true,
     border: const OutlineInputBorder(borderRadius: radius, borderSide: side),
-    enabledBorder: const OutlineInputBorder(borderRadius: radius, borderSide: side),
-    focusedBorder: OutlineInputBorder(borderRadius: radius, borderSide: BorderSide(color: AppColors.primary, width: 2)),
+    enabledBorder:
+        const OutlineInputBorder(borderRadius: radius, borderSide: side),
+    focusedBorder: OutlineInputBorder(
+        borderRadius: radius,
+        borderSide: BorderSide(color: AppColors.primary, width: 2)),
     prefixIcon: prefixIcon,
   );
 }
@@ -50,8 +56,11 @@ InputDecoration _fixedFlowPremiumDropdownDeco({required Widget prefixIcon}) {
     isDense: true,
     floatingLabelBehavior: FloatingLabelBehavior.never,
     border: const OutlineInputBorder(borderRadius: radius, borderSide: side),
-    enabledBorder: const OutlineInputBorder(borderRadius: radius, borderSide: side),
-    focusedBorder: OutlineInputBorder(borderRadius: radius, borderSide: BorderSide(color: AppColors.primary, width: 2)),
+    enabledBorder:
+        const OutlineInputBorder(borderRadius: radius, borderSide: side),
+    focusedBorder: OutlineInputBorder(
+        borderRadius: radius,
+        borderSide: BorderSide(color: AppColors.primary, width: 2)),
     prefixIcon: prefixIcon,
   );
 }
@@ -68,7 +77,9 @@ class ReceitasFixasScreen extends StatefulWidget {
 
 class _ReceitasFixasScreenState extends State<ReceitasFixasScreen> {
   final FixedIncomeService _service = FixedIncomeService();
-  final FixedIncomePreferencesService _prefsService = FixedIncomePreferencesService();
+  final FixedIncomePreferencesService _prefsService =
+      FixedIncomePreferencesService();
+
   /// Padrão do app até o Firestore devolver as categorias do utilizador (evita dropdown só com «Incluir nova»).
   List<String> _incomeCategories = List<String>.from(kDefaultIncomeCategories)
     ..sort(UserCategoriesService.compareNamesPt);
@@ -135,14 +146,20 @@ class _ReceitasFixasScreenState extends State<ReceitasFixasScreen> {
   }) {
     const kIncluirNova = UserCategoriesService.kIncluirNova;
     final options = [kIncluirNova, ...incomeCategories];
-    final value = category == kIncluirNova || incomeCategories.contains(category)
+    final value = category == kIncluirNova ||
+            incomeCategories.contains(category)
         ? category
         : (incomeCategories.isNotEmpty ? incomeCategories.first : kIncluirNova);
     return DropdownButtonFormField<String>(
       isExpanded: true,
-      value: options.contains(value) ? value : (incomeCategories.isNotEmpty ? incomeCategories.first : kIncluirNova),
+      initialValue: options.contains(value)
+          ? value
+          : (incomeCategories.isNotEmpty
+              ? incomeCategories.first
+              : kIncluirNova),
       decoration: _fixedFlowPremiumDropdownDeco(
-        prefixIcon: Icon(Icons.category_outlined, color: AppColors.primary.withValues(alpha: 0.88)),
+        prefixIcon: Icon(Icons.category_outlined,
+            color: AppColors.primary.withValues(alpha: 0.88)),
       ),
       items: options.map((c) {
         final isNew = c == kIncluirNova;
@@ -167,7 +184,9 @@ class _ReceitasFixasScreenState extends State<ReceitasFixasScreen> {
     );
   }
 
-  String _subtitleFixedIncome(Map<String, dynamic> e, int day, DateTime? start, DateTime? end, {bool includeCategory = true}) {
+  String _subtitleFixedIncome(
+      Map<String, dynamic> e, int day, DateTime? start, DateTime? end,
+      {bool includeCategory = true}) {
     final mode = (e['mode'] ?? FixedIncomeService.modePeriod).toString();
     final cat = e['category'] ?? 'Receita';
     final periodTail =
@@ -177,8 +196,11 @@ class _ReceitasFixasScreenState extends State<ReceitasFixasScreen> {
       final total = (e['totalParcelas'] as num?)?.toInt();
       final ini = (e['parcelaInicial'] as num?)?.toInt();
       if (total != null) {
-        final parcelaInfo = ini != null && ini > 1 ? 'Da parcela $ini até $total' : '$total parcelas';
-        tail = 'Dia $day · $parcelaInfo · ${start != null ? DateFormat("MM/yyyy").format(start) : "?"}';
+        final parcelaInfo = ini != null && ini > 1
+            ? 'Da parcela $ini até $total'
+            : '$total parcelas';
+        tail =
+            'Dia $day · $parcelaInfo · ${start != null ? DateFormat("MM/yyyy").format(start) : "?"}';
       } else {
         tail = periodTail;
       }
@@ -200,17 +222,22 @@ class _ReceitasFixasScreenState extends State<ReceitasFixasScreen> {
       final d = (m['description'] ?? '').toString().trim();
       if (d.length >= 2) descSuggestions.add(d);
     }
-    final descriptionSuggestionsAll = descSuggestions.toList()..sort(UserCategoriesService.compareNamesPt);
-    final descriptionSuggestionsShown =
-        descriptionSuggestionsAll.length > 32 ? descriptionSuggestionsAll.sublist(0, 32) : descriptionSuggestionsAll;
+    final descriptionSuggestionsAll = descSuggestions.toList()
+      ..sort(UserCategoriesService.compareNamesPt);
+    final descriptionSuggestionsShown = descriptionSuggestionsAll.length > 32
+        ? descriptionSuggestionsAll.sublist(0, 32)
+        : descriptionSuggestionsAll;
 
-    final descCtrl = TextEditingController(text: existing?['description']?.toString() ?? '');
+    final descCtrl =
+        TextEditingController(text: existing?['description']?.toString() ?? '');
     final amountCtrl = TextEditingController(
       text: existing != null && existing['amount'] != null
-          ? CurrencyFormats.formatBRLInput((existing['amount'] as num).toDouble())
+          ? CurrencyFormats.formatBRLInput(
+              (existing['amount'] as num).toDouble())
           : '',
     );
-    String category = existing?['category']?.toString() ?? (_incomeCategories.isNotEmpty ? _incomeCategories.first : 'Receita');
+    String category = existing?['category']?.toString() ??
+        (_incomeCategories.isNotEmpty ? _incomeCategories.first : 'Receita');
     int dayOfMonth = (existing?['dayOfMonth'] as num?)?.toInt() ?? 10;
     final now = DateTime.now();
     DateTime startDate = existing != null && existing['startDate'] is Timestamp
@@ -219,11 +246,16 @@ class _ReceitasFixasScreenState extends State<ReceitasFixasScreen> {
     DateTime? endDate = existing != null && existing['endDate'] is Timestamp
         ? (existing['endDate'] as Timestamp).toDate()
         : DateTime(now.year + 1, now.month, 1);
-    String mode = (existing?['mode'] ?? FixedIncomeService.modePeriod).toString();
+    String mode =
+        (existing?['mode'] ?? FixedIncomeService.modePeriod).toString();
     int totalParcelas = (existing?['totalParcelas'] as num?)?.toInt() ?? 12;
     int parcelaInicial = (existing?['parcelaInicial'] as num?)?.toInt() ?? 1;
+    // Mostrar no calendário Agenda/Escala + cor escolhida (novas começam desligadas).
+    bool addToCalendar = existing != null && existing['addToCalendar'] != false;
+    String? calendarColorHex = existing?['calendarColorHex']?.toString();
     if (mode == FixedIncomeService.modeInstallments) {
-      totalParcelas = totalParcelas.clamp(1, AppBusinessRules.maxFixedFlowInstallments);
+      totalParcelas =
+          totalParcelas.clamp(1, AppBusinessRules.maxFixedFlowInstallments);
       parcelaInicial = parcelaInicial.clamp(1, totalParcelas);
     }
     final isEdit = existing != null;
@@ -250,450 +282,736 @@ class _ReceitasFixasScreenState extends State<ReceitasFixasScreen> {
       // Tela full-screen (antes era bottom sheet com DraggableScrollableSheet).
       // O Scaffold trata viewInsets sozinho — sem KeyboardViewInsetPad.
       ok = await Navigator.of(context).push<bool>(
-        MaterialPageRoute<bool>(
-          fullscreenDialog: true,
-          builder: (ctx) => StatefulBuilder(
-            builder: (context, setModalState) {
-              void scrollFieldIntoView(FocusNode node) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (!context.mounted) return;
-                  final bx = node.context;
-                  if (bx != null) {
-                    Scrollable.ensureVisible(
-                      bx,
-                      alignment: 0.12,
-                      duration: const Duration(milliseconds: 320),
-                      curve: Curves.easeOutCubic,
-                    );
+            MaterialPageRoute<bool>(
+              fullscreenDialog: true,
+              builder: (ctx) => StatefulBuilder(
+                builder: (context, setModalState) {
+                  void scrollFieldIntoView(FocusNode node) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!context.mounted) return;
+                      final bx = node.context;
+                      if (bx != null) {
+                        Scrollable.ensureVisible(
+                          bx,
+                          alignment: 0.12,
+                          duration: const Duration(milliseconds: 320),
+                          curve: Curves.easeOutCubic,
+                        );
+                      }
+                    });
                   }
-                });
-              }
 
-              return Scaffold(
-                backgroundColor: Colors.white,
-                appBar: AppBar(
-                  elevation: 0,
-                  leading: IconButton(
-                    tooltip: 'Fechar',
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () => Navigator.maybePop(ctx, false),
-                    style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
-                  ),
-                  title: Row(
-                    children: [
-                      Icon(Icons.repeat_rounded, color: AppColors.primary, size: 22),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          isEdit ? 'Editar receita fixa' : 'Nova receita fixa',
-                          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: Color(0xFF1A237E)),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                  return Scaffold(
+                    backgroundColor: Colors.white,
+                    appBar: AppBar(
+                      elevation: 0,
+                      leading: IconButton(
+                        tooltip: 'Fechar',
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () => Navigator.maybePop(ctx, false),
+                        style: IconButton.styleFrom(
+                            minimumSize: const Size(48, 48)),
                       ),
-                    ],
-                  ),
-                ),
-                body: SafeArea(
-                  child: ListView(
-                    keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                    padding: EdgeInsets.fromLTRB(20, 12, 20, 24 + MediaQuery.paddingOf(ctx).bottom),
-                    children: [
-                        RepaintBoundary(
-                          child: FastTextField(
-                            controller: descCtrl,
-                            scrollPadding: _kFixedFlowKeyboardScrollPad,
-                            decoration: _fixedFlowPremiumInputDeco(
-                              labelText: 'Descrição',
-                              hintText: 'Ex: Aluguel recebido, comissões, juros',
-                              prefixIcon: Icon(Icons.description_outlined, color: AppColors.primary.withValues(alpha: 0.88)),
-                            ),
-                            textCapitalization: TextCapitalization.sentences,
-                            enableSuggestions: false,
-                            autocorrect: false,
-                          ),
-                        ),
-                        if (descriptionSuggestionsShown.isNotEmpty) ...[
-                          const SizedBox(height: 10),
-                          Align(
-                            alignment: Alignment.centerLeft,
+                      title: Row(
+                        children: [
+                          Icon(Icons.repeat_rounded,
+                              color: AppColors.primary, size: 22),
+                          const SizedBox(width: 8),
+                          Expanded(
                             child: Text(
-                              'Sugestões (modelos e já cadastradas) — toque para preencher ou escreva outra',
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade700, height: 1.25),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          SizedBox(
-                            height: 42,
-                            child: ListView.separated(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: descriptionSuggestionsShown.length,
-                              separatorBuilder: (_, __) => const SizedBox(width: 8),
-                              itemBuilder: (context, i) {
-                                final s = descriptionSuggestionsShown[i];
-                                return ActionChip(
-                                  label: Text(s, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5)),
-                                  onPressed: () {
-                                    descCtrl.text = s;
-                                    setModalState(() {});
-                                  },
-                                );
-                              },
+                              isEdit
+                                  ? 'Editar receita fixa'
+                                  : 'Nova receita fixa',
+                              style: const TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w900,
+                                  color: Color(0xFF1A237E)),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
-                        const SizedBox(height: 16),
-                        _buildCategoryDropdown(
-                          context: context,
-                          category: category,
-                          incomeCategories: _incomeCategories,
-                          setModalState: setModalState,
-                          onCategoryChanged: (v) => category = v,
-                          onCategoryAdded: () async {
-                            final nameCtrl = TextEditingController();
-                            final added = await showDialog<bool>(
-                              context: context,
-                              barrierDismissible: false,
-                              builder: (ctx) => AlertDialog(
-                                title: const Text('Nova categoria de receita'),
-                                content: FastTextField(
-                                  controller: nameCtrl,
-                                  decoration: const InputDecoration(
-                                    hintText: 'Nome da categoria',
-                                    border: OutlineInputBorder(),
-                                  ),
-                                  autofocus: true,
-                                  textCapitalization: TextCapitalization.words,
-                                ),
-                                actions: [
-                                  TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-                                  FilledButton(
+                      ),
+                    ),
+                    body: SafeArea(
+                      child: ListView(
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
+                        padding: EdgeInsets.fromLTRB(
+                            20, 12, 20, 24 + MediaQuery.paddingOf(ctx).bottom),
+                        children: [
+                          RepaintBoundary(
+                            child: FastTextField(
+                              controller: descCtrl,
+                              scrollPadding: _kFixedFlowKeyboardScrollPad,
+                              decoration: _fixedFlowPremiumInputDeco(
+                                labelText: 'Descrição',
+                                hintText:
+                                    'Ex: Aluguel recebido, comissões, juros',
+                                prefixIcon: Icon(Icons.description_outlined,
+                                    color: AppColors.primary
+                                        .withValues(alpha: 0.88)),
+                              ),
+                              textCapitalization: TextCapitalization.sentences,
+                              enableSuggestions: false,
+                              autocorrect: false,
+                            ),
+                          ),
+                          if (descriptionSuggestionsShown.isNotEmpty) ...[
+                            const SizedBox(height: 10),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                'Sugestões (modelos e já cadastradas) — toque para preencher ou escreva outra',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.grey.shade700,
+                                    height: 1.25),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            SizedBox(
+                              height: 42,
+                              child: ListView.separated(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: descriptionSuggestionsShown.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(width: 8),
+                                itemBuilder: (context, i) {
+                                  final s = descriptionSuggestionsShown[i];
+                                  return ActionChip(
+                                    label: Text(s,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(fontSize: 12.5)),
                                     onPressed: () {
-                                      if (nameCtrl.text.trim().isEmpty) return;
-                                      Navigator.pop(ctx, true);
+                                      descCtrl.text = s;
+                                      setModalState(() {});
                                     },
-                                    child: const Text('Adicionar'),
-                                  ),
-                                ],
+                                  );
+                                },
                               ),
-                            );
-                            if (added != true) return;
-                            final name = nameCtrl.text.trim();
-                            nameCtrl.dispose();
-                            try {
-                              await UserCategoriesService().addCustom(_fsUid, true, name);
-                              if (!context.mounted) return;
-                              final c = await UserCategoriesService().load(_fsUid);
-                              if (!context.mounted) return;
-                              final list =
-                                  UserCategoriesService.sortedWithoutIncluirNova(c.income);
-                              setModalState(() {
-                                category = name;
-                                _incomeCategories = list;
-                              });
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Categoria "$name" adicionada.')));
-                              }
-                            } catch (e) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Erro ao salvar: ${e.toString().split('\n').first}')),
-                                );
-                              }
-                            }
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        RepaintBoundary(
-                          child: BrlAmountTextField(
-                            controller: amountCtrl,
-                            scrollPadding: _kFixedFlowKeyboardScrollPad,
-                            decoration: _fixedFlowPremiumInputDeco(
-                              labelText: 'Valor (R\$)',
-                              hintText: '0,00',
-                              prefixIcon: Icon(Icons.attach_money_rounded, color: AppColors.primary.withValues(alpha: 0.88)),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        DropdownButtonFormField<int>(
-                          value: dayOfMonth.clamp(1, 31),
-                          decoration: _fixedFlowPremiumInputDeco(
-                            labelText: 'Dia do mês do lançamento',
-                            prefixIcon: Icon(Icons.calendar_today_rounded, color: AppColors.primary.withValues(alpha: 0.88)),
-                          ),
-                          items: List.generate(31, (i) => i + 1).map((d) => DropdownMenuItem(value: d, child: Text('Dia $d'))).toList(),
-                          onChanged: (v) => setModalState(() => dayOfMonth = v ?? dayOfMonth),
-                        ),
-                        const SizedBox(height: 20),
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(7),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    AppColors.deepBlueDark.withValues(alpha: 0.92),
-                                    AppColors.primary.withValues(alpha: 0.9),
-                                  ],
-                                ),
-                                borderRadius: BorderRadius.circular(11),
-                              ),
-                              child: const Icon(Icons.tune_rounded, color: Colors.white, size: 18),
-                            ),
-                            const SizedBox(width: 10),
-                            const Text(
-                              'Tipo de controle',
-                              style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w900, color: AppColors.textPrimary, letterSpacing: 0.15),
                             ),
                           ],
-                        ),
-                        const SizedBox(height: 10),
-                        Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(16),
-                            gradient: LinearGradient(
-                              colors: [
-                                AppColors.primary.withValues(alpha: 0.07),
-                                AppColors.accent.withValues(alpha: 0.05),
-                              ],
-                            ),
-                            border: Border.all(color: AppColors.primary.withValues(alpha: 0.14)),
-                          ),
-                          padding: const EdgeInsets.all(5),
-                          child: SegmentedButton<String>(
-                            segments: const [
-                              ButtonSegment(value: FixedIncomeService.modePeriod, label: Text('Por período'), icon: Icon(Icons.date_range_rounded, size: 20)),
-                              ButtonSegment(value: FixedIncomeService.modeInstallments, label: Text('Por parcelas'), icon: Icon(Icons.receipt_long_rounded, size: 20)),
-                            ],
-                            selected: {mode},
-                            onSelectionChanged: (Set<String> sel) => setModalState(() {
-                              final prev = mode;
-                              mode = sel.first;
-                              if (mode == FixedIncomeService.modeInstallments) {
-                                if (prev != FixedIncomeService.modeInstallments) {
-                                  totalParcelas = 12;
-                                  parcelaInicial = 1;
-                                  totalParcelasCtrl.text = '12';
-                                  parcelaIniCtrl.text = '1';
-                                } else {
-                                  parcelaInicial = parcelaInicial.clamp(1, totalParcelas);
-                                  parcelaIniCtrl.text = '$parcelaInicial';
-                                }
-                              } else {
-                                endDate ??= DateTime(startDate.year + 1, startDate.month, startDate.day);
-                              }
-                            }),
-                            style: ButtonStyle(
-                              visualDensity: VisualDensity.compact,
-                              padding: WidgetStateProperty.all(const EdgeInsets.symmetric(vertical: 10, horizontal: 12)),
-                            ),
-                          ),
-                        ),
-                        if (mode == FixedIncomeService.modeInstallments) ...[
                           const SizedBox(height: 16),
-                          FastTextField(
-                            controller: totalParcelasCtrl,
-                            focusNode: totalParcelasFocus,
-                            keyboardType: TextInputType.number,
-                            scrollPadding: _kFixedFlowKeyboardScrollPad,
-                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                            decoration: _fixedFlowPremiumInputDeco(
-                              labelText: 'Total de parcelas',
-                              hintText: 'Ex.: 12 ou 360',
-                              helperText: 'Máximo ${AppBusinessRules.maxFixedFlowInstallments} parcelas',
-                              prefixIcon: Icon(Icons.numbers_rounded, color: AppColors.primary.withValues(alpha: 0.88)),
-                            ),
-                            onTap: () => scrollFieldIntoView(totalParcelasFocus),
-                            onChanged: (s) {
-                              final v = int.tryParse(s.trim());
-                              if (v == null || v < 1) return;
-                              setModalState(() {
-                                totalParcelas = v.clamp(1, AppBusinessRules.maxFixedFlowInstallments);
-                                parcelaInicial = parcelaInicial.clamp(1, totalParcelas);
-                                if (parcelaIniCtrl.text != '$parcelaInicial') parcelaIniCtrl.text = '$parcelaInicial';
-                              });
-                            },
-                          ),
-                          const SizedBox(height: 12),
-                          FastTextField(
-                            controller: parcelaIniCtrl,
-                            focusNode: parcelaIniFocus,
-                            keyboardType: TextInputType.number,
-                            scrollPadding: _kFixedFlowKeyboardScrollPad,
-                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                            decoration: _fixedFlowPremiumInputDeco(
-                              labelText: 'Começar da parcela nº',
-                              helperText: 'Ex.: já pagou 3 de 12 — comece da 4ª',
-                              prefixIcon: Icon(Icons.play_arrow_rounded, color: AppColors.primary.withValues(alpha: 0.88)),
-                            ),
-                            onTap: () => scrollFieldIntoView(parcelaIniFocus),
-                            onChanged: (s) {
-                              final v = int.tryParse(s.trim());
-                              if (v == null || v < 1) return;
-                              setModalState(() => parcelaInicial = v.clamp(1, totalParcelas));
-                            },
-                          ),
-                        ],
-                        const SizedBox(height: 16),
-                        ListTile(
-                          tileColor: const Color(0xFFF8FAFC),
-                          title: Text(mode == FixedIncomeService.modeInstallments ? 'Data da primeira parcela (que você controla)' : 'Data início'),
-                          subtitle: Text(DateFormat('dd/MM/yyyy').format(startDate)),
-                          trailing: Icon(Icons.edit_calendar_rounded, color: AppColors.primary.withValues(alpha: 0.85)),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            side: BorderSide(color: AppColors.primary.withValues(alpha: 0.18)),
-                          ),
-                          onTap: () async {
-                            final p = await showDatePicker(context: context, initialDate: startDate, firstDate: DateTime(2020), lastDate: DateTime(2035));
-                            if (p != null) setModalState(() => startDate = p);
-                          },
-                        ),
-                        if (mode == FixedIncomeService.modePeriod) ...[
-                          const SizedBox(height: 12),
-                          ListTile(
-                            tileColor: const Color(0xFFF8FAFC),
-                            title: const Text('Data fim (opcional)'),
-                            subtitle: Text(endDate == null ? 'Sem data fim' : DateFormat('dd/MM/yyyy').format(endDate!)),
-                            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                              if (endDate != null)
-                                IconButton(
-                                  icon: const Icon(Icons.clear_rounded),
-                                  onPressed: () => setModalState(() => endDate = null),
-                                  tooltip: 'Remover data fim',
-                                ),
-                              Icon(Icons.edit_calendar_rounded, color: AppColors.primary.withValues(alpha: 0.85)),
-                            ]),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                              side: BorderSide(color: AppColors.primary.withValues(alpha: 0.18)),
-                            ),
-                            onTap: () async {
-                              final p = await showDatePicker(
+                          _buildCategoryDropdown(
+                            context: context,
+                            category: category,
+                            incomeCategories: _incomeCategories,
+                            setModalState: setModalState,
+                            onCategoryChanged: (v) => category = v,
+                            onCategoryAdded: () async {
+                              final nameCtrl = TextEditingController();
+                              final added = await showDialog<bool>(
                                 context: context,
-                                initialDate: endDate ?? startDate.add(const Duration(days: 365)),
-                                firstDate: startDate,
-                                lastDate: DateTime(2040),
+                                barrierDismissible: false,
+                                builder: (ctx) => AlertDialog(
+                                  title:
+                                      const Text('Nova categoria de receita'),
+                                  content: FastTextField(
+                                    controller: nameCtrl,
+                                    decoration: const InputDecoration(
+                                      hintText: 'Nome da categoria',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    autofocus: true,
+                                    textCapitalization:
+                                        TextCapitalization.words,
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(ctx, false),
+                                        child: const Text('Cancelar')),
+                                    FilledButton(
+                                      onPressed: () {
+                                        if (nameCtrl.text.trim().isEmpty) {
+                                          return;
+                                        }
+                                        Navigator.pop(ctx, true);
+                                      },
+                                      child: const Text('Adicionar'),
+                                    ),
+                                  ],
+                                ),
                               );
-                              if (p != null) setModalState(() => endDate = p);
-                            },
-                          ),
-                        ] else
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Text(
-                              'Serão geradas ${totalParcelas - parcelaInicial + 1} parcelas (da $parcelaInicialª à ${totalParcelas}ª).',
-                              style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
-                            ),
-                          ),
-                        const SizedBox(height: 24),
-                        _buildSuperPremiumActionButton(
-                          ctx: context,
-                          isEdit: isEdit,
-                          onPressed: () async {
-                            final desc = descCtrl.text.trim();
-                            final amount = CurrencyFormats.parseBRLInput(amountCtrl.text) ?? 0;
-                            if (mode == FixedIncomeService.modeInstallments) {
-                              totalParcelas = (int.tryParse(totalParcelasCtrl.text.trim()) ?? totalParcelas)
-                                  .clamp(1, AppBusinessRules.maxFixedFlowInstallments);
-                              parcelaInicial = (int.tryParse(parcelaIniCtrl.text.trim()) ?? 1).clamp(1, totalParcelas);
-                            }
-                            if (desc.isEmpty) {
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Informe a descrição.')));
-                              return;
-                            }
-                            if (amount <= 0) {
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Informe um valor maior que zero.')));
-                              return;
-                            }
-                            if (mode == FixedIncomeService.modeInstallments && (totalParcelas < 1 || parcelaInicial < 1 || parcelaInicial > totalParcelas)) {
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Por parcelas: informe total de parcelas e parcela inicial válidos.')));
-                              return;
-                            }
-                            DateTime? effectiveEnd = endDate;
-                            if (mode == FixedIncomeService.modeInstallments) {
-                              final meses = totalParcelas - parcelaInicial + 1;
-                              effectiveEnd = DateTime(startDate.year, startDate.month + meses - 1, startDate.day);
-                            }
-                            try {
-                              if (isEdit && id != null) {
-                                final updatedCount = await _service.update(
-                                  uid: _fsUid,
-                                  id: id,
-                                  description: desc,
-                                  category: category,
-                                  amount: amount,
-                                  dayOfMonth: dayOfMonth,
-                                  startDate: startDate,
-                                  endDate: effectiveEnd,
-                                  mode: mode,
-                                  totalParcelas: mode == FixedIncomeService.modeInstallments ? totalParcelas : null,
-                                  parcelaInicial: mode == FixedIncomeService.modeInstallments ? parcelaInicial : null,
-                                );
-                                if (context.mounted) {
-                                  if (updatedCount > 0) {
-                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Receita fixa atualizada. $updatedCount parcela(s) futura(s) ajustada(s) para o novo dia.')));
-                                  } else {
-                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Receita fixa atualizada.')));
-                                  }
-                                }
-                              } else {
-                                await _service.add(
-                                  uid: _fsUid,
-                                  description: desc,
-                                  category: category,
-                                  amount: amount,
-                                  dayOfMonth: dayOfMonth,
-                                  startDate: startDate,
-                                  endDate: effectiveEnd,
-                                  mode: mode,
-                                  totalParcelas: mode == FixedIncomeService.modeInstallments ? totalParcelas : null,
-                                  parcelaInicial: mode == FixedIncomeService.modeInstallments ? parcelaInicial : null,
-                                );
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Receita fixa criada. Gerando lançamentos no Financeiro…')),
-                                  );
-                                }
-                              }
-                              // Parcelas só aqui (não ao reabrir o módulo Financeiro), para não duplicar mês já pago.
+                              if (added != true) return;
+                              final name = nameCtrl.text.trim();
+                              nameCtrl.dispose();
                               try {
-                                final monthsAhead = await _prefsService.getPendingMonthsAhead(_fsUid);
-                                final created = await _service.ensureMonthlyEntries(_fsUid, monthsAhead: monthsAhead);
-                                if (context.mounted && created > 0) {
+                                await UserCategoriesService()
+                                    .addCustom(_fsUid, true, name);
+                                if (!context.mounted) return;
+                                final c =
+                                    await UserCategoriesService().load(_fsUid);
+                                if (!context.mounted) return;
+                                final list = UserCategoriesService
+                                    .sortedWithoutIncluirNova(c.income);
+                                setModalState(() {
+                                  category = name;
+                                  _incomeCategories = list;
+                                });
+                                if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('$created lançamento(s) criado(s) no Financeiro.')),
-                                  );
+                                      SnackBar(
+                                          content: Text(
+                                              'Categoria "$name" adicionada.')));
                                 }
                               } catch (e) {
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text('Erro ao gerar parcelas no Financeiro: ${e.toString().split('\n').first}'),
-                                      backgroundColor: AppColors.error,
-                                    ),
+                                        content: Text(
+                                            'Erro ao salvar: ${e.toString().split('\n').first}')),
                                   );
                                 }
                               }
-                              if (context.mounted) Navigator.pop(context, true);
-                            } catch (e) {
-                              if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro: ${e.toString().split('\n').first}')));
-                            }
-                          },
-                        ),
-                      ],
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          RepaintBoundary(
+                            child: BrlAmountTextField(
+                              controller: amountCtrl,
+                              scrollPadding: _kFixedFlowKeyboardScrollPad,
+                              decoration: _fixedFlowPremiumInputDeco(
+                                labelText: 'Valor (R\$)',
+                                hintText: '0,00',
+                                prefixIcon: Icon(Icons.attach_money_rounded,
+                                    color: AppColors.primary
+                                        .withValues(alpha: 0.88)),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          DropdownButtonFormField<int>(
+                            initialValue: dayOfMonth.clamp(1, 31),
+                            decoration: _fixedFlowPremiumInputDeco(
+                              labelText: 'Dia do mês do lançamento',
+                              prefixIcon: Icon(Icons.calendar_today_rounded,
+                                  color: AppColors.primary
+                                      .withValues(alpha: 0.88)),
+                            ),
+                            items: List.generate(31, (i) => i + 1)
+                                .map((d) => DropdownMenuItem(
+                                    value: d, child: Text('Dia $d')))
+                                .toList(),
+                            onChanged: (v) => setModalState(
+                                () => dayOfMonth = v ?? dayOfMonth),
+                          ),
+                          const SizedBox(height: 14),
+                          _buildAddToCalendarToggle(
+                            isIncome: true,
+                            value: addToCalendar,
+                            onChanged: (v) =>
+                                setModalState(() => addToCalendar = v),
+                          ),
+                          if (addToCalendar) ...[
+                            const SizedBox(height: 10),
+                            _buildCalendarColorButton(
+                              context: context,
+                              isIncome: true,
+                              currentHex: calendarColorHex,
+                              onChanged: (v) =>
+                                  setModalState(() => calendarColorHex = v),
+                            ),
+                          ],
+                          const SizedBox(height: 20),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(7),
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      AppColors.deepBlueDark
+                                          .withValues(alpha: 0.92),
+                                      AppColors.primary.withValues(alpha: 0.9),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(11),
+                                ),
+                                child: const Icon(Icons.tune_rounded,
+                                    color: Colors.white, size: 18),
+                              ),
+                              const SizedBox(width: 10),
+                              const Text(
+                                'Tipo de controle',
+                                style: TextStyle(
+                                    fontSize: 14.5,
+                                    fontWeight: FontWeight.w900,
+                                    color: AppColors.textPrimary,
+                                    letterSpacing: 0.15),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              gradient: LinearGradient(
+                                colors: [
+                                  AppColors.primary.withValues(alpha: 0.07),
+                                  AppColors.accent.withValues(alpha: 0.05),
+                                ],
+                              ),
+                              border: Border.all(
+                                  color: AppColors.primary
+                                      .withValues(alpha: 0.14)),
+                            ),
+                            padding: const EdgeInsets.all(5),
+                            child: SegmentedButton<String>(
+                              segments: const [
+                                ButtonSegment(
+                                    value: FixedIncomeService.modePeriod,
+                                    label: Text('Por período'),
+                                    icon: Icon(Icons.date_range_rounded,
+                                        size: 20)),
+                                ButtonSegment(
+                                    value: FixedIncomeService.modeInstallments,
+                                    label: Text('Por parcelas'),
+                                    icon: Icon(Icons.receipt_long_rounded,
+                                        size: 20)),
+                              ],
+                              selected: {mode},
+                              onSelectionChanged: (Set<String> sel) =>
+                                  setModalState(() {
+                                final prev = mode;
+                                mode = sel.first;
+                                if (mode ==
+                                    FixedIncomeService.modeInstallments) {
+                                  if (prev !=
+                                      FixedIncomeService.modeInstallments) {
+                                    totalParcelas = 12;
+                                    parcelaInicial = 1;
+                                    totalParcelasCtrl.text = '12';
+                                    parcelaIniCtrl.text = '1';
+                                  } else {
+                                    parcelaInicial =
+                                        parcelaInicial.clamp(1, totalParcelas);
+                                    parcelaIniCtrl.text = '$parcelaInicial';
+                                  }
+                                } else {
+                                  endDate ??= DateTime(startDate.year + 1,
+                                      startDate.month, startDate.day);
+                                }
+                              }),
+                              style: ButtonStyle(
+                                visualDensity: VisualDensity.compact,
+                                padding: WidgetStateProperty.all(
+                                    const EdgeInsets.symmetric(
+                                        vertical: 10, horizontal: 12)),
+                              ),
+                            ),
+                          ),
+                          if (mode == FixedIncomeService.modeInstallments) ...[
+                            const SizedBox(height: 16),
+                            FastTextField(
+                              controller: totalParcelasCtrl,
+                              focusNode: totalParcelasFocus,
+                              keyboardType: TextInputType.number,
+                              scrollPadding: _kFixedFlowKeyboardScrollPad,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly
+                              ],
+                              decoration: _fixedFlowPremiumInputDeco(
+                                labelText: 'Total de parcelas',
+                                hintText: 'Ex.: 12 ou 360',
+                                helperText:
+                                    'Máximo ${AppBusinessRules.maxFixedFlowInstallments} parcelas',
+                                prefixIcon: Icon(Icons.numbers_rounded,
+                                    color: AppColors.primary
+                                        .withValues(alpha: 0.88)),
+                              ),
+                              onTap: () =>
+                                  scrollFieldIntoView(totalParcelasFocus),
+                              onChanged: (s) {
+                                final v = int.tryParse(s.trim());
+                                if (v == null || v < 1) return;
+                                setModalState(() {
+                                  totalParcelas = v.clamp(
+                                      1,
+                                      AppBusinessRules
+                                          .maxFixedFlowInstallments);
+                                  parcelaInicial =
+                                      parcelaInicial.clamp(1, totalParcelas);
+                                  if (parcelaIniCtrl.text != '$parcelaInicial') {
+                                    parcelaIniCtrl.text = '$parcelaInicial';
+                                  }
+                                });
+                              },
+                            ),
+                            const SizedBox(height: 12),
+                            FastTextField(
+                              controller: parcelaIniCtrl,
+                              focusNode: parcelaIniFocus,
+                              keyboardType: TextInputType.number,
+                              scrollPadding: _kFixedFlowKeyboardScrollPad,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly
+                              ],
+                              decoration: _fixedFlowPremiumInputDeco(
+                                labelText: 'Começar da parcela nº',
+                                helperText:
+                                    'Ex.: já pagou 3 de 12 — comece da 4ª',
+                                prefixIcon: Icon(Icons.play_arrow_rounded,
+                                    color: AppColors.primary
+                                        .withValues(alpha: 0.88)),
+                              ),
+                              onTap: () => scrollFieldIntoView(parcelaIniFocus),
+                              onChanged: (s) {
+                                final v = int.tryParse(s.trim());
+                                if (v == null || v < 1) return;
+                                setModalState(() =>
+                                    parcelaInicial = v.clamp(1, totalParcelas));
+                              },
+                            ),
+                          ],
+                          const SizedBox(height: 16),
+                          ListTile(
+                            tileColor: const Color(0xFFF8FAFC),
+                            title: Text(mode ==
+                                    FixedIncomeService.modeInstallments
+                                ? 'Data da primeira parcela (que você controla)'
+                                : 'Data início'),
+                            subtitle: Text(
+                                DateFormat('dd/MM/yyyy').format(startDate)),
+                            trailing: Icon(Icons.edit_calendar_rounded,
+                                color:
+                                    AppColors.primary.withValues(alpha: 0.85)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              side: BorderSide(
+                                  color: AppColors.primary
+                                      .withValues(alpha: 0.18)),
+                            ),
+                            onTap: () async {
+                              final p = await showDatePicker(
+                                  context: context,
+                                  initialDate: startDate,
+                                  firstDate: DateTime(2020),
+                                  lastDate: DateTime(2035));
+                              if (p != null) setModalState(() => startDate = p);
+                            },
+                          ),
+                          if (mode == FixedIncomeService.modePeriod) ...[
+                            const SizedBox(height: 12),
+                            ListTile(
+                              tileColor: const Color(0xFFF8FAFC),
+                              title: const Text('Data fim (opcional)'),
+                              subtitle: Text(endDate == null
+                                  ? 'Sem data fim'
+                                  : DateFormat('dd/MM/yyyy').format(endDate!)),
+                              trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (endDate != null)
+                                      IconButton(
+                                        icon: const Icon(Icons.clear_rounded),
+                                        onPressed: () =>
+                                            setModalState(() => endDate = null),
+                                        tooltip: 'Remover data fim',
+                                      ),
+                                    Icon(Icons.edit_calendar_rounded,
+                                        color: AppColors.primary
+                                            .withValues(alpha: 0.85)),
+                                  ]),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                side: BorderSide(
+                                    color: AppColors.primary
+                                        .withValues(alpha: 0.18)),
+                              ),
+                              onTap: () async {
+                                final p = await showDatePicker(
+                                  context: context,
+                                  initialDate: endDate ??
+                                      startDate.add(const Duration(days: 365)),
+                                  firstDate: startDate,
+                                  lastDate: DateTime(2040),
+                                );
+                                if (p != null) setModalState(() => endDate = p);
+                              },
+                            ),
+                          ] else
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                'Serão geradas ${totalParcelas - parcelaInicial + 1} parcelas (da $parcelaInicialª à $totalParcelasª).',
+                                style: TextStyle(
+                                    fontSize: 13, color: Colors.grey.shade700),
+                              ),
+                            ),
+                          const SizedBox(height: 24),
+                          _buildSuperPremiumActionButton(
+                            ctx: context,
+                            isEdit: isEdit,
+                            onPressed: () async {
+                              final desc = descCtrl.text.trim();
+                              final amount = CurrencyFormats.parseBRLInput(
+                                      amountCtrl.text) ??
+                                  0;
+                              if (mode == FixedIncomeService.modeInstallments) {
+                                totalParcelas = (int.tryParse(
+                                            totalParcelasCtrl.text.trim()) ??
+                                        totalParcelas)
+                                    .clamp(
+                                        1,
+                                        AppBusinessRules
+                                            .maxFixedFlowInstallments);
+                                parcelaInicial =
+                                    (int.tryParse(parcelaIniCtrl.text.trim()) ??
+                                            1)
+                                        .clamp(1, totalParcelas);
+                              }
+                              if (desc.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                        content: Text('Informe a descrição.')));
+                                return;
+                              }
+                              if (amount <= 0) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                        content: Text(
+                                            'Informe um valor maior que zero.')));
+                                return;
+                              }
+                              if (mode == FixedIncomeService.modeInstallments &&
+                                  (totalParcelas < 1 ||
+                                      parcelaInicial < 1 ||
+                                      parcelaInicial > totalParcelas)) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                        content: Text(
+                                            'Por parcelas: informe total de parcelas e parcela inicial válidos.')));
+                                return;
+                              }
+                              DateTime? effectiveEnd = endDate;
+                              if (mode == FixedIncomeService.modeInstallments) {
+                                final meses =
+                                    totalParcelas - parcelaInicial + 1;
+                                effectiveEnd = DateTime(startDate.year,
+                                    startDate.month + meses - 1, startDate.day);
+                              }
+                              try {
+                                if (isEdit && id != null) {
+                                  final updatedCount = await _service.update(
+                                    uid: _fsUid,
+                                    id: id,
+                                    description: desc,
+                                    category: category,
+                                    amount: amount,
+                                    dayOfMonth: dayOfMonth,
+                                    startDate: startDate,
+                                    endDate: effectiveEnd,
+                                    mode: mode,
+                                    totalParcelas: mode ==
+                                            FixedIncomeService.modeInstallments
+                                        ? totalParcelas
+                                        : null,
+                                    parcelaInicial: mode ==
+                                            FixedIncomeService.modeInstallments
+                                        ? parcelaInicial
+                                        : null,
+                                    addToCalendar: addToCalendar,
+                                    calendarColorHex: calendarColorHex,
+                                  );
+                                  if (context.mounted) {
+                                    if (updatedCount > 0) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(SnackBar(
+                                              content: Text(
+                                                  'Receita fixa atualizada. $updatedCount parcela(s) futura(s) ajustada(s) para o novo dia.')));
+                                    } else {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(const SnackBar(
+                                              content: Text(
+                                                  'Receita fixa atualizada.')));
+                                    }
+                                  }
+                                } else {
+                                  await _service.add(
+                                    uid: _fsUid,
+                                    description: desc,
+                                    category: category,
+                                    amount: amount,
+                                    dayOfMonth: dayOfMonth,
+                                    startDate: startDate,
+                                    endDate: effectiveEnd,
+                                    mode: mode,
+                                    totalParcelas: mode ==
+                                            FixedIncomeService.modeInstallments
+                                        ? totalParcelas
+                                        : null,
+                                    parcelaInicial: mode ==
+                                            FixedIncomeService.modeInstallments
+                                        ? parcelaInicial
+                                        : null,
+                                    addToCalendar: addToCalendar,
+                                    calendarColorHex: calendarColorHex,
+                                  );
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                          content: Text(
+                                              'Receita fixa criada. Gerando lançamentos no Financeiro…')),
+                                    );
+                                  }
+                                }
+                                // Parcelas só aqui (não ao reabrir o módulo Financeiro), para não duplicar mês já pago.
+                                try {
+                                  final monthsAhead = await _prefsService
+                                      .getPendingMonthsAhead(_fsUid);
+                                  final created = await _service
+                                      .ensureMonthlyEntries(_fsUid,
+                                          monthsAhead: monthsAhead);
+                                  if (context.mounted && created > 0) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                          content: Text(
+                                              '$created lançamento(s) criado(s) no Financeiro.')),
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                            'Erro ao gerar parcelas no Financeiro: ${e.toString().split('\n').first}'),
+                                        backgroundColor: AppColors.error,
+                                      ),
+                                    );
+                                  }
+                                }
+                                if (context.mounted) {
+                                  Navigator.pop(context, true);
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                          content: Text(
+                                              'Erro: ${e.toString().split('\n').first}')));
+                                }
+                              }
+                            },
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                );
-            },
-          ),
-        ),
-      ) ??
+                  );
+                },
+              ),
+            ),
+          ) ??
           false;
     } finally {
       disposeFormCtrls();
     }
     if (ok == true && mounted) _refreshFixedIncomes();
+  }
+
+  /// Toggle «Mostrar no calendário» (Agenda/Escala) das parcelas pendentes geradas.
+  static Widget _buildAddToCalendarToggle({
+    required bool isIncome,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    final accent = isIncome ? const Color(0xFF2E7D32) : const Color(0xFFE53935);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: accent.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            value ? Icons.event_available_rounded : Icons.event_busy_rounded,
+            size: 20,
+            color: accent,
+          ),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Mostrar no calendário',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                    color: Color(0xFF1A237E),
+                  ),
+                ),
+                Text(
+                  'Agenda/Escala',
+                  style: TextStyle(fontSize: 11.5, color: Colors.black54),
+                ),
+              ],
+            ),
+          ),
+          Switch.adaptive(
+            value: value,
+            activeThumbColor: accent,
+            activeTrackColor: accent.withValues(alpha: 0.5),
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Botão «Cor no calendário» na cor atual; abre a paleta do módulo financeiro.
+  static Widget _buildCalendarColorButton({
+    required BuildContext context,
+    required bool isIncome,
+    required String? currentHex,
+    required ValueChanged<String> onChanged,
+  }) {
+    final hex =
+        currentHex ?? FinanceCalendarColorPicker.defaultHexFor(isIncome);
+    var clean = hex
+        .replaceFirst('#', '')
+        .replaceFirst(RegExp(r'^0x', caseSensitive: false), '')
+        .toUpperCase();
+    if (clean.length > 6) clean = clean.substring(clean.length - 6);
+    final color = Color(int.parse('FF$clean', radix: 16));
+    return Material(
+      color: color,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () async {
+          final picked = await FinanceCalendarColorPicker.show(
+            context,
+            isIncome: isIncome,
+            currentHex: currentHex,
+          );
+          if (picked != null) onChanged(picked);
+        },
+        child: const SizedBox(
+          width: double.infinity,
+          height: 44,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.palette_outlined, size: 18, color: Colors.white),
+              SizedBox(width: 8),
+              Text(
+                'Cor no calendário',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   /// Card de preferências: mostrar nas contas pendentes e próximos X meses.
@@ -702,7 +1020,9 @@ class _ReceitasFixasScreenState extends State<ReceitasFixasScreen> {
       stream: _prefsService.watch(_fsUid),
       builder: (context, snap) {
         final showInPending = snap.data?['showInPending'] as bool? ?? true;
-        final monthsAhead = (snap.data?['pendingMonthsAhead'] as int?)?.clamp(1, 12) ?? AppBusinessRules.pendingMonthsAheadDefault;
+        final monthsAhead =
+            (snap.data?['pendingMonthsAhead'] as int?)?.clamp(1, 12) ??
+                AppBusinessRules.pendingMonthsAheadDefault;
         return Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
@@ -741,13 +1061,18 @@ class _ReceitasFixasScreenState extends State<ReceitasFixasScreen> {
                       ),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.tune_rounded, color: Colors.white, size: 20),
+                    child: const Icon(Icons.tune_rounded,
+                        color: Colors.white, size: 20),
                   ),
                   const SizedBox(width: 12),
                   const Expanded(
                     child: Text(
                       'Exibição nas receitas pendentes',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: AppColors.textPrimary, letterSpacing: 0.15),
+                      style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.textPrimary,
+                          letterSpacing: 0.15),
                     ),
                   ),
                 ],
@@ -756,7 +1081,12 @@ class _ReceitasFixasScreenState extends State<ReceitasFixasScreen> {
               SwitchListTile(
                 value: showInPending,
                 onChanged: (v) => _prefsService.set(_fsUid, showInPending: v),
-                title: const Text('Mostrar receitas fixas nas receitas pendentes', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                title: const Text(
+                    'Mostrar receitas fixas nas receitas pendentes',
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary)),
                 contentPadding: EdgeInsets.zero,
                 activeTrackColor: AppColors.primary.withValues(alpha: 0.45),
                 activeThumbColor: Colors.white,
@@ -769,17 +1099,26 @@ class _ReceitasFixasScreenState extends State<ReceitasFixasScreen> {
                 child: Wrap(
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    const Text('Próximos ', style: TextStyle(fontSize: 14, color: AppColors.textSecondary)),
+                    const Text('Próximos ',
+                        style: TextStyle(
+                            fontSize: 14, color: AppColors.textSecondary)),
                     DropdownButton<int>(
                       value: monthsAhead,
                       isDense: true,
                       underline: const SizedBox(),
-                      items: List.generate(12, (i) => i + 1).map((m) => DropdownMenuItem(value: m, child: Text('$m mês(es)'))).toList(),
+                      items: List.generate(12, (i) => i + 1)
+                          .map((m) => DropdownMenuItem(
+                              value: m, child: Text('$m mês(es)')))
+                          .toList(),
                       onChanged: (v) {
-                        if (v != null) _prefsService.set(_fsUid, pendingMonthsAhead: v);
+                        if (v != null) {
+                          _prefsService.set(_fsUid, pendingMonthsAhead: v);
+                        }
                       },
                     ),
-                    const Text(' nas receitas pendentes', style: TextStyle(fontSize: 14, color: AppColors.textSecondary)),
+                    const Text(' nas receitas pendentes',
+                        style: TextStyle(
+                            fontSize: 14, color: AppColors.textSecondary)),
                   ],
                 ),
               ),
@@ -796,7 +1135,8 @@ class _ReceitasFixasScreenState extends State<ReceitasFixasScreen> {
       useSafeArea: true,
       showDragHandle: true,
       builder: (ctx) => SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(16, 8, 16, 16 + MediaQuery.paddingOf(ctx).bottom),
+        padding: EdgeInsets.fromLTRB(
+            16, 8, 16, 16 + MediaQuery.paddingOf(ctx).bottom),
         child: _buildPreferencesCard(),
       ),
     );
@@ -829,7 +1169,11 @@ class _ReceitasFixasScreenState extends State<ReceitasFixasScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF14532D), Color(0xFF15803D), Color(0xFF22C55E)],
+                colors: [
+                  Color(0xFF14532D),
+                  Color(0xFF15803D),
+                  Color(0xFF22C55E)
+                ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -877,8 +1221,14 @@ class _ReceitasFixasScreenState extends State<ReceitasFixasScreen> {
           end: Alignment.centerRight,
         ),
         boxShadow: [
-          BoxShadow(color: const Color(0xFF14532D).withValues(alpha: 0.4), blurRadius: 16, offset: const Offset(0, 6)),
-          BoxShadow(color: AppColors.financeReceita.withValues(alpha: 0.28), blurRadius: 10, offset: const Offset(0, 3)),
+          BoxShadow(
+              color: const Color(0xFF14532D).withValues(alpha: 0.4),
+              blurRadius: 16,
+              offset: const Offset(0, 6)),
+          BoxShadow(
+              color: AppColors.financeReceita.withValues(alpha: 0.28),
+              blurRadius: 10,
+              offset: const Offset(0, 3)),
         ],
       ),
       child: Material(
@@ -895,7 +1245,11 @@ class _ReceitasFixasScreenState extends State<ReceitasFixasScreen> {
                 const SizedBox(width: 10),
                 Text(
                   isEdit ? 'Salvar alterações' : 'Criar receita fixa',
-                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Colors.white, letterSpacing: 0.25),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16,
+                      color: Colors.white,
+                      letterSpacing: 0.25),
                 ),
               ],
             ),
@@ -923,7 +1277,9 @@ class _ReceitasFixasScreenState extends State<ReceitasFixasScreen> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('Cancelar')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, null),
+              child: const Text('Cancelar')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Excluir só a receita'),
@@ -944,16 +1300,25 @@ class _ReceitasFixasScreenState extends State<ReceitasFixasScreen> {
         await _service.delete(_fsUid, id);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Receita fixa excluída e $count lançamento(s) removido(s) do Financeiro.')),
+            SnackBar(
+                content: Text(
+                    'Receita fixa excluída e $count lançamento(s) removido(s) do Financeiro.')),
           );
         }
       } else {
         await _service.delete(_fsUid, id);
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Receita fixa excluída. Os lançamentos já criados permanecem.')));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text(
+                  'Receita fixa excluída. Os lançamentos já criados permanecem.')));
+        }
       }
       if (mounted) _refreshFixedIncomes();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro: ${e.toString().split('\n').first}')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Erro: ${e.toString().split('\n').first}')));
+      }
     }
   }
 
@@ -970,7 +1335,8 @@ class _ReceitasFixasScreenState extends State<ReceitasFixasScreen> {
         iconTheme: const IconThemeData(color: Colors.white),
         title: const Text(
           'Receitas fixas',
-          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 19, letterSpacing: 0.2),
+          style: TextStyle(
+              fontWeight: FontWeight.w900, fontSize: 19, letterSpacing: 0.2),
         ),
         leading: IconButton(
           tooltip: 'Voltar',
@@ -988,7 +1354,8 @@ class _ReceitasFixasScreenState extends State<ReceitasFixasScreen> {
           TextButton(
             style: TextButton.styleFrom(foregroundColor: Colors.white),
             onPressed: () => Navigator.maybePop(context),
-            child: const Text('Cancelar', style: TextStyle(fontWeight: FontWeight.w700)),
+            child: const Text('Cancelar',
+                style: TextStyle(fontWeight: FontWeight.w700)),
           ),
         ],
         flexibleSpace: Container(
@@ -1012,17 +1379,23 @@ class _ReceitasFixasScreenState extends State<ReceitasFixasScreen> {
         future: _fixedIncomesFuture,
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator(color: AppColors.primary.withValues(alpha: 0.9)));
+            return Center(
+                child: CircularProgressIndicator(
+                    color: AppColors.primary.withValues(alpha: 0.9)));
           }
           final items = snap.data ?? [];
           if (items.isEmpty) {
             return Center(
               child: Padding(
-                padding: EdgeInsets.fromLTRB(24, 0, 24, 120 + MediaQuery.paddingOf(context).bottom),
+                padding: EdgeInsets.fromLTRB(
+                    24, 0, 24, 120 + MediaQuery.paddingOf(context).bottom),
                 child: Text(
                   'Nenhuma receita fixa. Toque em «Nova receita fixa» para adicionar.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 15, color: AppColors.textSecondary.withValues(alpha: 0.95), height: 1.4),
+                  style: TextStyle(
+                      fontSize: 15,
+                      color: AppColors.textSecondary.withValues(alpha: 0.95),
+                      height: 1.4),
                 ),
               ),
             );
@@ -1036,86 +1409,121 @@ class _ReceitasFixasScreenState extends State<ReceitasFixasScreen> {
                   delegate: SliverChildBuilderDelegate(
                     (context, i) {
                       final e = items[i];
-              final amount = (e['amount'] as num?)?.toDouble() ?? 0;
-              final catName = (e['category'] ?? 'Receita').toString();
-              final vis = financeCategoryVisualFor(catName, isIncome: true);
-              final startTs = e['startDate'];
-              final endTs = e['endDate'];
-              final start = startTs is Timestamp ? startTs.toDate() : null;
-              final end = endTs is Timestamp ? endTs.toDate() : null;
-              final day = (e['dayOfMonth'] as num?)?.toInt() ?? 1;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(18),
-                    onTap: () => _openForm(existing: e),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: vis.color.withValues(alpha: 0.22)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: vis.color.withValues(alpha: 0.12),
-                            blurRadius: 16,
-                            offset: const Offset(0, 6),
+                      final amount = (e['amount'] as num?)?.toDouble() ?? 0;
+                      final catName = (e['category'] ?? 'Receita').toString();
+                      final vis =
+                          financeCategoryVisualFor(catName, isIncome: true);
+                      final startTs = e['startDate'];
+                      final endTs = e['endDate'];
+                      final start =
+                          startTs is Timestamp ? startTs.toDate() : null;
+                      final end = endTs is Timestamp ? endTs.toDate() : null;
+                      final day = (e['dayOfMonth'] as num?)?.toInt() ?? 1;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(18),
+                            onTap: () => _openForm(existing: e),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(18),
+                                border: Border.all(
+                                    color: vis.color.withValues(alpha: 0.22)),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: vis.color.withValues(alpha: 0.12),
+                                    blurRadius: 16,
+                                    offset: const Offset(0, 6),
+                                  ),
+                                ],
+                              ),
+                              child: ListTile(
+                                visualDensity: VisualDensity.compact,
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 6),
+                                leading: financeCategoryLeadingTile(catName,
+                                    isIncome: true),
+                                title: Text(
+                                  catName,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.textPrimary,
+                                      fontSize: 15),
+                                ),
+                                subtitle: Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Text(
+                                    '${(e['description'] ?? '').toString()} · ${_subtitleFixedIncome(e, day, start, end, includeCategory: false)}',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: AppColors.textSecondary
+                                            .withValues(alpha: 0.95),
+                                        height: 1.35),
+                                  ),
+                                ),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(CurrencyFormats.formatBRL(amount),
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w900,
+                                            color: Color(0xFF15803D),
+                                            fontSize: 15)),
+                                    PopupMenuButton<String>(
+                                      icon: Icon(Icons.more_vert_rounded,
+                                          color: AppColors.textMuted
+                                              .withValues(alpha: 0.9)),
+                                      padding: EdgeInsets.zero,
+                                      onSelected: (v) {
+                                        if (v == 'edit') _openForm(existing: e);
+                                        if (v == 'delete') _delete(e);
+                                      },
+                                      itemBuilder: (_) => [
+                                        const PopupMenuItem(
+                                            value: 'edit',
+                                            child: Row(children: [
+                                              Icon(Icons.edit_rounded,
+                                                  size: 20),
+                                              SizedBox(width: 8),
+                                              Text('Editar')
+                                            ])),
+                                        const PopupMenuItem(
+                                            value: 'delete',
+                                            child: Row(children: [
+                                              Icon(Icons.delete_outline_rounded,
+                                                  size: 20),
+                                              SizedBox(width: 8),
+                                              Text('Excluir')
+                                            ])),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                           ),
-                        ],
-                      ),
-                      child: ListTile(
-                  visualDensity: VisualDensity.compact,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                  leading: financeCategoryLeadingTile(catName, isIncome: true),
-                  title: Text(
-                    catName,
-                    style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.textPrimary, fontSize: 15),
-                  ),
-                  subtitle: Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(
-                    '${(e['description'] ?? '').toString()} · ${_subtitleFixedIncome(e, day, start, end, includeCategory: false)}',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary.withValues(alpha: 0.95), height: 1.35),
-                    ),
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(CurrencyFormats.formatBRL(amount), style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF15803D), fontSize: 15)),
-                      PopupMenuButton<String>(
-                        icon: Icon(Icons.more_vert_rounded, color: AppColors.textMuted.withValues(alpha: 0.9)),
-                        padding: EdgeInsets.zero,
-                        onSelected: (v) {
-                          if (v == 'edit') _openForm(existing: e);
-                          if (v == 'delete') _delete(e);
-                        },
-                        itemBuilder: (_) => [
-                          const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_rounded, size: 20), SizedBox(width: 8), Text('Editar')])),
-                          const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline_rounded, size: 20), SizedBox(width: 8), Text('Excluir')])),
-                        ],
-                      ),
-                    ],
-                  ),
-                      ),
-                    ),
-                  ),
-                ),
-              );
+                        ),
+                      );
                     },
                     childCount: items.length,
                   ),
                 ),
               ),
-              SliverPadding(padding: EdgeInsets.only(bottom: 120 + MediaQuery.paddingOf(context).bottom)),
+              SliverPadding(
+                  padding: EdgeInsets.only(
+                      bottom: 120 + MediaQuery.paddingOf(context).bottom)),
             ],
           );
         },
       ),
       floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom > 0 ? 8 : 0),
+        padding: EdgeInsets.only(
+            bottom: MediaQuery.paddingOf(context).bottom > 0 ? 8 : 0),
         child: _buildSuperPremiumFab(context),
       ),
     );

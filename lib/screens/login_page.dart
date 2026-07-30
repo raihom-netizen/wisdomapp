@@ -113,11 +113,11 @@ class _LoginPageState extends State<LoginPage> {
                 color: panelColor,
                 borderRadius: BorderRadius.circular(28.0), // Bordas premium arredondadas
                 border: Border.all(
-                  color: theme.dividerColor.withOpacity(isDark ? 0.1 : 0.08),
+                  color: theme.dividerColor.withValues(alpha: isDark ? 0.1 : 0.08),
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(isDark ? 0.4 : 0.06),
+                    color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.06),
                     blurRadius: 40,
                     offset: const Offset(0, 20),
                   ),
@@ -142,7 +142,7 @@ class _LoginPageState extends State<LoginPage> {
                     Text(
                       "Faça login para gerenciar seus dados com segurança.",
                       style: theme.textTheme.bodyLarge?.copyWith(
-                        color: colorScheme.onSurface.withOpacity(0.7),
+                        color: colorScheme.onSurface.withValues(alpha: 0.7),
                       ),
                     ),
                     const SizedBox(height: 40),

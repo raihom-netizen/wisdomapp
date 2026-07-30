@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.wisdomapp.app",
+      "sha256_cert_fingerprints": [
+        "06:C3:AF:F7:CA:01:A7:9E:E0:A4:D9:3D:78:AA:F8:F3:97:A3:D5:9D:45:45:2C:69:FC:37:51:A5:41:9F:14:EF"
+      ]
+    }
+  }
+]

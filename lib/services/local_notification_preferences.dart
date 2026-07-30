@@ -5,9 +5,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 class LocalNotificationPreferences {
   static const _keyFinanceiro = 'notif_local_financeiro';
   static const _keyEscalas = 'notif_local_escalas';
-  static const _keyCompromissosAudiencias = 'notif_local_compromissos_audiencias';
+  static const _keyCompromissosAudiencias =
+      'notif_local_compromissos_audiencias';
   static const _keyAntecedenciaMinutos = 'notif_local_antecedencia_minutos';
-  static const _keyAntecedenciaPersonalizado = 'notif_local_antecedencia_personalizado';
+  static const _keyAntecedenciaPersonalizado =
+      'notif_local_antecedencia_personalizado';
   static const _keyAntecedenciaList = 'notif_local_antecedencia_list';
   static const _keyCursos = 'notif_local_cursos';
   static const _keyShowAsPopupOnPhone = 'notif_show_as_popup_on_phone';
@@ -17,15 +19,28 @@ class LocalNotificationPreferences {
   static const int k30Min = 30;
   static const int k15Min = 15;
 
+  /// Antecedências permitidas no app (sem personalizado).
+  static const Set<int> kAllowedLeads = {k1Dia, k1Hora, k30Min};
+
   /// Padrão oficial do sistema: **1 dia + 60 min** (30, 15 e personalizado desligados).
   static const List<int> kDefaultLeads = [k1Dia, k1Hora];
 
-  /// Fallback quando a lista salva está vazia ou inválida.
-  static List<int> effectiveLeads(Iterable<int>? raw) {
-    final parsed = (raw ?? const <int>[])
-        .where((m) => m > 0)
+  /// Filtra leads legados (15 min, personalizado, etc.) para o conjunto permitido.
+  static List<int> normalizeReminderLeads(Iterable<dynamic>? raw) {
+    final parsed = (raw ?? const <dynamic>[])
+        .map((e) => e is num ? e.toInt() : int.tryParse('$e'))
+        .whereType<int>()
+        .where((m) => kAllowedLeads.contains(m))
         .toSet()
         .toList()
+      ..sort((a, b) => b.compareTo(a));
+    if (parsed.isNotEmpty) return parsed;
+    return List<int>.from(kDefaultLeads);
+  }
+
+  /// Fallback quando a lista salva está vazia ou inválida.
+  static List<int> effectiveLeads(Iterable<int>? raw) {
+    final parsed = (raw ?? const <int>[]).where((m) => m > 0).toSet().toList()
       ..sort();
     if (parsed.isNotEmpty) return parsed;
     return List<int>.from(kDefaultLeads);
@@ -67,23 +82,25 @@ class LocalNotificationPreferences {
       financeiro: p.getBool(_keyFinanceiro) ?? true,
       cursos: p.getBool(_keyCursos) ?? true,
       escalas: p.getBool(_keyEscalas) ?? true,
-      compromissosAudiencias:
-          p.getBool(_keyCompromissosAudiencias) ?? true,
+      compromissosAudiencias: p.getBool(_keyCompromissosAudiencias) ?? true,
       antecedenciaMinutosList: leads,
       personalizadoValor: p.getInt(_keyAntecedenciaPersonalizado),
     );
   }
 
   /// Mostrar notificações em pop-up no celular (heads-up). Padrão true.
-  Future<bool> get showAsPopupOnPhone async => (await _prefs).getBool(_keyShowAsPopupOnPhone) ?? true;
+  Future<bool> get showAsPopupOnPhone async =>
+      (await _prefs).getBool(_keyShowAsPopupOnPhone) ?? true;
   Future<void> setShowAsPopupOnPhone(bool value) async {
     await (await _prefs).setBool(_keyShowAsPopupOnPhone, value);
   }
 
-  Future<bool> get financeiro async => (await _prefs).getBool(_keyFinanceiro) ?? true;
+  Future<bool> get financeiro async =>
+      (await _prefs).getBool(_keyFinanceiro) ?? true;
   Future<bool> get cursos async => (await _prefs).getBool(_keyCursos) ?? true;
   Future<bool> get escalas async => (await _prefs).getBool(_keyEscalas) ?? true;
-  Future<bool> get compromissosAudiencias async => (await _prefs).getBool(_keyCompromissosAudiencias) ?? true;
+  Future<bool> get compromissosAudiencias async =>
+      (await _prefs).getBool(_keyCompromissosAudiencias) ?? true;
 
   /// Lista de minutos de antecedência selecionados (ex.: [60, 1440, 90]). Pode marcar 60 min, 1 dia e personalizado ao mesmo tempo.
   ///
@@ -136,7 +153,8 @@ class LocalNotificationPreferences {
   }
 
   /// Salva a lista de antecedências (ex.: [60, 1440] ou [60, 1440, 90] com personalizado).
-  Future<void> setAntecedenciaList(List<int> minutesList, {int? personalizadoMinutos}) async {
+  Future<void> setAntecedenciaList(List<int> minutesList,
+      {int? personalizadoMinutos}) async {
     final p = await _prefs;
     final list = minutesList.where((m) => m > 0).toSet().toList()..sort();
     await p.setString(_keyAntecedenciaList, list.join(','));

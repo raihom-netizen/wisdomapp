@@ -1,8 +1,11 @@
 ﻿import 'package:flutter/material.dart';
-class EscalaScreen extends StatelessWidget { 
-  @override 
+
+class EscalaScreen extends StatelessWidget {
+  const EscalaScreen({super.key});
+
+  @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text('Minhas Escalas')),
-    body: Center(child: Text('Escalas')),
-  ); 
+        appBar: AppBar(title: Text('Minhas Escalas')),
+        body: Center(child: Text('Escalas')),
+      );
 }

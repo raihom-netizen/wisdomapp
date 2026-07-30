@@ -117,12 +117,12 @@ class _EditLocationScreenState extends State<EditLocationScreen> {
   }
 
   String _colorToHex(Color c) {
-    return '0xFF${c.value.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
+    return '0xFF${c.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
   }
 
   /// Formato da escala: #RRGGBB (6 hex).
   String _colorToHexForScale(Color c) {
-    final hex = c.value.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase();
+    final hex = c.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase();
     return '#${hex.length > 6 ? hex.substring(hex.length - 6) : hex}';
   }
 

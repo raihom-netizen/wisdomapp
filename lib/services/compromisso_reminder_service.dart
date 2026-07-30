@@ -19,7 +19,10 @@ class CompromissoReminderService {
   CompromissoReminderService._();
 
   static CollectionReference<Map<String, dynamic>> _reminders(String uid) =>
-      FirebaseFirestore.instance.collection('users').doc(uid).collection('reminders');
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('reminders');
 
   static Future<({String docId, bool googleSynced, int created})> create({
     required String userDocId,
@@ -53,6 +56,8 @@ class CompromissoReminderService {
       'type': 'compromisso',
       'title': result.title,
       'notes': result.notes,
+      'linkLocalizacao': result.linkLocalizacao,
+      'contatoWhatsApp': result.contatoWhatsApp,
       'date': Timestamp.fromDate(result.date),
       'time': timeStr,
       'endTime': endTimeStr,
@@ -133,7 +138,8 @@ class CompromissoReminderService {
       await GoogleCalendarSyncService.warmUpIfEnabled(userDocId);
     }
 
-    final createdRefs = <({DocumentReference<Map<String, dynamic>> ref, DateTime day})>[];
+    final createdRefs =
+        <({DocumentReference<Map<String, dynamic>> ref, DateTime day})>[];
     for (var i = 0; i < dates.length; i += batchLimit) {
       final slice = dates.skip(i).take(batchLimit);
       final batch = FirebaseFirestore.instance.batch();
@@ -144,6 +150,8 @@ class CompromissoReminderService {
           'type': 'compromisso',
           'title': result.title,
           'notes': result.notes,
+          'linkLocalizacao': result.linkLocalizacao,
+          'contatoWhatsApp': result.contatoWhatsApp,
           'date': Timestamp.fromDate(day),
           'time': timeStr,
           'endTime': endTimeStr,
@@ -248,6 +256,8 @@ class CompromissoReminderService {
       'type': 'compromisso',
       'title': result.title,
       'notes': result.notes,
+      'linkLocalizacao': result.linkLocalizacao,
+      'contatoWhatsApp': result.contatoWhatsApp,
       'date': Timestamp.fromDate(result.date),
       'time': timeStr,
       'endTime': endTimeStr,
@@ -493,7 +503,8 @@ class CompromissoReminderService {
   }
 
   /// Busca compromissos particulares num intervalo (query indexada type+date).
-  static Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> fetchCompromissosInRange({
+  static Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
+      fetchCompromissosInRange({
     required String userDocId,
     required DateTime start,
     required DateTime end,

@@ -232,7 +232,7 @@ class _EventItemState extends State<EventItem> {
                 ],
               ),
             ),
-            ButtonBar(
+            OverflowBar(
               children: [
                 if (!widget._isReadOnly) ...[
                   IconButton(

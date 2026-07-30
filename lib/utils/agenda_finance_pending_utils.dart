@@ -45,7 +45,11 @@ List<AgendaFinancePendingItem> filterAgendaFinancePending({
     final d = Map<String, dynamic>.from(doc.data());
     if ((d['status'] ?? 'paid').toString() != 'pending') continue;
     if ((d['type'] ?? '').toString() != type) continue;
-    if (FinanceAccountBalanceUtils.isOnCreditCardAccount(d, creditCardAccountIds)) {
+    // Lançamento marcado para não aparecer no calendário (toggle «Mostrar no calendário»).
+    // Docs legados sem o campo continuam visíveis.
+    if (d['addToCalendar'] == false) continue;
+    if (FinanceAccountBalanceUtils.isOnCreditCardAccount(
+        d, creditCardAccountIds)) {
       continue;
     }
     if (!showFixedInPending && (d[fixedField] ?? '').toString().isNotEmpty) {

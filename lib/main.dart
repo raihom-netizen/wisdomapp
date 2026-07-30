@@ -21,6 +21,7 @@ import 'screens/assego_public_signup_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/admin_route_gate.dart';
 import 'screens/signup_screen.dart';
+import 'screens/email_verification_screen.dart';
 import 'screens/home_shell.dart';
 import 'screens/biometric_gate_screen.dart';
 import 'services/biometric_auth_service.dart';
@@ -28,6 +29,8 @@ import 'services/auth_service.dart';
 import 'services/app_session_cache.dart';
 import 'services/delegate_access_service.dart';
 import 'services/home_start_module_cache.dart';
+import 'services/notification_center_store.dart';
+import 'services/notification_navigator.dart';
 import 'services/course_videos_cache_service.dart';
 import 'services/login_preferences.dart';
 import 'services/user_profile_startup_cache.dart';
@@ -45,6 +48,7 @@ import 'constants/bank_brand_assets.dart';
 import 'screens/supported_banks_screen.dart';
 import 'widgets/license_gate.dart';
 import 'services/version_check_service.dart';
+import 'widgets/new_version_dialog.dart';
 import 'services/push_background_handler.dart';
 import 'services/push_notification_service.dart';
 import 'services/functions_service.dart';
@@ -112,8 +116,7 @@ Future<void> _configureFirebaseCore() async {
             break;
           }
           final msg = e.toString();
-          final likelyTransient =
-              msg.contains('Null check') ||
+          final likelyTransient = msg.contains('Null check') ||
               msg.contains('null value') ||
               msg.contains('TrustedTypes') ||
               msg.contains('appendChild');
@@ -165,9 +168,7 @@ Future<void> _configureFirebaseCore() async {
     // sem teto e gerava I/O de disco/jank em aparelhos com armazenamento mais lento.
     // iOS está perfeito e fica como está (ilimitado) para não regredir.
     final int cacheBytes = (defaultTargetPlatform == TargetPlatform.android)
-        ? 100 *
-              1024 *
-              1024 // 100 MB
+        ? 100 * 1024 * 1024 // 100 MB
         : Settings.CACHE_SIZE_UNLIMITED;
     FirebaseFirestore.instance.settings = Settings(
       persistenceEnabled: true,
@@ -266,6 +267,7 @@ void main() async {
     UserProfileStartupCache.warmUp(),
     HomeStartModuleCache.warmUp(),
     CourseVideosCacheService.warmUp(),
+    NotificationCenterStore.instance.warmUp(),
   ]);
   final reopenUid =
       FirebaseAuth.instance.currentUser?.uid ?? AppSessionCache.cachedUidSync();
@@ -296,10 +298,10 @@ void main() async {
     // Não bloqueia o 1º frame: atualiza perfil/módulo inicial em background.
     unawaited(
       Future.wait<void>([
-            UserProfileStartupCache.prefetch(reopenUid),
-            HomeStartModuleCache.prefetch(reopenUid),
-            CourseVideosCacheService.prefetch(),
-          ])
+        UserProfileStartupCache.prefetch(reopenUid),
+        HomeStartModuleCache.prefetch(reopenUid),
+        CourseVideosCacheService.prefetch(),
+      ])
           .timeout(const Duration(milliseconds: 800), onTimeout: () => <void>[])
           .catchError((_) {}),
     );
@@ -405,6 +407,7 @@ class _WebRouteTitleObserver extends NavigatorObserver {
     '/': 'WISDOMAPP — Início',
     '/login': 'WISDOMAPP — Entrar',
     '/signup': 'WISDOMAPP — Criar conta',
+    '/email-verification': 'WISDOMAPP — Confirme seu e-mail',
     '/downloads': 'WISDOMAPP — Downloads',
     '/dashboard': 'WISDOMAPP — Painel',
     '/checkout': 'WISDOMAPP — Pagamento',
@@ -609,6 +612,7 @@ class _ControleTotalAppState extends State<ControleTotalApp> {
     const themeMode = ThemeMode.light;
 
     return MaterialApp(
+      navigatorKey: NotificationNavigator.navigatorKey,
       scaffoldMessengerKey: _scaffoldMessengerKey,
       // Alinhar ao CFBundleDisplayName (Info.plist) — App Store exige nome semelhante ao do ícone.
       title: 'WISDOMAPP',
@@ -692,6 +696,7 @@ class _ControleTotalAppState extends State<ControleTotalApp> {
         '/login': (context) =>
             kIsWeb ? const LoginScreen() : const LandingScreen(),
         '/signup': (context) => const SignUpScreen(),
+        '/email-verification': (context) => const EmailVerificationScreen(),
         '/downloads': (context) => const DownloadsScreen(),
         '/dashboard': (context) => const _DashboardRoute(),
         '/checkout': (context) => const _PlanAuthGate(child: CheckoutScreen()),
@@ -730,8 +735,7 @@ class _AuthLoadingScreen extends StatelessWidget {
   const _AuthLoadingScreen({
     this.offlineHint = false,
     this.restoreHint = false,
-    this.delegateLinkHint = false,
-  });
+  }) : delegateLinkHint = false;
 
   final bool offlineHint;
   final bool restoreHint;
@@ -806,6 +810,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
       }),
     );
     VersionCheckService.forceUpdateNotifier.addListener(_onForceUpdateChanged);
+    // Se o check de versão já terminou antes do widget montar, exibe o diálogo.
+    _showNewVersionDialogIfNeeded();
     _connectivitySub = Connectivity().onConnectivityChanged.listen((results) {
       if (!mounted) return;
       var off = isConnectivityOffline(results);
@@ -833,6 +839,21 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   void _onForceUpdateChanged() {
     if (mounted) setState(() {});
+    _showNewVersionDialogIfNeeded();
+  }
+
+  /// Diálogo «Nova versão disponível» (Atualizar agora / Mais tarde) — igual CT.
+  /// Só dispara quando o admin gravou o release pelo botão «Subir versão».
+  void _showNewVersionDialogIfNeeded() {
+    if (VersionCheckService.pendingUpdateVersion == null) return;
+    final ctx = NotificationNavigator.navigatorKey.currentContext;
+    if (ctx == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (VersionCheckService.pendingUpdateVersion != null) {
+        NewVersionDialog.show(ctx);
+      }
+    });
   }
 
   @override
@@ -977,8 +998,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
             return _authedShell(_cachedUser!.uid);
           }
           final optimisticUid = AppSessionCache.cachedUidSync();
-          final shellWasReady =
-              optimisticUid != null &&
+          final shellWasReady = optimisticUid != null &&
               AppSessionCache.isShellReadyForSync(optimisticUid);
           if (optimisticUid != null &&
               LoginPreferences.startupAccountSwitchPending != true &&
@@ -1057,7 +1077,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
         }
         if (_returningUserOnDevice && _restoreGiveUp) {
           final cachedUid = AppSessionCache.cachedUidSync();
-          if (cachedUid != null && AppSessionCache.isShellReadyForSync(cachedUid)) {
+          if (cachedUid != null &&
+              AppSessionCache.isShellReadyForSync(cachedUid)) {
             return _authedShell(cachedUid);
           }
           return const LandingScreen();
@@ -1118,8 +1139,7 @@ class _DelegateAccessGateState extends State<_DelegateAccessGate>
   }
 
   Future<void> _bootstrap() async {
-    final uid =
-        FirebaseAuth.instance.currentUser?.uid ??
+    final uid = FirebaseAuth.instance.currentUser?.uid ??
         AppSessionCache.cachedUidSync();
 
     // Reabertura: mostra o painel na hora se já houve login neste aparelho.
@@ -1283,9 +1303,8 @@ class _PlanAuthGate extends StatelessWidget {
   Widget build(BuildContext context) {
     final args = ModalRoute.of(context)?.settings.arguments;
     final promoId = args is Map ? args['promoId']?.toString().trim() : null;
-    final pendingPromo = (promoId != null && promoId.isNotEmpty)
-        ? promoId
-        : null;
+    final pendingPromo =
+        (promoId != null && promoId.isNotEmpty) ? promoId : null;
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {

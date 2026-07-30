@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show TextInput;
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import '../constants/app_verse.dart';
@@ -14,6 +15,7 @@ import '../services/app_session_cache.dart';
 import '../services/auth_service.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, kIsWeb;
+import '../services/offline_credentials_store.dart';
 import '../services/version_check_service.dart';
 import '../models/landing_public_content.dart';
 import '../models/user_profile.dart';
@@ -40,6 +42,10 @@ class _LandingScreenState extends State<LandingScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _animController;
   bool _loginLoading = false;
+  bool _showEmailLogin = false;
+  final _emailCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
+  bool _obscurePass = true;
   final _auth = AuthService();
 
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _landingSub;
@@ -75,8 +81,26 @@ class _LandingScreenState extends State<LandingScreen>
     });
     if (!kIsWeb) {
       _tryInstantSessionRedirect();
-      WidgetsBinding.instance.addPostFrameCallback((_) => _autoRestoreSessionOnLanding());
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _autoRestoreSessionOnLanding());
     }
+    _prefillSavedEmailLogin();
+  }
+
+  /// Pré-preenche o e-mail salvo e abre o formulário quando o usuário prefere
+  /// e-mail/senha (ex.: «Voltar ao login» da tela de verificação) — igual Controle Total.
+  Future<void> _prefillSavedEmailLogin() async {
+    try {
+      final saved = await LoginPreferences.getLastLoginIdentifier();
+      final preferEmail = await LoginPreferences.getPreferEmailPassword();
+      if (!mounted) return;
+      if (saved.isNotEmpty && _emailCtrl.text.trim().isEmpty) {
+        _emailCtrl.text = saved;
+      }
+      if (preferEmail && !_showEmailLogin) {
+        setState(() => _showEmailLogin = true);
+      }
+    } catch (_) {}
   }
 
   /// Cold start: restaura Firebase/Google silencioso (igual Controle Total) — sem abrir Web.
@@ -197,13 +221,16 @@ class _LandingScreenState extends State<LandingScreen>
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Login expresso cancelado ou indisponível no momento.')),
+          const SnackBar(
+              content:
+                  Text('Login expresso cancelado ou indisponível no momento.')),
         );
       }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Não foi possível concluir o login expresso.')),
+          const SnackBar(
+              content: Text('Não foi possível concluir o login expresso.')),
         );
       }
     } finally {
@@ -229,7 +256,10 @@ class _LandingScreenState extends State<LandingScreen>
             ),
             border: Border.all(color: _lpGold.withValues(alpha: 0.22)),
             boxShadow: [
-              BoxShadow(color: _lpGold.withValues(alpha: 0.18), blurRadius: 16, offset: const Offset(0, 8)),
+              BoxShadow(
+                  color: _lpGold.withValues(alpha: 0.18),
+                  blurRadius: 16,
+                  offset: const Offset(0, 8)),
             ],
           ),
           child: Material(
@@ -238,7 +268,8 @@ class _LandingScreenState extends State<LandingScreen>
               borderRadius: BorderRadius.circular(18),
               onTap: _openExpressLoginFromFaixa,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 child: Row(
                   children: [
                     Container(
@@ -248,7 +279,8 @@ class _LandingScreenState extends State<LandingScreen>
                         color: Colors.white.withValues(alpha: 0.16),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(Icons.flash_on_rounded, color: Colors.white),
+                      child: const Icon(Icons.flash_on_rounded,
+                          color: Colors.white),
                     ),
                     const SizedBox(width: 10),
                     const Expanded(
@@ -306,11 +338,13 @@ class _LandingScreenState extends State<LandingScreen>
       if (!mounted) return;
       final base = LandingPublicContent.fromMap(_landingMainData);
       final snap = MpCheckoutPricingSnapshot.fromFirestore(_mpCheckoutData);
-      setState(() => _landing = base.applyPremiumTextsFromCheckoutPricing(snap));
+      setState(
+          () => _landing = base.applyPremiumTextsFromCheckoutPricing(snap));
     }
 
     _landingSub?.cancel();
     _mpCheckoutSub?.cancel();
+    try {
     _landingSub = FirebaseFirestore.instance
         .collection('landing_content')
         .doc('main')
@@ -318,6 +352,8 @@ class _LandingScreenState extends State<LandingScreen>
         .listen((doc) {
       _landingMainData = doc.data();
       mergeLanding();
+    }, onError: (Object e) {
+      debugPrint('landing_content listener: ' + e.toString());
     });
     _mpCheckoutSub = FirebaseFirestore.instance
         .collection('app_config')
@@ -326,7 +362,12 @@ class _LandingScreenState extends State<LandingScreen>
         .listen((doc) {
       _mpCheckoutData = doc.data();
       mergeLanding();
+    }, onError: (Object e) {
+      debugPrint('mp_checkout listener: ' + e.toString());
     });
+    } catch (e) {
+      debugPrint('bindPublicFirestoreListeners: ' + e.toString());
+    }
   }
 
   /// Web: pausa listeners enquanto login Google ou tela /login está aberta (evita assert Firestore).
@@ -348,6 +389,8 @@ class _LandingScreenState extends State<LandingScreen>
   void dispose() {
     _pausePublicFirestoreListeners();
     _animController.dispose();
+    _emailCtrl.dispose();
+    _passCtrl.dispose();
     super.dispose();
   }
 
@@ -369,7 +412,8 @@ class _LandingScreenState extends State<LandingScreen>
       } catch (_) {}
       return;
     }
-    if (await canLaunchUrl(url)) await launchUrl(url, mode: LaunchMode.externalApplication);
+    if (await canLaunchUrl(url))
+      await launchUrl(url, mode: LaunchMode.externalApplication);
   }
 
   Future<void> _loginWithGoogle() async {
@@ -387,7 +431,8 @@ class _LandingScreenState extends State<LandingScreen>
         }
       }
 
-      final cred = await _auth.signInWithGoogle(forceAccountPicker: forcePicker);
+      final cred =
+          await _auth.signInWithGoogle(forceAccountPicker: forcePicker);
       if (!mounted) return;
       if (cred != null) {
         if (forcePicker) await LoginPreferences.consumeAccountSwitchPending();
@@ -397,7 +442,8 @@ class _LandingScreenState extends State<LandingScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Erro ao entrar com Google: ${AuthService.friendlyGoogleSignInError(e)}'),
+          content: Text(
+              'Erro ao entrar com Google: ${AuthService.friendlyGoogleSignInError(e)}'),
           backgroundColor: Colors.red.shade700,
           duration: const Duration(seconds: 5),
         ),
@@ -437,6 +483,167 @@ class _LandingScreenState extends State<LandingScreen>
     }
   }
 
+  /// Login com e-mail (ou CPF) e senha — igual ao Controle Total.
+  Future<void> _loginWithEmailPassword() async {
+    if (_loginLoading) return;
+    final email = _emailCtrl.text.trim();
+    final pass = _passCtrl.text;
+    if (email.isEmpty || pass.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Informe e-mail e senha.')),
+      );
+      return;
+    }
+    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+$').hasMatch(email) &&
+        !email.contains(RegExp(r'^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$'))) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Informe um e-mail válido (ex.: nome@dominio.com).')),
+      );
+      return;
+    }
+    if (pass.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('A senha deve ter no mínimo 6 caracteres.')),
+      );
+      return;
+    }
+    if (kIsWeb) _pausePublicFirestoreListeners();
+    setState(() => _loginLoading = true);
+    try {
+      await _auth.signInWithCpf(email, pass);
+      if (!mounted) return;
+
+      // Gate de verificação (igual Controle Total): cadastro manual só entra
+      // após confirmar o e-mail. Recarrega o usuário para ler o flag atualizado.
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        try {
+          await user.reload();
+        } catch (_) {}
+        final fresh = FirebaseAuth.instance.currentUser;
+        final isPasswordUser =
+            fresh?.providerData.any((p) => p.providerId == 'password') ?? false;
+        if (fresh != null && isPasswordUser && !fresh.emailVerified) {
+          final userEmail = fresh.email?.trim() ?? email;
+          final userName = fresh.displayName?.trim() ?? '';
+          await FirebaseAuth.instance.signOut();
+          if (!mounted) return;
+          Navigator.of(context).pushNamedAndRemoveUntil(
+            '/email-verification',
+            (route) => false,
+            arguments: {
+              'email': userEmail,
+              'name': userName,
+              'fromLogin': true,
+            },
+          );
+          return;
+        }
+      }
+
+      await LoginPreferences.setLastLoginIdentifier(email);
+      await LoginPreferences.setLastOAuthProvider('email');
+      // Salva e-mail + senha no cofre do aparelho (Android/iOS) e aciona o
+      // gerenciador de senhas do navegador na web — igual Controle Total.
+      if (!kIsWeb) {
+        await OfflineCredentialsStore.instance
+            .saveAfterEmailPasswordLogin(email, pass)
+            .catchError((_) {});
+      }
+      try {
+        TextInput.finishAutofillContext(shouldSave: true);
+      } catch (_) {}
+      PushNotificationService().salvarTokenNoBanco().catchError((_) {});
+      VersionCheckService.checkAndReloadIfNeeded().catchError((_) {});
+      await _finishExpressLogin('email');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content:
+              Text('Erro: ${AuthService.friendlyEmailPasswordSignInError(e)}'),
+          backgroundColor: Colors.red.shade700,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _loginLoading = false);
+        _resumePublicFirestoreListenersIfNeeded();
+      }
+    }
+  }
+
+  /// Dialog de recuperação de senha (CPF ou e-mail).
+  Future<void> _showForgotPassword() async {
+    final ctrl = TextEditingController();
+    final sent = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Recuperar senha'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                  'Informe seu CPF ou e-mail cadastrado. Enviaremos um link para redefinir sua senha.'),
+              const SizedBox(height: 16),
+              TextField(
+                controller: ctrl,
+                keyboardType: TextInputType.emailAddress,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'CPF ou E-mail',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancelar')),
+          FilledButton(
+            onPressed: () async {
+              final v = ctrl.text.trim();
+              if (v.isEmpty) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(content: Text('Informe CPF ou e-mail.')));
+                return;
+              }
+              try {
+                await AuthService().sendPasswordResetEmail(v);
+                if (!ctx.mounted) return;
+                Navigator.of(ctx).pop(true);
+              } catch (e) {
+                if (!ctx.mounted) return;
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(
+                      content: Text(
+                          'Erro: ${e.toString().replaceFirst(RegExp(r'^Exception:?\s*'), '')}')),
+                );
+              }
+            },
+            child: const Text('Enviar link'),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (sent == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text(
+                'Enviamos um e-mail para redefinir sua senha. Verifique sua caixa de entrada.')),
+      );
+    }
+  }
+
   /// Cor de fundo garantida (Android: evita tela branca se tema atrasar).
   static const Color _scaffoldBg = Color(0xFFF4F6FB);
 
@@ -452,7 +659,9 @@ class _LandingScreenState extends State<LandingScreen>
   static const Color _lpCyan = Color(0xFF22D3EE);
   static const Color _lpRose = Color(0xFFF43F5E);
 
-  static const String _versionJsonUrl = 'https://wisdomapp-b9e98.web.app/version.json';
+  static const String _versionJsonUrl =
+      'https://wisdomapp-b9e98.web.app/version.json';
+
   /// Link público TestFlight (beta no iPhone sem publicar na App Store). Sobrescrito por version.json / Firestore.
   static const String _defaultTestFlightPublicLink =
       VersionCheckService.defaultTestFlightPublicUrl;
@@ -460,29 +669,41 @@ class _LandingScreenState extends State<LandingScreen>
   String? _resolvePlayStoreUrl(String? fallback) {
     final fromLanding = _landing.divPlayStoreUrl.trim();
     if (fromLanding.isNotEmpty &&
-        (fromLanding.startsWith('http://') || fromLanding.startsWith('https://'))) {
+        (fromLanding.startsWith('http://') ||
+            fromLanding.startsWith('https://'))) {
       return fromLanding;
     }
     return fallback;
   }
 
   /// Fallback imediato na landing — rede atualiza depois sem spinner.
-  static ({String? apkUrl, String? iosUrl, String? testFlightUrl, String? version})
-      get _downloadUrlsFallback => (
-            apkUrl: kDefaultPlayStoreUrl,
-            iosUrl: null,
-            testFlightUrl: _defaultTestFlightPublicLink,
-            version: null,
-          );
+  static ({
+    String? apkUrl,
+    String? iosUrl,
+    String? testFlightUrl,
+    String? version
+  }) get _downloadUrlsFallback => (
+        apkUrl: kDefaultPlayStoreUrl,
+        iosUrl: null,
+        testFlightUrl: _defaultTestFlightPublicLink,
+        version: null,
+      );
 
   /// Busca link Android (loja) / testFlight do version.json e do Firestore.
-  static Future<({String? apkUrl, String? iosUrl, String? testFlightUrl, String? version})> _fetchDownloadUrls() async {
+  static Future<
+      ({
+        String? apkUrl,
+        String? iosUrl,
+        String? testFlightUrl,
+        String? version
+      })> _fetchDownloadUrls() async {
     String? apkUrl = kDefaultPlayStoreUrl;
     String? iosUrl;
     String? testFlightUrl = _defaultTestFlightPublicLink;
     String? version;
     try {
-      final uri = Uri.parse('$_versionJsonUrl?t=${DateTime.now().millisecondsSinceEpoch}');
+      final uri = Uri.parse(
+          '$_versionJsonUrl?t=${DateTime.now().millisecondsSinceEpoch}');
       final response = await http.get(uri).timeout(const Duration(seconds: 4));
       if (response.statusCode == 200 && response.body.isNotEmpty) {
         final decoded = jsonDecode(response.body);
@@ -490,19 +711,28 @@ class _LandingScreenState extends State<LandingScreen>
           final apk = decoded['apkDownloadUrl']?.toString().trim();
           final tf = decoded['testFlightUrl']?.toString().trim();
           final v = decoded['version']?.toString().trim();
-          if (apk != null && apk.isNotEmpty && (apk.startsWith('http://') || apk.startsWith('https://'))) {
+          if (apk != null &&
+              apk.isNotEmpty &&
+              (apk.startsWith('http://') || apk.startsWith('https://'))) {
             final lower = apk.toLowerCase();
             apkUrl = (lower.endsWith('.apk') || lower.contains('/apk/'))
                 ? kDefaultPlayStoreUrl
                 : apk;
           }
-          if (tf != null && tf.isNotEmpty && (tf.startsWith('http://') || tf.startsWith('https://'))) testFlightUrl = tf;
+          if (tf != null &&
+              tf.isNotEmpty &&
+              (tf.startsWith('http://') || tf.startsWith('https://')))
+            testFlightUrl = tf;
           if (v != null && v.isNotEmpty) version = v;
         }
       }
     } catch (_) {}
     try {
-      final snap = await FirebaseFirestore.instance.collection('app_config').doc('version').get().timeout(const Duration(seconds: 3));
+      final snap = await FirebaseFirestore.instance
+          .collection('app_config')
+          .doc('version')
+          .get()
+          .timeout(const Duration(seconds: 3));
       final data = snap.data();
       if (data != null) {
         final apk = data['apkDownloadUrl']?.toString().trim();
@@ -515,11 +745,20 @@ class _LandingScreenState extends State<LandingScreen>
               : apk;
         }
         final tf = data['testFlightUrl']?.toString().trim();
-        if (tf != null && tf.isNotEmpty && (tf.startsWith('http://') || tf.startsWith('https://'))) testFlightUrl = tf;
-        if (version == null && data['version'] != null) version = data['version']?.toString().trim();
+        if (tf != null &&
+            tf.isNotEmpty &&
+            (tf.startsWith('http://') || tf.startsWith('https://')))
+          testFlightUrl = tf;
+        if (version == null && data['version'] != null)
+          version = data['version']?.toString().trim();
       }
     } catch (_) {}
-    return (apkUrl: apkUrl, iosUrl: iosUrl, testFlightUrl: testFlightUrl, version: version);
+    return (
+      apkUrl: apkUrl,
+      iosUrl: iosUrl,
+      testFlightUrl: testFlightUrl,
+      version: version
+    );
   }
 
   /// Seção no início do site: Baixar o app (Google Play / iOS). Links vêm do version.json e atualizam ao subir nova versão.
@@ -537,11 +776,13 @@ class _LandingScreenState extends State<LandingScreen>
       decoration: BoxDecoration(
         color: const Color(0xFF1A237E).withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF2962FF).withValues(alpha: 0.4)),
+        border:
+            Border.all(color: const Color(0xFF2962FF).withValues(alpha: 0.4)),
       ),
       child: Row(
         children: [
-          Icon(Icons.info_outline_rounded, size: 22, color: Colors.blue.shade700),
+          Icon(Icons.info_outline_rounded,
+              size: 22, color: Colors.blue.shade700),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -550,7 +791,8 @@ class _LandingScreenState extends State<LandingScreen>
               children: [
                 Text(
                   'Melhor no iPhone: abra no Safari e toque em Compartilhar → "Adicionar à Tela de Início".',
-                  style: TextStyle(fontSize: 13, color: Colors.grey.shade800, height: 1.3),
+                  style: TextStyle(
+                      fontSize: 13, color: Colors.grey.shade800, height: 1.3),
                 ),
               ],
             ),
@@ -561,7 +803,13 @@ class _LandingScreenState extends State<LandingScreen>
   }
 
   Widget _buildDownloadAppSection(BuildContext context) {
-    return FutureBuilder<({String? apkUrl, String? iosUrl, String? testFlightUrl, String? version})>(
+    return FutureBuilder<
+        ({
+          String? apkUrl,
+          String? iosUrl,
+          String? testFlightUrl,
+          String? version
+        })>(
       initialData: _downloadUrlsFallback,
       future: _fetchDownloadUrls(),
       builder: (context, snapshot) {
@@ -581,20 +829,24 @@ class _LandingScreenState extends State<LandingScreen>
             16,
           ),
           decoration: BoxDecoration(
-            color: _lpNavy.withValues(alpha: 0.92),
+            gradient: const LinearGradient(
+              colors: [_lpNavyDark, _lpNavyMid],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
             border: Border(
-              bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+              bottom: BorderSide(color: _lpGold.withValues(alpha: 0.3)),
             ),
           ),
           child: Column(
             children: [
               Text(
-                'Baixar o app',
+                'BAIXE O APP',
                 style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white.withValues(alpha: 0.72),
-                  letterSpacing: 0.4,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w800,
+                  color: _lpGoldLight.withValues(alpha: 0.95),
+                  letterSpacing: 1.6,
                 ),
               ),
               if (version != null && version.isNotEmpty)
@@ -602,7 +854,9 @@ class _LandingScreenState extends State<LandingScreen>
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(
                     'Versão $version',
-                    style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.5)),
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.white.withValues(alpha: 0.5)),
                   ),
                 ),
               const SizedBox(height: 10),
@@ -611,16 +865,61 @@ class _LandingScreenState extends State<LandingScreen>
                 runSpacing: 8,
                 spacing: 8,
                 children: [
-                    if (_showApkDownloadOnLanding && apkUrl != null)
-                      OutlinedButton.icon(
+                  if (_showApkDownloadOnLanding && apkUrl != null)
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        try {
+                          await openUrlPreferChrome(apkUrl);
+                        } catch (_) {}
+                      },
+                      icon: Icon(Icons.shop_rounded,
+                          size: 16,
+                          color: Colors.white.withValues(alpha: 0.85)),
+                      label: Text(
+                        playLabel,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                          color: Colors.white.withValues(alpha: 0.9),
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white.withValues(alpha: 0.9),
+                        backgroundColor: Colors.white.withValues(alpha: 0.06),
+                        side: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.22)),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 8),
+                        minimumSize: const Size(0, 38),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  if (!_hideIosDownloadOnNativeAndroid)
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        OutlinedButton.icon(
                           onPressed: () async {
                             try {
-                              await openUrlPreferChrome(apkUrl);
+                              final tf = testFlightUrl;
+                              final url = (tf != null && tf.isNotEmpty)
+                                  ? tf
+                                  : _defaultTestFlightPublicLink;
+                              await openUrlPreferChrome(url);
                             } catch (_) {}
                           },
-                          icon: Icon(Icons.shop_rounded, size: 16, color: Colors.white.withValues(alpha: 0.85)),
+                          icon: Icon(
+                            _showApkDownloadOnLanding
+                                ? Icons.apple_rounded
+                                : Icons.download_rounded,
+                            size: 16,
+                            color: Colors.white.withValues(alpha: 0.85),
+                          ),
                           label: Text(
-                            playLabel,
+                            _showApkDownloadOnLanding
+                                ? 'iPhone (TestFlight)'
+                                : 'Baixar',
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
                               fontSize: 13,
@@ -628,68 +927,43 @@ class _LandingScreenState extends State<LandingScreen>
                             ),
                           ),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white.withValues(alpha: 0.9),
-                            backgroundColor: Colors.white.withValues(alpha: 0.06),
-                            side: BorderSide(color: Colors.white.withValues(alpha: 0.22)),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            foregroundColor:
+                                Colors.white.withValues(alpha: 0.9),
+                            backgroundColor:
+                                Colors.white.withValues(alpha: 0.06),
+                            side: BorderSide(
+                                color: Colors.white.withValues(alpha: 0.22)),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 8),
                             minimumSize: const Size(0, 38),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
                           ),
                         ),
-                    if (!_hideIosDownloadOnNativeAndroid)
-                    Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          OutlinedButton.icon(
-                            onPressed: () async {
-                              try {
-                                final tf = testFlightUrl;
-                                final url = (tf != null && tf.isNotEmpty) ? tf : _defaultTestFlightPublicLink;
-                                await openUrlPreferChrome(url);
-                              } catch (_) {}
-                            },
-                            icon: Icon(
-                              _showApkDownloadOnLanding ? Icons.apple_rounded : Icons.download_rounded,
-                              size: 16,
-                              color: Colors.white.withValues(alpha: 0.85),
-                            ),
-                            label: Text(
-                              _showApkDownloadOnLanding ? 'iPhone (TestFlight)' : 'Baixar',
+                        if (_showApkDownloadOnLanding)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              'TestFlight na App Store, depois abra este link.',
                               style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 13,
-                                color: Colors.white.withValues(alpha: 0.9),
-                              ),
+                                  fontSize: 10,
+                                  color: Colors.white.withValues(alpha: 0.55)),
+                              textAlign: TextAlign.center,
                             ),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.white.withValues(alpha: 0.9),
-                              backgroundColor: Colors.white.withValues(alpha: 0.06),
-                              side: BorderSide(color: Colors.white.withValues(alpha: 0.22)),
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                              minimumSize: const Size(0, 38),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          )
+                        else
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              'Instale o TestFlight e abra o link da beta.',
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.white.withValues(alpha: 0.55)),
+                              textAlign: TextAlign.center,
                             ),
                           ),
-                          if (_showApkDownloadOnLanding)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Text(
-                                'TestFlight na App Store, depois abra este link.',
-                                style: TextStyle(fontSize: 10, color: Colors.white.withValues(alpha: 0.55)),
-                                textAlign: TextAlign.center,
-                              ),
-                            )
-                          else
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Text(
-                                'Instale o TestFlight e abra o link da beta.',
-                                style: TextStyle(fontSize: 10, color: Colors.white.withValues(alpha: 0.55)),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                        ],
-                      ),
+                      ],
+                    ),
                 ],
               ),
               const SizedBox(height: 14),
@@ -709,50 +983,52 @@ class _LandingScreenState extends State<LandingScreen>
       resizeToAvoidBottomInset: scaffoldKeyboardResizeToAvoidBottomInset(),
       body: keyboardScaffoldBody(
         Stack(
-        children: [
-          SafeArea(
-            top: true,
-            bottom: true,
-            left: true,
-            right: true,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final h = constraints.maxHeight > 0 ? constraints.maxHeight : 700.0;
-                return SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: EdgeInsets.only(bottom: padding.bottom + 104),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(minHeight: h),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                    if (kIsWeb && isPwaIos && !isPwaStandalone) _buildIosSafariHint(context),
-                    _buildDownloadAppSection(context),
-                    if (kIsWeb)
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(16, 0, 16, 0),
-                        child: DivulgacaoPublicPromoCard(),
+          children: [
+            SafeArea(
+              top: true,
+              bottom: true,
+              left: true,
+              right: true,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final h =
+                      constraints.maxHeight > 0 ? constraints.maxHeight : 700.0;
+                  return SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: EdgeInsets.only(bottom: padding.bottom + 104),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(minHeight: h),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (kIsWeb && isPwaIos && !isPwaStandalone)
+                            _buildIosSafariHint(context),
+                          _buildDownloadAppSection(context),
+                          if (kIsWeb)
+                            const Padding(
+                              padding: EdgeInsets.fromLTRB(16, 0, 16, 0),
+                              child: DivulgacaoPublicPromoCard(),
+                            ),
+                          _buildHeroSection(context),
+                          _buildFeaturesSection(),
+                          _buildInspirationalQuote(),
+                          _buildPricingSection(context),
+                          _buildFooter(context),
+                        ],
                       ),
-                    _buildHeroSection(context),
-                    _buildFeaturesSection(),
-                    _buildInspirationalQuote(),
-                    _buildPricingSection(context),
-                    _buildFooter(context),
-                      ],
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: _buildFaixaSuspensaLoginExpresso(context),
-          ),
-        ],
-      ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: _buildFaixaSuspensaLoginExpresso(context),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -807,18 +1083,25 @@ class _LandingScreenState extends State<LandingScreen>
           Text(
             _landing.heroTealLine,
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white.withValues(alpha: 0.92)),
+            style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: Colors.white.withValues(alpha: 0.92)),
           ),
           const SizedBox(height: 6),
           Text(
             _landing.heroSlateLine,
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.white.withValues(alpha: 0.78)),
+            style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.white.withValues(alpha: 0.78)),
           ),
           const SizedBox(height: 24),
           OutlinedButton.icon(
             onPressed: () => unawaited(_loginWithGoogle()),
-            icon: Icon(Icons.rocket_launch_rounded, color: _lpGoldLight.withValues(alpha: 0.95), size: 18),
+            icon: Icon(Icons.rocket_launch_rounded,
+                color: _lpGoldLight.withValues(alpha: 0.95), size: 18),
             label: Text(
               'Começar ${UserProfile.newUserTrialDays} dias grátis',
               style: TextStyle(
@@ -833,7 +1116,8 @@ class _LandingScreenState extends State<LandingScreen>
               backgroundColor: Colors.white.withValues(alpha: 0.06),
               side: BorderSide(color: _lpGold.withValues(alpha: 0.45)),
               padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
             ),
           ),
           const SizedBox(height: 28),
@@ -847,7 +1131,10 @@ class _LandingScreenState extends State<LandingScreen>
                 end: Alignment.bottomRight,
               ),
               boxShadow: [
-                BoxShadow(color: _lpViolet.withValues(alpha: 0.2), blurRadius: 32, offset: const Offset(0, 14)),
+                BoxShadow(
+                    color: _lpViolet.withValues(alpha: 0.2),
+                    blurRadius: 32,
+                    offset: const Offset(0, 14)),
               ],
             ),
             child: Container(
@@ -860,21 +1147,27 @@ class _LandingScreenState extends State<LandingScreen>
                 children: [
                   if (isPwaStandalone) ...[
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
                       margin: const EdgeInsets.only(bottom: 14),
                       decoration: BoxDecoration(
                         color: _lpViolet.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: _lpViolet.withValues(alpha: 0.28)),
+                        border: Border.all(
+                            color: _lpViolet.withValues(alpha: 0.28)),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.check_circle_outline_rounded, size: 18, color: Colors.green.shade700),
+                          Icon(Icons.check_circle_outline_rounded,
+                              size: 18, color: Colors.green.shade700),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               'App instalado: seu login será mantido ao fechar e abrir.',
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade800),
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey.shade800),
                             ),
                           ),
                         ],
@@ -894,7 +1187,11 @@ class _LandingScreenState extends State<LandingScreen>
                           _webFromIosAppLicense
                               ? 'Renove ou adquira sua licença'
                               : 'Gerencie sua Licença',
-                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: _lpDeep, letterSpacing: -0.3),
+                          style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                              color: _lpDeep,
+                              letterSpacing: -0.3),
                         ),
                       ),
                     ],
@@ -905,7 +1202,8 @@ class _LandingScreenState extends State<LandingScreen>
                         ? 'Você abriu o site pelo app iPhone/iPad. Entre com Google ou Apple. Depois escolha mensal ou anual — PIX ou cartão.'
                         : 'Entre com Google (Android e web) ou com Google/Apple no iPhone. Depois do login você compra ou renova a licença — PIX ou cartão.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 13, height: 1.4, color: Colors.grey.shade700),
+                    style: TextStyle(
+                        fontSize: 13, height: 1.4, color: Colors.grey.shade700),
                   ),
                   const SizedBox(height: 18),
                   OAuthLoginButtons(
@@ -915,6 +1213,243 @@ class _LandingScreenState extends State<LandingScreen>
                         ? _loginWithApple
                         : null,
                   ),
+                  const SizedBox(height: 16),
+                  // ── Toggle: Entrar com e-mail e senha ──
+                  Center(
+                    child: TextButton.icon(
+                      onPressed: _loginLoading
+                          ? null
+                          : () => setState(
+                              () => _showEmailLogin = !_showEmailLogin),
+                      icon: Icon(
+                        _showEmailLogin
+                            ? Icons.close_rounded
+                            : Icons.email_outlined,
+                        size: 18,
+                        color: _lpGold,
+                      ),
+                      label: Text(
+                        _showEmailLogin
+                            ? 'Fechar'
+                            : 'Entrar com e-mail e senha',
+                        style: const TextStyle(
+                          color: _lpGold,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                  // ── Email / Password form ──
+                  if (_showEmailLogin) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.07),
+                        borderRadius: BorderRadius.circular(18),
+                        border:
+                            Border.all(color: _lpGold.withValues(alpha: 0.25)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            'Equipe Wisdom APP',
+                            style: TextStyle(
+                              color: _lpGoldLight,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Acesse com seu e-mail e senha cadastrados.',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.6),
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          AutofillGroup(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                TextField(
+                                  controller: _emailCtrl,
+                                  keyboardType: TextInputType.emailAddress,
+                                  textInputAction: TextInputAction.next,
+                                  autofillHints: const [
+                                    AutofillHints.username,
+                                    AutofillHints.email,
+                                  ],
+                                  style: const TextStyle(
+                                      color: Colors.white, fontSize: 15),
+                                  decoration: InputDecoration(
+                                    labelText: 'E-mail',
+                                    labelStyle: const TextStyle(
+                                        color: Color(0xFF94A3B8)),
+                                    prefixIcon: const Icon(Icons.email_outlined,
+                                        color: Color(0xFF94A3B8), size: 20),
+                                    border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(13),
+                                        borderSide: BorderSide(
+                                            color: Colors.white
+                                                .withValues(alpha: 0.15))),
+                                    enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(13),
+                                        borderSide: BorderSide(
+                                            color: Colors.white
+                                                .withValues(alpha: 0.15))),
+                                    focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(13),
+                                        borderSide: const BorderSide(
+                                            color: _lpGold, width: 1.5)),
+                                    filled: true,
+                                    fillColor: const Color(0xFF1e293b),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                TextField(
+                                  controller: _passCtrl,
+                                  obscureText: _obscurePass,
+                                  textInputAction: TextInputAction.done,
+                                  autofillHints: const [AutofillHints.password],
+                                  onSubmitted: (_) => _loginWithEmailPassword(),
+                                  style: const TextStyle(
+                                      color: Colors.white, fontSize: 15),
+                                  decoration: InputDecoration(
+                                    labelText: 'Senha',
+                                    labelStyle: const TextStyle(
+                                        color: Color(0xFF94A3B8)),
+                                    prefixIcon: const Icon(
+                                        Icons.lock_outline_rounded,
+                                        color: Color(0xFF94A3B8),
+                                        size: 20),
+                                    suffixIcon: IconButton(
+                                      icon: Icon(
+                                        _obscurePass
+                                            ? Icons.visibility_rounded
+                                            : Icons.visibility_off_rounded,
+                                        size: 20,
+                                        color: const Color(0xFF94A3B8),
+                                      ),
+                                      onPressed: () => setState(
+                                          () => _obscurePass = !_obscurePass),
+                                    ),
+                                    border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(13),
+                                        borderSide: BorderSide(
+                                            color: Colors.white
+                                                .withValues(alpha: 0.15))),
+                                    enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(13),
+                                        borderSide: BorderSide(
+                                            color: Colors.white
+                                                .withValues(alpha: 0.15))),
+                                    focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(13),
+                                        borderSide: const BorderSide(
+                                            color: _lpGold, width: 1.5)),
+                                    filled: true,
+                                    fillColor: const Color(0xFF1e293b),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              onPressed:
+                                  _loginLoading ? null : _showForgotPassword,
+                              style: TextButton.styleFrom(
+                                  foregroundColor: _lpGoldLight,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 4, vertical: 2)),
+                              child: const Text('Esqueceu a senha?',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600)),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                  colors: [_lpGold, _lpGoldLight]),
+                              borderRadius: BorderRadius.circular(14),
+                              boxShadow: [
+                                BoxShadow(
+                                    color: _lpGold.withValues(alpha: 0.3),
+                                    blurRadius: 14,
+                                    offset: const Offset(0, 6)),
+                              ],
+                            ),
+                            child: FilledButton(
+                              onPressed: _loginLoading
+                                  ? null
+                                  : _loginWithEmailPassword,
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size.fromHeight(48),
+                                backgroundColor: Colors.transparent,
+                                foregroundColor: _lpNavyDark,
+                                shadowColor: Colors.transparent,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14)),
+                              ),
+                              child: _loginLoading
+                                  ? const SizedBox(
+                                      width: 22,
+                                      height: 22,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2, color: _lpNavyDark))
+                                  : const Text('ENTRAR',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                          letterSpacing: 0.8,
+                                          fontSize: 15)),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          // ── Cadastrar: cadastro manual com confirmação de e-mail (igual Controle Total) ──
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Não tem conta?',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.6),
+                                  fontSize: 13,
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: _loginLoading
+                                    ? null
+                                    : () =>
+                                        Navigator.pushNamed(context, '/signup'),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: _lpGoldLight,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                ),
+                                child: const Text(
+                                  'Cadastrar',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w800,
+                                    decoration: TextDecoration.underline,
+                                    decorationColor: _lpGoldLight,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -923,31 +1458,34 @@ class _LandingScreenState extends State<LandingScreen>
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: RichText(
-                    textAlign: TextAlign.center,
-                    text: TextSpan(
-                      style: const TextStyle(fontSize: 14, color: Colors.black87, height: 1.4),
-                      children: [
-                        TextSpan(
-                          text: 'Teste grátis por ${UserProfile.newUserTrialDays} dias – acesso livre total pelo celular, computador ou notebook. Use no app ou no navegador em ',
-                        ),
-                        TextSpan(
-                          text: 'wisdomapp-b9e98.web.app',
-                          style: TextStyle(
-                            color: _lpGold,
-                            fontWeight: FontWeight.w700,
-                            decoration: TextDecoration.underline,
-                          ),
-                          recognizer: TapGestureRecognizer()
-                            ..onTap = () async {
-                              try {
-                                await openUrlPreferChrome('https://wisdomapp-b9e98.web.app/');
-                              } catch (_) {}
-                            },
-                        ),
-                        const TextSpan(text: '.'),
-                      ],
-                    ),
+              textAlign: TextAlign.center,
+              text: TextSpan(
+                style: const TextStyle(
+                    fontSize: 14, color: Colors.black87, height: 1.4),
+                children: [
+                  TextSpan(
+                    text:
+                        'Teste grátis por ${UserProfile.newUserTrialDays} dias – acesso livre total pelo celular, computador ou notebook. Use no app ou no navegador em ',
                   ),
+                  TextSpan(
+                    text: 'wisdomapp-b9e98.web.app',
+                    style: TextStyle(
+                      color: _lpGold,
+                      fontWeight: FontWeight.w700,
+                      decoration: TextDecoration.underline,
+                    ),
+                    recognizer: TapGestureRecognizer()
+                      ..onTap = () async {
+                        try {
+                          await openUrlPreferChrome(
+                              'https://wisdomapp-b9e98.web.app/');
+                        } catch (_) {}
+                      },
+                  ),
+                  const TextSpan(text: '.'),
+                ],
+              ),
+            ),
           ),
         ],
       ),
@@ -963,7 +1501,10 @@ class _LandingScreenState extends State<LandingScreen>
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
           gradient: LinearGradient(
-            colors: [_lpNavy.withValues(alpha: 0.06), _lpGold.withValues(alpha: 0.08)],
+            colors: [
+              _lpNavy.withValues(alpha: 0.06),
+              _lpGold.withValues(alpha: 0.08)
+            ],
           ),
           border: Border.all(color: _lpGold.withValues(alpha: 0.35)),
         ),
@@ -983,7 +1524,8 @@ class _LandingScreenState extends State<LandingScreen>
             const SizedBox(height: 8),
             Text(
               '— Billy Graham',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: _lpGold),
+              style: TextStyle(
+                  fontSize: 13, fontWeight: FontWeight.w800, color: _lpGold),
             ),
           ],
         ),
@@ -994,10 +1536,26 @@ class _LandingScreenState extends State<LandingScreen>
   // --- Módulos / Features (todas as funções do app) ---
   Widget _buildFeaturesSection() {
     const features = [
-      (Icons.account_balance_wallet_rounded, 'Módulo Financeiro', 'Receitas, despesas, orçamentos e relatórios.'),
-      (Icons.flag_rounded, 'Módulo Objetivos Financeiros', 'Metas com Projeto 52 semanas — viagem, carro, casa, reserva…'),
-      (Icons.event_note_rounded, 'Módulo Agenda', 'Compromissos, lembretes e planejamento no dia a dia.'),
-      (Icons.menu_book_rounded, 'Módulo Cursos Financeiros', 'Educação financeira com princípios bíblicos.'),
+      (
+        Icons.account_balance_wallet_rounded,
+        'Módulo Financeiro',
+        'Receitas, despesas, orçamentos e relatórios.'
+      ),
+      (
+        Icons.flag_rounded,
+        'Módulo Objetivos Financeiros',
+        'Metas com Projeto 52 semanas — viagem, carro, casa, reserva…'
+      ),
+      (
+        Icons.event_note_rounded,
+        'Módulo Agenda',
+        'Compromissos, lembretes e planejamento no dia a dia.'
+      ),
+      (
+        Icons.menu_book_rounded,
+        'Módulo Cursos Financeiros',
+        'Educação financeira com princípios bíblicos.'
+      ),
     ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 48, 24, 40),
@@ -1006,13 +1564,30 @@ class _LandingScreenState extends State<LandingScreen>
           Text(
             'Módulos do WISDOMAPP',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: _lpNavy, letterSpacing: -0.5),
+            style: TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.w800,
+                color: _lpNavy,
+                letterSpacing: -0.5),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
+          Container(
+            width: 64,
+            height: 4,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(2),
+              gradient: const LinearGradient(colors: [_lpGold, _lpGoldLight]),
+            ),
+          ),
+          const SizedBox(height: 14),
           Text(
             'Financeiro, objetivos financeiros, agenda e cursos com princípios bíblicos — tudo integrado.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 15, height: 1.45, color: Colors.grey.shade700, fontWeight: FontWeight.w500),
+            style: TextStyle(
+                fontSize: 15,
+                height: 1.45,
+                color: Colors.grey.shade700,
+                fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 28),
           Wrap(
@@ -1028,13 +1603,19 @@ class _LandingScreenState extends State<LandingScreen>
                     final anim = Tween<double>(begin: 0, end: 1).animate(
                       CurvedAnimation(
                         parent: _animController,
-                        curve: Interval(delay.clamp(0.0, 0.9), (delay + 0.2).clamp(0.0, 1.0),
+                        curve: Interval(delay.clamp(0.0, 0.9),
+                            (delay + 0.2).clamp(0.0, 1.0),
                             curve: Curves.easeOut),
                       ),
                     );
-                    return Opacity(opacity: anim.value, child: Transform.translate(offset: Offset(0, 20 * (1 - anim.value)), child: child));
+                    return Opacity(
+                        opacity: anim.value,
+                        child: Transform.translate(
+                            offset: Offset(0, 20 * (1 - anim.value)),
+                            child: child));
                   },
-                  child: _featureCard(features[i].$1, features[i].$2, features[i].$3),
+                  child: _featureCard(features[i].$1, features[i].$2,
+                      features[i].$3, _featureAccents[i]),
                 ),
             ],
           ),
@@ -1043,17 +1624,30 @@ class _LandingScreenState extends State<LandingScreen>
     );
   }
 
-  Widget _featureCard(IconData icon, String title, String desc) {
+  static const List<Color> _featureAccents = [
+    Color(0xFF10B981),
+    _lpGold,
+    _lpCyan,
+    _lpViolet,
+  ];
+
+  Widget _featureCard(IconData icon, String title, String desc, Color accent) {
     return Container(
       width: 268,
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: accent.withValues(alpha: 0.28)),
         boxShadow: [
-          BoxShadow(color: _lpViolet.withValues(alpha: 0.07), blurRadius: 24, offset: const Offset(0, 10)),
-          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2)),
+          BoxShadow(
+              color: accent.withValues(alpha: 0.14),
+              blurRadius: 24,
+              offset: const Offset(0, 10)),
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2)),
         ],
       ),
       child: Column(
@@ -1063,17 +1657,25 @@ class _LandingScreenState extends State<LandingScreen>
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
               gradient: LinearGradient(
-                colors: [_lpViolet.withValues(alpha: 0.12), _lpCyan.withValues(alpha: 0.1)],
+                colors: [
+                  accent.withValues(alpha: 0.18),
+                  accent.withValues(alpha: 0.06)
+                ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
             ),
-            child: Icon(icon, size: 36, color: _lpViolet),
+            child: Icon(icon, size: 36, color: accent),
           ),
           const SizedBox(height: 16),
-          Text(title, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17, color: _lpDeep)),
+          Text(title,
+              style: TextStyle(
+                  fontWeight: FontWeight.w800, fontSize: 17, color: _lpDeep)),
           const SizedBox(height: 10),
-          Text(desc, textAlign: TextAlign.center, style: TextStyle(color: Colors.grey.shade600, height: 1.35, fontSize: 13.5)),
+          Text(desc,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  color: Colors.grey.shade600, height: 1.35, fontSize: 13.5)),
         ],
       ),
     );
@@ -1097,12 +1699,17 @@ class _LandingScreenState extends State<LandingScreen>
         children: [
           Text(
             _landing.plansTitle,
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: _lpDeep, letterSpacing: -0.6),
+            style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w800,
+                color: _lpDeep,
+                letterSpacing: -0.6),
           ),
           const SizedBox(height: 10),
           Text(
             _landing.homePremiumCombinedPriceLine,
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: _lpSlate),
+            style: TextStyle(
+                fontSize: 18, fontWeight: FontWeight.w800, color: _lpSlate),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
@@ -1110,7 +1717,8 @@ class _LandingScreenState extends State<LandingScreen>
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Text(
               _landing.landingPremiumDetail,
-              style: TextStyle(fontSize: 15, height: 1.45, color: Colors.grey.shade700),
+              style: TextStyle(
+                  fontSize: 15, height: 1.45, color: Colors.grey.shade700),
               textAlign: TextAlign.center,
             ),
           ),
@@ -1128,7 +1736,9 @@ class _LandingScreenState extends State<LandingScreen>
                     period: _landing.landingPremiumCardPeriod,
                     features: _landing.landingPremiumFeaturesList,
                     isPremium: true,
-                    ctaLabel: _webFromIosAppLicense ? 'Renove ou adquira — ver planos' : _landing.planCtaText,
+                    ctaLabel: _webFromIosAppLicense
+                        ? 'Renove ou adquira — ver planos'
+                        : _landing.planCtaText,
                   ),
                 ),
               ],
@@ -1142,7 +1752,9 @@ class _LandingScreenState extends State<LandingScreen>
                 period: _landing.landingPremiumCardPeriod,
                 features: _landing.landingPremiumFeaturesList,
                 isPremium: true,
-                ctaLabel: _webFromIosAppLicense ? 'Renove ou adquira — ver planos' : _landing.planCtaText,
+                ctaLabel: _webFromIosAppLicense
+                    ? 'Renove ou adquira — ver planos'
+                    : _landing.planCtaText,
               ),
             ),
           ],
@@ -1163,8 +1775,14 @@ class _LandingScreenState extends State<LandingScreen>
   }) {
     final borderGradient = isPremium
         ? (isProTier
-            ? LinearGradient(colors: [_lpRose, _lpViolet, _lpCyan], begin: Alignment.topLeft, end: Alignment.bottomRight)
-            : LinearGradient(colors: [_lpViolet, _lpCyan, _lpGold], begin: Alignment.topLeft, end: Alignment.bottomRight))
+            ? LinearGradient(
+                colors: [_lpRose, _lpViolet, _lpCyan],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight)
+            : LinearGradient(
+                colors: [_lpViolet, _lpCyan, _lpGold],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight))
         : null;
     return Container(
       width: 320,
@@ -1174,7 +1792,10 @@ class _LandingScreenState extends State<LandingScreen>
         gradient: borderGradient,
         color: isPremium ? null : Colors.grey.shade300,
         boxShadow: [
-          BoxShadow(color: _lpDeep.withValues(alpha: isPremium ? 0.25 : 0.08), blurRadius: 28, offset: const Offset(0, 14)),
+          BoxShadow(
+              color: _lpDeep.withValues(alpha: isPremium ? 0.25 : 0.08),
+              blurRadius: 28,
+              offset: const Offset(0, 14)),
         ],
       ),
       child: Container(
@@ -1191,39 +1812,66 @@ class _LandingScreenState extends State<LandingScreen>
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.workspace_premium_rounded, color: _lpGold, size: 26),
+                    Icon(Icons.workspace_premium_rounded,
+                        color: _lpGold, size: 26),
                     const SizedBox(width: 10),
                     Flexible(
                       child: Text(
                         title,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: -0.4),
+                        style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            letterSpacing: -0.4),
                       ),
                     ),
                   ],
                 ),
               )
             else ...[
-              Text(title, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _lpDeep)),
+              Text(title,
+                  style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: _lpDeep)),
               const SizedBox(height: 16),
             ],
             if (isPremium) const SizedBox(height: 12),
             Text(
               price,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: isPremium ? _lpCyan : _lpViolet, height: 1.2),
+              style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                  color: isPremium ? _lpCyan : _lpViolet,
+                  height: 1.2),
             ),
             const SizedBox(height: 6),
-            Text(period, textAlign: TextAlign.center, style: TextStyle(color: isPremium ? Colors.white70 : Colors.grey.shade600, fontSize: 13)),
-            Divider(height: 36, color: isPremium ? Colors.white24 : Colors.grey.shade300),
+            Text(period,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    color: isPremium ? Colors.white70 : Colors.grey.shade600,
+                    fontSize: 13)),
+            Divider(
+                height: 36,
+                color: isPremium ? Colors.white24 : Colors.grey.shade300),
             ...features.map((f) => Padding(
                   padding: const EdgeInsets.symmetric(vertical: 5),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.check_circle_rounded, size: 20, color: isPremium ? _lpGold : Colors.green.shade600),
+                      Icon(Icons.check_circle_rounded,
+                          size: 20,
+                          color: isPremium ? _lpGold : Colors.green.shade600),
                       const SizedBox(width: 10),
-                      Expanded(child: Text(f, style: TextStyle(color: isPremium ? Colors.white.withValues(alpha: 0.92) : Colors.black87, height: 1.35))),
+                      Expanded(
+                          child: Text(f,
+                              style: TextStyle(
+                                  color: isPremium
+                                      ? Colors.white.withValues(alpha: 0.92)
+                                      : Colors.black87,
+                                  height: 1.35))),
                     ],
                   ),
                 )),
@@ -1233,7 +1881,12 @@ class _LandingScreenState extends State<LandingScreen>
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(16),
-                  gradient: isPremium ? LinearGradient(colors: [_lpViolet, Color.lerp(_lpViolet, _lpRose, 0.35)!]) : null,
+                  gradient: isPremium
+                      ? LinearGradient(colors: [
+                          _lpViolet,
+                          Color.lerp(_lpViolet, _lpRose, 0.35)!
+                        ])
+                      : null,
                   color: isPremium ? null : _lpViolet,
                 ),
                 child: Material(
@@ -1252,7 +1905,10 @@ class _LandingScreenState extends State<LandingScreen>
                       child: Center(
                         child: Text(
                           ctaLabel,
-                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: Colors.white),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                              color: Colors.white),
                         ),
                       ),
                     ),
@@ -1272,14 +1928,28 @@ class _LandingScreenState extends State<LandingScreen>
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        border: Border(top: BorderSide(color: Colors.grey.shade300)),
+        gradient: const LinearGradient(
+          colors: [Color(0xFFF8FAFC), Color(0xFFEDF1F9)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+        border: Border(
+            top: BorderSide(color: _lpGold.withValues(alpha: 0.45), width: 2)),
       ),
       child: Column(
         children: [
-          const Text("Sistema sem propagandas indesejáveis, limpo e seguro.", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1A237E))),
+          const Text("Sistema sem propagandas indesejáveis, limpo e seguro.",
+              style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1A237E))),
           const SizedBox(height: 4),
-          const Text("Acesso pelo celular, computador ou notebook. Acesso livre total.", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1A237E))),
+          const Text(
+              "Acesso pelo celular, computador ou notebook. Acesso livre total.",
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1A237E))),
           const SizedBox(height: 6),
           Builder(
             builder: (context) {
@@ -1300,11 +1970,19 @@ class _LandingScreenState extends State<LandingScreen>
             spacing: 12,
             runSpacing: 8,
             children: [
-              _FooterLink(label: 'Política de Privacidade', onTap: () => Navigator.of(context).pushNamed('/privacidade')),
-              Text('•', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
-              _FooterLink(label: 'Termos de Uso', onTap: () => Navigator.of(context).pushNamed('/termos')),
-              Text('•', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
-              _FooterLink(label: 'Suporte', onTap: () => Navigator.of(context).pushNamed('/suporte')),
+              _FooterLink(
+                  label: 'Política de Privacidade',
+                  onTap: () => Navigator.of(context).pushNamed('/privacidade')),
+              Text('•',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+              _FooterLink(
+                  label: 'Termos de Uso',
+                  onTap: () => Navigator.of(context).pushNamed('/termos')),
+              Text('•',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+              _FooterLink(
+                  label: 'Suporte',
+                  onTap: () => Navigator.of(context).pushNamed('/suporte')),
             ],
           ),
           const SizedBox(height: 16),
@@ -1313,15 +1991,24 @@ class _LandingScreenState extends State<LandingScreen>
             spacing: 16,
             runSpacing: 8,
             children: [
-              _FooterLink(label: email, onTap: () => _launch(Uri.parse('mailto:$email'))),
+              _FooterLink(
+                  label: email,
+                  onTap: () => _launch(Uri.parse('mailto:$email'))),
             ],
           ),
           const SizedBox(height: 20),
-          Text(AppVerse.full, textAlign: TextAlign.center, style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.grey.shade700)),
+          Text(AppVerse.full,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                  color: Colors.grey.shade700)),
           const SizedBox(height: 16),
-          Text('Desenvolvido por Raihom Barbosa', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+          Text('Desenvolvido por Raihom Barbosa',
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
           const SizedBox(height: 4),
-          Text('© 2026 WISDOMAPP', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+          Text('© 2026 WISDOMAPP',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
         ],
       ),
     );
@@ -1339,7 +2026,12 @@ class _FooterLink extends StatelessWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      child: Text(label, style: const TextStyle(color: Color(0xFF2962FF), fontSize: 13, decoration: TextDecoration.underline, decorationColor: Color(0xFF2962FF))),
+      child: Text(label,
+          style: const TextStyle(
+              color: Color(0xFF2962FF),
+              fontSize: 13,
+              decoration: TextDecoration.underline,
+              decorationColor: Color(0xFF2962FF))),
     );
   }
 }

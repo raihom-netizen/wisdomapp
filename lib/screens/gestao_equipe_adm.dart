@@ -139,7 +139,7 @@ class _GestaoEquipeAdmState extends State<GestaoEquipeAdm>
                 ),
                 const SizedBox(height: 14),
                 DropdownButtonFormField<TeamRole>(
-                  value: TeamRoleConfig.creatableRoles.contains(selected)
+                  initialValue: TeamRoleConfig.creatableRoles.contains(selected)
                       ? selected
                       : TeamRole.admin,
                   decoration: InputDecoration(
@@ -270,7 +270,7 @@ class _GestaoEquipeAdmState extends State<GestaoEquipeAdm>
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<TeamRole>(
-                value: selected,
+                initialValue: selected,
                 decoration: const InputDecoration(labelText: 'Novo papel'),
                 items: TeamRoleConfig.creatableRoles
                     .map((r) => DropdownMenuItem(value: r, child: Text(TeamRoleConfig.label(r))))

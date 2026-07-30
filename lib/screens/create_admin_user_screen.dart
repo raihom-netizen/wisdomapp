@@ -145,7 +145,7 @@ class _CreateAdminUserScreenState extends State<CreateAdminUserScreen> {
                 ),
                 const SizedBox(height: 24),
                 DropdownButtonFormField<TeamRole>(
-                  value: _selectedRole,
+                  initialValue: _selectedRole,
                   decoration: InputDecoration(
                     labelText: 'Papel na equipe',
                     prefixIcon: Icon(TeamRoleConfig.icon(_selectedRole), color: roleColor),

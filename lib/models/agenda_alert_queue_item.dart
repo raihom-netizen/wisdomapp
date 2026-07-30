@@ -17,6 +17,8 @@ class AgendaAlertQueueItem {
     this.cancelReason,
     this.pushEnabled = true,
     this.emailEnabled = true,
+    this.linkLocalizacao = '',
+    this.contatoWhatsApp = '',
   });
 
   final String id;
@@ -33,11 +35,12 @@ class AgendaAlertQueueItem {
   final String? cancelReason;
   final bool pushEnabled;
   final bool emailEnabled;
+  final String linkLocalizacao;
+  final String contatoWhatsApp;
 
   bool get isPending => status == 'pending';
   bool get isSent => status == 'sent';
-  bool get isCancelled =>
-      status == 'cancelled' || status == 'skipped';
+  bool get isCancelled => status == 'cancelled' || status == 'skipped';
 
   static AgendaAlertQueueItem? fromDoc(
     QueryDocumentSnapshot<Map<String, dynamic>> doc,
@@ -63,6 +66,8 @@ class AgendaAlertQueueItem {
       cancelReason: (d['cancelReason'] as String?)?.toString(),
       pushEnabled: d['pushEnabled'] != false,
       emailEnabled: d['emailEnabled'] != false,
+      linkLocalizacao: (d['linkLocalizacao'] ?? '').toString().trim(),
+      contatoWhatsApp: (d['contatoWhatsApp'] ?? '').toString().trim(),
     );
   }
 }

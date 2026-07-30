@@ -122,7 +122,7 @@ class _AcessosDominioTabState extends State<AcessosDominioTab> {
                       _statsFuture = _loadStats();
                     });
                   },
-                  selectedColor: AppColors.primary.withOpacity(0.25),
+                  selectedColor: AppColors.primary.withValues(alpha: 0.25),
                   backgroundColor: Colors.grey.shade100,
                 );
               }).toList(),
@@ -197,7 +197,9 @@ class _AcessosDominioTabState extends State<AcessosDominioTab> {
         list.add(0);
       }
     }
-    while (list.length < 24) list.add(0);
+    while (list.length < 24) {
+      list.add(0);
+    }
     return list;
   }
 
@@ -205,7 +207,7 @@ class _AcessosDominioTabState extends State<AcessosDominioTab> {
     final raw = data['days'];
     if (raw == null || raw is! List) return [];
     return raw.map((e) {
-      if (e is Map) return Map<String, dynamic>.from(e as Map);
+      if (e is Map) return Map<String, dynamic>.from(e);
       return <String, dynamic>{'date': '', 'count': 0};
     }).toList();
   }
@@ -420,7 +422,7 @@ class _AcessosDominioTabState extends State<AcessosDominioTab> {
   Widget _buildTotalCard(int total, String label) {
     return Card(
       elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: AppColors.primary.withOpacity(0.3))),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: AppColors.primary.withValues(alpha: 0.3))),
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
@@ -433,13 +435,13 @@ class _AcessosDominioTabState extends State<AcessosDominioTab> {
         ),
         child: Row(
           children: [
-            Icon(Icons.trending_up_rounded, color: Colors.white.withOpacity(0.9), size: 36),
+            Icon(Icons.trending_up_rounded, color: Colors.white.withValues(alpha: 0.9), size: 36),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.9))),
+                  Text(label, style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.9))),
                   const SizedBox(height: 4),
                   Text('$total', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.white)),
                 ],

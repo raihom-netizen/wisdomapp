@@ -94,7 +94,7 @@ class _HalfSquarePainter extends CustomPainter {
     canvas.drawPath(rightPath, Paint()..color = right);
 
     canvas.drawRect(rect, Paint()
-      ..color = Colors.white.withOpacity(0.3)
+      ..color = Colors.white.withValues(alpha: 0.3)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.5);
   }
@@ -131,7 +131,7 @@ class _PizzaSquarePainter extends CustomPainter {
     }
 
     canvas.drawRect(Rect.fromLTWH(0, 0, w, h), Paint()
-      ..color = Colors.white.withOpacity(0.3)
+      ..color = Colors.white.withValues(alpha: 0.3)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.5);
   }

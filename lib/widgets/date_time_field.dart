@@ -26,10 +26,12 @@ class DateFieldWithCalendarOrManual extends StatefulWidget {
   });
 
   @override
-  State<DateFieldWithCalendarOrManual> createState() => _DateFieldWithCalendarOrManualState();
+  State<DateFieldWithCalendarOrManual> createState() =>
+      _DateFieldWithCalendarOrManualState();
 }
 
-class _DateFieldWithCalendarOrManualState extends State<DateFieldWithCalendarOrManual> {
+class _DateFieldWithCalendarOrManualState
+    extends State<DateFieldWithCalendarOrManual> {
   late TextEditingController _ctrl;
   String _lastFormatted = '';
 
@@ -73,10 +75,8 @@ class _DateFieldWithCalendarOrManualState extends State<DateFieldWithCalendarOrM
   void _onManualChange(String text) {
     if (text.length == 10 && RegExp(r'^\d{2}/\d{2}/\d{4}$').hasMatch(text)) {
       final parsed = DateTimeFormats.dateBR.parse(text, true);
-      if (parsed != null) {
-        widget.onChanged(parsed);
-        _lastFormatted = text;
-      }
+      widget.onChanged(parsed);
+      _lastFormatted = text;
     }
   }
 
@@ -86,7 +86,9 @@ class _DateFieldWithCalendarOrManualState extends State<DateFieldWithCalendarOrM
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (widget.label != null) ...[
-          Text(widget.label!, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+          Text(widget.label!,
+              style:
+                  const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
           const SizedBox(height: 8),
         ],
         Row(
@@ -103,25 +105,40 @@ class _DateFieldWithCalendarOrManualState extends State<DateFieldWithCalendarOrM
                   TextInputFormatter.withFunction((old, neu) {
                     final s = neu.text.replaceAll(RegExp(r'\D'), '');
                     if (s.isEmpty) return const TextEditingValue(text: '');
-                    if (s.length <= 2) return TextEditingValue(text: s, selection: TextSelection.collapsed(offset: s.length));
-                    if (s.length <= 4) return TextEditingValue(text: '${s.substring(0, 2)}/${s.substring(2)}', selection: TextSelection.collapsed(offset: s.length + 1));
-                    return TextEditingValue(text: '${s.substring(0, 2)}/${s.substring(2, 4)}/${s.substring(4, s.length > 8 ? 8 : s.length)}', selection: TextSelection.collapsed(offset: (s.length > 8 ? 10 : s.length + 2)));
+                    if (s.length <= 2)
+                      return TextEditingValue(
+                          text: s,
+                          selection: TextSelection.collapsed(offset: s.length));
+                    if (s.length <= 4)
+                      return TextEditingValue(
+                          text: '${s.substring(0, 2)}/${s.substring(2)}',
+                          selection:
+                              TextSelection.collapsed(offset: s.length + 1));
+                    return TextEditingValue(
+                        text:
+                            '${s.substring(0, 2)}/${s.substring(2, 4)}/${s.substring(4, s.length > 8 ? 8 : s.length)}',
+                        selection: TextSelection.collapsed(
+                            offset: (s.length > 8 ? 10 : s.length + 2)));
                   }),
                 ],
                 decoration: InputDecoration(
                   hintText: 'dd/mm/aaaa',
                   prefixIcon: IconButton(
-                    icon: Icon(Icons.calendar_today_rounded, color: AppColors.primary, size: 20),
+                    icon: Icon(Icons.calendar_today_rounded,
+                        color: AppColors.primary, size: 20),
                     onPressed: widget.readOnly ? null : _openCalendar,
                     tooltip: 'Abrir calendário',
                   ),
                   suffixIcon: IconButton(
-                    icon: Icon(Icons.edit_calendar_rounded, color: Colors.grey.shade600),
+                    icon: Icon(Icons.edit_calendar_rounded,
+                        color: Colors.grey.shade600),
                     onPressed: widget.readOnly ? null : _openCalendar,
                     tooltip: 'Abrir calendário',
                   ),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   filled: true,
                   fillColor: Colors.white,
                 ),
@@ -152,10 +169,12 @@ class TimeFieldWithClockOrManual extends StatefulWidget {
   });
 
   @override
-  State<TimeFieldWithClockOrManual> createState() => _TimeFieldWithClockOrManualState();
+  State<TimeFieldWithClockOrManual> createState() =>
+      _TimeFieldWithClockOrManualState();
 }
 
-class _TimeFieldWithClockOrManualState extends State<TimeFieldWithClockOrManual> {
+class _TimeFieldWithClockOrManualState
+    extends State<TimeFieldWithClockOrManual> {
   late TextEditingController _ctrl;
 
   @override
@@ -194,7 +213,8 @@ class _TimeFieldWithClockOrManualState extends State<TimeFieldWithClockOrManual>
   }
 
   void _onManualChange(String text) {
-    if (RegExp(r'^\d{1,2}:\d{2}$').hasMatch(text) || RegExp(r'^\d{4}$').hasMatch(text)) {
+    if (RegExp(r'^\d{1,2}:\d{2}$').hasMatch(text) ||
+        RegExp(r'^\d{4}$').hasMatch(text)) {
       int h = 0, m = 0;
       if (text.contains(':')) {
         final parts = text.split(':');
@@ -216,7 +236,9 @@ class _TimeFieldWithClockOrManualState extends State<TimeFieldWithClockOrManual>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (widget.label != null) ...[
-          Text(widget.label!, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+          Text(widget.label!,
+              style:
+                  const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
           const SizedBox(height: 8),
         ],
         Row(
@@ -232,20 +254,30 @@ class _TimeFieldWithClockOrManualState extends State<TimeFieldWithClockOrManual>
                   TextInputFormatter.withFunction((old, neu) {
                     final s = neu.text.replaceAll(RegExp(r'\D'), '');
                     if (s.isEmpty) return TextEditingValue(text: '');
-                    if (s.length <= 2) return TextEditingValue(text: s, selection: TextSelection.collapsed(offset: s.length));
-                    return TextEditingValue(text: '${s.substring(0, 2)}:${s.substring(2)}', selection: TextSelection.collapsed(offset: s.length + 1));
+                    if (s.length <= 2)
+                      return TextEditingValue(
+                          text: s,
+                          selection: TextSelection.collapsed(offset: s.length));
+                    return TextEditingValue(
+                        text: '${s.substring(0, 2)}:${s.substring(2)}',
+                        selection:
+                            TextSelection.collapsed(offset: s.length + 1));
                   }),
                 ],
                 decoration: InputDecoration(
                   hintText: 'HH:mm',
-                  prefixIcon: Icon(Icons.access_time_rounded, color: AppColors.primary, size: 20),
+                  prefixIcon: Icon(Icons.access_time_rounded,
+                      color: AppColors.primary, size: 20),
                   suffixIcon: IconButton(
-                    icon: Icon(Icons.schedule_rounded, color: Colors.grey.shade600),
+                    icon: Icon(Icons.schedule_rounded,
+                        color: Colors.grey.shade600),
                     onPressed: widget.readOnly ? null : _openClock,
                     tooltip: 'Abrir relógio',
                   ),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   filled: true,
                   fillColor: Colors.white,
                 ),

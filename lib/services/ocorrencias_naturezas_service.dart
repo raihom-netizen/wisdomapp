@@ -42,7 +42,7 @@ class OcorrenciasNaturezasService {
   List<OcorrenciaNatureza> _listFrom(dynamic v) {
     if (v is! List) return [];
     return v
-        .map((e) => e is Map ? OcorrenciaNatureza.fromMap(Map<String, dynamic>.from(e as Map)) : null)
+        .map((e) => e is Map ? OcorrenciaNatureza.fromMap(Map<String, dynamic>.from(e)) : null)
         .whereType<OcorrenciaNatureza>()
         .toList();
   }

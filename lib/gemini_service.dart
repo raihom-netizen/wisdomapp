@@ -8,8 +8,7 @@ class GeminiService {
     try {
       final model = GenerativeModel(model: 'gemini-1.5-flash', apiKey: _apiKey);
       
-      final prompt = "Aja como um consultor financeiro. O usuário quer atingir a meta de $objetivo no valor de R\$ $valor. " +
-                     "Dê uma dica curta, prática e motivadora de no máximo 3 frases.";
+      final prompt = "Aja como um consultor financeiro. O usuário quer atingir a meta de $objetivo no valor de R\$ $valor. " "Dê uma dica curta, prática e motivadora de no máximo 3 frases.";
       
       final content = [Content.text(prompt)];
       final response = await model.generateContent(content);

@@ -97,7 +97,8 @@ class _ExternalCalendarIntegrationPanelState
       }
       final results = await Future.wait(futures);
       if (!mounted) return;
-      final g = results[1] as ({bool enabled, String? email, bool hasRefreshToken});
+      final g =
+          results[1] as ({bool enabled, String? email, bool hasRefreshToken});
       var appleOn = false;
       if (AppleCalendarSyncService.isPlatformSupported && results.length > 2) {
         final a = results[2] as ({bool enabled, bool permissionGranted});
@@ -140,7 +141,9 @@ class _ExternalCalendarIntegrationPanelState
     setState(() {
       _googleOverride = true;
       _googleEnabled = true;
-      _googleEmail = res.email?.trim().isNotEmpty == true ? res.email!.trim() : _googleEmail;
+      _googleEmail = res.email?.trim().isNotEmpty == true
+          ? res.email!.trim()
+          : _googleEmail;
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -159,7 +162,8 @@ class _ExternalCalendarIntegrationPanelState
     setState(() => _googleBusy = true);
     try {
       if (v) {
-        final res = await GoogleCalendarSyncService.tryEnableSilent(widget.userDocId);
+        final res =
+            await GoogleCalendarSyncService.tryEnableSilent(widget.userDocId);
         if (!mounted) return;
         if (res.needsInteractiveAuth) {
           setState(() => _googleBusy = false);
@@ -204,7 +208,8 @@ class _ExternalCalendarIntegrationPanelState
     } catch (e) {
       if (mounted && FirestoreWebGuard.isClientTerminatedError(e)) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Atualize a página (F5) e tente de novo.')),
+          const SnackBar(
+              content: Text('Atualize a página (F5) e tente de novo.')),
         );
       }
     } finally {
@@ -257,15 +262,20 @@ class _ExternalCalendarIntegrationPanelState
               : 'Credenciais removidas. Ao ativar, escolha qual Gmail usar.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Trocar')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Trocar')),
         ],
       ),
     );
     if (ok != true || !mounted) return;
     setState(() => _googleBusy = true);
     try {
-      await GoogleCalendarSyncService.prepareGoogleAccountChange(widget.userDocId);
+      await GoogleCalendarSyncService.prepareGoogleAccountChange(
+          widget.userDocId);
       if (mounted) {
         setState(() {
           _googleOverride = false;
@@ -362,7 +372,8 @@ class _ExternalCalendarIntegrationPanelState
               Switch.adaptive(
                 value: value,
                 onChanged: onChanged,
-                activeTrackColor: (activeColor ?? _accent).withValues(alpha: 0.42),
+                activeTrackColor:
+                    (activeColor ?? _accent).withValues(alpha: 0.42),
                 activeThumbColor: activeColor ?? _accent,
               ),
           ],
@@ -391,8 +402,10 @@ class _ExternalCalendarIntegrationPanelState
       );
     }
 
-    final primary = _hex(_landingCfg['divThemePrimaryColor']?.toString(), _primary);
-    final accent = _hex(_landingCfg['divThemeAccentColor']?.toString(), _accent);
+    final primary =
+        _hex(_landingCfg['divThemePrimaryColor']?.toString(), _primary);
+    final accent =
+        _hex(_landingCfg['divThemeAccentColor']?.toString(), _accent);
     final appleHint = GoogleCalendarAuthHelper.isApplePrimaryLogin()
         ? 'Entrou com Apple? Use Google para Gmail ou EventKit abaixo para o Calendário do iPhone.'
         : 'Ative um ou os dois — compromissos sincronizam automaticamente.';
@@ -452,7 +465,11 @@ class _ExternalCalendarIntegrationPanelState
                     ),
                     if (_googleOn || _appleEnabled)
                       _statusChip(
-                        _googleOn && _appleEnabled ? 'GOOGLE + APPLE' : _googleOn ? 'GOOGLE' : 'APPLE',
+                        _googleOn && _appleEnabled
+                            ? 'GOOGLE + APPLE'
+                            : _googleOn
+                                ? 'GOOGLE'
+                                : 'APPLE',
                         accent,
                       ),
                   ],
@@ -467,7 +484,8 @@ class _ExternalCalendarIntegrationPanelState
                   ),
                 ),
                 const SizedBox(height: 4),
-                Divider(color: Colors.white.withValues(alpha: 0.14), height: 20),
+                Divider(
+                    color: Colors.white.withValues(alpha: 0.14), height: 20),
                 _providerTile(
                   leading: Container(
                     padding: const EdgeInsets.all(8),
@@ -475,7 +493,8 @@ class _ExternalCalendarIntegrationPanelState
                       color: _googleBlue.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.calendar_month_rounded, color: _googleBlue, size: 22),
+                    child: const Icon(Icons.calendar_month_rounded,
+                        color: _googleBlue, size: 22),
                   ),
                   title: 'Google Calendar',
                   subtitle: _googleOn
@@ -489,12 +508,14 @@ class _ExternalCalendarIntegrationPanelState
                   activeColor: _googleBlue,
                 ),
                 if (AppleCalendarSyncService.isPlatformSupported) ...[
-                  Divider(color: Colors.white.withValues(alpha: 0.12), height: 8),
+                  Divider(
+                      color: Colors.white.withValues(alpha: 0.12), height: 8),
                   _providerTile(
                     leading: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: AppleCalendarSyncService.appleEventColor.withValues(alpha: 0.2),
+                        color: AppleCalendarSyncService.appleEventColor
+                            .withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Icon(
@@ -530,7 +551,8 @@ class _ExternalCalendarIntegrationPanelState
             ),
           ),
         ),
-        if (widget.showChangeGoogleAccountAction && (_googleOn || (_googleEmail?.isNotEmpty ?? false)))
+        if (widget.showChangeGoogleAccountAction &&
+            (_googleOn || (_googleEmail?.isNotEmpty ?? false)))
           Padding(
             padding: const EdgeInsets.only(left: 4, bottom: 8),
             child: TextButton.icon(
@@ -540,6 +562,182 @@ class _ExternalCalendarIntegrationPanelState
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Botão compacto «SINCRONIZAR CALENDÁRIOS» — libera espaço para o calendário
+/// no módulo Agenda. Ao tocar, abre a [ExternalCalendarSyncScreen] completa.
+class ExternalCalendarSyncCollapsedButton extends StatelessWidget {
+  const ExternalCalendarSyncCollapsedButton({
+    super.key,
+    required this.googleActive,
+    required this.appleActive,
+    required this.onTap,
+  });
+
+  final bool googleActive;
+  final bool appleActive;
+  final VoidCallback onTap;
+
+  static const _primary = Color(0xFF0B1B4B);
+  static const _accent = Color(0xFFE8C547);
+
+  @override
+  Widget build(BuildContext context) {
+    final statusLabel = googleActive && appleActive
+        ? 'GOOGLE + APPLE'
+        : googleActive
+            ? 'GOOGLE'
+            : appleActive
+                ? 'APPLE'
+                : null;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: LinearGradient(
+              colors: [_primary, _primary.withValues(alpha: 0.92)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: _primary.withValues(alpha: 0.25),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.sync_rounded, color: _accent, size: 18),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'SINCRONIZAR CALENDÁRIOS',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 12.5,
+                        letterSpacing: 0.45,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Toque para ativar Google · Apple',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.78),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (statusLabel != null) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: _accent.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: _accent.withValues(alpha: 0.45)),
+                  ),
+                  child: Text(
+                    statusLabel,
+                    style: const TextStyle(
+                      color: _accent,
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.35,
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(width: 4),
+              const Icon(Icons.chevron_right_rounded,
+                  color: Colors.white70, size: 22),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Tela completa de sincronização de calendários (Google + Apple) —
+/// aberta pelo botão compacto da Agenda, com botão «Retornar».
+class ExternalCalendarSyncScreen extends StatelessWidget {
+  const ExternalCalendarSyncScreen({
+    super.key,
+    required this.userDocId,
+    this.onGoogleChanged,
+    this.onAppleChanged,
+  });
+
+  final String userDocId;
+  final VoidCallback? onGoogleChanged;
+  final VoidCallback? onAppleChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF4F6FB),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF0B1B4B),
+        foregroundColor: Colors.white,
+        title: const Text(
+          'Sincronizar calendários',
+          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+        ),
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+          children: [
+            ExternalCalendarIntegrationPanel(
+              userDocId: userDocId,
+              showChangeGoogleAccountAction: true,
+              onGoogleChanged: onGoogleChanged,
+              onAppleChanged: onAppleChanged,
+            ),
+            const SizedBox(height: 8),
+            FilledButton.icon(
+              onPressed: () => Navigator.of(context).maybePop(),
+              icon: const Icon(Icons.arrow_back_rounded, size: 20),
+              label: const Text(
+                'Retornar à Agenda',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(double.infinity, 50),
+                backgroundColor: const Color(0xFF0B1B4B),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

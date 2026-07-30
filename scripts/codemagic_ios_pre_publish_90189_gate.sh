@@ -22,6 +22,17 @@ if LATEST="$(bash "$ROOT/scripts/codemagic_ios_asc_latest_build_number.sh" 2>/de
   esac
 fi
 
+# Floor do repo também bloqueia (API ASC pode devolver valor obsoleto — DUPLICATE -19232).
+FLOOR=0
+if FLOOR="$(bash "$ROOT/scripts/codemagic_ios_read_asc_floor.sh" 2>/dev/null)"; then
+  case "$FLOOR" in
+    ''|*[!0-9]*) FLOOR=0 ;;
+  esac
+fi
+if [[ "$FLOOR" -gt "$LATEST" ]]; then
+  LATEST="$FLOOR"
+fi
+
 if [[ -n "$BN" && "$LATEST" -gt 0 && "$BN" -le "$LATEST" ]]; then
   echo "ERRO: CFBundleVersion planeado ($BN) ≤ ASC ($LATEST). Abortar upload."
   echo "       (Reinicie workflow completo — o passo Versão iOS deve auto-corrigir.)"

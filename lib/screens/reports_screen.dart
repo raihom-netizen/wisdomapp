@@ -29,7 +29,6 @@ import '../services/ocorrencias_service.dart';
 import '../utils/premium_upgrade.dart';
 import '../models/shift_location.dart';
 import '../utils/date_picker_a11y.dart';
-import '../models/finance_account.dart';
 import '../services/finance_accounts_service.dart';
 import '../widgets/report_finance_charts_panel.dart';
 import '../widgets/report_layout_responsive.dart';
@@ -40,7 +39,6 @@ import '../utils/friendly_error.dart';
 import '../utils/pdf_financeiro_super_extrato.dart';
 import '../services/express_compromisso_agenda_sync.dart';
 import '../utils/keyboard_form_scaffold.dart';
-import '../utils/home_shell_layout.dart';
 import '../widgets/finance_confirm_payment_sheet.dart';
 /// Relatórios — Clean Premium (PADRAO_VISUAL_CLEAN_PREMIUM.md).
 /// Apenas filtro de período; abaixo aparecem os dados da consulta.
@@ -2084,7 +2082,7 @@ Usadas para folga: ${usadasFolga.fold<int>(0, (s, g) => s + (((g['ocorrencias'] 
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 CircleAvatar(
-                  backgroundColor: accentColor.withOpacity(0.12),
+                  backgroundColor: accentColor.withValues(alpha: 0.12),
                   radius: 22,
                   child: Icon(Icons.receipt_long_rounded, color: accentColor, size: 20),
                 ),
@@ -2133,7 +2131,7 @@ Usadas para folga: ${usadasFolga.fold<int>(0, (s, g) => s + (((g['ocorrencias'] 
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      backgroundColor: AppColors.success.withOpacity(0.15),
+                      backgroundColor: AppColors.success.withValues(alpha: 0.15),
                       foregroundColor: AppColors.success,
                     ),
                   ),
@@ -2314,7 +2312,7 @@ Usadas para folga: ${usadasFolga.fold<int>(0, (s, g) => s + (((g['ocorrencias'] 
                     ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
-                    value: selectedCategory,
+                    initialValue: selectedCategory,
                     decoration: const InputDecoration(labelText: 'Categoria'),
                     items: [
                       ...categories.map((c) => DropdownMenuItem(value: c, child: Text(c))),
@@ -2348,7 +2346,7 @@ Usadas para folga: ${usadasFolga.fold<int>(0, (s, g) => s + (((g['ocorrencias'] 
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
-                    value: status,
+                    initialValue: status,
                     decoration: const InputDecoration(labelText: 'Status'),
                     items: const [
                       DropdownMenuItem(value: 'paid', child: Text('Pago')),
@@ -2371,7 +2369,7 @@ Usadas para folga: ${usadasFolga.fold<int>(0, (s, g) => s + (((g['ocorrencias'] 
                     )
                   else
                     DropdownButtonFormField<String?>(
-                      value: selectedFinanceAccountId,
+                      initialValue: selectedFinanceAccountId,
                       decoration: const InputDecoration(labelText: 'Conta do lançamento', isDense: true),
                       items: [
                         if (type == 'income')
@@ -2526,7 +2524,7 @@ Usadas para folga: ${usadasFolga.fold<int>(0, (s, g) => s + (((g['ocorrencias'] 
       } else if (newReceiptBytes != null && newReceiptBytes!.isNotEmpty && newReceiptName.isNotEmpty && newReceiptMime != null) {
         try {
           final fn = FunctionsService();
-          final txPath = 'users/${_userDocId}/transactions/$docId';
+          final txPath = 'users/$_userDocId/transactions/$docId';
           await fn.uploadReceiptToStorage(txPath: txPath, filename: newReceiptName, bytes: newReceiptBytes!, mimeType: newReceiptMime!);
         } catch (e) {
           if (context.mounted) {
@@ -2540,7 +2538,7 @@ Usadas para folga: ${usadasFolga.fold<int>(0, (s, g) => s + (((g['ocorrencias'] 
     await LogsService().saveLog(
       modulo: 'Relatórios',
       acao: type == 'income' ? 'Editou receita' : 'Editou despesa',
-      detalhes: '${categoryFinal} · ${CurrencyFormats.formatBRL(amount)}',
+      detalhes: '$categoryFinal · ${CurrencyFormats.formatBRL(amount)}',
     );
     if (context.mounted) {
       HapticFeedback.lightImpact();

@@ -29,13 +29,18 @@ import '../utils/premium_upgrade.dart';
 import '../utils/smart_input_heavy_parse.dart';
 import '../utils/smart_input_voice_text.dart';
 import '../widgets/finance_bank_brand_thumb.dart';
+import '../widgets/finance_calendar_color_picker.dart';
 import 'smart_input_batch_preview_screen.dart';
 
 const String _kSmartInputGuideCardText =
     'Escreva em linguagem natural: «compra supermercado 100 reais», «6× 250», «10 parcelas de 250». O assistente sugere a categoria (ex.: Supermercado) e você confirma. Vírgulas entre itens viram | no resumo. CSV / TXT: importe acima.';
 
 bool _bytesLookLikePdf(Uint8List b) =>
-    b.length >= 5 && b[0] == 0x25 && b[1] == 0x50 && b[2] == 0x44 && b[3] == 0x46; // %PDF
+    b.length >= 5 &&
+    b[0] == 0x25 &&
+    b[1] == 0x50 &&
+    b[2] == 0x44 &&
+    b[3] == 0x46; // %PDF
 
 /// Só para recusar import de imagem (OCR desativado — texto/CSV only).
 bool _importBytesLookLikeImage(Uint8List bytes, String name) {
@@ -50,9 +55,22 @@ bool _importBytesLookLikeImage(Uint8List bytes, String name) {
   }
   final b = bytes;
   if (b.length >= 3 && b[0] == 0xFF && b[1] == 0xD8) return true;
-  if (b.length >= 8 && b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47) return true;
-  if (b.length >= 6 && b[0] == 0x47 && b[1] == 0x49 && b[2] == 0x46) return true;
-  if (b.length >= 12 && b[0] == 0x52 && b[8] == 0x57 && b[9] == 0x45 && b[10] == 0x42 && b[11] == 0x50) {
+  if (b.length >= 8 &&
+      b[0] == 0x89 &&
+      b[1] == 0x50 &&
+      b[2] == 0x4E &&
+      b[3] == 0x47) {
+    return true;
+  }
+  if (b.length >= 6 && b[0] == 0x47 && b[1] == 0x49 && b[2] == 0x46) {
+    return true;
+  }
+  if (b.length >= 12 &&
+      b[0] == 0x52 &&
+      b[8] == 0x57 &&
+      b[9] == 0x45 &&
+      b[10] == 0x42 &&
+      b[11] == 0x50) {
     return true;
   }
   return false;
@@ -89,6 +107,7 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
   final FocusNode _fieldFocus = FocusNode();
   BankNotificationParseResult? _parsed;
   bool _saving = false;
+
   /// Enquanto busca categoria sugerida (há await no aparelho).
   bool _reparsing = false;
 
@@ -98,16 +117,20 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
 
   /// Quantidade de lançamentos detetados no texto (para botão de massa).
   int _batchCandidateCount = 0;
+
   /// Texto exatamente como estava quando o utilizador carregou em «Gerar lançamentos» (evita confirmar com texto desatualizado).
   String? _parsedSourceText;
+
   /// Resumo multi-linha calculado na última geração (não recalcula a cada frame).
   String? _cachedMultiSummary;
+
   /// Lista em massa da última análise (evita re-parse ao abrir pré-visualização).
   List<BankNotificationParseResult>? _cachedBatchList;
   bool _importBusy = false;
   bool get _ioBusy => _importBusy;
 
   _SmartInputMode _modeHighlight = _SmartInputMode.texto;
+
   /// Último texto do campo antes de colagem/import/ditado (um nível de desfazer).
   String? _undoFieldSnapshot;
 
@@ -119,12 +142,21 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
   List<FinanceAccount> _accounts = [];
 
   String _category = '';
+
   /// null em receitas = «sem conta» (igual novo lançamento).
   String? _financeAccountId;
   String? _defaultFinanceAccountId;
   DateTime _paymentDate = DateTime.now();
+
   /// `paid` = saldo imediato (débito na conta); `pending` = crédito / a receber (fica pendente).
   String _settlement = 'paid';
+
+  /// Se true e o status gravado for pendente, o lançamento aparece no calendário Agenda/Escala.
+  bool _addToCalendar = false;
+
+  /// Cor do lançamento no calendário (hex). Null = padrão (vermelho/verde).
+  String? _calendarColorHex;
+
   /// null = segue o tipo inferido do texto; se preenchido, o utilizador escolheu Receita/Despesa à mão.
   bool? _incomeUserOverride;
   String? _lastParsedTypeForOverride;
@@ -153,7 +185,8 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
   }
 
   /// Corta PDF bruto e limita tamanho (web fica fluido com menos texto no canvas).
-  ({String text, bool strippedPdf, bool truncated}) _normalizeFieldText(String raw) {
+  ({String text, bool strippedPdf, bool truncated}) _normalizeFieldText(
+      String raw) {
     var t = raw;
     var strippedPdf = false;
     final pdfIdx = t.indexOf('%PDF');
@@ -183,7 +216,8 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
     super.initState();
     _hydrateCategoriesAndAccounts();
     _textCtrl.addListener(_onTextChanged);
-    _authSubscription = fa.FirebaseAuth.instance.authStateChanges().listen((user) {
+    _authSubscription =
+        fa.FirebaseAuth.instance.authStateChanges().listen((user) {
       if (user != null) {
         unawaited(_hydrateCategoriesAndAccounts());
       }
@@ -194,7 +228,8 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
     final seq = ++_hydrateSeq;
     final cats = await UserCategoriesService().load(widget.uid);
     final accounts = await FinanceAccountsService().listOnce(widget.uid);
-    final defId = await FinanceAdvancedSettingsService().getDefaultFinanceAccountId(widget.uid);
+    final defId = await FinanceAdvancedSettingsService()
+        .getDefaultFinanceAccountId(widget.uid);
     if (!mounted || seq != _hydrateSeq) return;
     setState(() {
       _incomeCategories = cats.income
@@ -267,6 +302,8 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
     _cachedBatchList = null;
     _incomeUserOverride = null;
     _lastParsedTypeForOverride = null;
+    _addToCalendar = false;
+    _calendarColorHex = null;
   }
 
   void _onTextChanged() {
@@ -333,7 +370,9 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
           batchCount = r.batchCount;
         } catch (_) {
           batch = BankNotificationParser.parseManyForBatch(text);
-          p = batch.isNotEmpty ? batch.first : BankNotificationParser.parse(text);
+          p = batch.isNotEmpty
+              ? batch.first
+              : BankNotificationParser.parse(text);
           batchCount = batch.length;
         }
       } else {
@@ -362,8 +401,10 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
         _parsed = p;
         _batchCandidateCount = batchCount;
         _parsedSourceText = text;
-        _cachedBatchList = batchCount >= 2 ? (batch.isNotEmpty ? batch : null) : null;
-        _cachedMultiSummary = batchCount >= 2 ? _batchSummaryLight(p, batchCount) : null;
+        _cachedBatchList =
+            batchCount >= 2 ? (batch.isNotEmpty ? batch : null) : null;
+        _cachedMultiSummary =
+            batchCount >= 2 ? _batchSummaryLight(p, batchCount) : null;
         if (p.data != null) _paymentDate = p.data!;
 
         final t = p.type;
@@ -397,7 +438,9 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
     if (t.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Digite ou cole o texto dos lançamentos. Depois toque em «Gerar lançamentos».')),
+        const SnackBar(
+            content: Text(
+                'Digite ou cole o texto dos lançamentos. Depois toque em «Gerar lançamentos».')),
       );
       return;
     }
@@ -409,7 +452,8 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
       setState(_clearGeneratedPreview);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Não foi possível reconhecer valores e descrição neste texto. Ajuste e tente de novo.'),
+          content: Text(
+              'Não foi possível reconhecer valores e descrição neste texto. Ajuste e tente de novo.'),
         ),
       );
       return;
@@ -436,9 +480,11 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
     required List<String> allowed,
   }) async {
     if (allowed.isEmpty || descricao.isEmpty) return '';
-    final direct = SmartCategoryHintsService.matchAllowedCategoryInDescription(descricao, allowed);
+    final direct = SmartCategoryHintsService.matchAllowedCategoryInDescription(
+        descricao, allowed);
     if (direct != null && direct.trim().isNotEmpty) return direct.trim();
-    final hinted = await SmartCategoryHintsService.suggestCategory(widget.uid, descricao, allowed);
+    final hinted = await SmartCategoryHintsService.suggestCategory(
+        widget.uid, descricao, allowed);
     if (hinted != null && hinted.trim().isNotEmpty) return hinted.trim();
     return '';
   }
@@ -465,7 +511,9 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
             },
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancelar')),
             FilledButton(
               onPressed: () {
                 final t = ctrl.text.trim();
@@ -484,7 +532,10 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Não foi possível guardar a categoria. Tente de novo.'), backgroundColor: Color(0xFFB00020)),
+          const SnackBar(
+              content:
+                  Text('Não foi possível guardar a categoria. Tente de novo.'),
+              backgroundColor: Color(0xFFB00020)),
         );
       }
       return;
@@ -519,7 +570,9 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
       return _financeAccountId;
     }
     final cur = _financeAccountId;
-    if (cur != null && cur.isNotEmpty && _accounts.any((a) => a.id == cur)) return cur;
+    if (cur != null && cur.isNotEmpty && _accounts.any((a) => a.id == cur)) {
+      return cur;
+    }
     return _accounts.first.id;
   }
 
@@ -586,7 +639,8 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
     if (picked != null) setState(() => _paymentDate = picked);
   }
 
-  Future<void> _pushBatch(List<BankNotificationParseResult> raw, {String? importPresetIdHint}) async {
+  Future<void> _pushBatch(List<BankNotificationParseResult> raw,
+      {String? importPresetIdHint}) async {
     if (!widget.profile.hasActiveLicense) {
       mostrarAvisoSeLicencaInativa(context, widget.profile);
       return;
@@ -616,15 +670,20 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
     if (_parsedSourceText == null || _parsedSourceText != _textCtrl.text) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Primeiro toque em «Gerar lançamentos». Depois abra a pré-visualização em massa.')),
+        const SnackBar(
+            content: Text(
+                'Primeiro toque em «Gerar lançamentos». Depois abra a pré-visualização em massa.')),
       );
       return;
     }
-    final raw = _cachedBatchList ?? BankNotificationParser.parseManyForBatch(_textCtrl.text);
+    final raw = _cachedBatchList ??
+        BankNotificationParser.parseManyForBatch(_textCtrl.text);
     if (raw.length < 2) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('São necessários pelo menos 2 lançamentos reconhecidos no texto.')),
+          const SnackBar(
+              content: Text(
+                  'São necessários pelo menos 2 lançamentos reconhecidos no texto.')),
         );
       }
       return;
@@ -663,16 +722,21 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
     final parcela = (first.descricao ?? '').toLowerCase().contains('parcela');
     final parcelaBit = parcela ? ' · parcelas' : '';
     final v0 = first.valor;
-    final unitBit = v0 != null && v0 > 0 ? ' · $count× ${CurrencyFormats.formatBRL(v0)}' : '';
+    final unitBit = v0 != null && v0 > 0
+        ? ' · $count× ${CurrencyFormats.formatBRL(v0)}'
+        : '';
     final d0s = d0 != null ? df.format(d0) : '—';
     return '$count lançamentos$unitBit$parcelaBit · 1.º venc. $d0s';
   }
 
   Future<void> _copyCsvTemplateToClipboard() async {
-    await Clipboard.setData(const ClipboardData(text: _kSmartInputCsvTemplateBody));
+    await Clipboard.setData(
+        const ClipboardData(text: _kSmartInputCsvTemplateBody));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Modelo CSV copiado. Cole numa folha de cálculo ou guarde como .csv.')),
+      const SnackBar(
+          content: Text(
+              'Modelo CSV copiado. Cole numa folha de cálculo ou guarde como .csv.')),
     );
   }
 
@@ -701,7 +765,9 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
       await _copyCsvTemplateToClipboard();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Partilha indisponível; o modelo foi copiado para a área de transferência.')),
+        const SnackBar(
+            content: Text(
+                'Partilha indisponível; o modelo foi copiado para a área de transferência.')),
       );
     }
   }
@@ -732,21 +798,31 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
       builder: (ctx) {
         final scheme = Theme.of(ctx).colorScheme;
         return Padding(
-          padding: EdgeInsets.only(left: 20, right: 20, top: 8, bottom: MediaQuery.paddingOf(ctx).bottom + 20),
+          padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 8,
+              bottom: MediaQuery.paddingOf(ctx).bottom + 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
                 'Pré-visualização CSV',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: scheme.onSurface),
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: scheme.onSurface),
               ),
               const SizedBox(height: 6),
               Text(
                 fileName,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                    fontSize: 13,
+                    color: scheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600),
               ),
               if (usedLatin1Fallback) ...[
                 const SizedBox(height: 10),
@@ -759,12 +835,17 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.translate_rounded, size: 20, color: scheme.onSecondaryContainer),
+                      Icon(Icons.translate_rounded,
+                          size: 20, color: scheme.onSecondaryContainer),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'O ficheiro não estava em UTF-8 perfeito; lemos também em Latin-1 (acentos podem variar).',
-                          style: TextStyle(fontSize: 12.5, height: 1.35, fontWeight: FontWeight.w600, color: scheme.onSurface),
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              height: 1.35,
+                              fontWeight: FontWeight.w600,
+                              color: scheme.onSurface),
                         ),
                       ),
                     ],
@@ -772,9 +853,15 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
                 ),
               ],
               const SizedBox(height: 14),
-              _CsvPreviewStat(icon: Icons.table_rows_rounded, label: 'Linhas com valor', value: '${rows.length}'),
+              _CsvPreviewStat(
+                  icon: Icons.table_rows_rounded,
+                  label: 'Linhas com valor',
+                  value: '${rows.length}'),
               const SizedBox(height: 8),
-              _CsvPreviewStat(icon: Icons.payments_rounded, label: 'Soma dos valores', value: CurrencyFormats.formatBRL(sum)),
+              _CsvPreviewStat(
+                  icon: Icons.payments_rounded,
+                  label: 'Soma dos valores',
+                  value: CurrencyFormats.formatBRL(sum)),
               if (dMin != null || dMax != null) ...[
                 const SizedBox(height: 8),
                 _CsvPreviewStat(
@@ -784,8 +871,12 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
                     final a = dMin;
                     final b = dMax;
                     if (a != null && b != null) {
-                      final sameDay = a.year == b.year && a.month == b.month && a.day == b.day;
-                      return sameDay ? df.format(a) : '${df.format(a)} — ${df.format(b)}';
+                      final sameDay = a.year == b.year &&
+                          a.month == b.month &&
+                          a.day == b.day;
+                      return sameDay
+                          ? df.format(a)
+                          : '${df.format(a)} — ${df.format(b)}';
                     }
                     if (a != null) return df.format(a);
                     if (b != null) return df.format(b);
@@ -794,26 +885,40 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
                 ),
               ],
               const SizedBox(height: 12),
-              Text('Cabeçalho / colunas detetadas', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: scheme.onSurfaceVariant)),
+              Text('Cabeçalho / colunas detetadas',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                      color: scheme.onSurfaceVariant)),
               const SizedBox(height: 6),
               DecoratedBox(
                 decoration: BoxDecoration(
                   color: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
+                  border: Border.all(
+                      color: scheme.outlineVariant.withValues(alpha: 0.5)),
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(10),
                   child: Text(
-                    headerPreview.length > 280 ? '${headerPreview.substring(0, 277)}…' : headerPreview,
-                    style: const TextStyle(fontSize: 11.5, height: 1.35, fontFamily: 'monospace', fontFamilyFallback: ['Consolas', 'monospace']),
+                    headerPreview.length > 280
+                        ? '${headerPreview.substring(0, 277)}…'
+                        : headerPreview,
+                    style: const TextStyle(
+                        fontSize: 11.5,
+                        height: 1.35,
+                        fontFamily: 'monospace',
+                        fontFamilyFallback: ['Consolas', 'monospace']),
                   ),
                 ),
               ),
               const SizedBox(height: 8),
               Text(
                 'Linhas sem valor ou data reconhecível são ignoradas pelo importador.',
-                style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w500),
+                style: TextStyle(
+                    fontSize: 11,
+                    color: scheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 18),
               Row(
@@ -863,7 +968,8 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('PDF desativado aqui. Exporte o extrato para .csv ou copie o texto para o campo.'),
+              content: Text(
+                  'PDF desativado aqui. Exporte o extrato para .csv ou copie o texto para o campo.'),
             ),
           );
         }
@@ -874,7 +980,8 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Leitura de imagem (OCR) desativada. Importe .csv ou .txt, ou copie o texto para o campo.'),
+              content: Text(
+                  'Leitura de imagem (OCR) desativada. Importe .csv ou .txt, ou copie o texto para o campo.'),
             ),
           );
         }
@@ -903,7 +1010,10 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
           }
         }
         if (csvRows.isNotEmpty) {
-          final nonEmptyLines = t.split(RegExp(r'\r?\n')).where((e) => e.trim().isNotEmpty).toList();
+          final nonEmptyLines = t
+              .split(RegExp(r'\r?\n'))
+              .where((e) => e.trim().isNotEmpty)
+              .toList();
           final headerLine = nonEmptyLines.isEmpty ? '' : nonEmptyLines.first;
           if (csvRows.length >= 2) {
             final ok = await _showCsvImportPreviewSheet(
@@ -915,7 +1025,9 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
             if (ok && mounted) await _pushBatch(csvRows);
           } else {
             final only = csvRows.first;
-            final line = '${only.descricao ?? ''} ${only.valor?.toStringAsFixed(2).replaceAll('.', ',') ?? ''}'.trim();
+            final line =
+                '${only.descricao ?? ''} ${only.valor?.toStringAsFixed(2).replaceAll('.', ',') ?? ''}'
+                    .trim();
             if (line.isNotEmpty) {
               final ok = await _showCsvImportPreviewSheet(
                 fileName: name,
@@ -927,7 +1039,8 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
               _saveUndoSnapshot();
               _suppressTextListener = true;
               _textCtrl.text = line;
-              _textCtrl.selection = TextSelection.collapsed(offset: _textCtrl.text.length);
+              _textCtrl.selection =
+                  TextSelection.collapsed(offset: _textCtrl.text.length);
               _suppressTextListener = false;
               await _reparse();
             }
@@ -943,13 +1056,15 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
         final norm = _normalizeFieldText(merged);
         _suppressTextListener = true;
         _textCtrl.text = norm.text;
-        _textCtrl.selection = TextSelection.collapsed(offset: _textCtrl.text.length);
+        _textCtrl.selection =
+            TextSelection.collapsed(offset: _textCtrl.text.length);
         _suppressTextListener = false;
       });
       await _reparse();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ficheiro: ${_shortErr(e)}')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Ficheiro: ${_shortErr(e)}')));
       }
     } finally {
       if (mounted) setState(() => _importBusy = false);
@@ -964,31 +1079,38 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
     if (_parsedSourceText == null || _parsedSourceText != _textCtrl.text) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Toque em «Gerar lançamentos» para analisar o texto. Se editar o texto, gere de novo antes de confirmar.')),
+        const SnackBar(
+            content: Text(
+                'Toque em «Gerar lançamentos» para analisar o texto. Se editar o texto, gere de novo antes de confirmar.')),
       );
       return;
     }
-    final multi = _cachedBatchList ?? BankNotificationParser.parseManyForBatch(_textCtrl.text.trim());
+    final multi = _cachedBatchList ??
+        BankNotificationParser.parseManyForBatch(_textCtrl.text.trim());
     if (multi.length > 1) {
       await _confirmParcelBatch(multi);
       return;
     }
     final p = _parsed;
     if (p == null || p.valor == null || p.valor! <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cole um texto com valor em R\$ válido.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Cole um texto com valor em R\$ válido.')));
       return;
     }
     final desc = (p.descricao ?? '').trim();
     if (desc.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Não foi possível identificar a descrição a partir do texto.')),
-
+        const SnackBar(
+            content: Text(
+                'Não foi possível identificar a descrição a partir do texto.')),
       );
       return;
     }
     if (desc.length < 3) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Histórico muito curto — use pelo menos 3 caracteres ou edite o texto.')),
+        const SnackBar(
+            content: Text(
+                'Histórico muito curto — use pelo menos 3 caracteres ou edite o texto.')),
       );
       return;
     }
@@ -999,7 +1121,9 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
     if (!isIncome) {
       if (aid.isEmpty || !_accounts.any((a) => a.id == aid)) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Selecione a conta para esta despesa.'), backgroundColor: Color(0xFFB00020)),
+          const SnackBar(
+              content: Text('Selecione a conta para esta despesa.'),
+              backgroundColor: Color(0xFFB00020)),
         );
         return;
       }
@@ -1009,7 +1133,8 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
     if (cat.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Lançamento sem categoria. Selecione ou crie uma categoria antes de gravar.'),
+          content: Text(
+              'Lançamento sem categoria. Selecione ou crie uma categoria antes de gravar.'),
           backgroundColor: Color(0xFFB00020),
         ),
       );
@@ -1019,7 +1144,9 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
     setState(() => _saving = true);
     try {
       final autoPending = _shouldDefaultPendingFromParsed(p);
-      final statusToSave = autoPending ? 'pending' : (_settlement == 'pending' ? 'pending' : 'paid');
+      final statusToSave = autoPending
+          ? 'pending'
+          : (_settlement == 'pending' ? 'pending' : 'paid');
       final docId = await FinanceService.saveSmartPasteTransaction(
         uid: widget.uid,
         context: context,
@@ -1032,10 +1159,13 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
         rawSnippet: p.rawSnippet,
         saveLearnedMapping: true,
         status: statusToSave,
+        addToCalendar: statusToSave == 'pending' && _addToCalendar,
+        calendarColorHex: _calendarColorHex,
       );
       if (docId != null && mounted) {
         HapticFeedback.mediumImpact();
-        Navigator.of(context).pop(SmartInputPopResult(createdTransactionIds: [docId]));
+        Navigator.of(context)
+            .pop(SmartInputPopResult(createdTransactionIds: [docId]));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -1043,7 +1173,8 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
   }
 
   /// Várias parcelas detetadas no mesmo texto (ex.: «parcelado em 10 vezes valor total 1.000»).
-  Future<void> _confirmParcelBatch(List<BankNotificationParseResult> items) async {
+  Future<void> _confirmParcelBatch(
+      List<BankNotificationParseResult> items) async {
     if (!widget.profile.hasActiveLicense) {
       mostrarAvisoSeLicencaInativa(context, widget.profile);
       return;
@@ -1052,7 +1183,9 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
       if (!p.hasMinimumForConfirmation) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Um dos lançamentos ficou incompleto. Ajuste o texto ou abra «Massa» para rever.')),
+            const SnackBar(
+                content: Text(
+                    'Um dos lançamentos ficou incompleto. Ajuste o texto ou abra «Massa» para rever.')),
           );
         }
         return;
@@ -1063,7 +1196,9 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
     if (!isIncome) {
       if (aid.isEmpty || !_accounts.any((a) => a.id == aid)) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Selecione a conta para esta despesa.'), backgroundColor: Color(0xFFB00020)),
+          const SnackBar(
+              content: Text('Selecione a conta para esta despesa.'),
+              backgroundColor: Color(0xFFB00020)),
         );
         return;
       }
@@ -1072,7 +1207,8 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
     if (cat.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Há lançamento sem categoria. Selecione ou crie uma categoria antes de gravar.'),
+          content: Text(
+              'Há lançamento sem categoria. Selecione ou crie uma categoria antes de gravar.'),
           backgroundColor: Color(0xFFB00020),
         ),
       );
@@ -1080,7 +1216,8 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
     }
 
     final nParc = items.length;
-    final batchHasInstallmentLike = nParc > 1 || items.any(_shouldDefaultPendingFromParsed);
+    final batchHasInstallmentLike =
+        nParc > 1 || items.any(_shouldDefaultPendingFromParsed);
     setState(() {
       _saving = true;
       if (batchHasInstallmentLike) _settlement = 'pending';
@@ -1091,8 +1228,11 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
       for (var i = 0; i < items.length; i++) {
         final p = items[i];
         final desc = (p.descricao ?? '').trim();
-        final autoPending = batchHasInstallmentLike || _shouldDefaultPendingFromParsed(p);
-        final statusToSave = autoPending ? 'pending' : (_settlement == 'pending' ? 'pending' : 'paid');
+        final autoPending =
+            batchHasInstallmentLike || _shouldDefaultPendingFromParsed(p);
+        final statusToSave = autoPending
+            ? 'pending'
+            : (_settlement == 'pending' ? 'pending' : 'paid');
         final id = await FinanceService.saveSmartPasteTransaction(
           uid: widget.uid,
           context: context,
@@ -1105,6 +1245,8 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
           rawSnippet: p.rawSnippet,
           saveLearnedMapping: i == 0,
           status: statusToSave,
+          addToCalendar: statusToSave == 'pending' && _addToCalendar,
+          calendarColorHex: _calendarColorHex,
           showFeedback: false,
           smartPasteBatchId: batchId,
           installmentIndex: nParc > 1 ? i + 1 : null,
@@ -1117,7 +1259,8 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${ids.length} lançamento(s) guardado(s).')),
         );
-        Navigator.of(context).pop(SmartInputPopResult(createdTransactionIds: ids));
+        Navigator.of(context)
+            .pop(SmartInputPopResult(createdTransactionIds: ids));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -1148,453 +1291,552 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
         }
       },
       child: Scaffold(
-      resizeToAvoidBottomInset: scaffoldKeyboardResizeToAvoidBottomInset(),
-      backgroundColor: const Color(0xFFF1F5F9),
-      extendBodyBehindAppBar: false,
-      appBar: AppBar(
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        backgroundColor: Colors.transparent,
-        surfaceTintColor: Colors.transparent,
-        automaticallyImplyLeading: false,
-        leading: IconButton(
-          tooltip: 'Voltar',
-          onPressed: () => _leaveScreen(),
-          style: IconButton.styleFrom(foregroundColor: Colors.white),
-          icon: const Icon(Icons.arrow_back_rounded, size: 24),
-        ),
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppColors.deepBlueDark, AppColors.deepBlue, AppColors.primary],
-            ),
-            boxShadow: [BoxShadow(color: Color(0x330B1F4B), blurRadius: 20, offset: Offset(0, 6))],
-          ),
-        ),
-        title: const Text('Lançamento inteligente'),
-        centerTitle: true,
-        titleTextStyle: const TextStyle(
-          color: Colors.white,
-          fontSize: 18,
-          fontWeight: FontWeight.w800,
-          letterSpacing: -0.2,
-        ),
-        iconTheme: const IconThemeData(color: Colors.white),
-        actionsIconTheme: const IconThemeData(color: Colors.white),
-        foregroundColor: Colors.white,
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 2),
-            child: Center(
-              child: _AppBarGradientChip(
-                label: 'Colar texto',
-                icon: Icons.content_paste_go_rounded,
-                onPressed: _pasteClipboard,
-              ),
-            ),
-          ),
-          IconButton(
-            tooltip: 'Fechar',
+        resizeToAvoidBottomInset: scaffoldKeyboardResizeToAvoidBottomInset(),
+        backgroundColor: const Color(0xFFF1F5F9),
+        extendBodyBehindAppBar: false,
+        appBar: AppBar(
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          backgroundColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
+          automaticallyImplyLeading: false,
+          leading: IconButton(
+            tooltip: 'Voltar',
             onPressed: () => _leaveScreen(),
-            icon: const Icon(Icons.close_rounded, size: 24),
             style: IconButton.styleFrom(foregroundColor: Colors.white),
+            icon: const Icon(Icons.arrow_back_rounded, size: 24),
           ),
-        ],
-      ),
-      body: _loadingLists
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const SizedBox(
-                    width: 40,
-                    height: 40,
-                    child: CircularProgressIndicator(strokeWidth: 3, color: AppColors.primary),
-                  ),
-                  const SizedBox(height: 20),
-                  Text('Carregando contas e categorias…', style: TextStyle(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppColors.deepBlueDark,
+                  AppColors.deepBlue,
+                  AppColors.primary
                 ],
               ),
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
-                    children: [
-                  // Mesmo fio visual do atalho Início (dashboard) e do CTA do Financeiro
-                  const _LancExpressoInicioStyleHeader(),
-                  SizedBox(height: ready ? 12 : 18),
-                  const _PremiumGuideCard(
-                    text: _kSmartInputGuideCardText,
-                  ),
-                  const SizedBox(height: 10),
-                  _SmartInputModeChips(
-                    mode: _modeHighlight,
-                    onSelectionChanged: _saving || _ioBusy
-                        ? null
-                        : (s) {
-                            unawaited(_onModeSegmentChanged(s));
-                          },
-                  ),
-                  if (_undoFieldSnapshot != null) ...[
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        onPressed: _saving || _ioBusy ? null : _undoLastFieldChange,
-                        icon: const Icon(Icons.undo_rounded, size: 20),
-                        label: const Text('Desfazer colagem ou import'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: AppColors.deepBlue,
-                          textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                        ),
-                      ),
+              boxShadow: [
+                BoxShadow(
+                    color: Color(0x330B1F4B),
+                    blurRadius: 20,
+                    offset: Offset(0, 6))
+              ],
+            ),
+          ),
+          title: const Text('Lançamento inteligente'),
+          centerTitle: true,
+          titleTextStyle: const TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.2,
+          ),
+          iconTheme: const IconThemeData(color: Colors.white),
+          actionsIconTheme: const IconThemeData(color: Colors.white),
+          foregroundColor: Colors.white,
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: 2),
+              child: Center(
+                child: _AppBarGradientChip(
+                  label: 'Colar texto',
+                  icon: Icons.content_paste_go_rounded,
+                  onPressed: _pasteClipboard,
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Fechar',
+              onPressed: () => _leaveScreen(),
+              icon: const Icon(Icons.close_rounded, size: 24),
+              style: IconButton.styleFrom(foregroundColor: Colors.white),
+            ),
+          ],
+        ),
+        body: _loadingLists
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const SizedBox(
+                      width: 40,
+                      height: 40,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 3, color: AppColors.primary),
                     ),
+                    const SizedBox(height: 20),
+                    Text('Carregando contas e categorias…',
+                        style: TextStyle(
+                            color: scheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600)),
                   ],
-                  const SizedBox(height: 10),
-                  _SmartInputExamplesPanel(
-                    onCopyExample: _onExampleCopied,
-                    onCopyCsvTemplate: _copyCsvTemplateToClipboard,
-                    onShareCsvTemplate: _shareCsvTemplate,
-                  ),
-                  SizedBox(height: ready ? 10 : 16),
-                  // Borda suave com gradiente (alinhada ao card do início)
-                  Container(
-                    padding: const EdgeInsets.all(1.2),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(24),
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          AppColors.primary.withValues(alpha: 0.45),
-                          const Color(0xFF0D9488).withValues(alpha: 0.3),
+                ),
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
+                      children: [
+                        // Mesmo fio visual do atalho Início (dashboard) e do CTA do Financeiro
+                        const _LancExpressoInicioStyleHeader(),
+                        SizedBox(height: ready ? 12 : 18),
+                        const _PremiumGuideCard(
+                          text: _kSmartInputGuideCardText,
+                        ),
+                        const SizedBox(height: 10),
+                        _SmartInputModeChips(
+                          mode: _modeHighlight,
+                          onSelectionChanged: _saving || _ioBusy
+                              ? null
+                              : (s) {
+                                  unawaited(_onModeSegmentChanged(s));
+                                },
+                        ),
+                        if (_undoFieldSnapshot != null) ...[
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton.icon(
+                              onPressed: _saving || _ioBusy
+                                  ? null
+                                  : _undoLastFieldChange,
+                              icon: const Icon(Icons.undo_rounded, size: 20),
+                              label: const Text('Desfazer colagem ou import'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppColors.deepBlue,
+                                textStyle: const TextStyle(
+                                    fontWeight: FontWeight.w700, fontSize: 13),
+                              ),
+                            ),
+                          ),
                         ],
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.deepBlue.withValues(alpha: 0.12),
-                          blurRadius: 20,
-                          offset: const Offset(0, 10),
+                        const SizedBox(height: 10),
+                        _SmartInputExamplesPanel(
+                          onCopyExample: _onExampleCopied,
+                          onCopyCsvTemplate: _copyCsvTemplateToClipboard,
+                          onShareCsvTemplate: _shareCsvTemplate,
+                        ),
+                        SizedBox(height: ready ? 10 : 16),
+                        // Borda suave com gradiente (alinhada ao card do início)
+                        Container(
+                          padding: const EdgeInsets.all(1.2),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(24),
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                AppColors.primary.withValues(alpha: 0.45),
+                                const Color(0xFF0D9488).withValues(alpha: 0.3),
+                              ],
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color:
+                                    AppColors.deepBlue.withValues(alpha: 0.12),
+                                blurRadius: 20,
+                                offset: const Offset(0, 10),
+                              ),
+                            ],
+                          ),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: scheme.surface,
+                              borderRadius: BorderRadius.circular(22.5),
+                            ),
+                            child: Stack(
+                              children: [
+                                FastTextField(
+                                  controller: _textCtrl,
+                                  focusNode: _fieldFocus,
+                                  minLines: ready ? 6 : 8,
+                                  maxLines: 22,
+                                  keyboardType: TextInputType.multiline,
+                                  textInputAction: TextInputAction.newline,
+                                  inputFormatters: [
+                                    LengthLimitingTextInputFormatter(
+                                        _maxFieldChars),
+                                  ],
+                                  style: const TextStyle(
+                                      fontSize: 15, height: 1.4),
+                                  decoration: InputDecoration(
+                                    alignLabelWithHint: true,
+                                    hintText:
+                                        'Ex.: compra supermercado 100 reais · 6× 250 · 10 parcelas de 250 · 1000 parcelados em 4. Enter = nova linha.',
+                                    hintStyle: TextStyle(
+                                        color: scheme.onSurfaceVariant
+                                            .withValues(alpha: 0.72),
+                                        fontSize: 13,
+                                        height: 1.3),
+                                    filled: true,
+                                    fillColor: scheme.surface,
+                                    contentPadding: const EdgeInsets.fromLTRB(
+                                        18, 20, 18, 58),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(22),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  left: 2,
+                                  bottom: 2,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        tooltip: 'Limpar campo',
+                                        onPressed: _saving || _importBusy
+                                            ? null
+                                            : _clearField,
+                                        icon: Icon(Icons.delete_sweep_outlined,
+                                            size: 22,
+                                            color: scheme.onSurfaceVariant),
+                                      ),
+                                      IconButton(
+                                        tooltip:
+                                            'Selecionar tudo (depois apague com o teclado)',
+                                        onPressed: _saving || _importBusy
+                                            ? null
+                                            : _selectAllInField,
+                                        icon: Icon(Icons.select_all_rounded,
+                                            size: 22,
+                                            color: scheme.onSurfaceVariant),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Positioned(
+                                  right: 8,
+                                  bottom: 8,
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    borderRadius: BorderRadius.circular(16),
+                                    clipBehavior: Clip.antiAlias,
+                                    child: InkWell(
+                                      onTap: _saving ? null : _pasteClipboard,
+                                      borderRadius: BorderRadius.circular(16),
+                                      child: Ink(
+                                        decoration: const BoxDecoration(
+                                          borderRadius: BorderRadius.all(
+                                              Radius.circular(16)),
+                                          gradient: LinearGradient(
+                                            begin: Alignment.centerLeft,
+                                            end: Alignment.centerRight,
+                                            colors: [
+                                              AppColors.deepBlueDark,
+                                              AppColors.deepBlue,
+                                              AppColors.primary
+                                            ],
+                                          ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Color(0x442D5BFF),
+                                              blurRadius: 12,
+                                              offset: Offset(0, 4),
+                                            ),
+                                          ],
+                                        ),
+                                        child: const Padding(
+                                          padding: EdgeInsets.symmetric(
+                                              horizontal: 12, vertical: 10),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                  Icons
+                                                      .content_paste_go_rounded,
+                                                  size: 20,
+                                                  color: Colors.white),
+                                              SizedBox(width: 6),
+                                              Text('Colar texto',
+                                                  style: TextStyle(
+                                                      color: Colors.white,
+                                                      fontWeight:
+                                                          FontWeight.w800,
+                                                      fontSize: 12.5,
+                                                      letterSpacing: 0.15)),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: (_saving || _ioBusy || _reparsing)
+                                ? null
+                                : () {
+                                    unawaited(_generateLancamentos());
+                                  },
+                            icon: const Icon(Icons.auto_fix_high_rounded,
+                                size: 22),
+                            label: const Text('Gerar lançamentos',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 15,
+                                    letterSpacing: 0.15)),
+                            style: FilledButton.styleFrom(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 14)),
+                          ),
+                        ),
+                        if (!_loadingLists) ...[
+                          if (_batchCandidateCount >= 2)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(14),
+                                  color:
+                                      AppColors.primary.withValues(alpha: 0.08),
+                                  border: Border.all(
+                                      color: AppColors.primary
+                                          .withValues(alpha: 0.22)),
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 10),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.account_tree_rounded,
+                                          color: AppColors.deepBlue, size: 22),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Assistente: $_batchCandidateCount lançamento(s) neste texto',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w900,
+                                                fontSize: 13,
+                                                color: scheme.onSurface,
+                                                height: 1.2,
+                                              ),
+                                            ),
+                                            if (multiSummary != null) ...[
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                multiSummary,
+                                                style: TextStyle(
+                                                    fontSize: 12,
+                                                    height: 1.3,
+                                                    color:
+                                                        scheme.onSurfaceVariant,
+                                                    fontWeight:
+                                                        FontWeight.w600),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          if (_importBusy ||
+                              (_reparsing &&
+                                  _textCtrl.text.trim().isNotEmpty)) ...[
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: AppColors.primary,
+                                      backgroundColor: AppColors.accent
+                                          .withValues(alpha: 0.2),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      _importBusy
+                                          ? 'A importar ficheiro…'
+                                          : 'A analisar o texto…',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: scheme.onSurfaceVariant),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                          if (_importBusy)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 2),
+                              child: LinearProgressIndicator(minHeight: 3),
+                            ),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              if (_batchCandidateCount >= 2)
+                                Semantics(
+                                  label:
+                                      'Abrir pré-visualização em massa, $_batchCandidateCount lançamentos detetados',
+                                  button: true,
+                                  child: _ModernActionButton(
+                                    label:
+                                        'Pré-visualizar massa ($_batchCandidateCount)',
+                                    icon: Icons.grid_view_rounded,
+                                    emphasize: true,
+                                    onPressed: _saving || _ioBusy
+                                        ? null
+                                        : _openBatchFromField,
+                                  ),
+                                ),
+                              Semantics(
+                                label:
+                                    'Adicionar ficheiro CSV ou TXT ao lançamento',
+                                button: true,
+                                child: _ModernActionButton(
+                                  label: 'Adicionar CSV / TXT',
+                                  icon: Icons.add_chart_rounded,
+                                  csvAccent: true,
+                                  onPressed: _saving || _ioBusy
+                                      ? null
+                                      : _importTextFile,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Text(
+                              'Tríades com | (3, 6, 9… partes) viram linhas. Parcelas: use «em N parcelas» (total) ou «N parcelas de R\$» (cada). Máscaras: supermercado10000, datas dd/mm/aaaa.',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  height: 1.35,
+                                  color: scheme.onSurfaceVariant,
+                                  fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                        ],
+                        if (_reparsing &&
+                            _textCtrl.text.trim().isNotEmpty &&
+                            !_importBusy) ...[
+                          const SizedBox(height: 8),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: LinearProgressIndicator(
+                              minHeight: 3,
+                              backgroundColor:
+                                  AppColors.accent.withValues(alpha: 0.15),
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ],
+                        SizedBox(height: ready ? 12 : 20),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 320),
+                          switchInCurve: Curves.easeOutCubic,
+                          switchOutCurve: Curves.easeInCubic,
+                          child: ready
+                              ? _ConfirmCard(
+                                  key: const ValueKey('confirm'),
+                                  parsed: _parsed!,
+                                  multiLancSummary: multiSummary,
+                                  isIncome: _effectiveIsIncome,
+                                  onIncomeTypeChanged: _onUserChangeIncomeType,
+                                  category: _category,
+                                  categories: _catsForType,
+                                  accounts: _accounts,
+                                  financeAccountId: _financeAccountId,
+                                  paymentDate: _paymentDate,
+                                  settlement: _settlement,
+                                  onSettlement: (s) {
+                                    HapticFeedback.selectionClick();
+                                    setState(() => _settlement = s);
+                                  },
+                                  addToCalendar: _addToCalendar,
+                                  calendarColorHex: _calendarColorHex,
+                                  onAddToCalendarChanged: (v) =>
+                                      setState(() => _addToCalendar = v),
+                                  onCalendarColorChanged: (v) =>
+                                      setState(() => _calendarColorHex = v),
+                                  onCategoryChanged: (v) {
+                                    HapticFeedback.selectionClick();
+                                    setState(() => _category = v);
+                                  },
+                                  onAddNewCategory: _criarEUsarNovaCategoria,
+                                  onAccountChanged: (v) =>
+                                      setState(() => _financeAccountId = v),
+                                  onDateTap: _pickDate,
+                                )
+                              : _HintCard(
+                                  key: const ValueKey('hint'),
+                                  scheme: scheme,
+                                ),
                         ),
                       ],
                     ),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: scheme.surface,
-                        borderRadius: BorderRadius.circular(22.5),
-                      ),
-                      child: Stack(
-                        children: [
-                          FastTextField(
-                            controller: _textCtrl,
-                            focusNode: _fieldFocus,
-                            minLines: ready ? 6 : 8,
-                            maxLines: 22,
-                            keyboardType: TextInputType.multiline,
-                            textInputAction: TextInputAction.newline,
-                            inputFormatters: [
-                              LengthLimitingTextInputFormatter(_maxFieldChars),
-                            ],
-                            style: const TextStyle(fontSize: 15, height: 1.4),
-                            decoration: InputDecoration(
-                              alignLabelWithHint: true,
-                              hintText:
-                                  'Ex.: compra supermercado 100 reais · 6× 250 · 10 parcelas de 250 · 1000 parcelados em 4. Enter = nova linha.',
-                              hintStyle: TextStyle(color: scheme.onSurfaceVariant.withValues(alpha: 0.72), fontSize: 13, height: 1.3),
-                              filled: true,
-                              fillColor: scheme.surface,
-                              contentPadding: const EdgeInsets.fromLTRB(18, 20, 18, 58),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(22),
-                                borderSide: BorderSide.none,
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            left: 2,
-                            bottom: 2,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  tooltip: 'Limpar campo',
-                                  onPressed: _saving || _importBusy ? null : _clearField,
-                                  icon: Icon(Icons.delete_sweep_outlined, size: 22, color: scheme.onSurfaceVariant),
-                                ),
-                                IconButton(
-                                  tooltip: 'Selecionar tudo (depois apague com o teclado)',
-                                  onPressed: _saving || _importBusy ? null : _selectAllInField,
-                                  icon: Icon(Icons.select_all_rounded, size: 22, color: scheme.onSurfaceVariant),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Positioned(
-                            right: 8,
-                            bottom: 8,
-                            child: Material(
-                              color: Colors.transparent,
-                              borderRadius: BorderRadius.circular(16),
-                              clipBehavior: Clip.antiAlias,
-                              child: InkWell(
-                                onTap: _saving ? null : _pasteClipboard,
-                                borderRadius: BorderRadius.circular(16),
-                                child: Ink(
-                                  decoration: const BoxDecoration(
-                                    borderRadius: BorderRadius.all(Radius.circular(16)),
-                                    gradient: LinearGradient(
-                                      begin: Alignment.centerLeft,
-                                      end: Alignment.centerRight,
-                                      colors: [AppColors.deepBlueDark, AppColors.deepBlue, AppColors.primary],
-                                    ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Color(0x442D5BFF),
-                                        blurRadius: 12,
-                                        offset: Offset(0, 4),
-                                      ),
-                                    ],
-                                  ),
-                                  child: const Padding(
-                                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.content_paste_go_rounded, size: 20, color: Colors.white),
-                                        SizedBox(width: 6),
-                                        Text('Colar texto', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12.5, letterSpacing: 0.15)),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                   ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: (_saving || _ioBusy || _reparsing)
-                          ? null
-                          : () {
-                              unawaited(_generateLancamentos());
-                            },
-                      icon: const Icon(Icons.auto_fix_high_rounded, size: 22),
-                      label: const Text('Gerar lançamentos', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 0.15)),
-                      style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
-                    ),
-                  ),
-                  if (!_loadingLists) ...[
-                    if (_batchCandidateCount >= 2)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(14),
-                            color: AppColors.primary.withValues(alpha: 0.08),
-                            border: Border.all(color: AppColors.primary.withValues(alpha: 0.22)),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                            child: Row(
-                              children: [
-                                Icon(Icons.account_tree_rounded, color: AppColors.deepBlue, size: 22),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Assistente: $_batchCandidateCount lançamento(s) neste texto',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w900,
-                                          fontSize: 13,
-                                          color: scheme.onSurface,
-                                          height: 1.2,
-                                        ),
-                                      ),
-                                      if (multiSummary != null) ...[
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          multiSummary,
-                                          style: TextStyle(fontSize: 12, height: 1.3, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w600),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    if (_importBusy || (_reparsing && _textCtrl.text.trim().isNotEmpty)) ...[
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
+                  if (ready)
+                    SafeArea(
+                      top: false,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
                         child: Row(
                           children: [
-                            SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppColors.primary,
-                                backgroundColor: AppColors.accent.withValues(alpha: 0.2),
+                            Expanded(
+                              child: _PremiumGhostCtaButton(
+                                label: 'Cancelar',
+                                onPressed: () {
+                                  HapticFeedback.lightImpact();
+                                  _leaveScreen();
+                                },
                               ),
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 12),
                             Expanded(
-                              child: Text(
-                                _importBusy ? 'A importar ficheiro…' : 'A analisar o texto…',
-                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: scheme.onSurfaceVariant),
+                              child: _PremiumGradientCtaButton(
+                                onPressed: _saving ? null : _confirm,
+                                child: _saving
+                                    ? const SizedBox(
+                                        width: 22,
+                                        height: 22,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white),
+                                      )
+                                    : const Text(
+                                        'Confirmar',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 16,
+                                          color: Colors.white,
+                                          letterSpacing: 0.2,
+                                        ),
+                                      ),
                               ),
                             ),
                           ],
                         ),
                       ),
-                    ],
-                    if (_importBusy)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 2),
-                        child: LinearProgressIndicator(minHeight: 3),
-                      ),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        if (_batchCandidateCount >= 2)
-                          Semantics(
-                            label: 'Abrir pré-visualização em massa, $_batchCandidateCount lançamentos detetados',
-                            button: true,
-                            child: _ModernActionButton(
-                              label: 'Pré-visualizar massa ($_batchCandidateCount)',
-                              icon: Icons.grid_view_rounded,
-                              emphasize: true,
-                              onPressed: _saving || _ioBusy ? null : _openBatchFromField,
-                            ),
-                          ),
-                        Semantics(
-                          label: 'Adicionar ficheiro CSV ou TXT ao lançamento',
-                          button: true,
-                          child: _ModernActionButton(
-                            label: 'Adicionar CSV / TXT',
-                            icon: Icons.add_chart_rounded,
-                            csvAccent: true,
-                            onPressed: _saving || _ioBusy ? null : _importTextFile,
-                          ),
-                        ),
-                      ],
                     ),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Text(
-                        'Tríades com | (3, 6, 9… partes) viram linhas. Parcelas: use «em N parcelas» (total) ou «N parcelas de R\$» (cada). Máscaras: supermercado10000, datas dd/mm/aaaa.',
-                        style: TextStyle(fontSize: 11, height: 1.35, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                  ],
-                  if (_reparsing && _textCtrl.text.trim().isNotEmpty && !_importBusy) ...[
-                    const SizedBox(height: 8),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: LinearProgressIndicator(
-                        minHeight: 3,
-                        backgroundColor: AppColors.accent.withValues(alpha: 0.15),
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ],
-                  SizedBox(height: ready ? 12 : 20),
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 320),
-                    switchInCurve: Curves.easeOutCubic,
-                    switchOutCurve: Curves.easeInCubic,
-                    child: ready
-                        ? _ConfirmCard(
-                            key: const ValueKey('confirm'),
-                            parsed: _parsed!,
-                            multiLancSummary: multiSummary,
-                            isIncome: _effectiveIsIncome,
-                            onIncomeTypeChanged: _onUserChangeIncomeType,
-                            category: _category,
-                            categories: _catsForType,
-                            accounts: _accounts,
-                            financeAccountId: _financeAccountId,
-                            paymentDate: _paymentDate,
-                            settlement: _settlement,
-                            onSettlement: (s) {
-                              HapticFeedback.selectionClick();
-                              setState(() => _settlement = s);
-                            },
-                            onCategoryChanged: (v) {
-                              HapticFeedback.selectionClick();
-                              setState(() => _category = v);
-                            },
-                            onAddNewCategory: _criarEUsarNovaCategoria,
-                            onAccountChanged: (v) => setState(() => _financeAccountId = v),
-                            onDateTap: _pickDate,
-                          )
-                        : _HintCard(
-                            key: const ValueKey('hint'),
-                            scheme: scheme,
-                          ),
-                  ),
-                  ],
-                ),
+                ],
               ),
-                if (ready)
-                  SafeArea(
-                    top: false,
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: _PremiumGhostCtaButton(
-                              label: 'Cancelar',
-                              onPressed: () {
-                                HapticFeedback.lightImpact();
-                                _leaveScreen();
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _PremiumGradientCtaButton(
-                              onPressed: _saving ? null : _confirm,
-                              child: _saving
-                                  ? const SizedBox(
-                                      width: 22,
-                                      height: 22,
-                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                    )
-                                  : const Text(
-                                      'Confirmar',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 16,
-                                        color: Colors.white,
-                                        letterSpacing: 0.2,
-                                      ),
-                                    ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-    ),
+      ),
     );
   }
 }
@@ -1632,7 +1874,10 @@ class _AppBarGradientChip extends StatelessWidget {
             border: Border.all(color: Colors.white.withValues(alpha: 0.9)),
             boxShadow: enabled
                 ? const [
-                    BoxShadow(color: Color(0x33000000), blurRadius: 8, offset: Offset(0, 3)),
+                    BoxShadow(
+                        color: Color(0x33000000),
+                        blurRadius: 8,
+                        offset: Offset(0, 3)),
                   ]
                 : null,
           ),
@@ -1645,7 +1890,11 @@ class _AppBarGradientChip extends StatelessWidget {
                 const SizedBox(width: 6),
                 Text(
                   label,
-                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12.5, color: AppColors.deepBlueDark, letterSpacing: 0.1),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12.5,
+                      color: AppColors.deepBlueDark,
+                      letterSpacing: 0.1),
                 ),
               ],
             ),
@@ -1673,18 +1922,21 @@ class _SmartInputModeChips extends StatelessWidget {
       style: ButtonStyle(
         visualDensity: VisualDensity.compact,
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 10, vertical: 10)),
+        padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 10, vertical: 10)),
       ),
       segments: [
         ButtonSegment<_SmartInputMode>(
           value: _SmartInputMode.texto,
           label: const Text('Texto'),
-          icon: Icon(Icons.edit_note_rounded, size: 18, color: scheme.onSurfaceVariant),
+          icon: Icon(Icons.edit_note_rounded,
+              size: 18, color: scheme.onSurfaceVariant),
         ),
         ButtonSegment<_SmartInputMode>(
           value: _SmartInputMode.csv,
           label: const Text('CSV / TXT'),
-          icon: Icon(Icons.table_chart_rounded, size: 18, color: scheme.onSurfaceVariant),
+          icon: Icon(Icons.table_chart_rounded,
+              size: 18, color: scheme.onSurfaceVariant),
         ),
       ],
       selected: {mode},
@@ -1711,11 +1963,23 @@ class _SmartInputExamplesPanel extends StatelessWidget {
   static const _examples = <(String, String)>[
     ('Supermercado + valor', r'Supermercado r$ 50'),
     ('Data + local', '13/04/2026 farmácia 20,50'),
-    ('Total em N parcelas + descrição', r'compra geladeira r$ 1.200 em 6 parcelas começando em 05/05/2026'),
-    (r'N parcelas de R$ cada (10×250)', r'10 parcelas de 250,00 sofá novo 05/05/2026'),
+    (
+      'Total em N parcelas + descrição',
+      r'compra geladeira r$ 1.200 em 6 parcelas começando em 05/05/2026'
+    ),
+    (
+      r'N parcelas de R$ cada (10×250)',
+      r'10 parcelas de 250,00 sofá novo 05/05/2026'
+    ),
     ('Várias linhas: Enter', 'pix enviado 30\ncompra cartao 45,90'),
-    ('Múltiplos itens com | (pipe)', r'supermercado R$ 100,00 | açougue R$ 1,50 | padaria 12,00'),
-    ('Tríade desc|valor|data (detalhado)', 'mercado|10000|24/04/2026|pao|5000|25/04/2026'),
+    (
+      'Múltiplos itens com | (pipe)',
+      r'supermercado R$ 100,00 | açougue R$ 1,50 | padaria 12,00'
+    ),
+    (
+      'Tríade desc|valor|data (detalhado)',
+      'mercado|10000|24/04/2026|pao|5000|25/04/2026'
+    ),
   ];
 
   @override
@@ -1727,7 +1991,10 @@ class _SmartInputExamplesPanel extends StatelessWidget {
         border: Border.all(color: AppColors.deepBlue.withValues(alpha: 0.14)),
         color: scheme.surface,
         boxShadow: [
-          BoxShadow(color: AppColors.deepBlue.withValues(alpha: 0.06), blurRadius: 12, offset: const Offset(0, 4)),
+          BoxShadow(
+              color: AppColors.deepBlue.withValues(alpha: 0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 4)),
         ],
       ),
       child: Theme(
@@ -1737,7 +2004,8 @@ class _SmartInputExamplesPanel extends StatelessWidget {
           childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
           title: Row(
             children: [
-              Icon(Icons.lightbulb_outline_rounded, size: 20, color: AppColors.primary),
+              Icon(Icons.lightbulb_outline_rounded,
+                  size: 20, color: AppColors.primary),
               const SizedBox(width: 8),
               const Expanded(
                 child: Text(
@@ -1751,13 +2019,17 @@ class _SmartInputExamplesPanel extends StatelessWidget {
             padding: const EdgeInsets.only(top: 4),
             child: Text(
               'Toque para expandir, copie um exemplo ou o modelo.',
-              style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                  fontSize: 11.5,
+                  color: scheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600),
             ),
           ),
           children: [
             const Align(
               alignment: Alignment.centerLeft,
-              child: Text('Frases prontas', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+              child: Text('Frases prontas',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
             ),
             const SizedBox(height: 6),
             for (final e in _examples)
@@ -1780,11 +2052,18 @@ class _SmartInputExamplesPanel extends StatelessWidget {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(e.$1, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11.5)),
+                                Text(e.$1,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 11.5)),
                                 const SizedBox(height: 4),
                                 Text(
                                   e.$2,
-                                  style: TextStyle(fontSize: 12.5, height: 1.35, color: scheme.onSurface, fontWeight: FontWeight.w600),
+                                  style: TextStyle(
+                                      fontSize: 12.5,
+                                      height: 1.35,
+                                      color: scheme.onSurface,
+                                      fontWeight: FontWeight.w600),
                                 ),
                               ],
                             ),
@@ -1809,7 +2088,8 @@ class _SmartInputExamplesPanel extends StatelessWidget {
             const SizedBox(height: 8),
             const Align(
               alignment: Alignment.centerLeft,
-              child: Text('Modelo para banco / folha de cálculo', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+              child: Text('Modelo para banco / folha de cálculo',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
             ),
             const SizedBox(height: 6),
             Wrap(
@@ -1862,8 +2142,16 @@ class _CsvPreviewStat extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: scheme.onSurfaceVariant)),
-              Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: scheme.onSurface)),
+              Text(label,
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: scheme.onSurfaceVariant)),
+              Text(value,
+                  style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                      color: scheme.onSurface)),
             ],
           ),
         ),
@@ -1890,7 +2178,8 @@ class _LancExpressoInicioStyleHeader extends StatelessWidget {
             const Color(0xFF0D9488).withValues(alpha: 0.04),
           ],
         ),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.14), width: 1.2),
+        border: Border.all(
+            color: AppColors.primary.withValues(alpha: 0.14), width: 1.2),
         boxShadow: [
           BoxShadow(
             color: AppColors.deepBlue.withValues(alpha: 0.1),
@@ -1910,7 +2199,10 @@ class _LancExpressoInicioStyleHeader extends StatelessWidget {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(14),
                   gradient: LinearGradient(
-                    colors: [AppColors.primary, AppColors.primary.withValues(alpha: 0.78)],
+                    colors: [
+                      AppColors.primary,
+                      AppColors.primary.withValues(alpha: 0.78)
+                    ],
                   ),
                   boxShadow: [
                     BoxShadow(
@@ -1920,7 +2212,8 @@ class _LancExpressoInicioStyleHeader extends StatelessWidget {
                     ),
                   ],
                 ),
-                child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 22),
+                child: const Icon(Icons.auto_awesome_rounded,
+                    color: Colors.white, size: 22),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -1993,7 +2286,8 @@ class _PremiumGuideCard extends StatelessWidget {
                 ),
               ],
             ),
-            child: const Icon(Icons.tips_and_updates_rounded, size: 18, color: AppColors.deepBlue),
+            child: const Icon(Icons.tips_and_updates_rounded,
+                size: 18, color: AppColors.deepBlue),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -2031,10 +2325,14 @@ class _ModernActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
-    final fg = emphasize ? Colors.white : (csvAccent ? const Color(0xFF0D9488) : AppColors.deepBlue);
+    final fg = emphasize
+        ? Colors.white
+        : (csvAccent ? const Color(0xFF0D9488) : AppColors.deepBlue);
     final borderColor = emphasize
         ? Colors.transparent
-        : (csvAccent ? const Color(0xFF0D9488).withValues(alpha: 0.45) : AppColors.deepBlue.withValues(alpha: 0.25));
+        : (csvAccent
+            ? const Color(0xFF0D9488).withValues(alpha: 0.45)
+            : AppColors.deepBlue.withValues(alpha: 0.25));
     final bg = emphasize ? null : Colors.white;
     return AnimatedOpacity(
       duration: const Duration(milliseconds: 180),
@@ -2043,7 +2341,11 @@ class _ModernActionButton extends StatelessWidget {
         decoration: BoxDecoration(
           gradient: emphasize
               ? const LinearGradient(
-                  colors: [AppColors.deepBlueDark, AppColors.deepBlue, AppColors.primary],
+                  colors: [
+                    AppColors.deepBlueDark,
+                    AppColors.deepBlue,
+                    AppColors.primary
+                  ],
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                 )
@@ -2062,12 +2364,14 @@ class _ModernActionButton extends StatelessWidget {
         child: OutlinedButton.icon(
           onPressed: onPressed,
           icon: Icon(icon, size: 18, color: fg),
-          label: Text(label, style: TextStyle(color: fg, fontWeight: FontWeight.w800)),
+          label: Text(label,
+              style: TextStyle(color: fg, fontWeight: FontWeight.w800)),
           style: OutlinedButton.styleFrom(
             minimumSize: const Size(0, 48),
             backgroundColor: bg,
             side: BorderSide(color: borderColor),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
             padding: const EdgeInsets.symmetric(horizontal: 14),
           ),
         ),
@@ -2134,7 +2438,8 @@ class _PremiumGradientCtaButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final Widget child;
 
-  const _PremiumGradientCtaButton({required this.onPressed, required this.child});
+  const _PremiumGradientCtaButton(
+      {required this.onPressed, required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -2146,7 +2451,11 @@ class _PremiumGradientCtaButton extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(30),
           gradient: const LinearGradient(
-            colors: [AppColors.deepBlueDark, AppColors.deepBlue, AppColors.primary],
+            colors: [
+              AppColors.deepBlueDark,
+              AppColors.deepBlue,
+              AppColors.primary
+            ],
             begin: Alignment.centerLeft,
             end: Alignment.centerRight,
           ),
@@ -2193,7 +2502,8 @@ class _HintCard extends StatelessWidget {
             const Color(0xFF0D9488).withValues(alpha: 0.03),
           ],
         ),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.12), width: 1.1),
+        border: Border.all(
+            color: AppColors.primary.withValues(alpha: 0.12), width: 1.1),
         boxShadow: [
           BoxShadow(
             color: AppColors.deepBlue.withValues(alpha: 0.08),
@@ -2221,13 +2531,18 @@ class _HintCard extends StatelessWidget {
                   ),
                 ],
               ),
-              child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 20),
+              child: const Icon(Icons.auto_awesome_rounded,
+                  color: Colors.white, size: 20),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
                 'Ex.: «compra supermercado 100 reais» ou «6× 250». Toque em «Gerar lançamentos» — categoria sugerida com cor; depois confirme.',
-                style: TextStyle(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w600, height: 1.35, fontSize: 13.5),
+                style: TextStyle(
+                    color: scheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                    height: 1.35,
+                    fontSize: 13.5),
               ),
             ),
           ],
@@ -2239,6 +2554,7 @@ class _HintCard extends StatelessWidget {
 
 class _ConfirmCard extends StatelessWidget {
   final BankNotificationParseResult parsed;
+
   /// Quando há vários lançamentos no mesmo texto (ex.: parcelas).
   final String? multiLancSummary;
   final bool isIncome;
@@ -2250,6 +2566,12 @@ class _ConfirmCard extends StatelessWidget {
   final DateTime paymentDate;
   final String settlement;
   final void Function(String) onSettlement;
+
+  /// Mostrar no calendário Agenda/Escala (só quando pendente) + cor escolhida.
+  final bool addToCalendar;
+  final String? calendarColorHex;
+  final ValueChanged<bool> onAddToCalendarChanged;
+  final ValueChanged<String> onCalendarColorChanged;
   final ValueChanged<String> onCategoryChanged;
   final Future<void> Function() onAddNewCategory;
   final ValueChanged<String?> onAccountChanged;
@@ -2268,6 +2590,10 @@ class _ConfirmCard extends StatelessWidget {
     required this.paymentDate,
     required this.settlement,
     required this.onSettlement,
+    required this.addToCalendar,
+    required this.calendarColorHex,
+    required this.onAddToCalendarChanged,
+    required this.onCalendarColorChanged,
     required this.onCategoryChanged,
     required this.onAddNewCategory,
     required this.onAccountChanged,
@@ -2277,13 +2603,19 @@ class _ConfirmCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    var sortedCats = List<String>.from(categories)..sort(UserCategoriesService.compareNamesPt);
+    var sortedCats = List<String>.from(categories)
+      ..sort(UserCategoriesService.compareNamesPt);
     if (category.isNotEmpty && !sortedCats.contains(category)) {
-      sortedCats = [...sortedCats, category]..sort(UserCategoriesService.compareNamesPt);
+      sortedCats = [...sortedCats, category]
+        ..sort(UserCategoriesService.compareNamesPt);
     }
-    final String? safeCat = category.isNotEmpty && sortedCats.contains(category) ? category : (sortedCats.isNotEmpty ? sortedCats.first : null);
+    final String? safeCat = category.isNotEmpty && sortedCats.contains(category)
+        ? category
+        : (sortedCats.isNotEmpty ? sortedCats.first : null);
     final displayDesc =
-        BankNotificationParser.polishSmartPasteDescription(parsed.descricao) ?? parsed.descricao ?? '';
+        BankNotificationParser.polishSmartPasteDescription(parsed.descricao) ??
+            parsed.descricao ??
+            '';
 
     String? dropdownValue = financeAccountId;
     if (isIncome) {
@@ -2295,7 +2627,8 @@ class _ConfirmCard extends StatelessWidget {
     } else {
       if (accounts.isEmpty) {
         dropdownValue = null;
-      } else if (financeAccountId == null || !accounts.any((a) => a.id == financeAccountId)) {
+      } else if (financeAccountId == null ||
+          !accounts.any((a) => a.id == financeAccountId)) {
         dropdownValue = accounts.first.id;
       }
     }
@@ -2307,7 +2640,8 @@ class _ConfirmCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: (isIncome ? AppColors.success : AppColors.error).withValues(alpha: 0.08),
+            color: (isIncome ? AppColors.success : AppColors.error)
+                .withValues(alpha: 0.08),
             blurRadius: 14,
             offset: const Offset(0, 5),
           ),
@@ -2319,7 +2653,8 @@ class _ConfirmCard extends StatelessWidget {
         color: scheme.surface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(18),
-          side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.35)),
+          side:
+              BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.35)),
         ),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
@@ -2349,29 +2684,41 @@ class _ConfirmCard extends StatelessWidget {
                       displayDesc,
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, height: 1.25, color: scheme.onSurface),
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          height: 1.25,
+                          color: scheme.onSurface),
                     ),
                   ),
                 ],
               ),
-              if (multiLancSummary != null && multiLancSummary!.trim().isNotEmpty) ...[
+              if (multiLancSummary != null &&
+                  multiLancSummary!.trim().isNotEmpty) ...[
                 const SizedBox(height: 10),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
                     color: AppColors.primary.withValues(alpha: 0.1),
-                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.28)),
+                    border: Border.all(
+                        color: AppColors.primary.withValues(alpha: 0.28)),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.stacked_line_chart_rounded, size: 20, color: AppColors.deepBlue),
+                      Icon(Icons.stacked_line_chart_rounded,
+                          size: 20, color: AppColors.deepBlue),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           multiLancSummary!,
-                          style: TextStyle(fontSize: 12, height: 1.35, fontWeight: FontWeight.w700, color: scheme.onSurface),
+                          style: TextStyle(
+                              fontSize: 12,
+                              height: 1.35,
+                              fontWeight: FontWeight.w700,
+                              color: scheme.onSurface),
                         ),
                       ),
                     ],
@@ -2386,11 +2733,18 @@ class _ConfirmCard extends StatelessWidget {
                     child: SegmentedButton<bool>(
                       style: SegmentedButton.styleFrom(
                         visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 6),
                       ),
                       segments: const [
-                        ButtonSegment<bool>(value: true, label: Text('Receita'), icon: Icon(Icons.south_west_rounded, size: 14)),
-                        ButtonSegment<bool>(value: false, label: Text('Despesa'), icon: Icon(Icons.north_east_rounded, size: 14)),
+                        ButtonSegment<bool>(
+                            value: true,
+                            label: Text('Receita'),
+                            icon: Icon(Icons.south_west_rounded, size: 14)),
+                        ButtonSegment<bool>(
+                            value: false,
+                            label: Text('Despesa'),
+                            icon: Icon(Icons.north_east_rounded, size: 14)),
                       ],
                       showSelectedIcon: false,
                       selected: {isIncome},
@@ -2410,11 +2764,20 @@ class _ConfirmCard extends StatelessWidget {
                 onSelectpaid: () => onSettlement('paid'),
                 onSelectPending: () => onSettlement('pending'),
               ),
+              if (isPending) ...[
+                const SizedBox(height: 8),
+                _buildAddToCalendarToggle(),
+                if (addToCalendar) ...[
+                  const SizedBox(height: 8),
+                  _buildCalendarColorButton(context),
+                ],
+              ],
               if (safeCat != null && safeCat.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    financeCategoryLeadingTile(safeCat, isIncome: isIncome, size: 36),
+                    financeCategoryLeadingTile(safeCat,
+                        isIncome: isIncome, size: 36),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
@@ -2424,7 +2787,9 @@ class _ConfirmCard extends StatelessWidget {
                         style: TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 13.5,
-                          color: financeCategoryVisualFor(safeCat, isIncome: isIncome).color,
+                          color: financeCategoryVisualFor(safeCat,
+                                  isIncome: isIncome)
+                              .color,
                         ),
                       ),
                     ),
@@ -2440,12 +2805,16 @@ class _ConfirmCard extends StatelessWidget {
                       decoration: InputDecoration(
                         labelText: 'Categoria',
                         isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
                         filled: true,
-                        fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                        fillColor: scheme.surfaceContainerHighest
+                            .withValues(alpha: 0.35),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: AppColors.deepBlue.withValues(alpha: 0.18)),
+                          borderSide: BorderSide(
+                              color:
+                                  AppColors.deepBlue.withValues(alpha: 0.18)),
                         ),
                       ),
                       child: DropdownButtonHideUnderline(
@@ -2454,18 +2823,24 @@ class _ConfirmCard extends StatelessWidget {
                           isDense: true,
                           value: safeCat,
                           hint: Text(
-                            sortedCats.isEmpty ? 'Crie a primeira categoria (+)' : 'Categoria',
+                            sortedCats.isEmpty
+                                ? 'Crie a primeira categoria (+)'
+                                : 'Categoria',
                             style: const TextStyle(fontSize: 13),
                           ),
                           selectedItemBuilder: (ctx) => [
                             for (final c in sortedCats)
-                              financeCategoryDropdownMenuRow(c, isIncome: isIncome, isIncluirNovaOption: false),
+                              financeCategoryDropdownMenuRow(c,
+                                  isIncome: isIncome,
+                                  isIncluirNovaOption: false),
                           ],
                           items: [
                             for (final c in sortedCats)
                               DropdownMenuItem(
                                 value: c,
-                                child: financeCategoryDropdownMenuRow(c, isIncome: isIncome, isIncluirNovaOption: false),
+                                child: financeCategoryDropdownMenuRow(c,
+                                    isIncome: isIncome,
+                                    isIncluirNovaOption: false),
                               ),
                           ],
                           onChanged: sortedCats.isEmpty
@@ -2481,19 +2856,26 @@ class _ConfirmCard extends StatelessWidget {
                   IconButton.filledTonal(
                     onPressed: () => onAddNewCategory(),
                     tooltip: 'Nova categoria',
-                    constraints: const BoxConstraints(minWidth: 42, minHeight: 42),
+                    constraints:
+                        const BoxConstraints(minWidth: 42, minHeight: 42),
                     padding: EdgeInsets.zero,
                     style: IconButton.styleFrom(
-                      backgroundColor: AppColors.primary.withValues(alpha: 0.12),
+                      backgroundColor:
+                          AppColors.primary.withValues(alpha: 0.12),
                     ),
-                    icon: const Icon(Icons.add_rounded, color: AppColors.deepBlue, size: 22),
+                    icon: const Icon(Icons.add_rounded,
+                        color: AppColors.deepBlue, size: 22),
                   ),
                 ],
               ),
               if (!isIncome && accounts.isEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
-                  child: Text('Cadastre uma conta no Financeiro.', style: TextStyle(color: scheme.error, fontSize: 11.5, fontWeight: FontWeight.w600)),
+                  child: Text('Cadastre uma conta no Financeiro.',
+                      style: TextStyle(
+                          color: scheme.error,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600)),
                 ),
               const SizedBox(height: 8),
               Row(
@@ -2505,12 +2887,18 @@ class _ConfirmCard extends StatelessWidget {
                       decoration: InputDecoration(
                         labelText: 'Conta',
                         isDense: true,
-                        prefixIcon: const Icon(Icons.account_balance_wallet_rounded, size: 18, color: AppColors.deepBlue),
+                        prefixIcon: const Icon(
+                            Icons.account_balance_wallet_rounded,
+                            size: 18,
+                            color: AppColors.deepBlue),
                         filled: true,
-                        fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                        fillColor: scheme.surfaceContainerHighest
+                            .withValues(alpha: 0.3),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+                          borderSide: BorderSide(
+                              color:
+                                  scheme.outlineVariant.withValues(alpha: 0.4)),
                         ),
                         contentPadding: const EdgeInsets.symmetric(vertical: 2),
                       ),
@@ -2519,27 +2907,36 @@ class _ConfirmCard extends StatelessWidget {
                           isExpanded: true,
                           isDense: true,
                           value: dropdownValue,
-                          hint: Text(isIncome ? 'Sem conta' : 'Conta', style: const TextStyle(fontSize: 13)),
+                          hint: Text(isIncome ? 'Sem conta' : 'Conta',
+                              style: const TextStyle(fontSize: 13)),
                           items: [
                             if (isIncome)
                               const DropdownMenuItem<String?>(
                                 value: null,
-                                child: Text('Saldo geral (sem conta)', style: TextStyle(fontSize: 13)),
+                                child: Text('Saldo geral (sem conta)',
+                                    style: TextStyle(fontSize: 13)),
                               ),
                             ...accounts.map(
                               (a) => DropdownMenuItem<String?>(
                                 value: a.id,
                                 child: Row(
                                   children: [
-                                    FinanceBankBrandThumb(preset: a.preset, size: 20),
+                                    FinanceBankBrandThumb(
+                                        preset: a.preset, size: 20),
                                     const SizedBox(width: 6),
-                                    Expanded(child: Text(a.displayName, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
+                                    Expanded(
+                                        child: Text(a.displayName,
+                                            style:
+                                                const TextStyle(fontSize: 13),
+                                            overflow: TextOverflow.ellipsis)),
                                   ],
                                 ),
                               ),
                             ),
                           ],
-                          onChanged: accounts.isEmpty && !isIncome ? null : onAccountChanged,
+                          onChanged: accounts.isEmpty && !isIncome
+                              ? null
+                              : onAccountChanged,
                         ),
                       ),
                     ),
@@ -2555,30 +2952,133 @@ class _ConfirmCard extends StatelessWidget {
                           labelText: 'Data',
                           isDense: true,
                           filled: true,
-                          fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                          fillColor: scheme.surfaceContainerHighest
+                              .withValues(alpha: 0.3),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+                            borderSide: BorderSide(
+                                color: scheme.outlineVariant
+                                    .withValues(alpha: 0.4)),
                           ),
-                          contentPadding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
+                          contentPadding:
+                              const EdgeInsets.fromLTRB(10, 8, 6, 8),
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.event_rounded, color: AppColors.deepBlue, size: 18),
+                            const Icon(Icons.event_rounded,
+                                color: AppColors.deepBlue, size: 18),
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
                                 '${paymentDate.day.toString().padLeft(2, '0')}/${paymentDate.month.toString().padLeft(2, '0')}/${paymentDate.year}',
-                                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w800, fontSize: 13),
                               ),
                             ),
-                            Icon(Icons.chevron_right_rounded, size: 18, color: scheme.onSurfaceVariant),
+                            Icon(Icons.chevron_right_rounded,
+                                size: 18, color: scheme.onSurfaceVariant),
                           ],
                         ),
                       ),
                     ),
                   ),
                 ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Toggle «Mostrar no calendário» (Agenda/Escala) — visível só quando pendente.
+  Widget _buildAddToCalendarToggle() {
+    final accent = isIncome ? const Color(0xFF2E7D32) : const Color(0xFFE53935);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: accent.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            addToCalendar
+                ? Icons.event_available_rounded
+                : Icons.event_busy_rounded,
+            size: 20,
+            color: accent,
+          ),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Mostrar no calendário',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                    color: Color(0xFF1A237E),
+                  ),
+                ),
+                Text(
+                  'Agenda/Escala',
+                  style: TextStyle(fontSize: 11.5, color: Colors.black54),
+                ),
+              ],
+            ),
+          ),
+          Switch.adaptive(
+            value: addToCalendar,
+            activeThumbColor: accent,
+            activeTrackColor: accent.withValues(alpha: 0.5),
+            onChanged: onAddToCalendarChanged,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Botão «Cor no calendário» na cor atual; abre a paleta do módulo financeiro.
+  Widget _buildCalendarColorButton(BuildContext context) {
+    final hex =
+        calendarColorHex ?? FinanceCalendarColorPicker.defaultHexFor(isIncome);
+    var clean = hex
+        .replaceFirst('#', '')
+        .replaceFirst(RegExp(r'^0x', caseSensitive: false), '')
+        .toUpperCase();
+    if (clean.length > 6) clean = clean.substring(clean.length - 6);
+    final color = Color(int.parse('FF$clean', radix: 16));
+    return Material(
+      color: color,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () async {
+          final picked = await FinanceCalendarColorPicker.show(
+            context,
+            isIncome: isIncome,
+            currentHex: calendarColorHex,
+          );
+          if (picked != null) onCalendarColorChanged(picked);
+        },
+        child: const SizedBox(
+          width: double.infinity,
+          height: 40,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.palette_outlined, size: 18, color: Colors.white),
+              SizedBox(width: 8),
+              Text(
+                'Cor no calendário',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                ),
               ),
             ],
           ),
@@ -2613,7 +3113,8 @@ class _SettlementPills extends StatelessWidget {
             subtitle: isIncome ? 'Saldo hoje' : 'Efetivo',
             active: !isPending,
             primaryColor: isIncome ? AppColors.success : AppColors.deepBlue,
-            secondaryColor: isIncome ? const Color(0xFF0D9488) : AppColors.primary,
+            secondaryColor:
+                isIncome ? const Color(0xFF0D9488) : AppColors.primary,
             dense: dense,
             onTap: onSelectpaid,
           ),
@@ -2664,7 +3165,8 @@ class _Pill extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 220),
-          padding: EdgeInsets.symmetric(vertical: dense ? 9 : 14, horizontal: dense ? 6 : 8),
+          padding: EdgeInsets.symmetric(
+              vertical: dense ? 9 : 14, horizontal: dense ? 6 : 8),
           constraints: BoxConstraints(minHeight: dense ? 44 : 50),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
@@ -2675,7 +3177,10 @@ class _Pill extends StatelessWidget {
                     colors: [primaryColor, secondaryColor],
                   )
                 : null,
-            color: active ? null : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+            color: active
+                ? null
+                : theme.colorScheme.surfaceContainerHighest
+                    .withValues(alpha: 0.5),
             boxShadow: active
                 ? [
                     BoxShadow(
@@ -2712,7 +3217,9 @@ class _Pill extends StatelessWidget {
                 style: TextStyle(
                   fontSize: dense ? 9.5 : 10,
                   fontWeight: FontWeight.w600,
-                  color: active ? Colors.white.withValues(alpha: 0.9) : theme.colorScheme.onSurfaceVariant,
+                  color: active
+                      ? Colors.white.withValues(alpha: 0.9)
+                      : theme.colorScheme.onSurfaceVariant,
                 ),
               ),
             ],

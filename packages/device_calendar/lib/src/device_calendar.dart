@@ -291,7 +291,7 @@ class DeviceCalendarPlugin {
       arguments: () => <String, Object?>{
         ChannelConstants.parameterNameCalendarName: calendarName,
         ChannelConstants.parameterNameCalendarColor:
-            '0x${calendarColor?.value.toRadixString(16)}',
+            '0x${calendarColor?.toARGB32().toRadixString(16)}',
         ChannelConstants.parameterNameLocalAccountName:
             localAccountName?.isEmpty ?? true
                 ? 'Device Calendar'

@@ -536,7 +536,7 @@ class _FinanceBulkAssignScreenState extends State<FinanceBulkAssignScreen> {
     final items = accounts.where((a) => excludeId == null || a.id != excludeId).toList();
     return DropdownButtonFormField<String>(
       isExpanded: true,
-      value: value != null && items.any((a) => a.id == value) ? value : null,
+      initialValue: value != null && items.any((a) => a.id == value) ? value : null,
       decoration: InputDecoration(
         filled: true,
         fillColor: Colors.white,

@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WISDOMAPP — Google Calendar</title>
+  <script src="/google-oauth-config.js"></script>
   <style>
     body {
       font-family: system-ui, -apple-system, sans-serif;
@@ -18,7 +19,7 @@
       padding: 24px;
     }
     .card {
-      max-width: 360px;
+      max-width: 380px;
       padding: 28px 22px;
       border-radius: 18px;
       background: rgba(255,255,255,0.08);
@@ -34,27 +35,34 @@
       margin: 0 auto 16px;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
-    p { opacity: 0.88; line-height: 1.45; font-size: 14px; }
+    p { opacity: 0.88; line-height: 1.45; font-size: 14px; margin: 0; }
+    .hint { margin-top: 12px; font-size: 12px; opacity: 0.65; word-break: break-all; }
   </style>
 </head>
 <body>
   <div class="card">
-    <div class="spinner"></div>
+    <div class="spinner" id="spin"></div>
     <p id="msg">Conectando ao Google Calendar…</p>
+    <p class="hint" id="hint"></p>
   </div>
   <script>
     (function () {
-      var CLIENT_ID = '766524666378-ce9albkkvn01si77s6ofcqvoaatn29s0.apps.googleusercontent.com';
-      var STORAGE_KEY = 'wisdomapp_gcal_oauth';
+      var CFG = window.WISDOMAPP_OAUTH || {};
+      var CLIENT_ID = CFG.webClientId || '766524666378-ce9albkkvn01si77s6ofcqvoaatn29s0.apps.googleusercontent.com';
+      var REDIRECT_URI = CFG.redirectUri || 'https://wisdomapp-b9e98.web.app/google_calendar_oauth.html';
+      var PRIMARY_ORIGIN = CFG.primaryOrigin || 'https://wisdomapp-b9e98.web.app';
+      var CODE_KEY = 'wisdomapp_gcal_auth_code';
       var STATE_KEY = 'wisdomapp_gcal_oauth_state';
       var RETURN_KEY = 'wisdomapp_gcal_return';
       var ENABLE_UID_KEY = 'wisdomapp_gcal_enable_uid';
-      var REDIRECT_URI = window.location.origin + '/google_calendar_oauth.html';
-      var SCOPE = 'https://www.googleapis.com/auth/calendar.events openid email profile';
+      var SCOPE = (CFG.calendarScope || 'https://www.googleapis.com/auth/calendar.events') +
+        ' openid email profile';
 
-      function setMsg(t) {
+      function setMsg(t, hint) {
         var el = document.getElementById('msg');
         if (el) el.textContent = t;
+        var h = document.getElementById('hint');
+        if (h) h.textContent = hint || '';
       }
 
       function parseHash() {
@@ -69,66 +77,112 @@
         return out;
       }
 
-      function safeReturnPath(raw) {
-        if (!raw || typeof raw !== 'string') return '/';
+      function safeReturnUrl(raw) {
+        if (!raw || typeof raw !== 'string') return PRIMARY_ORIGIN + '/';
         try {
-          var u = new URL(raw, window.location.origin);
-          if (u.origin !== window.location.origin) return '/';
-          return u.pathname + u.search + u.hash;
+          var u = new URL(raw);
+          var allowed = (CFG.authorizedOrigins || []).concat([PRIMARY_ORIGIN, window.location.origin]);
+          if (allowed.indexOf(u.origin) < 0) return PRIMARY_ORIGIN + '/';
+          return u.href;
         } catch (e) {
-          return '/';
+          return PRIMARY_ORIGIN + '/';
         }
       }
 
       function finishReturn(extraQuery) {
-        var ret = safeReturnPath(sessionStorage.getItem(RETURN_KEY) || '/');
+        var ret = safeReturnUrl(sessionStorage.getItem(RETURN_KEY) || PRIMARY_ORIGIN + '/');
         sessionStorage.removeItem(RETURN_KEY);
         sessionStorage.removeItem(STATE_KEY);
-        var sep = ret.indexOf('?') >= 0 ? '&' : '?';
-        window.location.replace(ret + sep + (extraQuery || 'gcal=ok'));
+        var u = new URL(ret);
+        var sep = u.search ? '&' : '?';
+        var q = extraQuery || 'gcal=ok';
+        u.search += sep + q;
+        window.location.replace(u.href);
+      }
+
+      function finishReturnCrossOrigin(returnUrl, payload) {
+        sessionStorage.removeItem(RETURN_KEY);
+        sessionStorage.removeItem(STATE_KEY);
+        var u = new URL(returnUrl);
+        var base = u.origin + u.pathname + u.search;
+        var encoded = encodeURIComponent(JSON.stringify(payload));
+        window.location.replace(base + '#gcal_payload=' + encoded);
       }
 
       function failReturn(code) {
         finishReturn('gcal_error=' + encodeURIComponent(code || 'unknown'));
       }
 
-      // Retorno do Google (#access_token=…)
-      var hash = parseHash();
-      if (hash.error) {
-        if (hash.error === 'interaction_required' || hash.error === 'login_required') {
-          failReturn('interaction_required');
+      function deliverAuthCode(code) {
+        var returnUrl = safeReturnUrl(sessionStorage.getItem(RETURN_KEY) || PRIMARY_ORIGIN + '/');
+        var returnOrigin = new URL(returnUrl).origin;
+        var enableUid = sessionStorage.getItem(ENABLE_UID_KEY) || '';
+        var payload = { authorization_code: code };
+        if (enableUid) payload.enable_uid = enableUid;
+
+        if (returnOrigin !== window.location.origin) {
+          finishReturnCrossOrigin(returnUrl, payload);
           return;
         }
-        failReturn(hash.error);
+
+        sessionStorage.setItem(CODE_KEY, code);
+        finishReturn('gcal=ok');
+      }
+
+      var qs = new URLSearchParams(window.location.search);
+      var hash = parseHash();
+
+      if (hash.error || qs.get('error')) {
+        document.getElementById('spin').style.display = 'none';
+        var err = hash.error || qs.get('error');
+        if (err === 'redirect_uri_mismatch') {
+          setMsg(
+            'Redirect URI não autorizado no Google Cloud.',
+            'Adicione exatamente: ' + REDIRECT_URI
+          );
+          failReturn('redirect_uri_mismatch');
+          return;
+        }
+        if ((err === 'interaction_required' || err === 'login_required' || err === 'consent_required')
+            && qs.get('silent') === '1' && qs.get('force_consent') !== '1') {
+          var retryQs = new URLSearchParams(window.location.search);
+          retryQs.delete('silent');
+          retryQs.set('force_consent', '1');
+          retryQs.set('start', '1');
+          window.location.replace(PRIMARY_ORIGIN + '/google_calendar_oauth.html?' + retryQs.toString());
+          return;
+        }
+        failReturn(err);
         return;
       }
 
-      if (hash.access_token) {
+      // Google retornou ?code=… (Authorization Code Flow)
+      var authCode = qs.get('code');
+      if (authCode) {
         var savedState = sessionStorage.getItem(STATE_KEY);
-        if (savedState && hash.state && savedState !== hash.state) {
+        var returnedState = qs.get('state');
+        if (savedState && returnedState && savedState !== returnedState) {
           failReturn('state_mismatch');
           return;
         }
-        var expiresIn = parseInt(hash.expires_in || '3600', 10);
-        if (!isFinite(expiresIn) || expiresIn < 60) expiresIn = 3600;
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({
-          access_token: hash.access_token,
-          expires_at: Date.now() + expiresIn * 1000,
-          scope: hash.scope || SCOPE,
-          token_type: hash.token_type || 'Bearer'
-        }));
-        finishReturn('gcal=ok');
+        deliverAuthCode(authCode);
         return;
       }
 
-      // Iniciar fluxo OAuth
-      var qs = new URLSearchParams(window.location.search);
+      // Iniciar fluxo OAuth (?start=1)
       if (qs.get('start') !== '1') {
+        document.getElementById('spin').style.display = 'none';
         setMsg('Link inválido. Volte ao WISDOMAPP e tente de novo.');
         return;
       }
 
-      var ret = safeReturnPath(qs.get('return') || '/');
+      if (window.location.origin !== PRIMARY_ORIGIN) {
+        var forward = PRIMARY_ORIGIN + '/google_calendar_oauth.html?' + window.location.search;
+        window.location.replace(forward);
+        return;
+      }
+
+      var ret = safeReturnUrl(qs.get('return') || PRIMARY_ORIGIN + '/');
       sessionStorage.setItem(RETURN_KEY, ret);
 
       var enableUid = qs.get('enable_uid') || '';
@@ -142,25 +196,31 @@
       var params = {
         client_id: CLIENT_ID,
         redirect_uri: REDIRECT_URI,
-        response_type: 'token',
+        response_type: 'code',
         scope: SCOPE,
         state: state,
+        access_type: 'offline',
         include_granted_scopes: 'true'
       };
 
       var email = (qs.get('email') || '').trim();
       if (email) params.login_hint = email;
 
-      var prompt = (qs.get('prompt') || '').trim();
-      if (prompt) params.prompt = prompt;
-      else if (qs.get('select_account') === '1') params.prompt = 'select_account';
+      if (qs.get('select_account') === '1') {
+        params.prompt = 'consent select_account';
+      } else if (qs.get('force_consent') === '1') {
+        params.prompt = 'consent';
+      } else if (qs.get('silent') === '1') {
+        params.prompt = 'none';
+      }
+      // Sem prompt: Google reutiliza sessão já autorizada (menos telas assustadoras).
 
       var authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' +
         Object.keys(params).map(function (k) {
           return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
         }).join('&');
 
-      setMsg('Redirecionando para o Google…');
+      setMsg('Redirecionando para o Google…', REDIRECT_URI);
       window.location.assign(authUrl);
     })();
   </script>

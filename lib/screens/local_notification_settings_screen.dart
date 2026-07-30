@@ -665,7 +665,7 @@ class _LocalNotificationSettingsScreenState extends State<LocalNotificationSetti
       subtitle: Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
       value: value,
       onChanged: onChanged,
-      activeColor: AppColors.primary,
+      activeThumbColor: AppColors.primary,
     );
   }
 
@@ -760,7 +760,7 @@ class _LocalNotificationSettingsScreenState extends State<LocalNotificationSetti
                     subtitle: const Text('Lembrete no dia anterior ao vencimento'),
                     value: _ant1dia,
                     onChanged: (v) => _toggle1dia(v),
-                    activeColor: AppColors.primary,
+                    activeThumbColor: AppColors.primary,
                   ),
                   const Divider(height: 1),
                   SwitchListTile(
@@ -769,7 +769,7 @@ class _LocalNotificationSettingsScreenState extends State<LocalNotificationSetti
                     subtitle: const Text('Lembrete uma hora antes do vencimento'),
                     value: _ant60min,
                     onChanged: (v) => _toggle60min(v),
-                    activeColor: AppColors.primary,
+                    activeThumbColor: AppColors.primary,
                   ),
                 ],
               ),
