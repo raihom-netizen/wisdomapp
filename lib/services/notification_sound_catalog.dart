@@ -113,7 +113,7 @@ const List<NotificationSoundCatalogItem> kNotificationSoundCatalog = [
     id: 'urgente',
     assetPath: 'assets/sounds/notifications/urgente.wav',
     displayName: 'Urgente premium',
-    description: 'Triplo pulso + glissando — audiência crítica.',
+    description: 'Triplo pulso + glissando — alerta crítico.',
   ),
 ];
 

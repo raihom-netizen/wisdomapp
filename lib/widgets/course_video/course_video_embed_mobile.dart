@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -12,14 +14,18 @@ class CourseVideoEmbed extends StatefulWidget {
     this.mp4Url,
     this.autoplay = true,
     this.posterUrl,
+    this.startAtSeconds = 0,
     this.onReady,
+    this.onProgress,
   });
 
   final String? youtubeVideoId;
   final String? mp4Url;
   final bool autoplay;
   final String? posterUrl;
+  final double startAtSeconds;
   final VoidCallback? onReady;
+  final void Function(double position, double duration)? onProgress;
 
   @override
   State<CourseVideoEmbed> createState() => _CourseVideoEmbedState();
@@ -42,7 +48,8 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
     if (oldWidget.youtubeVideoId != widget.youtubeVideoId ||
         oldWidget.mp4Url != widget.mp4Url ||
         oldWidget.posterUrl != widget.posterUrl ||
-        oldWidget.autoplay != widget.autoplay) {
+        oldWidget.autoplay != widget.autoplay ||
+        oldWidget.startAtSeconds != widget.startAtSeconds) {
       _notifiedReady = false;
       _initController();
     }
@@ -54,6 +61,17 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
     widget.onReady?.call();
   }
 
+  void _onProgressMessage(JavaScriptMessage msg) {
+    try {
+      final data = jsonDecode(msg.message);
+      if (data is Map) {
+        final pos = (data['t'] as num?)?.toDouble() ?? 0;
+        final dur = (data['d'] as num?)?.toDouble() ?? 0;
+        widget.onProgress?.call(pos, dur);
+      }
+    } catch (_) {}
+  }
+
   String _escapeAttr(String raw) => raw
       .replaceAll('&', '&amp;')
       .replaceAll('"', '&quot;')
@@ -63,8 +81,17 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
     final yt = widget.youtubeVideoId?.trim();
     final mp4 = widget.mp4Url?.trim();
     final poster = widget.posterUrl?.trim();
+    final start = widget.startAtSeconds > 8 ? widget.startAtSeconds.round() : 0;
     final c = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..addJavaScriptChannel(
+        'CourseProgress',
+        onMessageReceived: _onProgressMessage,
+      )
+      ..addJavaScriptChannel(
+        'flutterReady',
+        onMessageReceived: (_) => _notifyReady(),
+      )
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageFinished: (_) => _notifyReady(),
@@ -74,14 +101,12 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
     if (yt != null && yt.isNotEmpty) {
       final thumb = poster ?? YoutubeUrlHelper.thumbnailUrl(yt);
       if (!widget.autoplay && thumb.isNotEmpty) {
-        c.loadHtmlString(_youtubePosterHtml(yt, thumb));
+        c.loadHtmlString(_youtubePosterHtml(yt, thumb, start));
       } else {
-        c.loadRequest(
-          Uri.parse(YoutubeUrlHelper.embedUrl(yt, autoplay: widget.autoplay)),
-        );
+        c.loadHtmlString(_youtubeApiHtml(yt, start, autoplay: widget.autoplay));
       }
     } else if (mp4 != null && mp4.isNotEmpty) {
-      c.loadHtmlString(_mp4Html(mp4, poster));
+      c.loadHtmlString(_mp4Html(mp4, poster, start));
     }
 
     setState(() {
@@ -90,10 +115,7 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
     });
   }
 
-  String _youtubePosterHtml(String videoId, String thumbUrl) {
-    final embed = _escapeAttr(
-      YoutubeUrlHelper.embedUrl(videoId, autoplay: true),
-    );
+  String _youtubePosterHtml(String videoId, String thumbUrl, int start) {
     final thumb = _escapeAttr(thumbUrl);
     return '''
 <!DOCTYPE html>
@@ -116,30 +138,92 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
   <div id="poster" style="background-image:url('$thumb')">
     <div class="play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
   </div>
-  <iframe id="player" allow="accelerometer; autoplay; encrypted-media; gyroscope; fullscreen" allowfullscreen></iframe>
+  <div id="player"></div>
 </div>
+<script src="https://www.youtube.com/iframe_api"></script>
 <script>
+var startAt=$start;
+var ytPlayer=null;
+function postProg(){
+  try{
+    if(!ytPlayer||!ytPlayer.getCurrentTime) return;
+    var t=ytPlayer.getCurrentTime()||0;
+    var d=ytPlayer.getDuration()||0;
+    CourseProgress.postMessage(JSON.stringify({t:t,d:d}));
+  }catch(e){}
+}
+function onYouTubeIframeAPIReady(){}
+function bootPlayer(){
+  document.getElementById('poster').style.display='none';
+  document.getElementById('player').style.display='block';
+  ytPlayer=new YT.Player('player',{
+    videoId:'$videoId',
+    playerVars:{autoplay:1,rel:0,modestbranding:1,playsinline:1,fs:1,start:startAt,iv_load_policy:3},
+    events:{
+      onReady:function(e){ try{e.target.playVideo();}catch(x){} setInterval(postProg,4000); },
+      onStateChange:function(e){ if(e.data===1||e.data===2||e.data===0) postProg(); }
+    }
+  });
+}
 (function(){
   var poster=document.getElementById('poster');
-  var player=document.getElementById('player');
-  function start(){
-    poster.style.display='none';
-    player.style.display='block';
-    player.src='$embed';
-  }
-  poster.addEventListener('click', start);
+  poster.addEventListener('click', function(){
+    if(window.YT && YT.Player){ bootPlayer(); }
+    else {
+      var t=setInterval(function(){
+        if(window.YT && YT.Player){ clearInterval(t); bootPlayer(); }
+      },200);
+    }
+  });
 })();
 </script>
 </body></html>
 ''';
   }
 
-  String _mp4Html(String mp4, String? poster) {
+  String _youtubeApiHtml(String videoId, int start, {required bool autoplay}) {
+    return '''
+<!DOCTYPE html>
+<html><head>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;background:#000;overflow:hidden}
+  #player{width:100%;height:100%}
+</style>
+</head><body>
+<div id="player"></div>
+<script src="https://www.youtube.com/iframe_api"></script>
+<script>
+var startAt=$start;
+var ytPlayer=null;
+function postProg(){
+  try{
+    if(!ytPlayer||!ytPlayer.getCurrentTime) return;
+    CourseProgress.postMessage(JSON.stringify({t:ytPlayer.getCurrentTime()||0,d:ytPlayer.getDuration()||0}));
+  }catch(e){}
+}
+function onYouTubeIframeAPIReady(){
+  ytPlayer=new YT.Player('player',{
+    videoId:'$videoId',
+    playerVars:{autoplay:${autoplay ? 1 : 0},rel:0,modestbranding:1,playsinline:1,fs:1,start:startAt,iv_load_policy:3},
+    events:{
+      onReady:function(e){ try{ window.flutterReady && flutterReady.postMessage('1'); }catch(x){} if($autoplay){try{e.target.playVideo();}catch(x){}} setInterval(postProg,4000); },
+      onStateChange:function(e){ if(e.data===1||e.data===2||e.data===0) postProg(); }
+    }
+  });
+}
+</script>
+</body></html>
+''';
+  }
+
+  String _mp4Html(String mp4, String? poster, int start) {
     final escaped = _escapeAttr(mp4);
     final autoplayAttr = widget.autoplay ? 'autoplay' : '';
     final hasPoster = poster != null && poster.isNotEmpty;
     final posterAttr = hasPoster ? 'poster="${_escapeAttr(poster)}"' : '';
-    final seekFirstFrame = hasPoster ? 'false' : 'true';
+    final seekFirstFrame = (!hasPoster && start <= 0) ? 'true' : 'false';
     return '''
 <!DOCTYPE html>
 <html><head>
@@ -155,13 +239,23 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
 <script>
 (function(){
   var v=document.getElementById('v');
+  var startAt=$start;
   function ready(){ try { window.flutterReady && window.flutterReady.postMessage('1'); } catch(e){} }
-  v.addEventListener('loadeddata', ready, {once:true});
-  if($seekFirstFrame){
-    v.addEventListener('loadeddata', function(){
-      try { v.currentTime = 0.05; } catch(e){}
-    }, {once:true});
+  function post(){
+    try{
+      CourseProgress.postMessage(JSON.stringify({t:v.currentTime||0,d:v.duration||0}));
+    }catch(e){}
   }
+  v.addEventListener('loadeddata', ready, {once:true});
+  v.addEventListener('loadedmetadata', function(){
+    if(startAt>0){ try{ v.currentTime=startAt; }catch(e){} }
+    else if($seekFirstFrame){ try{ v.currentTime=0.05; }catch(e){} }
+  }, {once:true});
+  v.addEventListener('timeupdate', function(){
+    if(!v._lastPost || (Date.now()-v._lastPost)>3500){ v._lastPost=Date.now(); post(); }
+  });
+  v.addEventListener('pause', post);
+  v.addEventListener('ended', post);
   if(v.readyState >= 2) ready();
 })();
 </script>

@@ -16,9 +16,16 @@ import '../widgets/compromisso_contact_chips.dart';
 enum NotificationCenterTab {
   escalas,
   compromissos,
-  audiencias,
+  audiencias, // legado — redirecionado para compromissos na UI
   contas,
 }
+
+/// Abas visíveis na central (sem audiências — o app só tem compromissos).
+const List<NotificationCenterTab> kNotificationCenterVisibleTabs = [
+  NotificationCenterTab.escalas,
+  NotificationCenterTab.compromissos,
+  NotificationCenterTab.contas,
+];
 
 /// Paleta WISDOMAPP por aba da central.
 class _NotificationCenterTabPalette {
@@ -49,10 +56,10 @@ class _NotificationCenterTabPalette {
           accent: Color(0xFF2563EB),
         ),
       NotificationCenterTab.audiencias => const _NotificationCenterTabPalette(
-          shortLabel: 'Audiências',
-          icon: Icons.gavel_rounded,
-          gradient: [Color(0xFF5B21B6), Color(0xFF9333EA)],
-          accent: Color(0xFF5B21B6),
+          shortLabel: 'Compromissos',
+          icon: Icons.event_rounded,
+          gradient: [Color(0xFF2563EB), Color(0xFF6366F1)],
+          accent: Color(0xFF2563EB),
         ),
       NotificationCenterTab.contas => const _NotificationCenterTabPalette(
           shortLabel: 'Contas',
@@ -102,13 +109,20 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
   @override
   void initState() {
     super.initState();
-    final initialIndex = widget.initialTab != null
-        ? NotificationCenterTab.values.indexOf(widget.initialTab!)
+    var initialTab = widget.initialTab;
+    if (initialTab == NotificationCenterTab.audiencias) {
+      initialTab = NotificationCenterTab.compromissos;
+    }
+    final initialIndex = initialTab != null
+        ? kNotificationCenterVisibleTabs.indexOf(initialTab)
         : 0;
     _tabController = TabController(
-      length: 4,
+      length: kNotificationCenterVisibleTabs.length,
       vsync: this,
-      initialIndex: initialIndex.clamp(0, 3),
+      initialIndex: initialIndex.clamp(
+        0,
+        kNotificationCenterVisibleTabs.length - 1,
+      ),
     );
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) setState(() {});
@@ -173,9 +187,12 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     required NotificationCenterTab tab,
     required NotificationCenterStatusFilter status,
   }) {
-    final kind = _kindForTab(tab);
     return all.where((e) {
-      if (e.kind != kind) return false;
+      final matchKind = tab == NotificationCenterTab.compromissos
+          ? (e.kind == NotificationCenterKind.compromisso ||
+              e.kind == NotificationCenterKind.audiencia)
+          : e.kind == _kindForTab(tab);
+      if (!matchKind) return false;
       return switch (status) {
         NotificationCenterStatusFilter.pendentes => e.isPending,
         NotificationCenterStatusFilter.notificados => !e.isPending,
@@ -188,6 +205,13 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     List<NotificationCenterEntry> all,
     NotificationCenterTab tab,
   ) {
+    if (tab == NotificationCenterTab.compromissos) {
+      return all
+          .where((e) =>
+              e.kind == NotificationCenterKind.compromisso ||
+              e.kind == NotificationCenterKind.audiencia)
+          .length;
+    }
     return all.where((e) => e.kind == _kindForTab(tab)).length;
   }
 
@@ -296,10 +320,11 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
             return const Center(child: CircularProgressIndicator());
           }
           final allEntries = snap.data?.entries ?? const [];
-          final tabCounts = NotificationCenterTab.values
+          final tabCounts = kNotificationCenterVisibleTabs
               .map((t) => _countForTab(allEntries, t))
               .toList();
-          final activeTab = NotificationCenterTab.values[_tabController.index];
+          final activeTab =
+              kNotificationCenterVisibleTabs[_tabController.index];
           final activePalette = _NotificationCenterTabPalette.of(activeTab);
 
           return Column(
@@ -358,8 +383,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                     children: [
                       TextButton(
                         onPressed: () {
-                          final tab = NotificationCenterTab
-                              .values[_tabController.index];
+                          final tab = kNotificationCenterVisibleTabs[
+                              _tabController.index];
                           final filtered = _filterEntries(
                             allEntries,
                             tab: tab,
@@ -389,7 +414,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
               Expanded(
                 child: TabBarView(
                   controller: _tabController,
-                  children: NotificationCenterTab.values.map((tab) {
+                  children: kNotificationCenterVisibleTabs.map((tab) {
                     final filtered = _filterEntries(
                       allEntries,
                       tab: tab,
@@ -514,12 +539,14 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
-          children: List.generate(4, (i) {
-            final tab = NotificationCenterTab.values[i];
+          children: List.generate(kNotificationCenterVisibleTabs.length, (i) {
+            final tab = kNotificationCenterVisibleTabs[i];
             final palette = _NotificationCenterTabPalette.of(tab);
             final selected = _tabController.index == i;
             return Padding(
-              padding: EdgeInsets.only(right: i == 3 ? 0 : 6),
+              padding: EdgeInsets.only(
+                right: i == kNotificationCenterVisibleTabs.length - 1 ? 0 : 6,
+              ),
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
@@ -835,9 +862,9 @@ class _NotificationCard extends StatelessWidget {
   static _CardTheme _themeFor(NotificationCenterKind kind) {
     return switch (kind) {
       NotificationCenterKind.audiencia => _CardTheme(
-          label: 'Audiência',
-          icon: Icons.gavel_rounded,
-          color: const Color(0xFF5B21B6),
+          label: 'Compromisso',
+          icon: Icons.event_rounded,
+          color: const Color(0xFF2563EB),
         ),
       NotificationCenterKind.compromisso => _CardTheme(
           label: 'Compromisso',

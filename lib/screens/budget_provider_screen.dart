@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../widgets/fast_text_field.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
+import '../core/wisdom_media_upload.dart';
 import '../models/budget_provider.dart';
 import '../theme/app_colors.dart';
 
@@ -26,6 +26,7 @@ class _BudgetProviderScreenState extends State<BudgetProviderScreen> {
   final _contactCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
   final _logoUrlCtrl = TextEditingController();
+  String? _logoStoragePath; // padrao CT: guarda path tambem
   bool _loading = true;
   bool _saving = false;
   bool _uploadingLogo = false;
@@ -46,6 +47,7 @@ class _BudgetProviderScreenState extends State<BudgetProviderScreen> {
       _contactCtrl.text = p.contact;
       _addressCtrl.text = p.address;
       _logoUrlCtrl.text = p.logoUrl;
+      _logoStoragePath = snap.data()?['logoStoragePath'] as String?;
     }
     if (mounted) setState(() => _loading = false);
   }
@@ -72,10 +74,14 @@ class _BudgetProviderScreenState extends State<BudgetProviderScreen> {
     setState(() => _uploadingLogo = true);
     try {
       final bytes = await xfile.readAsBytes();
-      final ref = FirebaseStorage.instance.ref().child('users/${widget.uid}/budget_provider_logo.jpg');
-      await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
-      final url = await ref.getDownloadURL();
-      _logoUrlCtrl.text = url;
+      // Usa WisdomMediaUpload com compressao + retry (padrao CT).
+      final result = await WisdomMediaUpload.uploadProviderLogo(
+        userId: widget.uid,
+        bytes: bytes,
+        mimeType: 'image/jpeg',
+      );
+      _logoUrlCtrl.text = result.downloadUrl;
+      _logoStoragePath = result.storagePath;
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Logo enviada. Toque em Salvar.')));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao enviar: $e')));
@@ -95,8 +101,14 @@ class _BudgetProviderScreenState extends State<BudgetProviderScreen> {
         address: _addressCtrl.text.trim(),
         logoUrl: _logoUrlCtrl.text.trim(),
       );
-      await widget._ref.set(p.toMap(), SetOptions(merge: true));
+      final data = p.toMap();
+      // padrao CT: guarda path tambem para fallback
+      if (_logoStoragePath != null && _logoStoragePath!.isNotEmpty) {
+        data['logoStoragePath'] = _logoStoragePath;
+      }
+      await widget._ref.set(data, SetOptions(merge: true));
       if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Dados do prestador salvos.')));
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Dados do prestador salvos.')));
       }
     } finally {
@@ -135,7 +147,7 @@ class _BudgetProviderScreenState extends State<BudgetProviderScreen> {
                     children: [
                       Icon(Icons.business_rounded, color: AppColors.primary),
                       const SizedBox(width: 10),
-                      const Text('Estes dados aparecem no cabeçalho do orçamento PDF', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                      const Text('Estes dados aparecem no cabe├ºalho do or├ºamento PDF', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
                     ],
                   ),
                   const SizedBox(height: 20),
@@ -143,7 +155,7 @@ class _BudgetProviderScreenState extends State<BudgetProviderScreen> {
                     controller: _nameCtrl,
                     decoration: const InputDecoration(
                       labelText: 'Nome (pessoa ou empresa) *',
-                      hintText: 'Seu nome ou razão social',
+                      hintText: 'Seu nome ou raz├úo social',
                     ),
                     textCapitalization: TextCapitalization.words,
                   ),
@@ -152,7 +164,7 @@ class _BudgetProviderScreenState extends State<BudgetProviderScreen> {
                     controller: _nomeFantasiaCtrl,
                     decoration: const InputDecoration(
                       labelText: 'Nome fantasia (opcional)',
-                      hintText: 'Ex: João Serviços Elétricos',
+                      hintText: 'Ex: Jo├úo Servi├ºos El├®tricos',
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -178,8 +190,8 @@ class _BudgetProviderScreenState extends State<BudgetProviderScreen> {
                     controller: _addressCtrl,
                     maxLines: 2,
                     decoration: const InputDecoration(
-                      labelText: 'Endereço',
-                      hintText: 'Rua, número, bairro, cidade',
+                      labelText: 'Endere├ºo',
+                      hintText: 'Rua, n├║mero, bairro, cidade',
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -197,12 +209,12 @@ class _BudgetProviderScreenState extends State<BudgetProviderScreen> {
                           children: [
                             Icon(Icons.image_rounded, color: AppColors.primary, size: 22),
                             const SizedBox(width: 8),
-                            const Text('Incluir minha logo no orçamento', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                            const Text('Incluir minha logo no or├ºamento', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
                           ],
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'Se quiser, adicione sua logo para aparecer no cabeçalho dos PDFs. Deixe em branco para não usar logo.',
+                          'Se quiser, adicione sua logo para aparecer no cabe├ºalho dos PDFs. Deixe em branco para n├úo usar logo.',
                           style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
                         ),
                         const SizedBox(height: 12),

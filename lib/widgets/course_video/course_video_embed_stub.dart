@@ -8,14 +8,18 @@ class CourseVideoEmbed extends StatelessWidget {
     this.mp4Url,
     this.autoplay = true,
     this.posterUrl,
+    this.startAtSeconds = 0,
     this.onReady,
+    this.onProgress,
   });
 
   final String? youtubeVideoId;
   final String? mp4Url;
   final bool autoplay;
   final String? posterUrl;
+  final double startAtSeconds;
   final VoidCallback? onReady;
+  final void Function(double position, double duration)? onProgress;
 
   @override
   Widget build(BuildContext context) {

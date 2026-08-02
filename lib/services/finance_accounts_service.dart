@@ -64,7 +64,21 @@ class FinanceAccountsService {
 
   Future<List<FinanceAccount>> listOnce(String uid) async {
     if (firestoreUserDocIdStrictFromSession().isEmpty) return const [];
-    final snap = await _col(uid).get();
+    // Cache local primeiro — abertura do Financeiro/Agenda sem esperar rede.
+    try {
+      final cached = await _col(uid).get(const GetOptions(source: Source.cache));
+      if (cached.docs.isNotEmpty) {
+        final list = cached.docs.map(FinanceAccount.fromDoc).toList();
+        sortFinanceAccounts(list);
+        // Atualiza persistence em background.
+        // ignore: unawaited_futures
+        _col(uid).get(const GetOptions(source: Source.serverAndCache));
+        return list;
+      }
+    } catch (_) {}
+    final snap = await _col(uid).get(
+      const GetOptions(source: Source.serverAndCache),
+    );
     final list = snap.docs.map(FinanceAccount.fromDoc).toList();
     sortFinanceAccounts(list);
     return list;

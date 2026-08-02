@@ -50,7 +50,7 @@ const List<CommitmentPreset> kCommitmentPresets = [
 
   // Trabalho
   CommitmentPreset(name: 'Reunião de trabalho', icon: Icons.groups_rounded, color: Color(0xFF1E88E5)),
-  CommitmentPreset(name: 'Audiência/advogado', icon: Icons.gavel_rounded, color: Color(0xFF455A64)),
+  CommitmentPreset(name: 'Consulta jurídica/advogado', icon: Icons.gavel_rounded, color: Color(0xFF455A64)),
   CommitmentPreset(name: 'Entrevista de emprego', icon: Icons.handshake_rounded, color: Color(0xFF1E88E5)),
   CommitmentPreset(name: 'Plantão/escala de serviço', icon: Icons.work_history_rounded, color: Color(0xFF1A237E)),
   CommitmentPreset(name: 'Almoço/jantar de negócios', icon: Icons.restaurant_rounded, color: Color(0xFFFB8C00)),
@@ -102,3 +102,109 @@ const List<CommitmentPreset> kCommitmentPresets = [
 final Map<String, CommitmentPreset> kCommitmentPresetByName = {
   for (final p in kCommitmentPresets) p.name.toLowerCase().trim(): p,
 };
+
+String _normalizeCommitmentKey(String raw) {
+  return raw
+      .toLowerCase()
+      .trim()
+      .replaceAll('á', 'a')
+      .replaceAll('à', 'a')
+      .replaceAll('â', 'a')
+      .replaceAll('ã', 'a')
+      .replaceAll('é', 'e')
+      .replaceAll('ê', 'e')
+      .replaceAll('í', 'i')
+      .replaceAll('ó', 'o')
+      .replaceAll('ô', 'o')
+      .replaceAll('õ', 'o')
+      .replaceAll('ú', 'u')
+      .replaceAll('ç', 'c');
+}
+
+/// Remove «Compromisso » do início (exibição / match de ícone).
+String stripLeadingCompromissoWord(String raw) {
+  var l = raw.trim();
+  if (l.isEmpty) return l;
+  return l
+      .replaceFirst(RegExp(r'^compromisso\s+', caseSensitive: false), '')
+      .trim();
+}
+
+/// Nome “limpo” para match: sem prefixo Compromisso, sem horário/horas no fim.
+String commitmentLabelBaseForMatch(String? raw) {
+  var n = stripLeadingCompromissoWord(raw ?? '');
+  if (n.isEmpty) return '';
+  n = n
+      .replaceFirst(
+        RegExp(r'\s+\d+([,.]\d+)?\s+HORAS\s*$', caseSensitive: false),
+        '',
+      )
+      .trim();
+  final match = RegExp(
+    r'\s+\d{1,2}:\d{2}\s*[àa]s\s*\d{1,2}:\d{2}\s*$',
+    caseSensitive: false,
+  ).firstMatch(n);
+  if (match != null) n = n.substring(0, match.start).trim();
+  return n;
+}
+
+const List<Color> _kCommitmentFallbackColors = [
+  Color(0xFF1E88E5),
+  Color(0xFF26A69A),
+  Color(0xFF7E57C2),
+  Color(0xFFEF6C00),
+  Color(0xFFEC407A),
+  Color(0xFF5C6BC0),
+  Color(0xFF00897B),
+  Color(0xFFFB8C00),
+  Color(0xFFAB47BC),
+  Color(0xFF42A5F5),
+];
+
+const List<IconData> _kCommitmentFallbackIcons = [
+  Icons.event_available_rounded,
+  Icons.star_rounded,
+  Icons.bookmark_rounded,
+  Icons.place_rounded,
+  Icons.schedule_rounded,
+  Icons.flag_rounded,
+  Icons.lightbulb_rounded,
+  Icons.favorite_rounded,
+];
+
+/// Resolve ícone/cor do compromisso (presets oficiais + fallback colorido estável).
+CommitmentPreset resolveCommitmentVisual(String? rawLabel) {
+  final base = commitmentLabelBaseForMatch(rawLabel);
+  final key = _normalizeCommitmentKey(base);
+  if (key.isEmpty) {
+    return const CommitmentPreset(
+      name: 'Compromisso',
+      icon: Icons.event_available_rounded,
+      color: Color(0xFF12B5A5),
+    );
+  }
+
+  final exact = kCommitmentPresetByName[key];
+  if (exact != null) return exact;
+
+  CommitmentPreset? best;
+  var bestLen = 0;
+  for (final p in kCommitmentPresets) {
+    final pn = _normalizeCommitmentKey(p.name);
+    if (pn.isEmpty) continue;
+    if (key.contains(pn) || pn.contains(key)) {
+      if (pn.length > bestLen) {
+        best = p;
+        bestLen = pn.length;
+      }
+    }
+  }
+  if (best != null) return best;
+
+  final hash = key.hashCode.abs();
+  return CommitmentPreset(
+    name: base,
+    icon: _kCommitmentFallbackIcons[hash % _kCommitmentFallbackIcons.length],
+    color: _kCommitmentFallbackColors[hash % _kCommitmentFallbackColors.length],
+  );
+}

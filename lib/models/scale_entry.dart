@@ -70,6 +70,17 @@ class ScaleEntry {
   /// true = compromisso particular (não é plantão profissional).
   final bool isCompromisso;
 
+  /// Compromisso particular efetivo (exclui plantão mal flagado no Firestore).
+  bool get isCompromissoParticularEfetivo {
+    if (isProdutividadeFolgaMirror) return false;
+    if (isAgendaMirror) {
+      final tipo = (agendaType ?? '').trim().toLowerCase();
+      return tipo == 'compromisso' || tipo == 'audiencia' || tipo.isEmpty;
+    }
+    if (!isCompromisso) return false;
+    return !scaleEntryLooksLikePlantaoProfissional(this);
+  }
+
   /// Vínculo do plantão: 'state' | 'municipality' | 'private' (Estado, Município, Particular).
   final String? employerType;
 

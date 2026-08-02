@@ -58,7 +58,7 @@ class _ReminderDetailScreenState extends State<ReminderDetailScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Remover anexo?'),
         content: const Text(
-          'O ofício de comparecimento será desvinculado desta audiência. A audiência continua no sistema.',
+          'O ofício de comparecimento será desvinculado deste compromisso. O compromisso continua no sistema.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
@@ -120,9 +120,9 @@ class _ReminderDetailScreenState extends State<ReminderDetailScreen> {
           onPressed: () => Navigator.of(context).pop(),
           tooltip: 'Voltar',
         ),
-        title: Text(
-          isAudiencia ? 'Detalhes da audiência' : 'Detalhes do compromisso',
-          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+        title: const Text(
+          'Detalhes do compromisso',
+          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
         ),
         backgroundColor: AppColors.deepBlueDark,
         foregroundColor: Colors.white,
@@ -150,14 +150,16 @@ class _ReminderDetailScreenState extends State<ReminderDetailScreen> {
                   Row(
                     children: [
                       Icon(
-                        isAudiencia ? Icons.gavel_rounded : Icons.schedule_rounded,
+                        Icons.schedule_rounded,
                         size: 28,
-                        color: isAudiencia ? const Color(0xFF1A237E) : AppColors.primary,
+                        color: AppColors.primary,
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          isAudiencia ? 'Audiência' : (title.isEmpty ? 'Compromisso' : title),
+                          (title.isEmpty || title == 'Audiência')
+                              ? 'Compromisso'
+                              : title,
                           style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF1A237E)),
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
@@ -231,7 +233,7 @@ class _ReminderDetailScreenState extends State<ReminderDetailScreen> {
                           }
                         },
                         icon: const Icon(Icons.video_call_rounded, size: 20),
-                        label: const Text('Acessar sala de audiência'),
+                        label: const Text('Acessar sala virtual'),
                         style: FilledButton.styleFrom(
                           backgroundColor: AppColors.primary,
                           foregroundColor: Colors.white,

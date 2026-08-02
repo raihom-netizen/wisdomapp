@@ -72,7 +72,7 @@ Future<bool> validateAudienciaFormOrShowAlert(
     missing: missing,
     headline: 'Complete para salvar',
     body:
-        'Preencha os campos obrigatórios da audiência. Link, local e anexo são opcionais.',
+        'Preencha os campos obrigatórios do compromisso. Link, local e anexo são opcionais.',
   );
   return false;
 }
@@ -110,7 +110,7 @@ List<FormMissingField> collectAudienciaFormMissingFields({
     missing.add(
       const FormMissingField(
         label: 'Resumo / relato',
-        hint: 'Descreva o assunto ou relato da audiência',
+        hint: 'Descreva o assunto ou relato do compromisso',
         icon: Icons.description_rounded,
         colors: [Color(0xFF7C3AED), Color(0xFF6D28D9)],
       ),

@@ -3097,7 +3097,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Audiências e Compromissos em aberto',
+                                    'Compromissos em aberto',
                                     style: TextStyle(
                                       fontSize: isNarrow ? 14 : 15,
                                       fontWeight: FontWeight.w900,
@@ -3148,51 +3148,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Material(
-                                color: Colors.transparent,
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(12),
-                                  onTap: () =>
-                                      _showCompromissosAudienciasAbertoSheet(
-                                    context,
-                                    filter: AgendaAbertoFilter.apenasAudiencias,
-                                  ),
-                                  child: AgendaResumoCountCard(
-                                    icon: Icons.gavel_rounded,
-                                    label: 'Audiências',
-                                    count: audiencias,
-                                    palette:
-                                        AgendaResumoCountPalette.audiencia(),
-                                  ),
-                                ),
-                              ),
+                        Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: () =>
+                                _showCompromissosAudienciasAbertoSheet(
+                              context,
+                              filter: AgendaAbertoFilter.todos,
                             ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Material(
-                                color: Colors.transparent,
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(12),
-                                  onTap: () =>
-                                      _showCompromissosAudienciasAbertoSheet(
-                                    context,
-                                    filter:
-                                        AgendaAbertoFilter.apenasCompromissos,
-                                  ),
-                                  child: AgendaResumoCountCard(
-                                    icon: Icons.person_outline_rounded,
-                                    label: 'Compromissos',
-                                    count: compromissos,
-                                    palette:
-                                        AgendaResumoCountPalette.compromisso(),
-                                  ),
-                                ),
-                              ),
+                            child: AgendaResumoCountCard(
+                              icon: Icons.person_outline_rounded,
+                              label: 'Compromissos',
+                              count: compromissos + audiencias,
+                              palette:
+                                  AgendaResumoCountPalette.compromisso(),
                             ),
-                          ],
+                          ),
                         ),
                         const SizedBox(height: 10),
                         Material(
@@ -3213,7 +3185,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   const SizedBox(width: 6),
                                   Expanded(
                                     child: Text(
-                                      'Toque em cada cartão para ver só audiências ou só compromissos (link da sala e anexo). Toque aqui para ver ambos.',
+                                      'Toque para ver os compromissos particulares em aberto neste período.',
                                       style: TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w600,
@@ -3915,10 +3887,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             final showInPending =
                 prefsSnap.data?['showInPending'] as bool? ?? true;
             final monthsAhead =
-                (prefsSnap.data?['pendingMonthsAhead'] as int?)?.clamp(1, 12) ??
+                (prefsSnap.data?['pendingMonthsAhead'] as int?)?.clamp(0, 12) ??
                     AppBusinessRules.pendingMonthsAheadDefault;
-            final limitDate = DateTime(
-                DateTime.now().year, DateTime.now().month + monthsAhead, 1);
+            // Paridade CT: 0 = mês atual; exclusiveEnd = 1º do mês após o último incluído.
+            final exclusiveEnd = DateTime(
+                DateTime.now().year, DateTime.now().month + monthsAhead + 1, 1);
             return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: financeTransactionsPendingSnapshots(
                   uid: _userFsId, type: 'income'),
@@ -3944,7 +3917,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   final dateTs = d['date'];
                   if (dateTs is Timestamp) {
                     final dt = dateTs.toDate();
-                    if (dt.isAfter(limitDate)) continue;
+                    if (!dt.isBefore(exclusiveEnd)) continue;
                   }
                   final amount = (d['amount'] ?? 0).toDouble().abs();
                   totalPendentes += amount;
@@ -4059,10 +4032,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             final showInPending =
                 prefsSnap.data?['showInPending'] as bool? ?? true;
             final monthsAhead =
-                (prefsSnap.data?['pendingMonthsAhead'] as int?)?.clamp(1, 12) ??
+                (prefsSnap.data?['pendingMonthsAhead'] as int?)?.clamp(0, 12) ??
                     AppBusinessRules.pendingMonthsAheadDefault;
-            final limitDate = DateTime(
-                DateTime.now().year, DateTime.now().month + monthsAhead, 1);
+            // Paridade CT: 0 = mês atual; exclusiveEnd = 1º do mês após o último incluído.
+            final exclusiveEnd = DateTime(
+                DateTime.now().year, DateTime.now().month + monthsAhead + 1, 1);
             return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: financeTransactionsPendingSnapshots(
                   uid: _userFsId, type: 'expense'),
@@ -4088,7 +4062,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   final dateTs = d['date'];
                   if (dateTs is Timestamp) {
                     final dt = dateTs.toDate();
-                    if (dt.isAfter(limitDate)) continue;
+                    if (!dt.isBefore(exclusiveEnd)) continue;
                   }
                   final amount = (d['amount'] ?? 0).toDouble().abs();
                   totalPendentes += amount;

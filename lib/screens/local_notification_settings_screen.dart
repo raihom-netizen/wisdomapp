@@ -512,7 +512,7 @@ class _LocalNotificationSettingsScreenState extends State<LocalNotificationSetti
   }
 
   Widget _buildDeliveryByTypeSection() {
-    if (!_escalas && !_compromissos && !_audiencias && !_financeiro) {
+    if (!_escalas && !_compromissos && !_financeiro) {
       return const SizedBox.shrink();
     }
     return Column(
@@ -556,7 +556,7 @@ class _LocalNotificationSettingsScreenState extends State<LocalNotificationSetti
                   mode: m,
                 ),
               ),
-              if (_escalas && (_compromissos || _audiencias)) const Divider(height: 1),
+              if (_escalas && _compromissos) const Divider(height: 1),
               _deliveryModeSelector(
                 title: 'Compromissos',
                 subtitle: 'Lembretes de compromisso',
@@ -570,22 +570,7 @@ class _LocalNotificationSettingsScreenState extends State<LocalNotificationSetti
                   mode: m,
                 ),
               ),
-              if (_compromissos && _audiencias) const Divider(height: 1),
-              _deliveryModeSelector(
-                title: 'Audiências',
-                subtitle:
-                    'Padrão: celular + e-mail (recomendado). Você pode deixar só e-mail.',
-                icon: Icons.gavel_rounded,
-                accent: const Color(0xFF5B21B6),
-                typeEnabled: _audiencias,
-                value: _deliveryAudiencia,
-                onChanged: (m) => _setDeliveryMode(
-                  label: 'Audiências',
-                  apply: (v) => _deliveryAudiencia = v,
-                  mode: m,
-                ),
-              ),
-              if (_financeiro && (_escalas || _compromissos || _audiencias))
+              if (_financeiro && (_escalas || _compromissos))
                 const Divider(height: 1),
               _deliveryModeSelector(
                 title: 'Financeiro',

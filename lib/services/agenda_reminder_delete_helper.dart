@@ -307,7 +307,7 @@ Future<bool> deleteAgendaReminder({
           title: const Text('Excluir da Agenda?'),
           content: Text(
             isAudiencia
-                ? 'A audiência e o espelho no calendário de Escalas serão removidos.'
+                ? 'O compromisso e o espelho no calendário de Escalas serão removidos.'
                 : 'O compromisso e o espelho no calendário de Escalas serão removidos.',
           ),
           actions: [
@@ -339,7 +339,7 @@ Future<bool> deleteAgendaReminder({
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(isAudiencia ? 'Audiência excluída.' : 'Compromisso excluído.'),
+          content: const Text('Compromisso excluído.'),
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),

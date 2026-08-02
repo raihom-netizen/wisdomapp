@@ -33,7 +33,7 @@ extension _ChannelMeta on _Channel {
   String get name => switch (this) {
         _Channel.escala => 'Escalas e Plantões',
         _Channel.compromisso => 'Compromissos',
-        _Channel.audiencia => 'Audiências',
+        _Channel.audiencia => 'Compromissos',
         _Channel.financeiro => 'Contas a pagar',
         _Channel.folga => 'Folgas (Produtividade)',
       };

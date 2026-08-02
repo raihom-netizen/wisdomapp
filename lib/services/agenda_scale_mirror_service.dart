@@ -18,7 +18,7 @@ extension AgendaMirrorTypeX on AgendaMirrorType {
 
   String get label => switch (this) {
         AgendaMirrorType.compromisso => 'Compromisso (Agenda)',
-        AgendaMirrorType.audiencia => 'Audiência (Agenda)',
+        AgendaMirrorType.audiencia => 'Compromisso (Agenda)',
       };
 }
 

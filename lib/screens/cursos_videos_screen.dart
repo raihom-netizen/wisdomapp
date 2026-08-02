@@ -12,8 +12,10 @@ import '../utils/course_content_link_helper.dart';
 import '../utils/course_thumb_resolver.dart';
 import '../utils/youtube_url_helper.dart';
 import '../utils/course_media_url_resolver.dart';
+import '../services/course_progress_service.dart';
 import '../widgets/course_media_preview.dart';
 import '../widgets/course_video/course_module_media_panel.dart';
+import '../widgets/course_video/course_youtube_feed_card.dart';
 
 BoxFit _courseThumbFit(Map<String, dynamic> data) {
   final type = (data['type'] ?? 'curso').toString();
@@ -55,6 +57,7 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
     super.initState();
     _cache.addListener(_onCacheUpdate);
     unawaited(_cache.ensureLoaded());
+    unawaited(CourseProgressService.instance.bindUser(widget.uid));
   }
 
   @override
@@ -185,14 +188,6 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
         _activeCurso = data;
       }
     });
-    final sc = widget.shellScrollController;
-    if (sc != null && sc.hasClients) {
-      sc.animateTo(
-        0,
-        duration: const Duration(milliseconds: 380),
-        curve: Curves.easeOutCubic,
-      );
-    }
   }
 
   Map<String, dynamic>? _panelData(
@@ -297,14 +292,34 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
                 child: _sectionTitle(cfg.sectionTitle, Colors.white),
               ),
               const SizedBox(height: 10),
-              _buildListBody(
-                cfg: cfg,
-                docs: cursos,
-                allDocs: cursos,
-                syncing: syncing,
-                accent: AppColors.primary,
-                accent2: AppColors.deepBlue,
-              ),
+              if (cursos.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: _emptyState(cfg, syncing, AppColors.primary),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Column(
+                    children: [
+                      for (final doc in cursos)
+                        CourseYoutubeFeedCard(
+                          key: ValueKey('curso-solo-${doc.id}'),
+                          data: {...doc.data, 'id': doc.id},
+                          uid: widget.uid,
+                          isActive:
+                              (_activeCurso?['id'] ?? cursos.first.id) ==
+                                  doc.id,
+                          onActivate: () => _selectModuleContent(
+                            {...doc.data, 'id': doc.id},
+                            isDica: false,
+                          ),
+                          accent: const Color(0xFFFF0000),
+                          accent2: const Color(0xFFCC0000),
+                        ),
+                    ],
+                  ),
+                ),
             ],
           ],
         ),
@@ -465,64 +480,43 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
         ],
       );
     }
-    final related = docs.map((d) => {...d.data, 'id': d.id}).toList();
-    final panelData = _panelData(docs, isDicas ? _activeDica : _activeCurso)!;
     return Column(
       key: key,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (docs.isNotEmpty) ...[
-          if (courseShowModulePanel(panelData))
-            RepaintBoundary(
-              child: CourseModuleMediaPanel(
-                key: ValueKey('panel-${panelData['id']}'),
-                data: panelData,
-                accent: accent,
-                accent2: accent2,
-                badge: 'DESTAQUE · $label',
-                related: related,
-                onSelectRelated: (item) =>
-                    _selectModuleContent(item, isDica: isDicas),
-              ),
-            )
-          else
-            _FeaturedVideoHighlight(
-              data: panelData,
-              videoId: _videoId(panelData),
-              thumbUrl: _thumbUrl(panelData),
-              accent: accent,
-              accent2: accent2,
-              badge: 'DESTAQUE · $label',
-              onTap: () => _selectModuleContent(panelData, isDica: isDicas),
-            ),
-          if (docs.length > 1) ...[
-            const SizedBox(height: 14),
-            _sectionTitle('Mais $label', accent),
-            const SizedBox(height: 10),
-          ],
-        ],
-        if (isDicas)
-          _buildDicasGrid(
-            cfg: cfg,
-            docs:
-                docs.length > 1 ? docs.sublist(1) : (docs.isEmpty ? docs : []),
-            allDocs: docs,
-            syncing: syncing,
-            accent: accent,
-            accent2: accent2,
-            showEmptyWhenNoFeatured: docs.isEmpty,
-          )
-        else
-          _buildListBody(
-            cfg: cfg,
-            docs:
-                docs.length > 1 ? docs.sublist(1) : (docs.isEmpty ? docs : []),
-            allDocs: docs,
-            syncing: syncing,
-            accent: accent,
-            accent2: accent2,
-            showEmptyWhenNoFeatured: docs.isEmpty,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+          child: _sectionTitle(
+            isDicas ? 'Todas as dicas' : 'Todos os cursos',
+            accent,
           ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Column(
+            children: [
+              for (final doc in docs)
+                CourseYoutubeFeedCard(
+                  key: ValueKey('${isDicas ? 'dica' : 'curso'}-${doc.id}'),
+                  data: {...doc.data, 'id': doc.id},
+                  uid: widget.uid,
+                  isActive: isDicas
+                      ? (_activeDica?['id'] ?? docs.first.id) == doc.id
+                      : (_activeCurso?['id'] ?? docs.first.id) == doc.id,
+                  onActivate: () => _selectModuleContent(
+                    {...doc.data, 'id': doc.id},
+                    isDica: isDicas,
+                  ),
+                  accent: isDicas
+                      ? const Color(0xFFF59E0B)
+                      : const Color(0xFFFF0000),
+                  accent2: isDicas
+                      ? const Color(0xFFD97706)
+                      : const Color(0xFFCC0000),
+                ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -710,6 +704,7 @@ class _YouTubeTabSelector extends StatelessWidget {
               icon: Icons.school_rounded,
               count: cursosCount,
               selected: index == 0,
+              accent: const Color(0xFFFF0000),
               onTap: () => onChanged(0),
             ),
           ),
@@ -720,6 +715,7 @@ class _YouTubeTabSelector extends StatelessWidget {
               icon: Icons.lightbulb_rounded,
               count: dicasCount,
               selected: index == 1,
+              accent: const Color(0xFFF59E0B),
               onTap: () => onChanged(1),
             ),
           ),
@@ -736,6 +732,7 @@ class _YTPill extends StatelessWidget {
     required this.count,
     required this.selected,
     required this.onTap,
+    this.accent = const Color(0xFFFF0000),
   });
 
   final String label;
@@ -743,6 +740,7 @@ class _YTPill extends StatelessWidget {
   final int count;
   final bool selected;
   final VoidCallback onTap;
+  final Color accent;
 
   @override
   Widget build(BuildContext context) {
@@ -757,7 +755,7 @@ class _YTPill extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
-            color: selected ? const Color(0xFFFF0000) : Colors.transparent,
+            color: selected ? accent : Colors.transparent,
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,

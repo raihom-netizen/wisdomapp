@@ -184,7 +184,7 @@ class _AdminNotificationTemplatesSectionState
             FastTextField(
               controller: _accentAudCtrl,
               decoration: const InputDecoration(
-                labelText: 'Audiência (#hex)',
+                labelText: 'Compromisso legado (#hex)',
                 border: OutlineInputBorder(),
               ),
             ),

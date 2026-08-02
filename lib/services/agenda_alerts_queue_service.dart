@@ -116,8 +116,10 @@ class AgendaAlertsQueueService {
     return items.where((e) {
       final kind = e.channelKind.toLowerCase();
       final channelOk = switch (channel) {
+        // Legado: itens type=audiencia aparecem junto com compromissos.
         AgendaQueueChannelFilter.audiencia => kind == 'audiencia',
-        AgendaQueueChannelFilter.compromisso => kind == 'compromisso',
+        AgendaQueueChannelFilter.compromisso =>
+          kind == 'compromisso' || kind == 'audiencia',
         AgendaQueueChannelFilter.escala => kind == 'escala',
       };
       if (!channelOk) return false;
@@ -223,7 +225,7 @@ class AgendaAlertsQueueService {
   }
 
   static String channelLabel(String kind) => switch (kind) {
-        'audiencia' => 'Audiência',
+        'audiencia' => 'Compromisso',
         'compromisso' => 'Compromisso',
         'escala' => 'Plantão / Escala',
         'financeiro' => 'Financeiro',

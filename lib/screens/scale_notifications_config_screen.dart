@@ -164,12 +164,12 @@ class _ScaleNotificationsConfigScreenState extends State<ScaleNotificationsConfi
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Lembretes de plantão, compromissos e audiências também são enviados por e-mail (além do aviso na tela).',
+                    'Lembretes de plantão e compromissos também são enviados por e-mail (além do aviso na tela).',
                     style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Avise-me antes (plantão, compromisso ou audiência) — ex.: 1 dia antes',
+                    'Avise-me antes (plantão ou compromisso) — ex.: 1 dia antes',
                     style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
                   ),
                   if (_reminderEnabled) ...[

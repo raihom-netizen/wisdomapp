@@ -7,7 +7,8 @@ class FixedExpensePreferencesService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   static const String _showInPendingKey = 'showInPending';
-  static const int _defaultPendingMonthsAhead = AppBusinessRules.pendingMonthsAheadDefault;
+  static const int _defaultPendingMonthsAhead =
+      AppBusinessRules.pendingMonthsAheadDefault;
   static const String _pendingMonthsAheadKey = 'pendingMonthsAhead';
 
   DocumentReference<Map<String, dynamic>> _settingsRef(String uid) => _db
@@ -24,23 +25,27 @@ class FixedExpensePreferencesService {
     return data[_showInPendingKey] as bool? ?? true;
   }
 
-  /// Quantos meses à frente considerar nas despesas pendentes (1 a 12).
+  /// Quantos meses à frente considerar nas despesas pendentes (0 a 12).
+  /// 0 = apenas o mês atual, 1 = mês atual + próximo, etc.
   Future<int> getPendingMonthsAhead(String uid) async {
     final snap = await _settingsRef(uid).get();
     final data = snap.data();
     if (data == null) return _defaultPendingMonthsAhead;
     final v = data[_pendingMonthsAheadKey];
-    if (v is num) return (v.toInt()).clamp(1, 12);
+    if (v is num) return (v.toInt()).clamp(0, 12);
     return _defaultPendingMonthsAhead;
   }
 
   /// Salva preferências.
-  Future<void> set(String uid, {bool? showInPending, int? pendingMonthsAhead}) async {
+  Future<void> set(String uid,
+      {bool? showInPending, int? pendingMonthsAhead}) async {
     final data = <String, dynamic>{
       'updatedAt': FieldValue.serverTimestamp(),
     };
     if (showInPending != null) data[_showInPendingKey] = showInPending;
-    if (pendingMonthsAhead != null) data[_pendingMonthsAheadKey] = pendingMonthsAhead.clamp(1, 12);
+    if (pendingMonthsAhead != null) {
+      data[_pendingMonthsAheadKey] = pendingMonthsAhead.clamp(0, 12);
+    }
     await _settingsRef(uid).set(data, SetOptions(merge: true));
   }
 
@@ -50,7 +55,9 @@ class FixedExpensePreferencesService {
       final d = s.data();
       return {
         _showInPendingKey: d?[_showInPendingKey] as bool? ?? true,
-        _pendingMonthsAheadKey: (d?[_pendingMonthsAheadKey] as num?)?.toInt().clamp(1, 12) ?? _defaultPendingMonthsAhead,
+        _pendingMonthsAheadKey:
+            (d?[_pendingMonthsAheadKey] as num?)?.toInt().clamp(0, 12) ??
+                _defaultPendingMonthsAhead,
       };
     });
   }

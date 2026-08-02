@@ -446,7 +446,7 @@ class _AudienciaFormPageState extends State<AudienciaFormPage> {
 
   @override
   Widget build(BuildContext context) {
-    final title = widget.isEdit ? 'Editar audiência' : 'Nova audiência';
+    final title = widget.isEdit ? 'Editar compromisso' : 'Novo compromisso';
     final pickedFill = _colorFromHex(_colorHex);
     final onPicked = pickedFill.computeLuminance() > 0.55
         ? const Color(0xFF0F172A)
@@ -484,7 +484,7 @@ class _AudienciaFormPageState extends State<AudienciaFormPage> {
         child: AgendaFormFooterActions(
           onCancel: () => Navigator.of(context).maybePop(),
           onSave: _submit,
-          saveLabel: widget.isEdit ? 'Salvar alterações' : 'Salvar audiência',
+          saveLabel: widget.isEdit ? 'Salvar alterações' : 'Salvar compromisso',
         ),
       ),
       body: keyboardScaffoldBody(
@@ -518,7 +518,7 @@ class _AudienciaFormPageState extends State<AudienciaFormPage> {
                 _field(
                   controller: _relatoCtrl,
                   label: 'Resumo / relato *',
-                  hint: 'Assunto ou relato da audiência',
+                  hint: 'Assunto ou relato do compromisso',
                   maxLines: 5,
                   maxLength: kAudienciaRelatoMaxLength,
                 ),
@@ -566,7 +566,7 @@ class _AudienciaFormPageState extends State<AudienciaFormPage> {
                 _field(
                   controller: _linkCtrl,
                   label: 'Link da sala (opcional)',
-                  hint: 'https://… para audiência virtual',
+                  hint: 'https://… para reunião virtual',
                 ),
                 const SizedBox(height: 10),
                 _buildColorCard(pickedFill, onPicked),
@@ -764,7 +764,7 @@ class _AudienciaFormPageState extends State<AudienciaFormPage> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'A audiência aparece no painel, na Agenda e no calendário de Escalas. '
+                'O compromisso aparece no painel, na Agenda e no calendário de Escalas. '
                 'Você receberá lembretes conforme as notificações configuradas.',
                 style: TextStyle(
                   fontSize: 11.5,

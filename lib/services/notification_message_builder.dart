@@ -230,7 +230,7 @@ class NotificationMessageBuilder {
 
       case 'audiencia':
 
-        return 'Audiência';
+        return 'Compromisso';
 
       case 'compromisso':
 
@@ -481,7 +481,7 @@ class NotificationMessageBuilder {
 
       userName: userName,
 
-      eventTitle: 'Audiência',
+      eventTitle: 'Compromisso',
 
       eventAt: eventAt,
 
@@ -737,9 +737,9 @@ class NotificationMessageBuilder {
 
       userName: userName,
 
-      eventTitle: title.isEmpty
+      eventTitle: title.isEmpty || title == 'Audiência'
 
-          ? (isAud ? 'Audiência' : 'Compromisso')
+          ? 'Compromisso'
 
           : title,
 
@@ -836,14 +836,16 @@ class NotificationMessageBuilder {
             : '');
 
     final titleDetail = _compactTitleDetail(
-      ctx.eventTitle.isNotEmpty && ctx.eventTitle != 'Audiência'
+      ctx.eventTitle.isNotEmpty &&
+              ctx.eventTitle != 'Audiência' &&
+              ctx.eventTitle != 'Compromisso'
           ? ctx.eventTitle
           : (ctx.processo.isNotEmpty ? 'SEI ${ctx.processo}' : ''),
     );
 
     final title = titleDetail.isEmpty
-        ? _pushTitle(ctx.leadMin, 'audiencia')
-        : '${leadTitlePrefix(ctx.leadMin)} — Audiência: $titleDetail';
+        ? _pushTitle(ctx.leadMin, 'compromisso')
+        : '${leadTitlePrefix(ctx.leadMin)} — Compromisso: $titleDetail';
 
     final modLabel =
 
@@ -869,7 +871,9 @@ class NotificationMessageBuilder {
 
     lines.add('📍 $modLabel');
 
-    if (ctx.eventTitle.isNotEmpty && ctx.eventTitle != 'Audiência') {
+    if (ctx.eventTitle.isNotEmpty &&
+        ctx.eventTitle != 'Audiência' &&
+        ctx.eventTitle != 'Compromisso') {
 
       lines.add('📝 ${ctx.eventTitle}');
 

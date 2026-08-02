@@ -91,6 +91,19 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create, update, delete: if canEditPublicContent();
     }
+    // Métricas de cursos/dicas: usuário autentica grava o próprio viewer + incrementos;
+    // painel admin/gestor lê agregados e lista de quem assistiu.
+    match /course_stats/{courseId} {
+      allow read: if isAdminPanelReader() || isSystemManager();
+      allow create, update: if isSignedIn();
+      allow delete: if canEditPublicContent();
+      match /viewers/{viewerId} {
+        allow read: if isAdminPanelReader() || isSystemManager();
+        allow create, update: if isSignedIn() && request.auth.uid == viewerId;
+        allow delete: if canEditPublicContent()
+          || (isSignedIn() && request.auth.uid == viewerId);
+      }
+    }
     // Dicas financeiras (Início + insights): leitura para usuários autenticados; CRUD gestor/admin.
     match /financial_tips/{tipId} {
       allow read: if isSignedIn();

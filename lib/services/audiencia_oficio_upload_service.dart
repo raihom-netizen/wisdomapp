@@ -1,11 +1,14 @@
+﻿import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/wisdom_media_upload.dart';
 import 'pending_storage_upload_service.dart';
 
-/// Upload / remoção de anexo (ofício) de audiência.
+/// Upload / remocao de anexo (oficio) de audiencia.
+///
+/// Usa [WisdomMediaUpload] com retry + URL timeout (padrao Controle Total).
 class AudienciaOficioUploadService {
   AudienciaOficioUploadService._();
 
@@ -41,17 +44,21 @@ class AudienciaOficioUploadService {
     final name = fileName ?? 'oficio.$ext';
 
     try {
-      final path = 'users/$userDocId/audiencias/$reminderDocId/oficio.$ext';
-      final ref = FirebaseStorage.instance.ref(path);
-      await ref.putData(bytes, SettableMetadata(contentType: mimeType));
-      final url = await ref.getDownloadURL();
+      final result = await WisdomMediaUpload.uploadOficio(
+        userId: userDocId,
+        reminderId: reminderDocId,
+        bytes: bytes,
+        mimeType: mimeType,
+        extension: ext,
+      );
       await FirebaseFirestore.instance
           .collection('users')
           .doc(userDocId)
           .collection('reminders')
           .doc(reminderDocId)
           .update({
-        'oficioUrl': url,
+        'oficioUrl': result.downloadUrl,
+        'oficioStoragePath': result.storagePath, // padrao CT: guarda path tambem
         'oficioFileName': name,
         'updatedAt': FieldValue.serverTimestamp(),
       });

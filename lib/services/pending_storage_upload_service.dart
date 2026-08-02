@@ -1,15 +1,17 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/wisdom_media_upload.dart';
 import 'functions_service.dart';
 
-/// Fila local de uploads (ex.: ofício de audiência) quando não há rede.
+/// Fila local de uploads (ex.: oficio de audiencia) quando nao ha rede.
+///
+/// Usa [WisdomMediaUpload] com retry (padrao Controle Total).
 class PendingStorageUploadService {
   PendingStorageUploadService._();
 
@@ -48,7 +50,7 @@ class PendingStorageUploadService {
     await prefs.setStringList(_kQueueKey, raw);
   }
 
-  /// Comprovante de lançamento financeiro — fila local (Android/iOS offline).
+  /// Comprovante de lancamento financeiro - fila local (Android/iOS offline).
   static Future<void> enqueueFinanceReceipt({
     required String userDocId,
     required String transactionDocId,
@@ -90,7 +92,7 @@ class PendingStorageUploadService {
     return 'jpg';
   }
 
-  /// Envia pendências e atualiza Firestore. Retorna quantos itens concluíram.
+  /// Envia pendencias e atualiza Firestore. Retorna quantos itens concluem.
   static Future<int> drainAll() async {
     if (kIsWeb) return 0;
     final prefs = await SharedPreferences.getInstance();
@@ -143,17 +145,24 @@ class PendingStorageUploadService {
     final file = File(localPath);
     if (!await file.exists()) return true;
     final bytes = await file.readAsBytes();
-    final path = 'users/$userDocId/audiencias/$reminderDocId/oficio.$ext';
-    final ref = FirebaseStorage.instance.ref(path);
-    await ref.putData(bytes, SettableMetadata(contentType: mime));
-    final url = await ref.getDownloadURL();
+
+    // Usa WisdomMediaUpload com retry (padrao CT).
+    final result = await WisdomMediaUpload.uploadOficio(
+      userId: userDocId,
+      reminderId: reminderDocId,
+      bytes: bytes,
+      mimeType: mime,
+      extension: ext,
+    );
+
     await FirebaseFirestore.instance
         .collection('users')
         .doc(userDocId)
         .collection('reminders')
         .doc(reminderDocId)
         .update({
-      'oficioUrl': url,
+      'oficioUrl': result.downloadUrl,
+      'oficioStoragePath': result.storagePath, // padrao CT: guarda path tambem
       'oficioFileName': fileName,
       'updatedAt': FieldValue.serverTimestamp(),
     });
@@ -171,13 +180,16 @@ class PendingStorageUploadService {
     final file = File(localPath);
     if (!await file.exists()) return true;
     final bytes = await file.readAsBytes();
-    final txPath = 'users/$userDocId/transactions/$txId';
-    await FunctionsService().uploadReceiptToStorage(
-      txPath: txPath,
-      filename: fileName,
+
+    // Usa WisdomMediaUpload com retry (padrao CT).
+    final result = await WisdomMediaUpload.uploadReceipt(
+      userId: userDocId,
+      transactionId: txId,
       bytes: bytes,
       mimeType: mime,
+      fileName: fileName,
     );
+
     await FirebaseFirestore.instance
         .collection('users')
         .doc(userDocId)
@@ -185,6 +197,7 @@ class PendingStorageUploadService {
         .doc(txId)
         .update({
       'hasReceipt': true,
+      'receiptStoragePath': result.storagePath, // padrao CT: guarda path tambem
       'receiptPendingUpload': FieldValue.delete(),
       'updatedAt': FieldValue.serverTimestamp(),
     });

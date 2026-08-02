@@ -170,9 +170,9 @@ class _AgendaEmAbertoSheetBodyState extends State<_AgendaEmAbertoSheetBody> {
 
   String get _title {
     return switch (widget.filter) {
-      AgendaAbertoFilter.todos => 'Audiências e Compromissos em aberto',
+      AgendaAbertoFilter.todos => 'Compromissos em aberto',
       AgendaAbertoFilter.apenasCompromissos => 'Compromissos em aberto',
-      AgendaAbertoFilter.apenasAudiencias => 'Audiências em aberto',
+      AgendaAbertoFilter.apenasAudiencias => 'Compromissos em aberto',
     };
   }
 
@@ -291,7 +291,7 @@ class _AgendaEmAbertoSheetBodyState extends State<_AgendaEmAbertoSheetBody> {
                         widget.onVerTudoNaAgenda!();
                       },
                       child: const Text(
-                        'Abrir\nAudiências/Compromissos',
+                        'Abrir\nAgenda',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 11,
@@ -414,9 +414,9 @@ class _AgendaEmAbertoSheetBodyState extends State<_AgendaEmAbertoSheetBody> {
                                 AgendaAbertoFilter.apenasCompromissos =>
                                   'Nenhum compromisso em aberto neste período',
                                 AgendaAbertoFilter.apenasAudiencias =>
-                                  'Nenhuma audiência em aberto neste período',
+                                  'Nenhum compromisso em aberto neste período',
                                 _ =>
-                                  'Nenhuma audiência ou compromisso em aberto neste período',
+                                  'Nenhum compromisso em aberto neste período',
                               },
                               textAlign: TextAlign.center,
                               style: TextStyle(
@@ -441,37 +441,26 @@ class _AgendaEmAbertoSheetBodyState extends State<_AgendaEmAbertoSheetBody> {
                     );
                   }
 
+                  final merged = <({
+                    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+                    bool isAudiencia
+                  })>[
+                    if (showAud)
+                      ...audiencias.map((d) => (doc: d, isAudiencia: true)),
+                    if (showComp)
+                      ...compromissos.map((d) => (doc: d, isAudiencia: false)),
+                  ]..sort((a, b) {
+                      final da = agendaReminderDateTime(a.doc.data());
+                      final db = agendaReminderDateTime(b.doc.data());
+                      if (da == null || db == null) return 0;
+                      return da.compareTo(db);
+                    });
+
                   return ListView(
                     controller: scrollController,
                     padding: const EdgeInsets.fromLTRB(16, 10, 16, 28),
                     children: [
-                      if (showAud && audiencias.isNotEmpty) ...[
-                        if (widget.filter == AgendaAbertoFilter.todos)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 4, bottom: 8),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.gavel_rounded,
-                                    size: 20, color: Color(0xFF1A237E)),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Audiências (${audiencias.length})',
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w800,
-                                    color: Color(0xFF1A237E),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ...audiencias.map((doc) => widget.buildTile(ctx, doc, true)),
-                        if (widget.filter == AgendaAbertoFilter.todos &&
-                            showComp &&
-                            compromissos.isNotEmpty)
-                          const SizedBox(height: 16),
-                      ],
-                      if (showComp && compromissos.isNotEmpty) ...[
+                      if (merged.isNotEmpty) ...[
                         if (widget.filter == AgendaAbertoFilter.todos)
                           Padding(
                             padding: const EdgeInsets.only(left: 4, bottom: 8),
@@ -481,7 +470,7 @@ class _AgendaEmAbertoSheetBodyState extends State<_AgendaEmAbertoSheetBody> {
                                     size: 20, color: AppColors.primary),
                                 const SizedBox(width: 8),
                                 Text(
-                                  'Compromissos (${compromissos.length})',
+                                  'Compromissos (${merged.length})',
                                   style: const TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w800,
@@ -491,7 +480,9 @@ class _AgendaEmAbertoSheetBodyState extends State<_AgendaEmAbertoSheetBody> {
                               ],
                             ),
                           ),
-                        ...compromissos.map((doc) => widget.buildTile(ctx, doc, false)),
+                        ...merged.map(
+                          (it) => widget.buildTile(ctx, it.doc, it.isAudiencia),
+                        ),
                       ],
                     ],
                   );

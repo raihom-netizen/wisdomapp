@@ -41,7 +41,7 @@ abstract final class NotificationNavigator {
       case 'compromisso':
         return NotificationCenterTab.compromissos;
       case 'audiencia':
-        return NotificationCenterTab.audiencias;
+        return NotificationCenterTab.compromissos;
       case 'financeiro':
         return NotificationCenterTab.contas;
       default:

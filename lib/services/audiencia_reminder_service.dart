@@ -47,7 +47,7 @@ class AudienciaReminderService {
 
     final docRef = await _reminders(userDocId).add({
       'type': 'audiencia',
-      'title': 'Audiência',
+      'title': 'Compromisso',
       'numeroSei': sei,
       'numeroOcorrencia': oco,
       'resumoRelato': relato,
@@ -67,7 +67,7 @@ class AudienciaReminderService {
       userDocId: userDocId,
       agendaId: docRef.id,
       type: AgendaMirrorType.audiencia,
-      label: 'Audiência',
+      label: 'Compromisso',
       date: result.date,
       startHHmm: timeStr,
       endHHmm: endTimeStr,

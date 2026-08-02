@@ -28,7 +28,7 @@ enum NotificationSoundCategory {
         NotificationSoundCategory.all => 'Todas as categorias',
         NotificationSoundCategory.escala => 'Escala / Plantão',
         NotificationSoundCategory.compromisso => 'Compromisso',
-        NotificationSoundCategory.audiencia => 'Audiência',
+        NotificationSoundCategory.audiencia => 'Compromisso',
         NotificationSoundCategory.financeiro => 'Conta a pagar',
       };
 
@@ -36,7 +36,7 @@ enum NotificationSoundCategory {
         NotificationSoundCategory.all => 'Todas',
         NotificationSoundCategory.escala => 'Escala',
         NotificationSoundCategory.compromisso => 'Compromisso',
-        NotificationSoundCategory.audiencia => 'Audiência',
+        NotificationSoundCategory.audiencia => 'Compromisso',
         NotificationSoundCategory.financeiro => 'Financeiro',
       };
 }

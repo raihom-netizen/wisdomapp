@@ -8,6 +8,12 @@ DateTime? _agendaReminderCalendarDay(Map<String, dynamic> d) {
   return DateTime(date.year, date.month, date.day);
 }
 
+/// Compromisso permanece no widget até 5h após o horário de fim.
+const Duration kWidgetCompromissoGraceAfterEnd = Duration(hours: 5);
+
+/// Plantão de escala: permanece no widget até 2h após o fim.
+const Duration kWidgetPlantaoGraceAfterEnd = Duration(hours: 2);
+
 /// Início do evento (date + time HH:mm). Sem hora = 00:00 do dia civil.
 DateTime? agendaReminderEventStartDateTime(Map<String, dynamic> d) {
   final day = _agendaReminderCalendarDay(d);
@@ -19,6 +25,32 @@ DateTime? agendaReminderEventStartDateTime(Map<String, dynamic> d) {
   final h = int.tryParse(parts[0]) ?? 0;
   final m = int.tryParse(parts[1]) ?? 0;
   return DateTime(day.year, day.month, day.day, h, m);
+}
+
+/// Fim do evento (date + endTime/end HH:mm). Sem fim = início (compromisso pontual).
+DateTime? agendaReminderEventEndDateTime(Map<String, dynamic> d) {
+  final day = _agendaReminderCalendarDay(d);
+  if (day == null) return null;
+  final endStr = (d['endTime'] ?? d['end'] ?? '').toString().trim();
+  if (endStr.isEmpty) return agendaReminderEventStartDateTime(d);
+  final parts = endStr.split(':');
+  final h = int.tryParse(parts.isNotEmpty ? parts[0] : '') ?? 0;
+  final m = int.tryParse(parts.length > 1 ? parts[1] : '') ?? 0;
+  var end = DateTime(day.year, day.month, day.day, h, m);
+  final start = agendaReminderEventStartDateTime(d);
+  if (start != null && !end.isAfter(start)) {
+    end = end.add(const Duration(days: 1));
+  }
+  return end;
+}
+
+/// Compromisso ainda visível no widget nativo (5h após fim).
+bool agendaReminderVisibleOnWidget(Map<String, dynamic> d, DateTime now) {
+  if (!agendaReminderOpenStatus(d)) return false;
+  if (!agendaReminderIsAudienciaOrCompromisso(d)) return false;
+  final end = agendaReminderEventEndDateTime(d);
+  if (end == null) return agendaStillCountedAsOpenOnPanel(d, now);
+  return now.isBefore(end.add(kWidgetCompromissoGraceAfterEnd));
 }
 
 /// Audiência e compromisso permanecem no painel até 24h após o horário marcado

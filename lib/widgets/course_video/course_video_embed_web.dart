@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui_web' as ui_web;
 
 // ignore: avoid_web_libraries_in_flutter
@@ -16,14 +17,18 @@ class CourseVideoEmbed extends StatefulWidget {
     this.mp4Url,
     this.autoplay = true,
     this.posterUrl,
+    this.startAtSeconds = 0,
     this.onReady,
+    this.onProgress,
   });
 
   final String? youtubeVideoId;
   final String? mp4Url;
   final bool autoplay;
   final String? posterUrl;
+  final double startAtSeconds;
   final VoidCallback? onReady;
+  final void Function(double position, double duration)? onProgress;
 
   @override
   State<CourseVideoEmbed> createState() => _CourseVideoEmbedState();
@@ -34,6 +39,11 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
   late final String _viewType;
   bool _registered = false;
   var _notifiedReady = false;
+  Timer? _progressTimer;
+  html.VideoElement? _videoEl;
+
+  int get _startAt =>
+      widget.startAtSeconds > 8 ? widget.startAtSeconds.round() : 0;
 
   @override
   void initState() {
@@ -43,14 +53,22 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
   }
 
   @override
+  void dispose() {
+    _progressTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
   void didUpdateWidget(covariant CourseVideoEmbed oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.youtubeVideoId != widget.youtubeVideoId ||
         oldWidget.mp4Url != widget.mp4Url ||
         oldWidget.posterUrl != widget.posterUrl ||
-        oldWidget.autoplay != widget.autoplay) {
+        oldWidget.autoplay != widget.autoplay ||
+        oldWidget.startAtSeconds != widget.startAtSeconds) {
       _notifiedReady = false;
       _registered = false;
+      _progressTimer?.cancel();
       _registerView();
     }
   }
@@ -61,23 +79,29 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
     widget.onReady?.call();
   }
 
+  void _emitProgress(double t, double d) {
+    widget.onProgress?.call(t, d);
+  }
+
   void _registerView() {
     if (_registered) return;
     final yt = widget.youtubeVideoId?.trim();
     final mp4 = widget.mp4Url?.trim();
     final poster = widget.posterUrl?.trim();
     final origin = Uri.base.origin;
+    final start = _startAt;
 
     ui_web.platformViewRegistry.registerViewFactory(_viewType, (int _) {
       if (yt != null && yt.isNotEmpty) {
         if (!widget.autoplay) {
-          return _buildYoutubePosterView(yt, poster);
+          return _buildYoutubePosterView(yt, poster, start);
         }
         final iframe = html.IFrameElement()
           ..src = YoutubeUrlHelper.embedUrl(
             yt,
             autoplay: widget.autoplay,
             origin: origin,
+            startSeconds: start,
           )
           ..style.border = 'none'
           ..style.width = '100%'
@@ -106,15 +130,39 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
         if (poster != null && poster.isNotEmpty) {
           video.poster = poster;
         }
+        _videoEl = video;
         video.onContextMenu.listen((e) => e.preventDefault());
         video.onDragStart.listen((e) => e.preventDefault());
-        video.onLoadedData.first.then((_) {
-          if (poster == null || poster.isEmpty) {
+        video.onLoadedMetadata.listen((_) {
+          if (start > 0) {
+            try {
+              video.currentTime = start.toDouble();
+            } catch (_) {}
+          } else if (poster == null || poster.isEmpty) {
             try {
               video.currentTime = 0.05;
             } catch (_) {}
           }
-          _notifyReady();
+        });
+        video.onLoadedData.first.then((_) => _notifyReady());
+        video.onPause.listen((_) {
+          _emitProgress(
+            video.currentTime.toDouble(),
+            video.duration.isFinite ? video.duration.toDouble() : 0.0,
+          );
+        });
+        video.onEnded.listen((_) {
+          _emitProgress(
+            video.currentTime.toDouble(),
+            video.duration.isFinite ? video.duration.toDouble() : 0.0,
+          );
+        });
+        _progressTimer?.cancel();
+        _progressTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+          if (_videoEl == null) return;
+          final v = _videoEl!;
+          final d = v.duration.isFinite ? v.duration.toDouble() : 0.0;
+          _emitProgress(v.currentTime.toDouble(), d);
         });
         return video;
       }
@@ -129,7 +177,11 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
     });
   }
 
-  html.Element _buildYoutubePosterView(String videoId, String? poster) {
+  html.Element _buildYoutubePosterView(
+    String videoId,
+    String? poster,
+    int start,
+  ) {
     final wrap = html.DivElement()
       ..style.width = '100%'
       ..style.height = '100%'
@@ -195,18 +247,19 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
         'accelerometer; autoplay; encrypted-media; gyroscope; fullscreen',
       );
 
-    void start() {
+    void startPlay() {
       posterEl.style.display = 'none';
       iframe.style.display = 'block';
       iframe.src = YoutubeUrlHelper.embedUrl(
         videoId,
         autoplay: true,
         origin: Uri.base.origin,
+        startSeconds: start,
       );
       iframe.onLoad.first.then((_) => _notifyReady());
     }
 
-    posterEl.onClick.listen((_) => start());
+    posterEl.onClick.listen((_) => startPlay());
     _notifyReady();
 
     wrap.children.addAll([posterEl, iframe]);
@@ -222,7 +275,10 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
           child: SizedBox(
             width: 32,
             height: 32,
-            child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white54),
+            child: CircularProgressIndicator(
+              strokeWidth: 2.5,
+              color: Colors.white54,
+            ),
           ),
         ),
       );

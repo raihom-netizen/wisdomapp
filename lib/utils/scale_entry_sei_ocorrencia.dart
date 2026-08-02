@@ -119,8 +119,9 @@ Map<String, dynamic> scalePlantaoFirestorePatch(ScalePlantaoEditValues values) {
 /// Título no resumo do dia — sem repetir SEI/ocorrência no texto do título.
 String scaleEntryResumoDisplayTitle(ScaleEntry e) {
   final tipo = (e.agendaType ?? '').toString().trim().toLowerCase();
-  if (e.isAgendaMirror && tipo == 'audiencia') return 'Audiência';
-  if (e.isAgendaMirror && tipo == 'compromisso') return 'Compromisso';
+  if (e.isAgendaMirror && (tipo == 'audiencia' || tipo == 'compromisso')) {
+    return 'Compromisso';
+  }
   var label = (e.label ?? 'Plantão').trim();
   if (label.isEmpty) return 'Plantão';
   final seiMatch = RegExp(r'\s*·\s*SEI\s', caseSensitive: false).firstMatch(label);
@@ -131,7 +132,10 @@ String scaleEntryResumoDisplayTitle(ScaleEntry e) {
   if (ocoMatch != null) {
     label = label.substring(0, ocoMatch.start).trim();
   }
-  if (label.toUpperCase().startsWith('AUDIÊNCIA')) return 'Audiência';
+  if (label.toUpperCase().startsWith('AUDIÊNCIA') ||
+      label.toUpperCase().startsWith('AUDIENCIA')) {
+    return 'Compromisso';
+  }
   if (label.toUpperCase().startsWith('COMPROMISSO')) return 'Compromisso';
   return label;
 }

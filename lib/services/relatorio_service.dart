@@ -172,7 +172,7 @@ class RelatorioService {
       case 'produtividade_ocorrencias':
         return 'produtividade_ocorrências $faixa$suf';
       case 'compromissos_audiencia':
-        return 'compromissos audiencia $faixa';
+        return 'compromissos $faixa';
       default:
         return 'relatorio $faixa$suf';
     }
@@ -2062,9 +2062,8 @@ class RelatorioService {
     final compromissosCount = merged.where((e) {
       if (e['agendaRowKind'] != 'reminder') return false;
       final t = (e['type'] ?? 'compromisso').toString();
-      return t != 'audiencia';
+      return t == 'compromisso' || t == 'audiencia';
     }).length;
-    final audienciasCount = merged.where((e) => (e['type'] ?? '').toString() == 'audiencia').length;
     final googleCount = merged.where((e) => e['agendaRowKind'] == 'google').length;
     final incomeItems = merged.where((e) =>
         e['agendaRowKind'] == 'finance' &&
@@ -2154,9 +2153,14 @@ class RelatorioService {
         details = parts.isEmpty ? 'Financeiro' : parts.join(' · ');
       } else {
         final type = (e['type'] ?? 'compromisso').toString();
-        tipoLabel = type == 'audiencia' ? 'Audiência' : 'Compromisso';
-        tipoColor = type == 'audiencia' ? PdfColor.fromInt(0xFF7C3AED) : _pdfAccent;
-        title = type == 'audiencia' ? 'Audiência' : (e['title'] ?? 'Compromisso').toString();
+        tipoLabel = 'Compromisso';
+        tipoColor = _pdfAccent;
+        title = type == 'audiencia'
+            ? ((e['title'] ?? '').toString().trim().isEmpty ||
+                    (e['title'] ?? '').toString() == 'Audiência'
+                ? 'Compromisso'
+                : (e['title'] ?? 'Compromisso').toString())
+            : (e['title'] ?? 'Compromisso').toString();
         final time = (e['time'] ?? '').toString();
         timeOrValue = time.isEmpty ? '—' : time;
         final aberto = _reminderEmAbertoPdf(e);
@@ -2299,11 +2303,6 @@ class RelatorioService {
                   _pdfAccent,
                 ),
                 _buildPdfStatCard(
-                  'Audiências',
-                  '$audienciasCount',
-                  PdfColor.fromInt(0xFF7C3AED),
-                ),
-                _buildPdfStatCard(
                   'Receitas pendentes',
                   '${incomeItems.length} · ${CurrencyFormats.formatBRL(totalReceitas)}',
                   _pdfAgendaReceita,
@@ -2358,7 +2357,7 @@ class RelatorioService {
                   ),
                   child: pw.Text(
                     sanitizeForReport(
-                      'Nenhum compromisso, audiência ou lançamento financeiro pendente no período.',
+                      'Nenhum compromisso ou lançamento financeiro pendente no período.',
                     ),
                     style: pw.TextStyle(
                       fontSize: 10,

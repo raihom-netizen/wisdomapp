@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import '../../services/course_progress_service.dart';
 import '../../utils/course_media_url_resolver.dart';
 import '../../utils/course_thumb_resolver.dart';
 import '../../utils/youtube_url_helper.dart';
@@ -16,6 +19,7 @@ class CourseModuleMediaPanel extends StatefulWidget {
     required this.badge,
     this.onSelectRelated,
     this.related = const [],
+    this.uid,
   });
 
   final Map<String, dynamic> data;
@@ -24,6 +28,7 @@ class CourseModuleMediaPanel extends StatefulWidget {
   final String badge;
   final void Function(Map<String, dynamic> item)? onSelectRelated;
   final List<Map<String, dynamic>> related;
+  final String? uid;
 
   static String? youtubeIdFrom(Map<String, dynamic> data) {
     final stored = (data['youtubeVideoId'] ?? '').toString().trim();
@@ -68,6 +73,8 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
   // A descrição completa já abre visível, como solicitado para o catálogo.
   var _descExpanded = true;
   String? _panelDocId;
+  CourseProgress _progress = const CourseProgress();
+  StreamSubscription<String>? _progressSub;
 
   @override
   bool get wantKeepAlive => true;
@@ -76,7 +83,23 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
   void initState() {
     super.initState();
     _panelDocId = widget.data['id']?.toString();
+    final uid = widget.uid;
+    if (uid != null && uid.isNotEmpty) {
+      unawaited(CourseProgressService.instance.bindUser(uid));
+    }
+    _progress = CourseProgressService.instance.of(_panelDocId ?? '');
+    _progressSub = CourseProgressService.instance.changes.listen((id) {
+      if (id == _panelDocId && mounted) {
+        setState(() => _progress = CourseProgressService.instance.of(id));
+      }
+    });
     _loadMp4();
+  }
+
+  @override
+  void dispose() {
+    _progressSub?.cancel();
+    super.dispose();
   }
 
   @override
@@ -86,6 +109,7 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
     if (newId != _panelDocId) {
       _panelDocId = newId;
       _descExpanded = true;
+      _progress = CourseProgressService.instance.of(newId ?? '');
       _resolvedMp4 = CourseModuleMediaPanel.mp4From(widget.data);
       _loadMp4();
     }
@@ -153,6 +177,8 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
                   posterData: widget.data,
                   youtubeVideoId: _youtubeId,
                   mp4Url: _resolvedMp4,
+                  courseId: widget.data['id']?.toString(),
+                  startAtSeconds: _progress.positionSeconds,
                   autoplay: true,
                   accent: widget.accent,
                   accent2: widget.accent2,
@@ -238,6 +264,8 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
                                     posterData: widget.data,
                                     youtubeVideoId: _youtubeId,
                                     mp4Url: _resolvedMp4,
+                                    courseId: widget.data['id']?.toString(),
+                                    startAtSeconds: _progress.positionSeconds,
                                     autoplay: false,
                                     accent: widget.accent,
                                     accent2: widget.accent2,
@@ -282,37 +310,79 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
                     ),
                   ),
                 ],
-                if (_description.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-                    child: _DescriptionCard(
-                      text: _description,
-                      expanded: _descExpanded,
-                      accent: widget.accent,
-                      onToggle: () =>
-                          setState(() => _descExpanded = !_descExpanded),
-                    ),
-                  ),
-                if (_showVideo)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-                    child: Row(
-                      children: [
-                        Icon(Icons.play_circle_outline_rounded,
-                            size: 18, color: widget.accent),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            _youtubeId != null
-                                ? 'Toque ▶ no player · qualidade até 4K'
-                                : 'Toque ▶ no player para assistir',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.grey.shade700,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
+                  child: Row(
+                    children: [
+                      Material(
+                        color: _progress.liked
+                            ? const Color(0xFFFF0000).withValues(alpha: 0.12)
+                            : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(999),
+                        child: InkWell(
+                          onTap: () async {
+                            final id = widget.data['id']?.toString() ?? '';
+                            await CourseProgressService.instance.toggleLike(
+                              id,
+                              title: _title,
+                              type: _isDica ? 'dica' : 'curso',
+                            );
+                            if (mounted) {
+                              setState(() {
+                                _progress =
+                                    CourseProgressService.instance.of(id);
+                              });
+                            }
+                          },
+                          borderRadius: BorderRadius.circular(999),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  _progress.liked
+                                      ? Icons.thumb_up_alt_rounded
+                                      : Icons.thumb_up_off_alt_rounded,
+                                  size: 18,
+                                  color: _progress.liked
+                                      ? const Color(0xFFFF0000)
+                                      : Colors.grey.shade700,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Gostei',
+                                  style: TextStyle(
+                                    color: _progress.liked
+                                        ? const Color(0xFFB91C1C)
+                                        : Colors.grey.shade800,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
+                      ),
+                      if (_progress.hasResume) ...[
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            _progress.resumeLabel,
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                      const Spacer(),
+                      if (_showVideo)
                         TextButton.icon(
                           onPressed: _openFullscreen,
                           icon: Icon(Icons.fullscreen_rounded,
@@ -328,7 +398,18 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
                             visualDensity: VisualDensity.compact,
                           ),
                         ),
-                      ],
+                    ],
+                  ),
+                ),
+                if (_description.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
+                    child: _DescriptionCard(
+                      text: _description,
+                      expanded: _descExpanded,
+                      accent: widget.accent,
+                      onToggle: () =>
+                          setState(() => _descExpanded = !_descExpanded),
                     ),
                   ),
                 if (widget.related.isNotEmpty && widget.onSelectRelated != null)

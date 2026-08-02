@@ -28,18 +28,19 @@ import '../utils/home_shell_layout.dart';
 import '../utils/premium_upgrade.dart';
 import '../utils/firestore_user_doc_id.dart';
 import '../utils/produtividade_ocorrencias_pdf_partition.dart';
+import '../core/wisdom_media_upload.dart';
 import 'report_preview_screen.dart';
 import '../widgets/date_time_field.dart';
 import '../widgets/produtividade_em_aberto_sheet.dart';
 
-/// Módulo Controle Produtividade/Ocorrências: lançar ocorrências, editar/remover,
-/// marcar para folga e gerar PDF de solicitação.
+/// MÃ³dulo Controle Produtividade/OcorrÃªncias: lanÃ§ar ocorrÃªncias, editar/remover,
+/// marcar para folga e gerar PDF de solicitaÃ§Ã£o.
 class OcorrenciasScreen extends StatefulWidget {
   final String uid;
   final UserProfile profile;
   final void Function(int index)? onNavigateTo;
 
-  /// Quando dentro do [HomeShell]: scroll volta ao topo ao mudar de módulo.
+  /// Quando dentro do [HomeShell]: scroll volta ao topo ao mudar de mÃ³dulo.
   final ScrollController? shellScrollController;
 
   const OcorrenciasScreen({
@@ -54,10 +55,10 @@ class OcorrenciasScreen extends StatefulWidget {
   State<OcorrenciasScreen> createState() => _OcorrenciasScreenState();
 }
 
-/// Opções do filtro "Status da folga".
+/// OpÃ§Ãµes do filtro "Status da folga".
 enum _StatusFolgaFilter { todas, disponiveis, usadas }
 
-/// Período do painel resumo no topo (Pontos em aberto / Folgas tiradas).
+/// PerÃ­odo do painel resumo no topo (Pontos em aberto / Folgas tiradas).
 enum _ResumoPeriodo { mesAtual, mesAnterior, anual, personalizado }
 
 class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
@@ -70,24 +71,24 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
   String get _userDocId => firestoreUserDocIdStrictFromSession();
 
   bool _topoExpandido = true;
-  // Filtro padrão ao entrar: "Disponíveis para folga" (ocorrências em aberto).
-  // O usuário troca o chip para ver as já tiradas; antes era 'Todas', mas
-  // o usuário pediu para abrir focado nas ocorrências ainda em aberto.
+  // Filtro padrÃ£o ao entrar: "DisponÃ­veis para folga" (ocorrÃªncias em aberto).
+  // O usuÃ¡rio troca o chip para ver as jÃ¡ tiradas; antes era 'Todas', mas
+  // o usuÃ¡rio pediu para abrir focado nas ocorrÃªncias ainda em aberto.
   _StatusFolgaFilter _statusFolga = _StatusFolgaFilter.disponiveis;
 
-  // Período do painel-resumo (Pontos em aberto / Folgas tiradas). Padrão: ano civil atual.
+  // PerÃ­odo do painel-resumo (Pontos em aberto / Folgas tiradas). PadrÃ£o: ano civil atual.
   _ResumoPeriodo _resumoPeriodo = _ResumoPeriodo.anual;
   DateTime? _resumoCustomStart;
   DateTime? _resumoCustomEnd;
-  // Quando o usuário escolhe **Personalizado…**, em vez de abrir uma nova
+  // Quando o usuÃ¡rio escolhe **Personalizadoâ€¦**, em vez de abrir uma nova
   // tela (showDateRangePicker), expandimos um painel inline na mesma tela
-  // com os campos "De" e "Até" (padrão idêntico ao módulo Escalas).
+  // com os campos "De" e "AtÃ©" (padrÃ£o idÃªntico ao mÃ³dulo Escalas).
   bool _resumoCustomExpanded = false;
   final Set<String> _selecionadosFolga = {};
-  /// Vista «Já usadas»: seleção para remover `folgaDate` em lote (remarcar folga).
+  /// Vista Â«JÃ¡ usadasÂ»: seleÃ§Ã£o para remover `folgaDate` em lote (remarcar folga).
   final Set<String> _selecionadosLimparFolga = {};
   DateTime? _dataFolgaEscolhida = DateTime.now();
-  /// Cor do espelho no calendário de Escalas ao confirmar folga (padrão = plantão Ordinário).
+  /// Cor do espelho no calendÃ¡rio de Escalas ao confirmar folga (padrÃ£o = plantÃ£o OrdinÃ¡rio).
   String _folgaCalendarColorHex = kProdutividadeFolgaCalendarDefaultHex;
   bool _loadingNaturezas = true;
   List<OcorrenciaNatureza> _naturezas = [];
@@ -99,7 +100,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
   static const int _anexoImageTargetBytes = 700 * 1024;
   static const List<String> _anexoAllowedExtensions = ['png', 'jpg', 'jpeg', 'pdf'];
 
-  /// Faixa superior do cabeçalho do módulo (gradiente logo).
+  /// Faixa superior do cabeÃ§alho do mÃ³dulo (gradiente logo).
   Widget _buildModuleHeroBanner() {
     return ClipRRect(
       borderRadius: BorderRadius.circular(_radiusLg),
@@ -142,7 +143,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                   const SizedBox(width: 14),
                   Expanded(
                     child: Text(
-                      'Lançamentos, pontos e solicitação de folga em um só lugar.',
+                      'LanÃ§amentos, pontos e solicitaÃ§Ã£o de folga em um sÃ³ lugar.',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
@@ -243,11 +244,11 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
     final hasDate = m['date'] != null || m['createdAt'] != null;
     final label = _naturezaLabelFromDoc(m);
     final hasNatureza =
-        label.isNotEmpty && label != 'Ocorrência sem natureza';
+        label.isNotEmpty && label != 'OcorrÃªncia sem natureza';
     return !hasDate || !hasNatureza;
   }
 
-  /// Lista de ocorrências: agrupada por folga quando "Já usadas"; ordem crescente (menor para maior).
+  /// Lista de ocorrÃªncias: agrupada por folga quando "JÃ¡ usadas"; ordem crescente (menor para maior).
   Widget _buildOcorrenciasList(List<Map<String, dynamic>> filtrada) {
     switch (_statusFolga) {
       case _StatusFolgaFilter.usadas:
@@ -352,7 +353,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              'Use quando cancelar a folga ou para voltar os pontos a «disponíveis» e marcar folga noutra data.',
+              'Use quando cancelar a folga ou para voltar os pontos a Â«disponÃ­veisÂ» e marcar folga noutra data.',
               style: TextStyle(fontSize: 11, color: Colors.grey.shade700, height: 1.25),
             ),
           ],
@@ -380,9 +381,9 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
           ],
         ),
         content: Text(
-          '${ids.length} ocorrência(s) deixam de estar vinculadas a esta data de folga. '
-          'Os pontos voltam a contar como disponíveis para marcar outra folga. '
-          'O lançamento correspondente no calendário de Escalas será removido.',
+          '${ids.length} ocorrÃªncia(s) deixam de estar vinculadas a esta data de folga. '
+          'Os pontos voltam a contar como disponÃ­veis para marcar outra folga. '
+          'O lanÃ§amento correspondente no calendÃ¡rio de Escalas serÃ¡ removido.',
           style: const TextStyle(fontSize: 14, height: 1.35, fontWeight: FontWeight.w600),
         ),
         actions: [
@@ -409,27 +410,27 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
         SnackBar(
           content: Text(
             ids.length == 1
-                ? 'Data da folga removida. O calendário de Escalas foi atualizado.'
-                : 'Datas da folga removidas (${ids.length}). O calendário de Escalas foi atualizado.',
+                ? 'Data da folga removida. O calendÃ¡rio de Escalas foi atualizado.'
+                : 'Datas da folga removidas (${ids.length}). O calendÃ¡rio de Escalas foi atualizado.',
           ),
         ),
       );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Não foi possível atualizar: ${e.toString().split('\n').first}')),
+          SnackBar(content: Text('NÃ£o foi possÃ­vel atualizar: ${e.toString().split('\n').first}')),
         );
       }
     }
   }
 
-  /// Limpa o cache local do Firestore e força um novo carregamento.
-  /// Útil quando o usuário relata "Não foi possível carregar" e a culpa é
-  /// de um cache corrompido após troca de sessão / atualização rápida.
+  /// Limpa o cache local do Firestore e forÃ§a um novo carregamento.
+  /// Ãštil quando o usuÃ¡rio relata "NÃ£o foi possÃ­vel carregar" e a culpa Ã©
+  /// de um cache corrompido apÃ³s troca de sessÃ£o / atualizaÃ§Ã£o rÃ¡pida.
   Future<void> _clearCacheAndRetry() async {
     try {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Limpando cache local…')),
+        const SnackBar(content: Text('Limpando cache localâ€¦')),
       );
       try {
         await FirebaseFirestore.instance.terminate();
@@ -440,12 +441,12 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
       if (!mounted) return;
       setState(() {}); // refaz o StreamBuilder com novo `watch`
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cache limpo. Tentando recarregar…')),
+        const SnackBar(content: Text('Cache limpo. Tentando recarregarâ€¦')),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Não foi possível limpar o cache: $e')),
+        SnackBar(content: Text('NÃ£o foi possÃ­vel limpar o cache: $e')),
       );
     }
   }
@@ -497,7 +498,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
     return '#${h.toUpperCase()}';
   }
 
-  /// Igual ao módulo Audiência: amostra da cor + «Trocar» → diálogo com grelha (72 tons + atalhos).
+  /// Igual ao mÃ³dulo AudiÃªncia: amostra da cor + Â«TrocarÂ» â†’ diÃ¡logo com grelha (72 tons + atalhos).
   Future<void> _abrirSeletorCorFolga() async {
     final palette = kColorPaletteHex.take(72).toList();
     final colors = palette.map(_colorFromHex6).toList();
@@ -509,7 +510,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
           children: [
             const Expanded(
               child: Text(
-                'Cor no calendário (Escalas)',
+                'Cor no calendÃ¡rio (Escalas)',
                 style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
               ),
             ),
@@ -543,14 +544,14 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                   ActionChip(
                     avatar: Icon(Icons.schedule_rounded,
                         size: 18, color: _colorFromHex6(kCalendarPresetPlantaoOrdinarioHex)),
-                    label: const Text('Plantão'),
+                    label: const Text('PlantÃ£o'),
                     onPressed: () =>
                         Navigator.pop(dlgCtx, kCalendarPresetPlantaoOrdinarioHex),
                   ),
                   ActionChip(
                     avatar: Icon(Icons.gavel_rounded,
                         size: 18, color: _colorFromHex6(kCalendarPresetAudienciaHex)),
-                    label: const Text('Audiências'),
+                    label: const Text('Dourado'),
                     onPressed: () =>
                         Navigator.pop(dlgCtx, kCalendarPresetAudienciaHex),
                   ),
@@ -610,7 +611,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
     setState(() => _folgaCalendarColorHex = _normalizeHexFolga(picked));
   }
 
-  /// Cartão estilo Audiência: padrão visível + botão «Trocar» abre o grid.
+  /// CartÃ£o estilo AudiÃªncia: padrÃ£o visÃ­vel + botÃ£o Â«TrocarÂ» abre o grid.
   Widget _buildFolgaCalendarColorSection() {
     final pickedFill = _colorFromHex6(_folgaCalendarColorHex);
     final onPicked = pickedFill.computeLuminance() > 0.55
@@ -636,7 +637,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Cor no calendário',
+                        'Cor no calendÃ¡rio',
                         style: TextStyle(
                           fontSize: 13.5,
                           fontWeight: FontWeight.w800,
@@ -645,7 +646,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Padrão: plantão Ordinário (azul). Toque em Trocar para escolher outra cor ou atalho.',
+                        'PadrÃ£o: plantÃ£o OrdinÃ¡rio (azul). Toque em Trocar para escolher outra cor ou atalho.',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
@@ -696,14 +697,14 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
           child: TextButton(
             onPressed: () => setState(() => _folgaCalendarColorHex =
                 kProdutividadeFolgaCalendarDefaultHex),
-            child: const Text('Restaurar padrão (plantão)'),
+            child: const Text('Restaurar padrÃ£o (plantÃ£o)'),
           ),
         ),
       ],
     );
   }
 
-  /// Pré-visualização premium + confirmação antes de gerar PDF, gravar folga e espelho no calendário.
+  /// PrÃ©-visualizaÃ§Ã£o premium + confirmaÃ§Ã£o antes de gerar PDF, gravar folga e espelho no calendÃ¡rio.
   Future<void> _abrirConfirmacaoFolgaPremium({
     required int pontuacaoParaFolga,
     required int totalPontos,
@@ -714,7 +715,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Selecione ocorrências que somem pelo menos $pontuacaoParaFolga pts. Total: $totalPontos pts.',
+            'Selecione ocorrÃªncias que somem pelo menos $pontuacaoParaFolga pts. Total: $totalPontos pts.',
           ),
           backgroundColor: AppColors.error,
         ),
@@ -796,17 +797,17 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _linhaResumoFolga(
-                              'Ocorrências', '${_selecionadosFolga.length} selecionada(s)'),
+                              'OcorrÃªncias', '${_selecionadosFolga.length} selecionada(s)'),
                           const SizedBox(height: 8),
                           _linhaResumoFolga(
-                              'Pontuação total', '$totalPontos pts'),
+                              'PontuaÃ§Ã£o total', '$totalPontos pts'),
                           const SizedBox(height: 8),
                           _linhaResumoFolga('Meta para 1 folga',
-                              '$pontuacaoParaFolga pts (Configurações)'),
+                              '$pontuacaoParaFolga pts (ConfiguraÃ§Ãµes)'),
                           if (restantes > 0) ...[
                             const SizedBox(height: 8),
                             _linhaResumoFolga(
-                                'Sobra após folga', '$restantes pts (nova ocorrência)'),
+                                'Sobra apÃ³s folga', '$restantes pts (nova ocorrÃªncia)'),
                           ],
                           const SizedBox(height: 8),
                           _linhaResumoFolga(
@@ -840,7 +841,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            'Cor no calendário de Escalas: igual ao módulo Audiência — Trocar abre o grid; padrão é o azul do plantão Ordinário.',
+                            'Cor no calendÃ¡rio de Escalas: igual ao mÃ³dulo AudiÃªncia â€” Trocar abre o grid; padrÃ£o Ã© o azul do plantÃ£o OrdinÃ¡rio.',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
@@ -853,9 +854,9 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                     ),
                     const SizedBox(height: 18),
                     Text(
-                      'Será criado um compromisso colorido no calendário de Escalas (módulo Escalas) na data escolhida. '
-                      'Use «Trocar» acima para escolher a cor — igual Audiência e Compromissos. '
-                      'Para remover, limpe aqui em Produtividade ou limpe o dia no calendário de Escalas.',
+                      'SerÃ¡ criado um compromisso colorido no calendÃ¡rio de Escalas (mÃ³dulo Escalas) na data escolhida. '
+                      'Use Â«TrocarÂ» acima para escolher a cor â€” igual AudiÃªncia e Compromissos. '
+                      'Para remover, limpe aqui em Produtividade ou limpe o dia no calendÃ¡rio de Escalas.',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -978,7 +979,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
     return v.toString();
   }
 
-  /// Data de ocorrência com fallbacks (legado / tipos heterogéneos — evita linhas “vazias” na grid).
+  /// Data de ocorrÃªncia com fallbacks (legado / tipos heterogÃ©neos â€” evita linhas â€œvaziasâ€ na grid).
   String _formatDateAny(dynamic v) {
     if (v == null) return '';
     if (v is Timestamp) return DateTimeFormats.dateBR.format(v.toDate());
@@ -996,7 +997,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
     return s;
   }
 
-  /// Rótulo de natureza com fallbacks (map legado, campos alternativos).
+  /// RÃ³tulo de natureza com fallbacks (map legado, campos alternativos).
   String _naturezaLabelFromDoc(Map<String, dynamic> e) {
     dynamic raw = e['naturezaLabel'];
     if (raw == null || raw.toString().trim().isEmpty) raw = e['natureza'];
@@ -1013,12 +1014,12 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
       } catch (_) {}
     }
     final out = (raw ?? '').toString().trim();
-    if (out.isEmpty || out == '{}' || out == 'null') return 'Ocorrência sem natureza';
+    if (out.isEmpty || out == '{}' || out == 'null') return 'OcorrÃªncia sem natureza';
     return out;
   }
 
   static final List<String> _diasSemana = [
-    'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo',
+    'Segunda', 'TerÃ§a', 'Quarta', 'Quinta', 'Sexta', 'SÃ¡bado', 'Domingo',
   ];
   String _diaSemana(DateTime d) => _diasSemana[d.weekday - 1];
   String _diaSemanaCompleto(DateTime d) {
@@ -1065,7 +1066,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                           children: [
                             CircularProgressIndicator(),
                             SizedBox(height: 16),
-                            Text('A sincronizar sessão…', textAlign: TextAlign.center),
+                            Text('A sincronizar sessÃ£oâ€¦', textAlign: TextAlign.center),
                           ],
                         ),
                       ),
@@ -1088,15 +1089,15 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                                       color: Colors.orange.shade700),
                                   const SizedBox(height: 12),
                                   Text(
-                                    'Não foi possível carregar as ocorrências. Verifique a sessão e a rede.',
+                                    'NÃ£o foi possÃ­vel carregar as ocorrÃªncias. Verifique a sessÃ£o e a rede.',
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
                                         color: Colors.grey.shade800,
                                         fontWeight: FontWeight.w600),
                                   ),
                                   const SizedBox(height: 12),
-                                  // Detalhe técnico (sempre visível, ajuda
-                                  // o suporte mesmo em produção).
+                                  // Detalhe tÃ©cnico (sempre visÃ­vel, ajuda
+                                  // o suporte mesmo em produÃ§Ã£o).
                                   Theme(
                                     data: Theme.of(context).copyWith(
                                       dividerColor: Colors.transparent,
@@ -1110,7 +1111,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                                               horizontal: 8,
                                               vertical: 4),
                                       title: const Text(
-                                        'Mostrar detalhe técnico (para o suporte)',
+                                        'Mostrar detalhe tÃ©cnico (para o suporte)',
                                         style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w600,
@@ -1185,10 +1186,10 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                         children: [
                           _buildCardFolga(list),
                           const SizedBox(height: 20),
-                          _sectionTitle('Ocorrências'),
+                          _sectionTitle('OcorrÃªncias'),
                           const SizedBox(height: 12),
                           if (list.isEmpty)
-                            _emptyCard('Nenhuma ocorrência lançada. Toque em + para adicionar.')
+                            _emptyCard('Nenhuma ocorrÃªncia lanÃ§ada. Toque em + para adicionar.')
                           else ...[
                             Builder(
                               builder: (context) {
@@ -1196,8 +1197,8 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                                 if (filtrada.isEmpty) {
                                   return _emptyCard(
                                     _statusFolga == _StatusFolgaFilter.todas
-                                        ? 'Nenhuma ocorrência lançada. Toque em + para adicionar.'
-                                        : 'Nenhuma ocorrência com esse status. Tente outro filtro.',
+                                        ? 'Nenhuma ocorrÃªncia lanÃ§ada. Toque em + para adicionar.'
+                                        : 'Nenhuma ocorrÃªncia com esse status. Tente outro filtro.',
                                   );
                                 }
                                 return _buildOcorrenciasList(filtrada);
@@ -1240,7 +1241,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
               foregroundColor: Colors.white,
               icon: const Icon(Icons.post_add_rounded, color: Colors.white),
               label: const Text(
-                'Nova ocorrência',
+                'Nova ocorrÃªncia',
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
@@ -1329,8 +1330,8 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                     runSpacing: 8,
                     children: [
                       _chipFolga(_StatusFolgaFilter.todas, 'Todas', Icons.view_module_rounded),
-                      _chipFolga(_StatusFolgaFilter.disponiveis, 'Disponíveis para folga', Icons.event_available_rounded),
-                      _chipFolga(_StatusFolgaFilter.usadas, 'Já usadas para folga', Icons.event_repeat_rounded),
+                      _chipFolga(_StatusFolgaFilter.disponiveis, 'DisponÃ­veis para folga', Icons.event_available_rounded),
+                      _chipFolga(_StatusFolgaFilter.usadas, 'JÃ¡ usadas para folga', Icons.event_repeat_rounded),
                     ],
                   ),
                 ],
@@ -1346,11 +1347,11 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
   // Painel-resumo Super Premium (Pontos em aberto / Folgas tiradas)
   // ============================================================
   //
-  // Idêntico em comportamento ao painel do início (Audiências/Compromissos):
-  // dois cards clicáveis com totais no período selecionado + filtros do
-  // período (Mês atual · Mês anterior · Anual · Personalizado). Ao abrir: Anual.
+  // IdÃªntico em comportamento ao painel do inÃ­cio (AudiÃªncias/Compromissos):
+  // dois cards clicÃ¡veis com totais no perÃ­odo selecionado + filtros do
+  // perÃ­odo (MÃªs atual Â· MÃªs anterior Â· Anual Â· Personalizado). Ao abrir: Anual.
 
-  /// Calcula o intervalo de datas do resumo conforme o período selecionado.
+  /// Calcula o intervalo de datas do resumo conforme o perÃ­odo selecionado.
   (DateTime, DateTime) _rangeForResumoPeriodo() {
     final now = DateTime.now();
     switch (_resumoPeriodo) {
@@ -1392,7 +1393,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
     }
   }
 
-  /// Pega pontuação (int seguro) de um doc de ocorrência.
+  /// Pega pontuaÃ§Ã£o (int seguro) de um doc de ocorrÃªncia.
   int _pontuacaoDe(Map<String, dynamic> data) {
     final v = data['pontuacao'];
     if (v is int) return v;
@@ -1400,7 +1401,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
     return int.tryParse((v ?? '0').toString()) ?? 0;
   }
 
-  /// Card clicável (igual padrão Audiências do painel inicial).
+  /// Card clicÃ¡vel (igual padrÃ£o AudiÃªncias do painel inicial).
   Widget _resumoCardClicavel({
     required IconData icon,
     required String label,
@@ -1476,15 +1477,15 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
     );
   }
 
-  /// Chip do filtro de período (Mês atual · Mês anterior · Anual ·
-  /// Personalizado). **Super Premium**: alto contraste para o usuário
-  /// distinguir claramente o que está selecionado.
+  /// Chip do filtro de perÃ­odo (MÃªs atual Â· MÃªs anterior Â· Anual Â·
+  /// Personalizado). **Super Premium**: alto contraste para o usuÃ¡rio
+  /// distinguir claramente o que estÃ¡ selecionado.
   ///
-  /// - **Selecionado**: pílula branca opaca com texto em azul-marinho forte.
-  /// - **Não selecionado**: pílula branca translúcida (mas suficiente para
+  /// - **Selecionado**: pÃ­lula branca opaca com texto em azul-marinho forte.
+  /// - **NÃ£o selecionado**: pÃ­lula branca translÃºcida (mas suficiente para
   ///   o texto branco em negrito ler bem) com borda mais marcada.
-  ///   Antes era `alpha 0.18` (quase invisível) — agora `alpha 0.28` + borda
-  ///   `alpha 0.9` + sombra leve, atendendo o padrão visual do app.
+  ///   Antes era `alpha 0.18` (quase invisÃ­vel) â€” agora `alpha 0.28` + borda
+  ///   `alpha 0.9` + sombra leve, atendendo o padrÃ£o visual do app.
   Widget _chipResumoPeriodo(_ResumoPeriodo value, String label) {
     final selected = _resumoPeriodo == value;
     return Material(
@@ -1539,15 +1540,15 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
     );
   }
 
-  /// Mesma lógica do antigo `onSelected` do ChoiceChip, separada para o
-  /// novo chip premium e para ser reutilizável por testes / atalhos.
+  /// Mesma lÃ³gica do antigo `onSelected` do ChoiceChip, separada para o
+  /// novo chip premium e para ser reutilizÃ¡vel por testes / atalhos.
   Future<void> _onSelectResumoPeriodo(_ResumoPeriodo value) async {
     if (value != _ResumoPeriodo.personalizado) {
       setState(() => _resumoPeriodo = value);
       return;
     }
-    // Personalizado: usa o **picker inline** (mesmo padrão do Escalas) —
-    // o usuário só preenche data inicial e final na mesma tela. Sem abrir
+    // Personalizado: usa o **picker inline** (mesmo padrÃ£o do Escalas) â€”
+    // o usuÃ¡rio sÃ³ preenche data inicial e final na mesma tela. Sem abrir
     // outro fluxo de tela cheia.
     setState(() {
       _resumoPeriodo = _ResumoPeriodo.personalizado;
@@ -1559,8 +1560,8 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
     });
   }
 
-  /// Painel inline de "De" / "Até" exibido quando `Personalizado…` está
-  /// selecionado. Mantém o usuário na **mesma tela**, sem abrir
+  /// Painel inline de "De" / "AtÃ©" exibido quando `Personalizadoâ€¦` estÃ¡
+  /// selecionado. MantÃ©m o usuÃ¡rio na **mesma tela**, sem abrir
   /// `showDateRangePicker` fullscreen.
   Widget _buildResumoPeriodoCustomInline() {
     final fmt = DateTimeFormats.dateBR;
@@ -1697,7 +1698,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
             children: [
               dateBox(label: 'De', value: ini, onTap: pickStart),
               const SizedBox(width: 8),
-              dateBox(label: 'Até', value: fim, onTap: pickEnd),
+              dateBox(label: 'AtÃ©', value: fim, onTap: pickEnd),
             ],
           ),
           const SizedBox(height: 8),
@@ -1743,7 +1744,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                   ),
                   icon: const Icon(Icons.check_rounded, size: 18),
                   label: const Text(
-                    'Aplicar período',
+                    'Aplicar perÃ­odo',
                     style: TextStyle(
                       fontWeight: FontWeight.w800,
                       letterSpacing: 0.2,
@@ -1758,7 +1759,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
     );
   }
 
-  /// Painel super premium no topo do módulo (Pontos em aberto / Folgas tiradas).
+  /// Painel super premium no topo do mÃ³dulo (Pontos em aberto / Folgas tiradas).
   Widget _buildResumoProdutividade() {
     final id = _userDocId;
     if (id.isEmpty) return const SizedBox.shrink();
@@ -1777,7 +1778,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
             final fd = m['folgaDate'];
             final pts = _pontuacaoDe(m);
             if (fd == null) {
-              // Em aberto — filtra pelo `date` da ocorrência.
+              // Em aberto â€” filtra pelo `date` da ocorrÃªncia.
               final dt = (m['date'] is Timestamp)
                   ? (m['date'] as Timestamp).toDate()
                   : null;
@@ -1786,7 +1787,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
               emAbertoQtde++;
               emAbertoPontos += pts;
             } else {
-              // Folga tirada — filtra pelo `folgaDate`.
+              // Folga tirada â€” filtra pelo `folgaDate`.
               final fdt = (fd is Timestamp)
                   ? fd.toDate()
                   : (fd is DateTime ? fd : null);
@@ -1861,15 +1862,15 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    _chipResumoPeriodo(_ResumoPeriodo.mesAtual, 'Mês atual'),
+                    _chipResumoPeriodo(_ResumoPeriodo.mesAtual, 'MÃªs atual'),
                     const SizedBox(width: 8),
                     _chipResumoPeriodo(
-                        _ResumoPeriodo.mesAnterior, 'Mês anterior'),
+                        _ResumoPeriodo.mesAnterior, 'MÃªs anterior'),
                     const SizedBox(width: 8),
                     _chipResumoPeriodo(_ResumoPeriodo.anual, 'Anual'),
                     const SizedBox(width: 8),
                     _chipResumoPeriodo(
-                        _ResumoPeriodo.personalizado, 'Personalizado…'),
+                        _ResumoPeriodo.personalizado, 'Personalizadoâ€¦'),
                   ],
                 ),
               ),
@@ -1890,7 +1891,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                         label: 'Pontos em aberto',
                         valor: '$emAbertoPontos pts',
                         secondary:
-                            '$emAbertoQtde ${emAbertoQtde == 1 ? 'ocorrência' : 'ocorrências'}',
+                            '$emAbertoQtde ${emAbertoQtde == 1 ? 'ocorrÃªncia' : 'ocorrÃªncias'}',
                         background: Colors.white,
                         onTap: () => _abrirSheetResumo(
                           filter: ProdutividadeAbertoFilter.emAberto,
@@ -1927,7 +1928,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      'Toque em cada cartão para abrir a lista. Mude o período acima para ver mês atual, anterior, anual ou personalizado.',
+                      'Toque em cada cartÃ£o para abrir a lista. Mude o perÃ­odo acima para ver mÃªs atual, anterior, anual ou personalizado.',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
@@ -1989,7 +1990,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
       rangeEnd: rangeEnd,
       periodLabel: periodLabel,
       onAbrirModuloCompleto: () {
-        // Já estamos dentro do módulo — apenas alinha o filtro com o sheet
+        // JÃ¡ estamos dentro do mÃ³dulo â€” apenas alinha o filtro com o sheet
         // aberto (mostra na lista o mesmo conjunto de itens).
         if (mounted) {
           setState(() {
@@ -1997,7 +1998,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                 ? _StatusFolgaFilter.disponiveis
                 : _StatusFolgaFilter.usadas;
           });
-          // Scroll para o topo da seção «Ocorrências».
+          // Scroll para o topo da seÃ§Ã£o Â«OcorrÃªnciasÂ».
           widget.shellScrollController?.animateTo(
             0,
             duration: const Duration(milliseconds: 350),
@@ -2009,7 +2010,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
     );
   }
 
-  /// Tile compacto da lista do sheet (não traz edição/exclusão — só leitura).
+  /// Tile compacto da lista do sheet (nÃ£o traz ediÃ§Ã£o/exclusÃ£o â€” sÃ³ leitura).
   Widget _resumoTile(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data();
     final dt = (data['date'] is Timestamp)
@@ -2056,7 +2057,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    natureza.isEmpty ? 'Ocorrência' : natureza,
+                    natureza.isEmpty ? 'OcorrÃªncia' : natureza,
                     style: const TextStyle(
                       fontWeight: FontWeight.w800,
                       color: Color(0xFF0F172A),
@@ -2068,7 +2069,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                   const SizedBox(height: 3),
                   Text(
                     temFolga
-                        ? 'Folga em ${formatDateOrDash(folga)} · ocorrência ${formatDateOrDash(dt)}'
+                        ? 'Folga em ${formatDateOrDash(folga)} Â· ocorrÃªncia ${formatDateOrDash(dt)}'
                         : 'Data: ${formatDateOrDash(dt)}',
                     style: TextStyle(
                       fontSize: 11.5,
@@ -2104,15 +2105,15 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
   }
 
   Widget _buildAcoesRapidasPremium() {
-    // Pedido do usuário: em mobile (Android/iOS/web estreita) os botões
-    // têm de ficar 100% visíveis — antes o FAB «Nova ocorrência» cobria o
-    // segundo botão. Empilhamos em Column (full-width) em telas
-    // estreitas e mantemos lado a lado só em telas largas.
+    // Pedido do usuÃ¡rio: em mobile (Android/iOS/web estreita) os botÃµes
+    // tÃªm de ficar 100% visÃ­veis â€” antes o FAB Â«Nova ocorrÃªnciaÂ» cobria o
+    // segundo botÃ£o. Empilhamos em Column (full-width) em telas
+    // estreitas e mantemos lado a lado sÃ³ em telas largas.
     return LayoutBuilder(
       builder: (ctx, c) {
-        // Largura útil dentro do card (descontando o padding 14 + 14).
+        // Largura Ãºtil dentro do card (descontando o padding 14 + 14).
         final innerWidth = c.maxWidth - 28;
-        // Cada botão precisa de ~190px para mostrar ícone + label inteiro.
+        // Cada botÃ£o precisa de ~190px para mostrar Ã­cone + label inteiro.
         // Abaixo disso (mobile) vamos para Column.
         final useColumn = innerWidth < 380;
 
@@ -2120,7 +2121,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
           onPressed: _exportarPdfProdutividadeListaSuperPremium,
           icon: const Icon(Icons.picture_as_pdf_rounded, size: 20),
           label: const Text(
-            'PDF — Super Premium',
+            'PDF â€” Super Premium',
             style: TextStyle(fontWeight: FontWeight.w800),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -2288,7 +2289,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '${_selecionadosFolga.length} ocorrência(s) selecionada(s)',
+                            '${_selecionadosFolga.length} ocorrÃªncia(s) selecionada(s)',
                             style: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w700,
@@ -2306,7 +2307,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Para 1 folga: $pontuacaoParaFolga pts (parâmetro em Configurações)',
+                            'Para 1 folga: $pontuacaoParaFolga pts (parÃ¢metro em ConfiguraÃ§Ãµes)',
                             style: TextStyle(
                               fontSize: 12,
                               color: AppColors.textSecondary,
@@ -2335,7 +2336,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Será gerado automaticamente um novo lançamento com a diferença dos pontos, vinculado à folga e às ocorrências utilizadas.',
+                                    'SerÃ¡ gerado automaticamente um novo lanÃ§amento com a diferenÃ§a dos pontos, vinculado Ã  folga e Ã s ocorrÃªncias utilizadas.',
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: Colors.orange.shade800,
@@ -2418,7 +2419,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                     icon: Icon(Icons.layers_clear_rounded,
                         size: 20, color: AppColors.secondary.withValues(alpha: 0.9)),
                     label: const Text(
-                      'Limpar seleção',
+                      'Limpar seleÃ§Ã£o',
                       style: TextStyle(fontWeight: FontWeight.w700),
                     ),
                     style: OutlinedButton.styleFrom(
@@ -2445,7 +2446,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
     );
   }
 
-  /// Relatório de produtividade/ocorrências: exporta exatamente o que está na lista (grid), sem novo filtro de período.
+  /// RelatÃ³rio de produtividade/ocorrÃªncias: exporta exatamente o que estÃ¡ na lista (grid), sem novo filtro de perÃ­odo.
   Future<void> _exportarPdfProdutividadeListaSuperPremium() async {
     if (!widget.profile.hasActiveLicense) {
       mostrarAvisoSeLicencaInativa(context, widget.profile);
@@ -2454,7 +2455,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
     if (_userDocId.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('A sincronizar sessão… tente de novo em instantes.')),
+        const SnackBar(content: Text('A sincronizar sessÃ£oâ€¦ tente de novo em instantes.')),
       );
       return;
     }
@@ -2478,7 +2479,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Nada a exportar: não há ocorrências com o filtro «Status da folga» atual.'),
+            content: Text('Nada a exportar: nÃ£o hÃ¡ ocorrÃªncias com o filtro Â«Status da folgaÂ» atual.'),
           ),
         );
         return;
@@ -2491,7 +2492,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
         if (d.isAfter(dateEnd)) dateEnd = d;
       }
       final periodLabel =
-          '${DateTimeFormats.dateBR.format(dateStart)} a ${DateTimeFormats.dateBR.format(dateEnd)} · ${_statusFolga == _StatusFolgaFilter.todas ? 'Todas' : _statusFolga == _StatusFolgaFilter.disponiveis ? 'Disponíveis para folga' : 'Já usadas para folga'}';
+          '${DateTimeFormats.dateBR.format(dateStart)} a ${DateTimeFormats.dateBR.format(dateEnd)} Â· ${_statusFolga == _StatusFolgaFilter.todas ? 'Todas' : _statusFolga == _StatusFolgaFilter.disponiveis ? 'DisponÃ­veis para folga' : 'JÃ¡ usadas para folga'}';
       final part = ProdutividadeOcorrenciasPdfPartition.partition(filtrada);
       final filenameBase = RelatorioService.reportFilenameFromPeriod(
         'produtividade_ocorrencias',
@@ -2540,13 +2541,13 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
       totalPontos += (e['pontuacao'] is int) ? e['pontuacao'] as int : int.tryParse((e['pontuacao'] ?? '0').toString()) ?? 0;
     }
 
-    // Só aceitar gerar se a seleção atingir a pontuação configurada
+    // SÃ³ aceitar gerar se a seleÃ§Ã£o atingir a pontuaÃ§Ã£o configurada
     if (totalPontos < pontuacaoParaFolga) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Selecione ocorrências que somem pelo menos $pontuacaoParaFolga pts (configurações). '
+              'Selecione ocorrÃªncias que somem pelo menos $pontuacaoParaFolga pts (configuraÃ§Ãµes). '
               'Total selecionado: $totalPontos pts.',
             ),
             backgroundColor: AppColors.error,
@@ -2556,7 +2557,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
       return;
     }
 
-    // Para o PDF usamos exatamente pontuacaoParaFolga (o que efetivamente é consumido na folga)
+    // Para o PDF usamos exatamente pontuacaoParaFolga (o que efetivamente Ã© consumido na folga)
     final pontosParaPdf = totalPontos > pontuacaoParaFolga ? pontuacaoParaFolga : totalPontos;
 
     final ocorrenciasParaPdf = selecionadas.map((e) {
@@ -2595,7 +2596,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
       colorHex: _folgaCalendarColorHex,
     );
 
-    // Se sobrar pontos, criar lançamento automático com observação detalhada
+    // Se sobrar pontos, criar lanÃ§amento automÃ¡tico com observaÃ§Ã£o detalhada
     final restantes = totalPontos - pontuacaoParaFolga;
     if (restantes > 0 && selecionadas.isNotEmpty) {
       final primeira = selecionadas.first;
@@ -2607,10 +2608,10 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
         final num = (o['numeroOcorrencia'] ?? '').toString();
         final natureza = (o['naturezaLabel'] ?? '').toString();
         final pts = (o['pontuacao'] is int) ? o['pontuacao'] as int : int.tryParse((o['pontuacao'] ?? '0').toString()) ?? 0;
-        return '- $dataStr | $natureza | N° $num | $pts pts';
+        return '- $dataStr | $natureza | NÂ° $num | $pts pts';
       }).join('\n');
-      final observacao = 'Vinculado à sobra de pontos referente à folga de $dataFolgaStr.\n\n'
-          'Ocorrências utilizadas para essa folga:\n$ocorrenciasDesc\n\n'
+      final observacao = 'Vinculado Ã  sobra de pontos referente Ã  folga de $dataFolgaStr.\n\n'
+          'OcorrÃªncias utilizadas para essa folga:\n$ocorrenciasDesc\n\n'
           'Total de pontos usado na folga: $pontuacaoParaFolga pts\n'
           'Pontos que sobraram: $restantes pts';
       await _ocorrenciasService.add(
@@ -2619,7 +2620,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
         pontuacao: restantes,
         numeroOcorrencia: 'Restantes da folga - $dataFolgaStr',
         naturezaId: (primeira['naturezaId'] ?? 'restantes').toString(),
-        naturezaLabel: 'Restantes pontos da ocorrência',
+        naturezaLabel: 'Restantes pontos da ocorrÃªncia',
         observacao: observacao,
       );
     }
@@ -2627,11 +2628,11 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
     if (mounted) {
       setState(() {
         _selecionadosFolga.clear();
-        _dataFolgaEscolhida = DateTime.now(); // mantém data padrão para próxima seleção (evita botão desabilitado)
+        _dataFolgaEscolhida = DateTime.now(); // mantÃ©m data padrÃ£o para prÃ³xima seleÃ§Ã£o (evita botÃ£o desabilitado)
       });
       final msg = restantes > 0
-          ? 'PDF gerado, folga no calendário de Escalas, ocorrências marcadas e $restantes pts restantes criados como nova ocorrência.'
-          : 'PDF gerado, folga registada no calendário de Escalas e ocorrências marcadas.';
+          ? 'PDF gerado, folga no calendÃ¡rio de Escalas, ocorrÃªncias marcadas e $restantes pts restantes criados como nova ocorrÃªncia.'
+          : 'PDF gerado, folga registada no calendÃ¡rio de Escalas e ocorrÃªncias marcadas.';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(msg),
@@ -2648,15 +2649,15 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
   }
 
   Future<({Uint8List bytes, String fileName, String contentType, String extension})?> _pickAnexoOcorrencia(BuildContext context) async {
-    // Mesmo padrão do módulo financeiro: pickFiles sem FileType.custom (que bugga
-    // PDFs no Android/Web) e validamos a extensão depois, no código.
+    // Mesmo padrÃ£o do mÃ³dulo financeiro: pickFiles sem FileType.custom (que bugga
+    // PDFs no Android/Web) e validamos a extensÃ£o depois, no cÃ³digo.
     final picked = await FilePicker.platform.pickFiles(withData: true);
     if (picked == null || picked.files.isEmpty) return null;
     final file = picked.files.first;
     String ext = (file.extension ?? '').toLowerCase().replaceAll('jpeg', 'jpg');
     if (ext.isEmpty) {
-      // Fallback: extrai extensão a partir do nome do arquivo (alguns provedores
-      // — Drive, iOS Files — não preenchem `extension`).
+      // Fallback: extrai extensÃ£o a partir do nome do arquivo (alguns provedores
+      // â€” Drive, iOS Files â€” nÃ£o preenchem `extension`).
       final name = file.name.toLowerCase();
       final dot = name.lastIndexOf('.');
       if (dot >= 0 && dot < name.length - 1) {
@@ -2668,7 +2669,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
     if (raw == null || raw.isEmpty) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Não foi possível ler o arquivo. Tente outro ou um tamanho menor.')),
+          const SnackBar(content: Text('NÃ£o foi possÃ­vel ler o arquivo. Tente outro ou um tamanho menor.')),
         );
       }
       return null;
@@ -2676,19 +2677,19 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
     if (!_anexoAllowedExtensions.contains(ext) || mimeRaw.endsWith('.mp4') || mimeRaw.endsWith('.mov') || mimeRaw.endsWith('.avi') || mimeRaw.endsWith('.mkv') || mimeRaw.endsWith('.webm')) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Apenas PDF, PNG ou JPG. Vídeos e outros formatos não são aceitos.')),
+          const SnackBar(content: Text('Apenas PDF, PNG ou JPG. VÃ­deos e outros formatos nÃ£o sÃ£o aceitos.')),
         );
       }
       return null;
     }
 
     if (ext == 'pdf') {
-      // Servidor (Storage Rules) usa `<` estrito em 5MB — então no cliente
+      // Servidor (Storage Rules) usa `<` estrito em 5MB â€” entÃ£o no cliente
       // precisamos rejeitar `>=` para evitar 403 silencioso ao subir 5MB exatos.
       if (raw.length >= _anexoMaxBytes) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('PDF excede 5MB. Envie uma versão mais leve.')),
+            const SnackBar(content: Text('PDF excede 5MB. Envie uma versÃ£o mais leve.')),
           );
         }
         return null;
@@ -2701,12 +2702,12 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
       );
     }
 
-    // Compressão pesada roda em isolate para não travar a UI no Android (responsivo).
+    // CompressÃ£o pesada roda em isolate para nÃ£o travar a UI no Android (responsivo).
     final compressed = await compute(_compressImageInIsolate, raw);
     if (compressed == null || compressed.isEmpty) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Não foi possível processar a imagem selecionada.')),
+          const SnackBar(content: Text('NÃ£o foi possÃ­vel processar a imagem selecionada.')),
         );
       }
       return null;
@@ -2751,18 +2752,18 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
         'anexoStoragePath': storagePath,
       };
     } on FirebaseException catch (e) {
-      // Traduz erros do Storage para mensagens claras (PT-BR) — evita o
-      // genérico "[firebase_storage/...]" aparecendo cru pro usuário.
+      // Traduz erros do Storage para mensagens claras (PT-BR) â€” evita o
+      // genÃ©rico "[firebase_storage/...]" aparecendo cru pro usuÃ¡rio.
       final code = (e.code).toLowerCase();
       String msg;
       if (code.contains('unauthorized') || code.contains('permission')) {
-        msg = 'Sem permissão para anexar agora. Verifique sua licença e tente novamente.';
+        msg = 'Sem permissÃ£o para anexar agora. Verifique sua licenÃ§a e tente novamente.';
       } else if (code.contains('canceled') || code.contains('cancelled')) {
         msg = 'Envio cancelado.';
       } else if (code.contains('quota') || code.contains('exceeded')) {
         msg = 'Limite de armazenamento atingido. Tente um arquivo menor.';
       } else if (code.contains('retry') || code.contains('network') || code.contains('unavailable')) {
-        msg = 'Falha de rede ao enviar o anexo. Verifique sua conexão e tente novamente.';
+        msg = 'Falha de rede ao enviar o anexo. Verifique sua conexÃ£o e tente novamente.';
       } else {
         msg = 'Erro ao enviar anexo: ${e.message ?? e.code}';
       }
@@ -2821,7 +2822,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
       return;
     }
 
-    // Só remove o arquivo antigo do Storage depois que o novo subiu (defensivo).
+    // SÃ³ remove o arquivo antigo do Storage depois que o novo subiu (defensivo).
     final oldPath = (e['anexoStoragePath'] ?? '').toString().trim();
     final newPath = (anexoPayload['anexoStoragePath'] ?? '').toString().trim();
     if (oldPath.isNotEmpty && oldPath != newPath) {
@@ -2873,7 +2874,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
 
   Future<void> _removerAnexoOcorrencia(String docId, Map<String, dynamic> e) async {
     final oldPath = (e['anexoStoragePath'] ?? '').toString().trim();
-    // Storage delete é "best effort": se o arquivo já não existe ou houve falha de rede,
+    // Storage delete Ã© "best effort": se o arquivo jÃ¡ nÃ£o existe ou houve falha de rede,
     // ainda assim limpamos os campos no Firestore para a UX ficar consistente.
     if (oldPath.isNotEmpty) {
       try {
@@ -2897,7 +2898,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Não foi possível atualizar a ocorrência: $err'),
+            content: Text('NÃ£o foi possÃ­vel atualizar a ocorrÃªncia: $err'),
             backgroundColor: AppColors.error,
             duration: const Duration(seconds: 5),
           ),
@@ -2955,7 +2956,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
     final selecionado = _selecionadosFolga.contains(id);
     final barColor = temFolga ? AppColors.success : AppColors.accent;
     final anexoUrl = (e['anexoUrl'] ?? '').toString().trim();
-    final anexoFileName = (e['anexoFileName'] ?? 'Anexo ocorrência').toString();
+    final anexoFileName = (e['anexoFileName'] ?? 'Anexo ocorrÃªncia').toString();
     final anexoContentType = (e['anexoContentType'] ?? '').toString();
     final hasAnexo = anexoUrl.isNotEmpty;
     final showImageThumb = hasAnexo &&
@@ -2967,7 +2968,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(_radiusLg),
-        // Faixa de estado à esquerda (evita Row + IntrinsicHeight + Expanded — quebra layout Web/iOS em alguns motores).
+        // Faixa de estado Ã  esquerda (evita Row + IntrinsicHeight + Expanded â€” quebra layout Web/iOS em alguns motores).
         border: Border(
           left: BorderSide(color: barColor, width: 5),
           top: BorderSide(color: AppColors.deepBlueDark.withValues(alpha: 0.06)),
@@ -3217,7 +3218,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                dataDisplay.isEmpty ? 'Data não informada' : dataDisplay,
+                                dataDisplay.isEmpty ? 'Data nÃ£o informada' : dataDisplay,
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: AppColors.textMuted,
@@ -3240,7 +3241,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                                 Padding(
                                   padding: const EdgeInsets.only(top: 4),
                                   child: Text(
-                                    'Nº $numeroDisplay',
+                                    'NÂº $numeroDisplay',
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: AppColors.textSecondary,
@@ -3350,7 +3351,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                                               child: Image.network(
                                                 anexoUrl,
                                                 fit: BoxFit.cover,
-                                                // Decodifica em tamanho reduzido (thumb) para poupar memória/GPU no Android.
+                                                // Decodifica em tamanho reduzido (thumb) para poupar memÃ³ria/GPU no Android.
                                                 cacheWidth: 240,
                                                 cacheHeight: 176,
                                                 errorBuilder: (_, __, ___) =>
@@ -3533,8 +3534,8 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
             titlePadding: EdgeInsets.zero,
             title: _dialogGradientTitle(
               icon: Icons.post_add_rounded,
-              title: 'Nova ocorrência',
-              subtitle: 'Lançamento — data, natureza e número (RAI)',
+              title: 'Nova ocorrÃªncia',
+              subtitle: 'LanÃ§amento â€” data, natureza e nÃºmero (RAI)',
             ),
             contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
             content: KeyboardAwareDialogScrollBody(
@@ -3599,7 +3600,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                       },
                     ),
                     const SizedBox(height: 20),
-                    _buildLabelObrigatorio('Pontuação (somente leitura)'),
+                    _buildLabelObrigatorio('PontuaÃ§Ã£o (somente leitura)'),
                     const SizedBox(height: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -3627,18 +3628,18 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    _buildLabelObrigatorio('Número da ocorrência (RAI)'),
+                    _buildLabelObrigatorio('NÃºmero da ocorrÃªncia (RAI)'),
                     const SizedBox(height: 8),
                     FastTextField(
                       controller: numeroCtrl,
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       scrollPadding: fieldPad,
-                      decoration: _inputDecoration('Apenas números'),
+                      decoration: _inputDecoration('Apenas nÃºmeros'),
                       onChanged: (_) => setDialogState(() {}),
                     ),
                     const SizedBox(height: 20),
-                    _buildLabelOpcional('Observação'),
+                    _buildLabelOpcional('ObservaÃ§Ã£o'),
                     const SizedBox(height: 8),
                     FastTextField(
                       controller: observacaoCtrl,
@@ -3647,7 +3648,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                       minLines: 2,
                       maxLines: 4,
                       scrollPadding: fieldPad,
-                      decoration: _inputDecoration('Ex.: detalhes adicionais da ocorrência'),
+                      decoration: _inputDecoration('Ex.: detalhes adicionais da ocorrÃªncia'),
                     ),
                     const SizedBox(height: 20),
                     _buildLabelOpcional('Anexo (PDF ou print)'),
@@ -3734,14 +3735,14 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                   }
                   final numStr = numeroCtrl.text.trim();
                   if (numStr.isEmpty) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Informe o número da ocorrência.')));
+                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Informe o nÃºmero da ocorrÃªncia.')));
                     return;
                   }
                   Navigator.of(ctx).pop(true);
                 },
                 icon: const Icon(Icons.check_circle_rounded, size: 20),
                 label: const Text(
-                  'Salvar ocorrência',
+                  'Salvar ocorrÃªncia',
                   style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.2),
                 ),
                 style: FilledButton.styleFrom(
@@ -3810,14 +3811,14 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
           contentType: anexoContentType!,
         );
       } on _AnexoUploadException catch (err) {
-        // Ocorrência já foi criada — não removemos para não perder dados;
-        // o usuário pode reanexar pelo botão "clipe" na linha do card.
+        // OcorrÃªncia jÃ¡ foi criada â€” nÃ£o removemos para nÃ£o perder dados;
+        // o usuÃ¡rio pode reanexar pelo botÃ£o "clipe" na linha do card.
         if (mounted) {
           ScaffoldMessenger.of(context)
             ..hideCurrentSnackBar()
             ..showSnackBar(
               SnackBar(
-                content: Text('Ocorrência salva, mas falhou o anexo: ${err.userMessage}\nReenvie pelo botão de clipe.'),
+                content: Text('OcorrÃªncia salva, mas falhou o anexo: ${err.userMessage}\nReenvie pelo botÃ£o de clipe.'),
                 backgroundColor: AppColors.error,
                 duration: const Duration(seconds: 6),
               ),
@@ -3861,15 +3862,15 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
           ..showSnackBar(
             SnackBar(
               content: Text(isPdf
-                  ? 'Ocorrência salva com PDF anexado.'
-                  : 'Ocorrência salva com print anexado (otimizado).'),
+                  ? 'OcorrÃªncia salva com PDF anexado.'
+                  : 'OcorrÃªncia salva com print anexado (otimizado).'),
             ),
           );
       }
       return;
     }
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ocorrência salva.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('OcorrÃªncia salva.')));
     }
   }
 
@@ -3915,7 +3916,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
       onChanged: onDate,
       firstDate: DateTime(2020),
       lastDate: DateTime(2030),
-      label: 'Data da ocorrência',
+      label: 'Data da ocorrÃªncia',
     );
   }
 
@@ -3944,7 +3945,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
           title: _dialogGradientTitle(
             icon: Icons.interests_rounded,
             title: 'Nova natureza',
-            subtitle: 'Descrição e pontos usados nos lançamentos',
+            subtitle: 'DescriÃ§Ã£o e pontos usados nos lanÃ§amentos',
           ),
           contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
           content: KeyboardAwareDialogScrollBody(
@@ -3955,7 +3956,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                 FastTextField(
                   controller: labelCtrl,
                   scrollPadding: fieldPad,
-                  decoration: _inputDecoration('Descrição da natureza'),
+                  decoration: _inputDecoration('DescriÃ§Ã£o da natureza'),
                   onChanged: (v) => label = v.trim(),
                 ),
                 const SizedBox(height: 14),
@@ -3963,7 +3964,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                   controller: pontosCtrl,
                   keyboardType: TextInputType.number,
                   scrollPadding: fieldPad,
-                  decoration: _inputDecoration('Pontuação (número inteiro)'),
+                  decoration: _inputDecoration('PontuaÃ§Ã£o (nÃºmero inteiro)'),
                   onChanged: (v) => pontos = int.tryParse(v) ?? 0,
                 ),
               ],
@@ -4057,10 +4058,10 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
             titlePadding: EdgeInsets.zero,
             title: _dialogGradientTitle(
               icon: Icons.edit_calendar_rounded,
-              title: 'Editar ocorrência',
+              title: 'Editar ocorrÃªncia',
               subtitle: jaTemFolgaInicial
-                  ? 'Pode atualizar nº (RAI), observação e anexo. Data, natureza e folga ficam fixas.'
-                  : 'Ajuste data, natureza ou número (RAI)',
+                  ? 'Pode atualizar nÂº (RAI), observaÃ§Ã£o e anexo. Data, natureza e folga ficam fixas.'
+                  : 'Ajuste data, natureza ou nÃºmero (RAI)',
             ),
             contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
             content: KeyboardAwareDialogScrollBody(
@@ -4085,9 +4086,9 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                             const SizedBox(width: 10),
                             Expanded(
                               child: Text(
-                                'Esta ocorrência já foi baixada para folga em '
+                                'Esta ocorrÃªncia jÃ¡ foi baixada para folga em '
                                 '${_formatDateAny(current['folgaDate'])}. '
-                                'Data da ocorrência, natureza, RAI e folga permanecem fixos.',
+                                'Data da ocorrÃªncia, natureza, RAI e folga permanecem fixos.',
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
@@ -4109,9 +4110,9 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                               builder: (dCtx) => AlertDialog(
                                 title: const Text('Limpar data da folga?'),
                                 content: const Text(
-                                  'O vínculo com esta data de folga será removido. '
-                                  'Poderá marcar folga noutro dia quando reunir os pontos. '
-                                  'O compromisso ligado no calendário de Escalas será atualizado.',
+                                  'O vÃ­nculo com esta data de folga serÃ¡ removido. '
+                                  'PoderÃ¡ marcar folga noutro dia quando reunir os pontos. '
+                                  'O compromisso ligado no calendÃ¡rio de Escalas serÃ¡ atualizado.',
                                 ),
                                 actions: [
                                   TextButton(onPressed: () => Navigator.pop(dCtx, false), child: const Text('Cancelar')),
@@ -4135,7 +4136,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     content: Text(
-                                      'Data da folga removida. Calendário de Escalas atualizado. Pode editar o lançamento novamente.',
+                                      'Data da folga removida. CalendÃ¡rio de Escalas atualizado. Pode editar o lanÃ§amento novamente.',
                                     ),
                                   ),
                                 );
@@ -4143,7 +4144,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                             }
                           },
                           icon: const Icon(Icons.event_busy_rounded, size: 20),
-                          label: const Text('Limpar data da folga (cancelar vínculo)'),
+                          label: const Text('Limpar data da folga (cancelar vÃ­nculo)'),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -4179,7 +4180,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                                   }
                                 },
                                 icon: const Icon(Icons.tune_rounded, size: 18),
-                                label: const Text('Editar natureza / pontuação'),
+                                label: const Text('Editar natureza / pontuaÃ§Ã£o'),
                                 style: FilledButton.styleFrom(
                                   backgroundColor: AppColors.amber.withValues(alpha: 0.22),
                                   foregroundColor: AppColors.deepBlueDark,
@@ -4191,7 +4192,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                               ),
                             ],
                             const SizedBox(height: 20),
-                            _buildLabelObrigatorio('Pontuação (somente leitura)'),
+                            _buildLabelObrigatorio('PontuaÃ§Ã£o (somente leitura)'),
                             const SizedBox(height: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -4223,25 +4224,25 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    _buildLabelObrigatorio('Número da ocorrência (RAI)'),
+                    _buildLabelObrigatorio('NÃºmero da ocorrÃªncia (RAI)'),
                     const SizedBox(height: 8),
                     FastTextField(
                       controller: numeroCtrl,
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       scrollPadding: fieldPad,
-                      decoration: _inputDecoration('Apenas números'),
+                      decoration: _inputDecoration('Apenas nÃºmeros'),
                       onChanged: (_) => setDialogState(() {}),
                     ),
                     if (jaTemFolgaInicial) ...[
                       const SizedBox(height: 6),
                       Text(
-                        'Pode corrigir o número (RAI) caso tenha digitado errado.',
+                        'Pode corrigir o nÃºmero (RAI) caso tenha digitado errado.',
                         style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600, height: 1.3),
                       ),
                     ],
                     const SizedBox(height: 20),
-                    _buildLabelOpcional('Observação'),
+                    _buildLabelOpcional('ObservaÃ§Ã£o'),
                     const SizedBox(height: 8),
                     FastTextField(
                       controller: observacaoCtrl,
@@ -4250,7 +4251,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                       minLines: 2,
                       maxLines: 4,
                       scrollPadding: fieldPad,
-                      decoration: _inputDecoration('Detalhes adicionais da ocorrência'),
+                      decoration: _inputDecoration('Detalhes adicionais da ocorrÃªncia'),
                     ),
                     const SizedBox(height: 20),
                     _buildLabelOpcional('Anexo (PDF ou print)'),
@@ -4262,7 +4263,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                           onPressed: () => mostrarAnexoNaMesmaTela(
                             ctx,
                             url: anexoAtualUrl,
-                            fileName: anexoAtualNome.isEmpty ? 'Anexo ocorrência' : anexoAtualNome,
+                            fileName: anexoAtualNome.isEmpty ? 'Anexo ocorrÃªncia' : anexoAtualNome,
                           ),
                           icon: const Icon(Icons.open_in_new_rounded, size: 18),
                           label: const Text('Ver anexo atual'),
@@ -4321,7 +4322,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                     if (jaTemFolgaInicial) ...[
                       const SizedBox(height: 6),
                       Text(
-                        'Pode anexar o PDF / print mesmo após pegar a folga (não altera os pontos já usados).',
+                        'Pode anexar o PDF / print mesmo apÃ³s pegar a folga (nÃ£o altera os pontos jÃ¡ usados).',
                         style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600, height: 1.3),
                       ),
                     ],
@@ -4355,13 +4356,13 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                     return;
                   }
                   if (numeroCtrl.text.trim().isEmpty) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Informe o número da ocorrência (RAI).')));
+                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Informe o nÃºmero da ocorrÃªncia (RAI).')));
                     return;
                   }
                   Navigator.of(ctx).pop(true);
                 },
                 icon: const Icon(Icons.save_rounded, size: 20),
-                label: const Text('Guardar alterações', style: TextStyle(fontWeight: FontWeight.w900)),
+                label: const Text('Guardar alteraÃ§Ãµes', style: TextStyle(fontWeight: FontWeight.w900)),
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.accent,
                   foregroundColor: Colors.white,
@@ -4441,7 +4442,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Não foi possível remover o anexo: $err'),
+              content: Text('NÃ£o foi possÃ­vel remover o anexo: $err'),
               backgroundColor: AppColors.error,
               duration: const Duration(seconds: 5),
             ),
@@ -4473,7 +4474,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
             ..hideCurrentSnackBar()
             ..showSnackBar(
               SnackBar(
-                content: Text('Ocorrência atualizada, mas o novo anexo falhou: ${err.userMessage}'),
+                content: Text('OcorrÃªncia atualizada, mas o novo anexo falhou: ${err.userMessage}'),
                 backgroundColor: AppColors.error,
                 duration: const Duration(seconds: 6),
               ),
@@ -4481,7 +4482,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
         }
         return;
       }
-      // Só apaga o anexo antigo depois que o novo subiu (defensivo).
+      // SÃ³ apaga o anexo antigo depois que o novo subiu (defensivo).
       final newPath = (anexoPayload['anexoStoragePath'] ?? '').toString().trim();
       if (anexoAtualPath.isNotEmpty && anexoAtualPath != newPath) {
         try {
@@ -4522,7 +4523,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
     if (mounted) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('Ocorrência atualizada.')));
+        ..showSnackBar(const SnackBar(content: Text('OcorrÃªncia atualizada.')));
     }
   }
 
@@ -4540,14 +4541,14 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
             const SizedBox(width: 10),
             const Expanded(
               child: Text(
-                'Remover ocorrência?',
+                'Remover ocorrÃªncia?',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
               ),
             ),
           ],
         ),
         content: Text(
-          '${_formatDate(e['date'])} — ${e['naturezaLabel']} (${e['pontuacao']} pts). Esta ação não pode ser desfeita.',
+          '${_formatDate(e['date'])} â€” ${e['naturezaLabel']} (${e['pontuacao']} pts). Esta aÃ§Ã£o nÃ£o pode ser desfeita.',
           style: const TextStyle(
             fontSize: 14,
             height: 1.35,
@@ -4600,7 +4601,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
     await _ocorrenciasService.delete(_userDocId, docId);
     if (mounted) {
       setState(() => _selecionadosFolga.remove(docId));
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ocorrência removida.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('OcorrÃªncia removida.')));
     }
   }
 
@@ -4640,7 +4641,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                 _dialogGradientTitle(
                   icon: Icons.interests_rounded,
                   title: 'Editar/Adicionar naturezas',
-                  subtitle: 'Inclusão, edição e exclusão no mesmo painel',
+                  subtitle: 'InclusÃ£o, ediÃ§Ã£o e exclusÃ£o no mesmo painel',
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
@@ -4706,7 +4707,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                             'Adicionar natureza',
                             style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.textPrimary),
                           ),
-                          subtitle: const Text('Cria uma nova opção para usar nas ocorrências'),
+                          subtitle: const Text('Cria uma nova opÃ§Ã£o para usar nas ocorrÃªncias'),
                           onTap: () async {
                             final nova = await _dialogNovaNatureza(context);
                             if (nova != null) {
@@ -4822,7 +4823,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                   child: FilledButton.icon(
                     onPressed: () => Navigator.of(ctx).pop(),
                     icon: const Icon(Icons.check_rounded, size: 20),
-                    label: const Text('Concluído', style: TextStyle(fontWeight: FontWeight.w900)),
+                    label: const Text('ConcluÃ­do', style: TextStyle(fontWeight: FontWeight.w900)),
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
@@ -4848,7 +4849,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Excluir natureza?'),
         content: Text(
-          'A natureza "${n.label}" será removida. Esta ação não pode ser desfeita.',
+          'A natureza "${n.label}" serÃ¡ removida. Esta aÃ§Ã£o nÃ£o pode ser desfeita.',
         ),
         actions: [
           TextButton(
@@ -4890,7 +4891,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
           title: _dialogGradientTitle(
             icon: Icons.tune_rounded,
             title: 'Editar natureza',
-            subtitle: 'Altera rótulo e pontuação em todos os usos futuros',
+            subtitle: 'Altera rÃ³tulo e pontuaÃ§Ã£o em todos os usos futuros',
           ),
           contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
           content: KeyboardAwareDialogScrollBody(
@@ -4899,7 +4900,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 FastTextField(
-                  decoration: _inputDecoration('Descrição'),
+                  decoration: _inputDecoration('DescriÃ§Ã£o'),
                   controller: labelCtrl,
                   scrollPadding: fieldPad,
                   onChanged: (v) => label = v.trim(),
@@ -4907,7 +4908,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                 const SizedBox(height: 14),
                 FastTextField(
                   keyboardType: TextInputType.number,
-                  decoration: _inputDecoration('Pontuação'),
+                  decoration: _inputDecoration('PontuaÃ§Ã£o'),
                   controller: pontosCtrl,
                   scrollPadding: fieldPad,
                   onChanged: (v) => pontos = int.tryParse(v) ?? 0,
@@ -4966,7 +4967,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
   }
 }
 
-/// Tile expansível para exibir observação extra em lançamentos (ex.: restantes da folga).
+/// Tile expansÃ­vel para exibir observaÃ§Ã£o extra em lanÃ§amentos (ex.: restantes da folga).
 class _ObservacaoExpansivel extends StatefulWidget {
   final String texto;
 
@@ -5000,7 +5001,7 @@ class _ObservacaoExpansivelState extends State<_ObservacaoExpansivel> {
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    _expandido ? 'Ocultar observação' : 'Ver observação completa',
+                    _expandido ? 'Ocultar observaÃ§Ã£o' : 'Ver observaÃ§Ã£o completa',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -5035,8 +5036,8 @@ class _ObservacaoExpansivelState extends State<_ObservacaoExpansivel> {
   }
 }
 
-/// Erro amigável para falhas de upload de anexo (PDF/print) no módulo Produtividade.
-/// Mensagem já vem traduzida para PT-BR e pronta para exibir em SnackBar.
+/// Erro amigÃ¡vel para falhas de upload de anexo (PDF/print) no mÃ³dulo Produtividade.
+/// Mensagem jÃ¡ vem traduzida para PT-BR e pronta para exibir em SnackBar.
 class _AnexoUploadException implements Exception {
   final String userMessage;
   _AnexoUploadException(this.userMessage);
@@ -5044,8 +5045,8 @@ class _AnexoUploadException implements Exception {
   String toString() => userMessage;
 }
 
-/// Compressão JPEG em isolate (compute) — não trava a UI no Android.
-/// Alvo ~700KB, largura máx 1600px, qualidades agressivas para ficar leve e rápido.
+/// CompressÃ£o JPEG em isolate (compute) â€” nÃ£o trava a UI no Android.
+/// Alvo ~700KB, largura mÃ¡x 1600px, qualidades agressivas para ficar leve e rÃ¡pido.
 Uint8List? _compressImageInIsolate(Uint8List source) {
   const int targetBytes = 700 * 1024;
   final decoded = img.decodeImage(source);
@@ -5062,3 +5063,5 @@ Uint8List? _compressImageInIsolate(Uint8List source) {
   }
   return best;
 }
+
+

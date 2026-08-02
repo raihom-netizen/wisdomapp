@@ -46,12 +46,12 @@ class AgendaReminderListTile extends StatelessWidget {
           ),
           child: ListTile(
             leading: Icon(
-              isAudiencia ? Icons.gavel_rounded : Icons.schedule_rounded,
+              Icons.schedule_rounded,
               size: 24,
-              color: isAudiencia ? const Color(0xFF1A237E) : AppColors.primary,
+              color: AppColors.primary,
             ),
             title: Text(
-              title,
+              (title.isEmpty || title == 'Audiência') ? 'Compromisso' : title,
               style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,

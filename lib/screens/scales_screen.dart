@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../widgets/fast_text_field.dart';
@@ -7453,8 +7453,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Text(
-                        'SEI e RAI deste item sÃ£o editados em '
-                        'AudiÃªncias/Compromissos.',
+                        'SEI e RAI deste item são editados no módulo Agenda.',
                         style: TextStyle(
                           fontSize: 12.5,
                           color: AppColors.textSecondary,
@@ -9071,8 +9070,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                    'Gere plantÃµes com valor (lista de plantÃµes recorrentes) ou compromissos sem valor financeiro. '
-                                    'Compromissos em sÃ©rie tambÃ©m entram no Painel (em aberto) e no mÃ³dulo Agenda/AudiÃªncias.',
+                                    'Gere plantões com valor (lista de plantões recorrentes) ou compromissos sem valor financeiro. '
+                                    'Compromissos em série também entram no Painel (em aberto) e no módulo Agenda.',
                                     style: TextStyle(
                                         fontSize: 13,
                                         color: Colors.grey.shade700)),

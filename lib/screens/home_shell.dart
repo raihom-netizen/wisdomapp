@@ -17,6 +17,7 @@ import '../services/pending_storage_upload_service.dart';
 import '../services/scale_rates_period_service.dart';
 import '../services/scale_rates_service.dart';
 import '../services/agenda_boot_orchestrator.dart';
+import '../services/finance_instant_prefetch_service.dart';
 import '../services/scale_notifications_service.dart';
 import '../services/scale_auto_confirm_service.dart';
 import '../services/user_backup_service.dart';
@@ -501,6 +502,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         unawaited(PushNotificationService.ensureRegisteredAfterResume());
         // Só dispara avisos já na fila iminente — sem reler 600+ docs do Firestore ao voltar do background.
         ScaleNotificationsService().checkDueNow();
+        final wUid = _profileFirestoreUid;
+        if (wUid.isNotEmpty) {
+          WidgetDataService.keepAliveWhileForeground(wUid);
+        }
       }
       _checkPendingPayment(force: false);
       _autoConfirmarPlantaoesPassados(showFeedback: false);
@@ -529,6 +534,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       final nUid = firestoreUserDocIdStrictFromSession();
       if (nUid.isEmpty) return;
       unawaited(AgendaBootOrchestrator.runOnLogin(nUid));
+      // Financeiro: aquece cache (pendentes/contas/mês) igual Escalas/Agenda.
+      unawaited(FinanceInstantPrefetchService.warmUpOnLogin(nUid));
     });
   }
 
@@ -555,6 +562,16 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       _idx = i;
       alsoInSetState?.call();
     });
+    unawaited(WidgetDataService.syncOpenModuleIndex(i));
+    // Prefetch financeiro ao entrar em Financeiro (1) ou Agenda (3).
+    final shellUid = _profileFirestoreUid;
+    if (shellUid.isNotEmpty) {
+      if (i == 1) {
+        unawaited(FinanceInstantPrefetchService.warmUpForFinanceModule(shellUid));
+      } else if (i == 3) {
+        unawaited(FinanceInstantPrefetchService.warmUpForAgenda(shellUid));
+      }
+    }
 
     if (prev == i) {
       setState(() => _materializedModuleIndices.add(i));

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../services/finance_month_cache.dart';
 import '../services/finance_opening_balance_service.dart';
 
 /// Sinal global leve: qualquer gravação/alteração em lançamentos financeiros
@@ -42,11 +43,18 @@ abstract final class FinanceTransactionsHub {
       _pendingEffectiveDate = null;
       _pendingInvalidateOpening = true;
 
-      if (inv && u != null && u.isNotEmpty) {
+      if (u != null && u.isNotEmpty) {
         if (date != null) {
-          FinanceOpeningBalanceService.invalidateIfBefore(u, date);
+          FinanceMonthCache.invalidateMonth(u, date);
         } else {
-          FinanceOpeningBalanceService.invalidateForUser(u);
+          FinanceMonthCache.clearUid(u);
+        }
+        if (inv) {
+          if (date != null) {
+            FinanceOpeningBalanceService.invalidateIfBefore(u, date);
+          } else {
+            FinanceOpeningBalanceService.invalidateForUser(u);
+          }
         }
       }
     });

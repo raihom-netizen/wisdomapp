@@ -54,16 +54,15 @@ class NotificationModuleTheme {
       case 'audiencia':
         return const NotificationModuleTheme(
           kind: 'audiencia',
-          label: 'Audiência',
-          emoji: '⚖️',
+          label: 'Compromisso',
+          emoji: '📅',
           channelId: 'controletotal_audiencia',
-          channelName: '⚖️ Audiências e Processos',
-          channelDescription:
-              'Alertas críticos de prazos processuais e audiências',
-          colorArgb: 0xFF5B21B6,
+          channelName: '📅 Compromissos',
+          channelDescription: 'Lembretes de compromissos particulares',
+          colorArgb: 0xFF2563EB,
           threadId: 'controletotal_audiencia',
-          bannerAsset: 'assets/images/push_banners/push-banner-audiencia.png',
-          webBannerPath: '/icons/push-banner-audiencia.png',
+          bannerAsset: 'assets/images/push_banners/push-banner-compromisso.png',
+          webBannerPath: '/icons/push-banner-compromisso.png',
         );
       case 'compromisso':
         return const NotificationModuleTheme(

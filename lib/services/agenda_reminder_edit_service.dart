@@ -180,7 +180,7 @@ class AgendaReminderEditService {
 
     final payload = <String, dynamic>{
       'type': 'audiencia',
-      'title': 'Audiência',
+      'title': 'Compromisso',
       'numeroSei': sei,
       'numeroOcorrencia': oco,
       'resumoRelato': relato,
@@ -202,7 +202,7 @@ class AgendaReminderEditService {
       userDocId: userDocId,
       agendaId: doc.id,
       type: AgendaMirrorType.audiencia,
-      label: 'Audiência',
+      label: 'Compromisso',
       date: result.date,
       startHHmm: timeStrSave,
       endHHmm: endTimeStrSave,
@@ -231,7 +231,7 @@ class AgendaReminderEditService {
     );
 
     return deliveryReset
-        ? 'Audiência atualizada. Notificações reprogramadas automaticamente para o novo dia/horário.'
-        : 'Audiência atualizada.';
+        ? 'Compromisso atualizado. Notificações reprogramadas automaticamente para o novo dia/horário.'
+        : 'Compromisso atualizado.';
   }
 }

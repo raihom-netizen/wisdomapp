@@ -23,8 +23,7 @@ class ScalePlantaoEditDialog {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'SEI e RAI desta audiência/compromisso são editados em '
-            'Audiências/Compromissos (módulo Agenda).',
+            'SEI e RAI deste compromisso são editados no módulo Agenda.',
           ),
         ),
       );
@@ -373,7 +372,7 @@ class _ScalePlantaoEditPageState extends State<_ScalePlantaoEditPage> {
                             Expanded(
                               child: Text(
                                 'Número do plantão ou compromisso na escala (com ou sem financeiro). '
-                                'Audiências usam Nº Ocorrência e processo (SEI) no módulo Agenda.',
+                                'Compromissos usam Nº Ocorrência e processo (SEI) no módulo Agenda.',
                                 style: TextStyle(
                                   fontSize: 12.5,
                                   height: 1.4,

@@ -5,11 +5,14 @@ param(
   [switch]$Clean,
   [switch]$NoCodemagicPush
 )
-# Deploy WISDOMAPP: web + Firebase + AAB (D:\TEMPORARIOS) + pacote iOS/CodeMagic.
+# Deploy WISDOMAPP — padrao rapido Controle Total.
 # Politica: NAO grava app_config/version nem avisa usuarios automaticamente.
 # Apos deploy, use Painel Admin > "Subir versao e forcar atualizacao" ou .\force_version_online.ps1
-# Uso: .\deploy.ps1
+# Uso: .\deploy.ps1 -WebOnly     -> RAPIDO (web+Firebase, sem AAB/iOS)
+#      .\deploy.ps1              -> COMPLETO (web+Firebase+AAB+CodeMagic)
+#      .\deploy.ps1 -Clean       -> inclui flutter clean
 #      .\deploy.ps1 -ForceVersionOnline  -> tambem grava Firestore (so se quiser forcar agora)
+# Temporarios: D:\TEMPORARIOS. CodeMagic = so iOS.
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot

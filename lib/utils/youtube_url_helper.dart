@@ -25,10 +25,12 @@ class YoutubeUrlHelper {
   static String watchUrl(String videoId) => 'https://www.youtube.com/watch?v=$videoId';
 
   /// Embed otimizado — fullscreen, autoplay, qualidade máxima disponível (até 4K).
+  /// [startSeconds] retoma de onde o usuário parou (`start` do YouTube).
   static String embedUrl(
     String videoId, {
     bool autoplay = false,
     String? origin,
+    int startSeconds = 0,
   }) {
     final params = <String, String>{
       'rel': '0',
@@ -41,6 +43,7 @@ class YoutubeUrlHelper {
       'color': 'white',
       if (autoplay) 'autoplay': '1',
       if (origin != null && origin.isNotEmpty) 'origin': origin,
+      if (startSeconds > 0) 'start': '$startSeconds',
     };
     final query = params.entries
         .map((e) => '${e.key}=${Uri.encodeComponent(e.value)}')

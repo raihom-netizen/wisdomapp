@@ -297,7 +297,7 @@ class _AgendaNotificationsQueueScreenState
     AgendaQueueStatusFilter status,
   ) {
     final tipo = switch (ch) {
-      AgendaQueueChannelFilter.audiencia => 'audiências',
+      AgendaQueueChannelFilter.audiencia => 'compromissos',
       AgendaQueueChannelFilter.compromisso => 'compromissos',
       AgendaQueueChannelFilter.escala => 'plantões/escalas',
     };
@@ -501,21 +501,6 @@ class _ChannelSelector extends StatelessWidget {
         children: [
           Expanded(
             child: _ChannelChip(
-              label: 'Audiências',
-              icon: Icons.gavel_rounded,
-              color: AppColors.deepBlue,
-              filter: AgendaQueueChannelFilter.audiencia,
-              selected: selected,
-              counts: AgendaAlertsQueueService.countsForChannel(
-                all,
-                AgendaQueueChannelFilter.audiencia,
-              ),
-              onTap: onSelected,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: _ChannelChip(
               label: 'Compromissos',
               icon: Icons.event_rounded,
               color: AppColors.accent,
@@ -692,7 +677,7 @@ class _InfoBanner extends StatelessWidget {
           const SizedBox(height: 6),
           const Text(
             'A fila é montada no servidor — este app só exibe, para ficar rápido. '
-            'Ao criar audiência, compromisso ou plantão, o aviso entra na fila na hora. '
+            'Ao criar compromisso ou plantão, o aviso entra na fila na hora. '
             'Push/e-mail saem no horário «Enviar em» (ex.: plantão 07:00 com «1 hora antes» = 06:00). '
             'Antecedências já passadas não são reenviadas.',
             style: TextStyle(
@@ -748,7 +733,7 @@ class _AlertGridCard extends StatelessWidget {
     final urgencyStyle = AgendaModernUI.styleFor(urgency);
     final channel = item.channelKind;
     final (icon, color) = switch (channel) {
-      'audiencia' => (Icons.gavel_rounded, AppColors.deepBlue),
+      'audiencia' => (Icons.event_rounded, AppColors.accent),
       'compromisso' => (Icons.event_rounded, AppColors.accent),
       'escala' => (Icons.work_history_rounded, AppColors.logoOrange),
       _ => (Icons.notifications_active_rounded, AppColors.primary),

@@ -18,6 +18,7 @@ import '../utils/date_picker_a11y.dart';
 import '../utils/firestore_user_doc_id.dart';
 import '../widgets/brl_amount_text_field.dart';
 import '../widgets/finance_calendar_color_picker.dart';
+import '../widgets/fixed_pending_prefs_sheet.dart';
 
 const EdgeInsets _kFixedFlowKeyboardScrollPad =
     EdgeInsets.fromLTRB(0, 0, 0, 260);
@@ -1014,131 +1015,23 @@ class _ReceitasFixasScreenState extends State<ReceitasFixasScreen> {
     );
   }
 
-  /// Card de preferências: mostrar nas contas pendentes e próximos X meses.
-  Widget _buildPreferencesCard() {
-    return StreamBuilder<Map<String, dynamic>>(
-      stream: _prefsService.watch(_fsUid),
-      builder: (context, snap) {
-        final showInPending = snap.data?['showInPending'] as bool? ?? true;
-        final monthsAhead =
-            (snap.data?['pendingMonthsAhead'] as int?)?.clamp(1, 12) ??
-                AppBusinessRules.pendingMonthsAheadDefault;
-        return Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: AppColors.primary.withValues(alpha: 0.1)),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.deepBlueDark.withValues(alpha: 0.06),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
-              ),
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          AppColors.deepBlueDark.withValues(alpha: 0.95),
-                          AppColors.primary.withValues(alpha: 0.95),
-                          AppColors.accent.withValues(alpha: 0.9),
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.tune_rounded,
-                        color: Colors.white, size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'Exibição nas receitas pendentes',
-                      style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w900,
-                          color: AppColors.textPrimary,
-                          letterSpacing: 0.15),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              SwitchListTile(
-                value: showInPending,
-                onChanged: (v) => _prefsService.set(_fsUid, showInPending: v),
-                title: const Text(
-                    'Mostrar receitas fixas nas receitas pendentes',
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary)),
-                contentPadding: EdgeInsets.zero,
-                activeTrackColor: AppColors.primary.withValues(alpha: 0.45),
-                activeThumbColor: Colors.white,
-                inactiveThumbColor: Colors.white,
-                inactiveTrackColor: Colors.grey.shade300,
-              ),
-              const SizedBox(height: 4),
-              Padding(
-                padding: const EdgeInsets.only(left: 4),
-                child: Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    const Text('Próximos ',
-                        style: TextStyle(
-                            fontSize: 14, color: AppColors.textSecondary)),
-                    DropdownButton<int>(
-                      value: monthsAhead,
-                      isDense: true,
-                      underline: const SizedBox(),
-                      items: List.generate(12, (i) => i + 1)
-                          .map((m) => DropdownMenuItem(
-                              value: m, child: Text('$m mês(es)')))
-                          .toList(),
-                      onChanged: (v) {
-                        if (v != null) {
-                          _prefsService.set(_fsUid, pendingMonthsAhead: v);
-                        }
-                      },
-                    ),
-                    const Text(' nas receitas pendentes',
-                        style: TextStyle(
-                            fontSize: 14, color: AppColors.textSecondary)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   Future<void> _openPreferencesSheet() async {
-    await showModalBottomSheet<void>(
+    Map<String, dynamic>? current;
+    try {
+      current = await _prefsService.watch(_fsUid).first;
+    } catch (_) {}
+    if (!mounted) return;
+    final result = await showFixedPendingPrefsSheet(
       context: context,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (ctx) => SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-            16, 8, 16, 16 + MediaQuery.paddingOf(ctx).bottom),
-        child: _buildPreferencesCard(),
-      ),
+      initialShowInPending: fixedPendingShowFromMap(current),
+      initialMonthsAhead: fixedPendingMonthsAheadFromMap(current),
+      isExpense: false,
+    );
+    if (result == null || !mounted) return;
+    await _prefsService.set(
+      _fsUid,
+      showInPending: result.showInPending,
+      pendingMonthsAhead: result.pendingMonthsAhead,
     );
   }
 

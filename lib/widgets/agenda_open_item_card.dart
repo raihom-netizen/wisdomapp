@@ -37,8 +37,8 @@ class AgendaOpenItemCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final data = doc.data();
     final title = (data['title'] ?? '').toString().trim();
-    final displayTitle = title.isEmpty
-        ? (isAudiencia ? 'Audiência' : 'Compromisso')
+    final displayTitle = title.isEmpty || title == 'Audiência'
+        ? 'Compromisso'
         : title;
     final date = (data['date'] as Timestamp?)?.toDate();
     final timeStr = (data['time'] ?? '').toString();
@@ -179,9 +179,7 @@ class AgendaOpenItemCard extends StatelessWidget {
                           ],
                         ),
                         child: Icon(
-                          isAudiencia
-                              ? Icons.gavel_rounded
-                              : Icons.event_available_rounded,
+                          Icons.event_available_rounded,
                           color: Colors.white,
                           size: 22,
                         ),

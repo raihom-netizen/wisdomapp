@@ -43,7 +43,6 @@ class _NotificationSoundSettingsScreenState
     NotificationSoundCategory.all,
     NotificationSoundCategory.escala,
     NotificationSoundCategory.compromisso,
-    NotificationSoundCategory.audiencia,
     NotificationSoundCategory.financeiro,
   ];
 
@@ -626,7 +625,7 @@ class _NotificationSoundSettingsScreenState
           const SizedBox(height: 6),
           const Text(
             '• Áudio — com som (padrão do sistema, banco do app ou seu arquivo) + vibração.\n'
-            '• Vibrar — só vibração, sem som. Útil em reuniões e audiências presenciais.\n'
+            '• Vibrar — só vibração, sem som. Útil em reuniões presenciais.\n'
             '• Só push — silencioso, sem som e sem vibração: só popup/badge.\n'
             '• Com o app fechado o tom é o do canal (padrão do sistema) — limitação técnica do Android.\n'
             '• Cada categoria tem seu próprio modo; "Todas as categorias" funciona como atalho.',

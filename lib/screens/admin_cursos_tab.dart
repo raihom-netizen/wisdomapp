@@ -16,6 +16,8 @@ import '../services/course_video_file_service.dart';
 import '../services/course_video_image_service.dart';
 import '../services/course_media_storage_cleanup.dart';
 import '../services/course_videos_cache_service.dart';
+import '../services/course_analytics_service.dart';
+import '../widgets/admin/course_admin_analytics_panel.dart';
 import '../widgets/admin/course_content_sheet_header.dart';
 import '../theme/app_colors.dart';
 import '../utils/course_content_link_helper.dart';
@@ -2022,32 +2024,87 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         builder: (ctx) => DraggableScrollableSheet(
-          initialChildSize: 0.75,
+          initialChildSize: 0.78,
           minChildSize: 0.45,
-          maxChildSize: 0.95,
+          maxChildSize: 0.96,
           builder: (_, scroll) => Container(
             decoration: const BoxDecoration(
-              color: Colors.white,
+              color: Color(0xFF0F0F0F),
               borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
             ),
             child: ListView(
               controller: scroll,
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
               children: [
-                Text((data['title'] ?? '').toString(),
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w900, fontSize: 18)),
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.9),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Text(
+                    'DICA',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  (data['title'] ?? '').toString(),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 20,
+                    color: Colors.white,
+                  ),
+                ),
                 if (CourseMediaUrlResolver.hasResolvableImage(data)) ...[
-                  const SizedBox(height: 12),
-                  CoursePhotoGallery(data: data, height: 240),
+                  const SizedBox(height: 14),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: CoursePhotoGallery(
+                      data: data,
+                      height: 240,
+                      accent: const Color(0xFFF59E0B),
+                    ),
+                  ),
                 ],
                 if (body.isNotEmpty) ...[
-                  const SizedBox(height: 14),
-                  Text(body,
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A1A1A),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.08),
+                      ),
+                    ),
+                    child: Text(
+                      body,
                       style: TextStyle(
-                          fontSize: 14,
-                          height: 1.5,
-                          color: Colors.grey.shade800)),
+                        fontSize: 14.5,
+                        height: 1.5,
+                        color: Colors.grey.shade300,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
                 ],
               ],
             ),
@@ -2090,15 +2147,37 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
             .length;
         final cursosCount = allCount - dicasCount;
         final syncing = _courseDocsLoading && _courseDocs.isEmpty;
+        final titleMap = <String, String>{
+          for (final d in _courseDocs)
+            d.id: (d.data()['title'] ?? 'Conteúdo').toString(),
+        };
 
-        return ListView(
+        return StreamBuilder<List<CourseStatSummary>>(
+          stream: CourseAnalyticsService.instance.watchAllStats(),
+          builder: (context, statsSnap) {
+            final stats = statsSnap.data ?? const <CourseStatSummary>[];
+            final statsById = {
+              for (final s in stats) s.courseId: s,
+            };
+
+            return ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
           children: [
             const ModuleHeaderPremium(
-              title: 'Cursos em vídeo',
+              title: 'Cursos e Dicas',
               icon: Icons.ondemand_video_rounded,
               subtitle:
-                  'Publique aulas e dicas. O app exibe somente o que estiver marcado como publicado.',
+                  'Publique conteúdos, acompanhe quem assistiu e quantos curtiram — visual alinhado ao app.',
+            ),
+            const SizedBox(height: 16),
+            CourseAdminAnalyticsPanel(
+              stats: stats,
+              courseTitles: titleMap,
+              onOpenViewers: (id, title) => showCourseViewersSheet(
+                context,
+                courseId: id,
+                title: title,
+              ),
             ),
             const SizedBox(height: 16),
             _buildConfigCard(),
@@ -2119,12 +2198,12 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.video_library_rounded,
-                          color: Colors.white, size: 22),
+                      const Icon(Icons.smart_display_rounded,
+                          color: Color(0xFFFF0000), size: 22),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Biblioteca (${docs.length}${docs.length != allCount ? ' / $allCount' : ''})',
+                          'Biblioteca YouTube (${docs.length}${docs.length != allCount ? ' / $allCount' : ''})',
                           style: const TextStyle(
                             fontWeight: FontWeight.w900,
                             fontSize: 16,
@@ -2192,7 +2271,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                   if (docs.isEmpty)
                     _emptyGrid(syncing)
                   else
-                    _buildVideoGrid(docs),
+                    _buildVideoGrid(docs, statsById),
                   if (_selectionMode && _selectedIds.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 12),
@@ -2220,6 +2299,8 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
               ),
             ),
           ],
+            );
+          },
         );
       },
     );
@@ -2322,57 +2403,54 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
   }
 
   Widget _buildVideoGrid(
-      List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
-    return LayoutBuilder(
-      builder: (context, c) {
-        final w = c.maxWidth;
-        final crossCount = w >= 900 ? 3 : (w >= 560 ? 2 : 1);
-        return GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossCount,
-            mainAxisSpacing: 14,
-            crossAxisSpacing: 14,
-            childAspectRatio:
-                crossCount >= 3 ? 0.72 : (crossCount == 2 ? 0.76 : 0.82),
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    Map<String, CourseStatSummary> statsById,
+  ) {
+    // Feed vertical alinhado ao módulo do app (cards YouTube 16:9).
+    return Column(
+      children: [
+        for (var i = 0; i < docs.length; i++) ...[
+          if (i > 0) const SizedBox(height: 14),
+          _VideoGridCard(
+            doc: docs[i],
+            index: i,
+            thumbUrl: _thumbUrl(docs[i].data()),
+            videoId: _videoId(docs[i].data()),
+            hasMp4: _mp4Url(docs[i].data()) != null,
+            selectionMode: _selectionMode,
+            selected: _selectedIds.contains(docs[i].id),
+            feedStyle: true,
+            viewCount: statsById[docs[i].id]?.viewCount ?? 0,
+            likeCount: statsById[docs[i].id]?.likeCount ?? 0,
+            onTap: () {
+              if (_selectionMode) {
+                setState(() {
+                  if (_selectedIds.contains(docs[i].id)) {
+                    _selectedIds.remove(docs[i].id);
+                  } else {
+                    _selectedIds.add(docs[i].id);
+                  }
+                });
+              } else {
+                _openContentPreview(docs[i]);
+              }
+            },
+            onLongPress: () => setState(() {
+              _selectionMode = true;
+              _selectedIds.add(docs[i].id);
+            }),
+            onPreview: () => _openContentPreview(docs[i]),
+            onEdit: () => _openEditSheet(docs[i]),
+            onTogglePublished: (v) => _togglePublished(docs[i].id, v),
+            onDelete: () => _deleteVideo(docs[i].id),
+            onOpenStats: () => showCourseViewersSheet(
+              context,
+              courseId: docs[i].id,
+              title: (docs[i].data()['title'] ?? 'Conteúdo').toString(),
+            ),
           ),
-          itemCount: docs.length,
-          itemBuilder: (context, i) {
-            final data = docs[i].data();
-            return _VideoGridCard(
-              doc: docs[i],
-              index: i,
-              thumbUrl: _thumbUrl(data),
-              videoId: _videoId(data),
-              hasMp4: _mp4Url(data) != null,
-              selectionMode: _selectionMode,
-              selected: _selectedIds.contains(docs[i].id),
-              onTap: () {
-                if (_selectionMode) {
-                  setState(() {
-                    if (_selectedIds.contains(docs[i].id)) {
-                      _selectedIds.remove(docs[i].id);
-                    } else {
-                      _selectedIds.add(docs[i].id);
-                    }
-                  });
-                } else {
-                  _openContentPreview(docs[i]);
-                }
-              },
-              onLongPress: () => setState(() {
-                _selectionMode = true;
-                _selectedIds.add(docs[i].id);
-              }),
-              onPreview: () => _openContentPreview(docs[i]),
-              onEdit: () => _openEditSheet(docs[i]),
-              onTogglePublished: (v) => _togglePublished(docs[i].id, v),
-              onDelete: () => _deleteVideo(docs[i].id),
-            );
-          },
-        );
-      },
+        ],
+      ],
     );
   }
 
@@ -3345,6 +3423,10 @@ class _VideoGridCard extends StatelessWidget {
     required this.onEdit,
     required this.onTogglePublished,
     required this.onDelete,
+    this.feedStyle = false,
+    this.viewCount = 0,
+    this.likeCount = 0,
+    this.onOpenStats,
   });
 
   final QueryDocumentSnapshot<Map<String, dynamic>> doc;
@@ -3354,12 +3436,16 @@ class _VideoGridCard extends StatelessWidget {
   final bool hasMp4;
   final bool selectionMode;
   final bool selected;
+  final bool feedStyle;
+  final int viewCount;
+  final int likeCount;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
   final VoidCallback onPreview;
   final VoidCallback onEdit;
   final ValueChanged<bool> onTogglePublished;
   final VoidCallback onDelete;
+  final VoidCallback? onOpenStats;
 
   @override
   Widget build(BuildContext context) {
@@ -3452,29 +3538,47 @@ class _VideoGridCard extends StatelessWidget {
                           ),
                         ),
                       ),
-                      // Play button overlay
+                      // Play / abrir — botão estilo YouTube
                       Material(
                         color: Colors.transparent,
                         child: InkWell(
                           onTap: onPreview,
                           child: Center(
                             child: Container(
-                              padding: const EdgeInsets.all(14),
+                              width: (isVideo || videoId != null || hasMp4)
+                                  ? 72
+                                  : 64,
+                              height: (isVideo || videoId != null || hasMp4)
+                                  ? 52
+                                  : 64,
                               decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.6),
-                                shape: BoxShape.circle,
+                                color: type == 'dica'
+                                    ? const Color(0xFFF59E0B)
+                                    : const Color(0xFFFF0000),
+                                borderRadius: BorderRadius.circular(
+                                  (isVideo || videoId != null || hasMp4)
+                                      ? 14
+                                      : 999,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color:
+                                        Colors.black.withValues(alpha: 0.45),
+                                    blurRadius: 16,
+                                    offset: const Offset(0, 6),
+                                  ),
+                                ],
                               ),
                               child: Icon(
-                                hasThumb &&
-                                        (isVideo || videoId != null || hasMp4)
+                                (isVideo || videoId != null || hasMp4)
                                     ? Icons.play_arrow_rounded
-                                    : (hasMp4
-                                        ? Icons.movie_rounded
-                                        : (type == 'dica' && videoId == null
-                                            ? Icons.article_rounded
-                                            : Icons.play_arrow_rounded)),
+                                    : (type == 'dica'
+                                        ? Icons.lightbulb_rounded
+                                        : Icons.visibility_rounded),
                                 color: Colors.white,
-                                size: 32,
+                                size: (isVideo || videoId != null || hasMp4)
+                                    ? 40
+                                    : 28,
                               ),
                             ),
                           ),
@@ -3522,88 +3626,153 @@ class _VideoGridCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                // Info area
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Title
+                // Info area — feedStyle = altura natural (igual app)
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    feedStyle ? 14 : 10,
+                    feedStyle ? 12 : 8,
+                    feedStyle ? 14 : 10,
+                    feedStyle ? 12 : 6,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: feedStyle ? 3 : 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: feedStyle ? 16 : 13.5,
+                          height: 1.25,
+                        ),
+                      ),
+                      if (previewText.isNotEmpty) ...[
+                        const SizedBox(height: 6),
                         Text(
-                          title,
-                          maxLines: 2,
+                          previewText,
+                          maxLines: feedStyle
+                              ? (type == 'dica' ? 5 : 3)
+                              : 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 13.5,
-                            height: 1.25,
+                          style: TextStyle(
+                            fontSize: feedStyle ? 13 : 11,
+                            height: 1.4,
+                            color: Colors.white.withValues(alpha: 0.55),
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        // Description/preview text
-                        if (previewText.isNotEmpty)
-                          Expanded(
-                            child: Text(
-                              previewText,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 11,
-                                height: 1.3,
-                                color: Colors.white.withValues(alpha: 0.5),
-                                fontWeight: FontWeight.w500,
+                      ],
+                      const SizedBox(height: 10),
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: onOpenStats,
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.04),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.08),
                               ),
                             ),
-                          )
-                        else
-                          const Spacer(),
-                        // Bottom row: chips + actions
-                        Row(
-                          children: [
-                            _miniChip(
-                              validityLabel,
-                              expired
-                                  ? const Color(0xFFDC2626)
-                                  : const Color(0xFF94A3B8),
-                            ),
-                            if (dateLabel.isNotEmpty) ...[
-                              const SizedBox(width: 6),
-                              Text(
-                                dateLabel,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.white.withValues(alpha: 0.35),
-                                  fontWeight: FontWeight.w600,
+                            child: Row(
+                              children: [
+                                Icon(Icons.visibility_rounded,
+                                    size: 16,
+                                    color: Colors.blue.shade300),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '$viewCount assistiram',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 12.5,
+                                  ),
                                 ),
+                                const SizedBox(width: 14),
+                                const Icon(Icons.thumb_up_alt_rounded,
+                                    size: 15, color: Color(0xFFFF0000)),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '$likeCount curtiram',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 12.5,
+                                  ),
+                                ),
+                                const Spacer(),
+                                Text(
+                                  'Ver quem',
+                                  style: TextStyle(
+                                    color: Colors.white
+                                        .withValues(alpha: 0.55),
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                                Icon(
+                                  Icons.chevron_right_rounded,
+                                  size: 18,
+                                  color: Colors.white.withValues(alpha: 0.45),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          _miniChip(
+                            validityLabel,
+                            expired
+                                ? const Color(0xFFDC2626)
+                                : const Color(0xFF94A3B8),
+                          ),
+                          if (dateLabel.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            Text(
+                              dateLabel,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.white.withValues(alpha: 0.35),
+                                fontWeight: FontWeight.w600,
                               ),
-                            ],
-                            const Spacer(),
-                            _actionIcon(
-                              Icons.edit_rounded,
-                              accent.withValues(alpha: 0.85),
-                              onEdit,
-                              'Editar',
-                            ),
-                            _actionIcon(
-                              published
-                                  ? Icons.visibility_off_outlined
-                                  : Icons.visibility_rounded,
-                              Colors.white.withValues(alpha: 0.5),
-                              () => onTogglePublished(!published),
-                              published ? 'Ocultar' : 'Publicar',
-                            ),
-                            _actionIcon(
-                              Icons.delete_outline_rounded,
-                              Colors.red.shade400.withValues(alpha: 0.8),
-                              onDelete,
-                              'Excluir',
                             ),
                           ],
-                        ),
-                      ],
-                    ),
+                          const Spacer(),
+                          _actionIcon(
+                            Icons.edit_rounded,
+                            accent.withValues(alpha: 0.85),
+                            onEdit,
+                            'Editar',
+                          ),
+                          _actionIcon(
+                            published
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_rounded,
+                            Colors.white.withValues(alpha: 0.5),
+                            () => onTogglePublished(!published),
+                            published ? 'Ocultar' : 'Publicar',
+                          ),
+                          _actionIcon(
+                            Icons.delete_outline_rounded,
+                            Colors.red.shade400.withValues(alpha: 0.8),
+                            onDelete,
+                            'Excluir',
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -3649,19 +3818,20 @@ class _VideoGridCard extends StatelessWidget {
   }
 
   Widget _thumbFallback(Color a, Color b) {
+    final isDica = (doc.data()['type'] ?? '').toString() == 'dica';
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [a.withValues(alpha: 0.7), b.withValues(alpha: 0.7)],
+          colors: [a.withValues(alpha: 0.75), b.withValues(alpha: 0.75)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
       ),
       child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.ondemand_video_rounded,
-                color: Colors.white.withValues(alpha: 0.6), size: 36),
-          ],
+        child: Icon(
+          isDica ? Icons.lightbulb_rounded : Icons.ondemand_video_rounded,
+          color: Colors.white.withValues(alpha: 0.65),
+          size: 40,
         ),
       ),
     );

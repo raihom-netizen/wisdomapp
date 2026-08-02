@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import '../constants/finance_bank_presets.dart';
 import '../constants/finance_account_visuals.dart';
@@ -82,6 +82,7 @@ import '../utils/firestore_user_doc_id.dart'
 import '../utils/finance_category_grouping.dart';
 import '../utils/finance_shell_navigation.dart';
 import '../utils/finance_transactions_hub.dart';
+import '../services/finance_instant_prefetch_service.dart';
 import '../widgets/finance_premium_ui.dart';
 import '../widgets/light_filter_picker.dart';
 import '../widgets/finance_confirm_payment_sheet.dart';
@@ -222,6 +223,9 @@ class _FinanceScreenState extends State<FinanceScreen> {
   String? _lastAuthUidForFinancePeriodReset;
   bool _financeBootstrapDone = false;
   bool _pdfWarmupScheduled = false;
+  int _lastFinanceHubRevisionSeen = 0;
+  /// Evita reload em cascata quando a própria tela dispara [FinanceTransactionsHub].
+  bool _financeHubIgnoreSelf = false;
 
   // PERF (Fase 2 — Financeiro): os streams de pendentes/preferências eram
   // recriados a CADA build (novo listener Firestore por rebuild) e a query de
@@ -587,6 +591,8 @@ class _FinanceScreenState extends State<FinanceScreen> {
         .removeListener(_onDelegateSessionChanged);
     FinanceShellNavigation.pendingAccountId
         .removeListener(_onShellFinanceAccountFilterRequest);
+    FinanceTransactionsHub.revision
+        .removeListener(_onFinanceHubRevisionFromOutside);
     _authStateSub?.cancel();
     _financeAccSub?.cancel();
     _stripHideZeroSub?.cancel();
@@ -650,6 +656,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
       }
     });
     _recomputeMainPeriodKpisFromVisibleDocs();
+    _financeHubIgnoreSelf = true;
     FinanceTransactionsHub.notifyMutated(
       uid: widget.uid,
       effectiveDate: effectiveDate,
@@ -1078,23 +1085,59 @@ class _FinanceScreenState extends State<FinanceScreen> {
       _financeBootstrapDone = true;
       unawaited(_primeFinanceBootstrap());
     }
-    // Firestore/KPIs no frame seguinte — pinta o módulo antes do trabalho pesado.
+    unawaited(FinanceInstantPrefetchService.warmUpForFinanceModule(widget.uid));
+    // Firestore/KPIs no frame seguinte — pinta cache primeiro; reload silencioso.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !widget.isShellVisible) return;
-      unawaited(FinanceOpeningBalanceService.ensureServerBucketsRebuildIfNeeded(
-          widget.uid));
-      unawaited(_primeMainPeriodFromFirestoreCache());
-      unawaited(_processDueFaturaScheduledPayments());
-      _requestMainPeriodReload();
-      if (!_pdfWarmupScheduled) {
-        _pdfWarmupScheduled = true;
-        Future.delayed(const Duration(seconds: 8), () {
-          if (mounted && widget.isShellVisible) {
-            unawaited(RelatorioService.warmUpPdfAssets());
-          }
-        });
-      }
+      unawaited(_resumeFinanceHeavyWorkAsync());
     });
+  }
+
+  /// Cache local → paint instantâneo → sync servidor sem esvaziar a lista.
+  Future<void> _resumeFinanceHeavyWorkAsync() async {
+    if (!mounted || !widget.isShellVisible) return;
+    unawaited(FinanceOpeningBalanceService.ensureServerBucketsRebuildIfNeeded(
+        widget.uid));
+    await _primeMainPeriodFromFirestoreCache();
+    if (!mounted || !widget.isShellVisible) return;
+    final sid = _effectiveFinanceSessionUid;
+    if (sid != null) {
+      _mainPeriodLoadGeneration++;
+      final g = _mainPeriodLoadGeneration;
+      // Mantém docs do prime na tela (sem skeleton) enquanto o servidor responde.
+      unawaited(
+        _executeMainPeriodLoad(
+          g,
+          sid,
+          preserveExistingDocs: _mainPeriodDocs.isNotEmpty,
+        ),
+      );
+    }
+    unawaited(_processDueFaturaScheduledPayments());
+    if (!_pdfWarmupScheduled) {
+      _pdfWarmupScheduled = true;
+      Future.delayed(const Duration(seconds: 8), () {
+        if (mounted && widget.isShellVisible) {
+          unawaited(RelatorioService.warmUpPdfAssets());
+        }
+      });
+    }
+  }
+
+  /// Mutação vinda da Agenda (ou outro módulo): atualiza lista sem piscar.
+  void _onFinanceHubRevisionFromOutside() {
+    if (!mounted || !widget.isShellVisible) return;
+    final rev = FinanceTransactionsHub.revision.value;
+    if (rev == _lastFinanceHubRevisionSeen) return;
+    _lastFinanceHubRevisionSeen = rev;
+    if (_financeHubIgnoreSelf) {
+      _financeHubIgnoreSelf = false;
+      return;
+    }
+    _scheduleMainPeriodReloadAfterMutationDebounced(
+      immediate: false,
+      preserveExistingDocs: true,
+    );
   }
 
   void _syncFinanceShellVisibility({bool scrollToTop = false}) {
@@ -1140,6 +1183,9 @@ class _FinanceScreenState extends State<FinanceScreen> {
         .addListener(_onDelegateSessionChanged);
     FinanceShellNavigation.pendingAccountId
         .addListener(_onShellFinanceAccountFilterRequest);
+    _lastFinanceHubRevisionSeen = FinanceTransactionsHub.revision.value;
+    FinanceTransactionsHub.revision
+        .addListener(_onFinanceHubRevisionFromOutside);
     final (f, t) = _rangeForPeriod();
     _from = f;
     _to = t;
@@ -4161,10 +4207,13 @@ class _FinanceScreenState extends State<FinanceScreen> {
       builder: (context, prefsSnap) {
         final showInPending = prefsSnap.data?['showInPending'] as bool? ?? true;
         final monthsAhead =
-            (prefsSnap.data?['pendingMonthsAhead'] as int?)?.clamp(1, 12) ??
+            (prefsSnap.data?['pendingMonthsAhead'] as int?)?.clamp(0, 12) ??
                 AppBusinessRules.pendingMonthsAheadDefault;
-        final limitDate = DateTime(
-            DateTime.now().year, DateTime.now().month + monthsAhead, 1);
+        // Limite exclusivo: 1º dia do mês APÓS o último mês incluído.
+        // Ex.: julho + monthsAhead=1 → inclui julho e agosto → exclusiveEnd = 01/09.
+        // monthsAhead=0 → só mês atual → exclusiveEnd = 1º do mês seguinte.
+        final exclusiveEnd = DateTime(
+            DateTime.now().year, DateTime.now().month + monthsAhead + 1, 1);
         return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: _pendingIncomesStream,
           initialData: _lastPendingIncomesSnap,
@@ -4178,6 +4227,8 @@ class _FinanceScreenState extends State<FinanceScreen> {
             }
             double total = 0;
             final list = <Map<String, dynamic>>[];
+            final today = DateTime(
+                DateTime.now().year, DateTime.now().month, DateTime.now().day);
             for (final doc in snap.data?.docs ?? []) {
               final d = Map<String, dynamic>.from(doc.data());
               d['id'] = doc.id;
@@ -4192,7 +4243,8 @@ class _FinanceScreenState extends State<FinanceScreen> {
               final dateTs = d['date'];
               if (dateTs is Timestamp) {
                 final dt = dateTs.toDate();
-                if (dt.isAfter(limitDate)) continue;
+                if (dt.isBefore(today)) continue;
+                if (!dt.isBefore(exclusiveEnd)) continue;
               }
               total += (d['amount'] ?? 0).toDouble().abs();
               list.add(d);
@@ -4304,10 +4356,13 @@ class _FinanceScreenState extends State<FinanceScreen> {
       builder: (context, prefsSnap) {
         final showInPending = prefsSnap.data?['showInPending'] as bool? ?? true;
         final monthsAhead =
-            (prefsSnap.data?['pendingMonthsAhead'] as int?)?.clamp(1, 12) ??
+            (prefsSnap.data?['pendingMonthsAhead'] as int?)?.clamp(0, 12) ??
                 AppBusinessRules.pendingMonthsAheadDefault;
-        final limitDate = DateTime(
-            DateTime.now().year, DateTime.now().month + monthsAhead, 1);
+        // Limite exclusivo: 1º dia do mês APÓS o último mês incluído.
+        // Ex.: julho + monthsAhead=1 → inclui julho e agosto → exclusiveEnd = 01/09.
+        // monthsAhead=0 → só mês atual → exclusiveEnd = 1º do mês seguinte.
+        final exclusiveEnd = DateTime(
+            DateTime.now().year, DateTime.now().month + monthsAhead + 1, 1);
         return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: _pendingExpensesStream,
           initialData: _lastPendingExpensesSnap,
@@ -4321,6 +4376,8 @@ class _FinanceScreenState extends State<FinanceScreen> {
             }
             double total = 0;
             final list = <Map<String, dynamic>>[];
+            final today = DateTime(
+                DateTime.now().year, DateTime.now().month, DateTime.now().day);
             for (final doc in snap.data?.docs ?? []) {
               final d = Map<String, dynamic>.from(doc.data());
               d['id'] = doc.id;
@@ -4335,7 +4392,8 @@ class _FinanceScreenState extends State<FinanceScreen> {
               final dateTs = d['date'];
               if (dateTs is Timestamp) {
                 final dt = dateTs.toDate();
-                if (dt.isAfter(limitDate)) continue;
+                if (dt.isBefore(today)) continue;
+                if (!dt.isBefore(exclusiveEnd)) continue;
               }
               total += (d['amount'] ?? 0).toDouble().abs();
               list.add(d);
@@ -6031,6 +6089,744 @@ class _FinanceScreenState extends State<FinanceScreen> {
     );
   }
 
+  /// Topo de acoes/filtros — rola com a lista (paridade Controle Total).
+  Widget _buildFinanceTopChrome(BuildContext context,
+      {required bool isNarrow}) {
+    return AnimatedCrossFade(
+  firstChild: Padding(
+        padding: EdgeInsets.fromLTRB(12, isNarrow ? 4 : 2, 12, 0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                children: [
+                  // Receita | Despesa | Despesas fixas — gradientes e sombras (super premium)
+                  Row(children: [
+                    Expanded(
+                        child: _buildPremiumReceitaButton(context,
+                            dense: false)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                        child: _buildPremiumDespesaButton(context,
+                            dense: false)),
+                  ]),
+                  const SizedBox(height: 8),
+                  Row(children: [
+                    Expanded(
+                        child: _buildDespesasFixasButtonCompact(
+                            context,
+                            dense: false)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                        child: _buildReceitasFixasButtonCompact(
+                            context,
+                            dense: false)),
+                  ]),
+                  const SizedBox(height: 8),
+                  _buildTransferenciaButton(context,
+                      dense: false),
+                  const SizedBox(height: 10),
+                  Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(16),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: widget.profile.hasActiveLicense
+                          ? () => unawaited(
+                              _abrirLancamentoInteligente())
+                          : () => mostrarAvisoSeLicencaInativa(
+                              context, widget.profile),
+                      borderRadius: BorderRadius.circular(16),
+                      child: Ink(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          gradient: const LinearGradient(
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                            colors: [
+                              AppColors.deepBlueDark,
+                              AppColors.deepBlue,
+                              AppColors.primary
+                            ],
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primary
+                                  .withValues(alpha: 0.35),
+                              blurRadius: 14,
+                              offset: const Offset(0, 5),
+                            ),
+                          ],
+                        ),
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(
+                              vertical: 13, horizontal: 12),
+                          child: Row(
+                            mainAxisAlignment:
+                                MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.content_paste_go_rounded,
+                                  size: 22, color: Colors.white),
+                              SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  'Lançamento inteligente (texto / SMS)',
+                                  textAlign: TextAlign.center,
+                                  maxLines: 2,
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13.5,
+                                    height: 1.2,
+                                    letterSpacing: 0.1,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  // Filtros: só período/status/pesquisa; barra compacta do topo usa ícone à direita
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () => setState(() =>
+                                _filtrosPainelAberto =
+                                    !_filtrosPainelAberto),
+                            borderRadius:
+                                BorderRadius.circular(16),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 12, horizontal: 14),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius:
+                                    BorderRadius.circular(16),
+                                border: Border.all(
+                                    color: AppColors.primary
+                                        .withValues(alpha: 0.12)),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppColors.deepBlueDark
+                                        .withValues(alpha: 0.07),
+                                    blurRadius: 16,
+                                    offset: const Offset(0, 6),
+                                  ),
+                                  BoxShadow(
+                                    color: Colors.black
+                                        .withValues(alpha: 0.04),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding:
+                                        const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          AppColors.primary
+                                              .withValues(
+                                                  alpha: 0.15),
+                                          AppColors.accent
+                                              .withValues(
+                                                  alpha: 0.12),
+                                        ],
+                                        begin: Alignment.topLeft,
+                                        end:
+                                            Alignment.bottomRight,
+                                      ),
+                                      borderRadius:
+                                          BorderRadius.circular(
+                                              12),
+                                    ),
+                                    child: Icon(
+                                      _filtrosPainelAberto
+                                          ? Icons.tune_rounded
+                                          : Icons
+                                              .filter_alt_rounded,
+                                      color: AppColors.primary,
+                                      size: 22,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      _filtrosPainelAberto
+                                          ? 'Recolher filtros'
+                                          : 'Filtros e pesquisa',
+                                      style: const TextStyle(
+                                          fontWeight:
+                                              FontWeight.w800,
+                                          color: AppColors
+                                              .textPrimary,
+                                          fontSize: 14,
+                                          letterSpacing: 0.1),
+                                    ),
+                                  ),
+                                  Icon(
+                                    _filtrosPainelAberto
+                                        ? Icons
+                                            .expand_less_rounded
+                                        : Icons
+                                            .expand_more_rounded,
+                                    color: AppColors.primary
+                                        .withValues(alpha: 0.85),
+                                    size: 22,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Tooltip(
+                        message:
+                            'Modo compacto (mais espaço para a lista)',
+                        child: IconButton.filledTonal(
+                          onPressed: () => setState(() {
+                            _topoExpandido = false;
+                            _filtrosPainelAberto = false;
+                          }),
+                          icon: const Icon(
+                              Icons.unfold_less_rounded,
+                              size: 22),
+                          style: IconButton.styleFrom(
+                            foregroundColor: AppColors.primary,
+                            backgroundColor: AppColors.primary
+                                .withValues(alpha: 0.12),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_filtrosPainelAberto) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(
+                          14, 14, 14, 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                            color: AppColors.primary
+                                .withValues(alpha: 0.1)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.deepBlueDark
+                                .withValues(alpha: 0.06),
+                            blurRadius: 18,
+                            offset: const Offset(0, 8),
+                          ),
+                          BoxShadow(
+                            color: Colors.black
+                                .withValues(alpha: 0.04),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment:
+                            CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.date_range_rounded,
+                                  size: 18,
+                                  color: AppColors.accent
+                                      .withValues(alpha: 0.95)),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Período',
+                                style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w900,
+                                    color: AppColors.textPrimary,
+                                    letterSpacing: 0.2),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: _periods.map((p) {
+                              return _financePeriodChip(
+                                period: p,
+                                selected: _selectedPeriod == p,
+                                onSelect: () {
+                                  setState(() {
+                                    _selectedPeriod = p;
+                                    if (p == 'Por período' &&
+                                        _customRangeStart ==
+                                            null) {
+                                      _customRangeStart =
+                                          DateTime(
+                                              DateTime.now().year,
+                                              DateTime.now()
+                                                  .month,
+                                              1);
+                                      _customRangeEnd =
+                                          DateTime.now();
+                                    }
+                                    _applyPeriod();
+                                  });
+                                },
+                              );
+                            }).toList(),
+                          ),
+                          if (_selectedPeriod ==
+                              'Por período') ...[
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: FilledButton.tonalIcon(
+                                    onPressed: () async {
+                                      final picked =
+                                          await showDatePicker(
+                                              context: context,
+                                              initialDate:
+                                                  _customRangeStart ??
+                                                      _from,
+                                              firstDate:
+                                                  DateTime(2000),
+                                              lastDate:
+                                                  DateTime(2030));
+                                      if (picked != null &&
+                                          mounted) {
+                                        setState(() {
+                                          _customRangeStart =
+                                              picked;
+                                          _applyPeriod();
+                                        });
+                                      }
+                                    },
+                                    icon: const Icon(
+                                        Icons
+                                            .calendar_today_rounded,
+                                        size: 18),
+                                    label: Text(
+                                        'De ${DateFormat('dd/MM/yy').format(_customRangeStart ?? _from)}',
+                                        style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight:
+                                                FontWeight.w700)),
+                                    style: FilledButton.styleFrom(
+                                      foregroundColor:
+                                          AppColors.primary,
+                                      backgroundColor: AppColors
+                                          .primary
+                                          .withValues(alpha: 0.1),
+                                      padding: const EdgeInsets
+                                          .symmetric(
+                                          vertical: 12,
+                                          horizontal: 8),
+                                      shape:
+                                          RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius
+                                                      .circular(
+                                                          14)),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: FilledButton.tonalIcon(
+                                    onPressed: () async {
+                                      final picked =
+                                          await showDatePicker(
+                                              context: context,
+                                              initialDate:
+                                                  _customRangeEnd ??
+                                                      _to,
+                                              firstDate:
+                                                  _customRangeStart ??
+                                                      DateTime(
+                                                          2000),
+                                              lastDate:
+                                                  DateTime(2030));
+                                      if (picked != null &&
+                                          mounted) {
+                                        setState(() {
+                                          _customRangeEnd =
+                                              picked;
+                                          _applyPeriod();
+                                        });
+                                      }
+                                    },
+                                    icon: const Icon(
+                                        Icons.event_rounded,
+                                        size: 18),
+                                    label: Text(
+                                        'Até ${DateFormat('dd/MM/yy').format(_customRangeEnd ?? _to)}',
+                                        style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight:
+                                                FontWeight.w700)),
+                                    style: FilledButton.styleFrom(
+                                      foregroundColor:
+                                          AppColors.primary,
+                                      backgroundColor: AppColors
+                                          .primary
+                                          .withValues(alpha: 0.1),
+                                      padding: const EdgeInsets
+                                          .symmetric(
+                                          vertical: 12,
+                                          horizontal: 8),
+                                      shape:
+                                          RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius
+                                                      .circular(
+                                                          14)),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    RepaintBoundary(
+                      child: LightFilterPicker<String>(
+                        value: _statusFilter,
+                        decoration:
+                            _financeFilterDropdownDecoration(
+                                'Status do lançamento',
+                                Icons.filter_list_rounded),
+                        label: 'Status do lançamento',
+                        options: const [
+                          LightFilterOption(
+                              value: 'all',
+                              label: 'Todos os status'),
+                          LightFilterOption(
+                              value: 'paid', label: 'Pago'),
+                          LightFilterOption(
+                              value: 'pending',
+                              label: 'Pendente'),
+                        ],
+                        onChanged: (v) {
+                          setState(() {
+                            _statusFilter = v;
+                            _resetTxPagination();
+                          });
+                          _requestMainPeriodReload();
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    RepaintBoundary(
+                      child: Builder(
+                        builder: (context) {
+                          final accountFilterValid =
+                              _financeAccountFilterId == null ||
+                                  _financeAccounts.any((a) =>
+                                      a.id ==
+                                      _financeAccountFilterId);
+                          final accountValue = accountFilterValid
+                              ? _financeAccountFilterId
+                              : null;
+                          final loadingAccounts =
+                              !_financeAccountsStreamPrimed &&
+                                  _financeAccounts.isEmpty;
+                          return LightFilterPicker<String?>(
+                            key: ValueKey<String?>(
+                                'acct-$accountValue-${_financeAccounts.length}'),
+                            value: accountValue,
+                            enabled: !loadingAccounts,
+                            label: 'Conta (banco ou cartão)',
+                            decoration:
+                                _financeFilterDropdownDecoration(
+                                    'Conta (banco ou cartão)',
+                                    Icons
+                                        .account_balance_rounded),
+                            options: [
+                              const LightFilterOption<String?>(
+                                value: null,
+                                label: 'Todas as contas',
+                              ),
+                              if (loadingAccounts)
+                                const LightFilterOption<String?>(
+                                  enabled: false,
+                                  value: '__loading__',
+                                  label: 'A carregar contas…',
+                                )
+                              else
+                                ..._financeAccounts.map(
+                                  (a) =>
+                                      LightFilterOption<String?>(
+                                    value: a.id,
+                                    label: a.displayName,
+                                  ),
+                                ),
+                            ],
+                            onChanged: (v) {
+                              if (v == '__loading__') return;
+                              _applyFinanceAccountFilter(v);
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                    if (_financeAccountsStreamPrimed &&
+                        _financeAccounts.isEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        'Sem contas cadastradas. Use Bancos e cartões para criar contas e filtrar por banco aqui.',
+                        style: TextStyle(
+                            fontSize: 11.5,
+                            color: AppColors.textMuted,
+                            height: 1.35),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    RepaintBoundary(
+                      child: LightFilterPicker<String>(
+                        value: _typeFilter,
+                        label: 'Tipo de lançamento',
+                        decoration:
+                            _financeFilterDropdownDecoration(
+                                'Tipo de lançamento',
+                                Icons.swap_vert_rounded),
+                        options: const [
+                          LightFilterOption(
+                              value: 'all',
+                              label: 'Receitas e despesas'),
+                          LightFilterOption(
+                              value: 'income',
+                              label: 'Só receitas'),
+                          LightFilterOption(
+                              value: 'expense',
+                              label: 'Só despesas'),
+                        ],
+                        onChanged: (v) {
+                          setState(() {
+                            _typeFilter = v;
+                            _resetTxPagination();
+                          });
+                          _requestMainPeriodReload();
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    FutureBuilder<List<String>>(
+                      future: _categoryFilterOptionsFuture,
+                      builder: (context, catSnap) {
+                        final loading = catSnap.connectionState ==
+                                ConnectionState.waiting &&
+                            !catSnap.hasData;
+                        String? displayCategory = _categoryFilter;
+                        if (_categoryFilter != null &&
+                            catSnap.hasData) {
+                          for (final o in catSnap.data!) {
+                            if (FinanceCategoryMerger
+                                .sameCategoryGroup(
+                                    o, _categoryFilter!)) {
+                              displayCategory = o;
+                              break;
+                            }
+                          }
+                        }
+                        return FinanceCategoryFilterTile(
+                          selectedCategory: displayCategory,
+                          loading: loading,
+                          onTap: _openCategoryFilterPicker,
+                          onClear: _categoryFilter == null
+                              ? null
+                              : () => setState(() {
+                                    _categoryFilter = null;
+                                    _resetTxPagination();
+                                  }),
+                        );
+                      },
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+  secondChild: Padding(
+    padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+    child: Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+                child: _buildPremiumReceitaButton(context,
+                    dense: true)),
+            const SizedBox(width: 8),
+            Expanded(
+                child: _buildPremiumDespesaButton(context,
+                    dense: true)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+                child: _buildDespesasFixasButtonCompact(context,
+                    dense: true)),
+            const SizedBox(width: 8),
+            Expanded(
+                child: _buildReceitasFixasButtonCompact(context,
+                    dense: true)),
+            const SizedBox(width: 6),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => setState(() {
+                  _topoExpandido = true;
+                  _filtrosPainelAberto = true;
+                }),
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      vertical: 10, horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                        color: AppColors.primary
+                            .withValues(alpha: 0.12)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.deepBlueDark
+                            .withValues(alpha: 0.08),
+                        blurRadius: 14,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              AppColors.primary
+                                  .withValues(alpha: 0.85),
+                              AppColors.accent
+                                  .withValues(alpha: 0.9),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.tune_rounded,
+                            color: Colors.white, size: 18),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Filtros',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.primary,
+                            fontSize: 12,
+                            letterSpacing: 0.2),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        _buildTransferenciaButton(context, dense: true),
+        const SizedBox(height: 8),
+        Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: widget.profile.hasActiveLicense
+                ? () => unawaited(_abrirLancamentoInteligente())
+                : () => mostrarAvisoSeLicencaInativa(
+                    context, widget.profile),
+            borderRadius: BorderRadius.circular(16),
+            child: Ink(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                gradient: const LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    AppColors.deepBlueDark,
+                    AppColors.deepBlue,
+                    AppColors.primary
+                  ],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color:
+                        AppColors.primary.withValues(alpha: 0.32),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(
+                    vertical: 12, horizontal: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.sms_outlined,
+                        size: 22, color: Colors.white),
+                    SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        'Lançamento por mensagem (SMS / banco)',
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 13,
+                          height: 1.2,
+                          letterSpacing: 0.1,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
+  ),
+  crossFadeState: _topoExpandido
+      ? CrossFadeState.showFirst
+      : CrossFadeState.showSecond,
+  duration: const Duration(milliseconds: 250),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!widget.isShellVisible) {
@@ -6055,749 +6851,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
       child: MediaQuery(
         data: mq.copyWith(textScaler: clampedScaler),
         child: RepaintBoundary(
-          child: Column(
-            children: [
-              AnimatedCrossFade(
-                firstChild: ConstrainedBox(
-                  constraints: BoxConstraints(
-                      maxHeight: MediaQuery.sizeOf(context).height * 0.55),
-                  child: SingleChildScrollView(
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(12, isNarrow ? 4 : 2, 12, 0),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              children: [
-                                // Receita | Despesa | Despesas fixas — gradientes e sombras (super premium)
-                                Row(children: [
-                                  Expanded(
-                                      child: _buildPremiumReceitaButton(context,
-                                          dense: false)),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                      child: _buildPremiumDespesaButton(context,
-                                          dense: false)),
-                                ]),
-                                const SizedBox(height: 8),
-                                Row(children: [
-                                  Expanded(
-                                      child: _buildDespesasFixasButtonCompact(
-                                          context,
-                                          dense: false)),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                      child: _buildReceitasFixasButtonCompact(
-                                          context,
-                                          dense: false)),
-                                ]),
-                                const SizedBox(height: 8),
-                                _buildTransferenciaButton(context,
-                                    dense: false),
-                                const SizedBox(height: 10),
-                                Material(
-                                  color: Colors.transparent,
-                                  borderRadius: BorderRadius.circular(16),
-                                  clipBehavior: Clip.antiAlias,
-                                  child: InkWell(
-                                    onTap: widget.profile.hasActiveLicense
-                                        ? () => unawaited(
-                                            _abrirLancamentoInteligente())
-                                        : () => mostrarAvisoSeLicencaInativa(
-                                            context, widget.profile),
-                                    borderRadius: BorderRadius.circular(16),
-                                    child: Ink(
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(16),
-                                        gradient: const LinearGradient(
-                                          begin: Alignment.centerLeft,
-                                          end: Alignment.centerRight,
-                                          colors: [
-                                            AppColors.deepBlueDark,
-                                            AppColors.deepBlue,
-                                            AppColors.primary
-                                          ],
-                                        ),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: AppColors.primary
-                                                .withValues(alpha: 0.35),
-                                            blurRadius: 14,
-                                            offset: const Offset(0, 5),
-                                          ),
-                                        ],
-                                      ),
-                                      child: const Padding(
-                                        padding: EdgeInsets.symmetric(
-                                            vertical: 13, horizontal: 12),
-                                        child: Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Icon(Icons.content_paste_go_rounded,
-                                                size: 22, color: Colors.white),
-                                            SizedBox(width: 8),
-                                            Flexible(
-                                              child: Text(
-                                                'Lançamento inteligente (texto / SMS)',
-                                                textAlign: TextAlign.center,
-                                                maxLines: 2,
-                                                style: TextStyle(
-                                                  color: Colors.white,
-                                                  fontWeight: FontWeight.w800,
-                                                  fontSize: 13.5,
-                                                  height: 1.2,
-                                                  letterSpacing: 0.1,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 10),
-                                // Filtros: só período/status/pesquisa; barra compacta do topo usa ícone à direita
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    Expanded(
-                                      child: Material(
-                                        color: Colors.transparent,
-                                        child: InkWell(
-                                          onTap: () => setState(() =>
-                                              _filtrosPainelAberto =
-                                                  !_filtrosPainelAberto),
-                                          borderRadius:
-                                              BorderRadius.circular(16),
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                                vertical: 12, horizontal: 14),
-                                            decoration: BoxDecoration(
-                                              color: Colors.white,
-                                              borderRadius:
-                                                  BorderRadius.circular(16),
-                                              border: Border.all(
-                                                  color: AppColors.primary
-                                                      .withValues(alpha: 0.12)),
-                                              boxShadow: [
-                                                BoxShadow(
-                                                  color: AppColors.deepBlueDark
-                                                      .withValues(alpha: 0.07),
-                                                  blurRadius: 16,
-                                                  offset: const Offset(0, 6),
-                                                ),
-                                                BoxShadow(
-                                                  color: Colors.black
-                                                      .withValues(alpha: 0.04),
-                                                  blurRadius: 8,
-                                                  offset: const Offset(0, 2),
-                                                ),
-                                              ],
-                                            ),
-                                            child: Row(
-                                              children: [
-                                                Container(
-                                                  padding:
-                                                      const EdgeInsets.all(8),
-                                                  decoration: BoxDecoration(
-                                                    gradient: LinearGradient(
-                                                      colors: [
-                                                        AppColors.primary
-                                                            .withValues(
-                                                                alpha: 0.15),
-                                                        AppColors.accent
-                                                            .withValues(
-                                                                alpha: 0.12),
-                                                      ],
-                                                      begin: Alignment.topLeft,
-                                                      end:
-                                                          Alignment.bottomRight,
-                                                    ),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            12),
-                                                  ),
-                                                  child: Icon(
-                                                    _filtrosPainelAberto
-                                                        ? Icons.tune_rounded
-                                                        : Icons
-                                                            .filter_alt_rounded,
-                                                    color: AppColors.primary,
-                                                    size: 22,
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 12),
-                                                Expanded(
-                                                  child: Text(
-                                                    _filtrosPainelAberto
-                                                        ? 'Recolher filtros'
-                                                        : 'Filtros e pesquisa',
-                                                    style: const TextStyle(
-                                                        fontWeight:
-                                                            FontWeight.w800,
-                                                        color: AppColors
-                                                            .textPrimary,
-                                                        fontSize: 14,
-                                                        letterSpacing: 0.1),
-                                                  ),
-                                                ),
-                                                Icon(
-                                                  _filtrosPainelAberto
-                                                      ? Icons
-                                                          .expand_less_rounded
-                                                      : Icons
-                                                          .expand_more_rounded,
-                                                  color: AppColors.primary
-                                                      .withValues(alpha: 0.85),
-                                                  size: 22,
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Tooltip(
-                                      message:
-                                          'Modo compacto (mais espaço para a lista)',
-                                      child: IconButton.filledTonal(
-                                        onPressed: () => setState(() {
-                                          _topoExpandido = false;
-                                          _filtrosPainelAberto = false;
-                                        }),
-                                        icon: const Icon(
-                                            Icons.unfold_less_rounded,
-                                            size: 22),
-                                        style: IconButton.styleFrom(
-                                          foregroundColor: AppColors.primary,
-                                          backgroundColor: AppColors.primary
-                                              .withValues(alpha: 0.12),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                if (_filtrosPainelAberto) ...[
-                                  const SizedBox(height: 12),
-                                  Container(
-                                    padding: const EdgeInsets.fromLTRB(
-                                        14, 14, 14, 12),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(18),
-                                      border: Border.all(
-                                          color: AppColors.primary
-                                              .withValues(alpha: 0.1)),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: AppColors.deepBlueDark
-                                              .withValues(alpha: 0.06),
-                                          blurRadius: 18,
-                                          offset: const Offset(0, 8),
-                                        ),
-                                        BoxShadow(
-                                          color: Colors.black
-                                              .withValues(alpha: 0.04),
-                                          blurRadius: 10,
-                                          offset: const Offset(0, 3),
-                                        ),
-                                      ],
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Icon(Icons.date_range_rounded,
-                                                size: 18,
-                                                color: AppColors.accent
-                                                    .withValues(alpha: 0.95)),
-                                            const SizedBox(width: 8),
-                                            Text(
-                                              'Período',
-                                              style: TextStyle(
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.w900,
-                                                  color: AppColors.textPrimary,
-                                                  letterSpacing: 0.2),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 10),
-                                        Wrap(
-                                          spacing: 8,
-                                          runSpacing: 8,
-                                          children: _periods.map((p) {
-                                            return _financePeriodChip(
-                                              period: p,
-                                              selected: _selectedPeriod == p,
-                                              onSelect: () {
-                                                setState(() {
-                                                  _selectedPeriod = p;
-                                                  if (p == 'Por período' &&
-                                                      _customRangeStart ==
-                                                          null) {
-                                                    _customRangeStart =
-                                                        DateTime(
-                                                            DateTime.now().year,
-                                                            DateTime.now()
-                                                                .month,
-                                                            1);
-                                                    _customRangeEnd =
-                                                        DateTime.now();
-                                                  }
-                                                  _applyPeriod();
-                                                });
-                                              },
-                                            );
-                                          }).toList(),
-                                        ),
-                                        if (_selectedPeriod ==
-                                            'Por período') ...[
-                                          const SizedBox(height: 12),
-                                          Row(
-                                            children: [
-                                              Expanded(
-                                                child: FilledButton.tonalIcon(
-                                                  onPressed: () async {
-                                                    final picked =
-                                                        await showDatePicker(
-                                                            context: context,
-                                                            initialDate:
-                                                                _customRangeStart ??
-                                                                    _from,
-                                                            firstDate:
-                                                                DateTime(2000),
-                                                            lastDate:
-                                                                DateTime(2030));
-                                                    if (picked != null &&
-                                                        mounted) {
-                                                      setState(() {
-                                                        _customRangeStart =
-                                                            picked;
-                                                        _applyPeriod();
-                                                      });
-                                                    }
-                                                  },
-                                                  icon: const Icon(
-                                                      Icons
-                                                          .calendar_today_rounded,
-                                                      size: 18),
-                                                  label: Text(
-                                                      'De ${DateFormat('dd/MM/yy').format(_customRangeStart ?? _from)}',
-                                                      style: const TextStyle(
-                                                          fontSize: 12,
-                                                          fontWeight:
-                                                              FontWeight.w700)),
-                                                  style: FilledButton.styleFrom(
-                                                    foregroundColor:
-                                                        AppColors.primary,
-                                                    backgroundColor: AppColors
-                                                        .primary
-                                                        .withValues(alpha: 0.1),
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                        vertical: 12,
-                                                        horizontal: 8),
-                                                    shape:
-                                                        RoundedRectangleBorder(
-                                                            borderRadius:
-                                                                BorderRadius
-                                                                    .circular(
-                                                                        14)),
-                                                  ),
-                                                ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Expanded(
-                                                child: FilledButton.tonalIcon(
-                                                  onPressed: () async {
-                                                    final picked =
-                                                        await showDatePicker(
-                                                            context: context,
-                                                            initialDate:
-                                                                _customRangeEnd ??
-                                                                    _to,
-                                                            firstDate:
-                                                                _customRangeStart ??
-                                                                    DateTime(
-                                                                        2000),
-                                                            lastDate:
-                                                                DateTime(2030));
-                                                    if (picked != null &&
-                                                        mounted) {
-                                                      setState(() {
-                                                        _customRangeEnd =
-                                                            picked;
-                                                        _applyPeriod();
-                                                      });
-                                                    }
-                                                  },
-                                                  icon: const Icon(
-                                                      Icons.event_rounded,
-                                                      size: 18),
-                                                  label: Text(
-                                                      'Até ${DateFormat('dd/MM/yy').format(_customRangeEnd ?? _to)}',
-                                                      style: const TextStyle(
-                                                          fontSize: 12,
-                                                          fontWeight:
-                                                              FontWeight.w700)),
-                                                  style: FilledButton.styleFrom(
-                                                    foregroundColor:
-                                                        AppColors.primary,
-                                                    backgroundColor: AppColors
-                                                        .primary
-                                                        .withValues(alpha: 0.1),
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                        vertical: 12,
-                                                        horizontal: 8),
-                                                    shape:
-                                                        RoundedRectangleBorder(
-                                                            borderRadius:
-                                                                BorderRadius
-                                                                    .circular(
-                                                                        14)),
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  RepaintBoundary(
-                                    child: LightFilterPicker<String>(
-                                      value: _statusFilter,
-                                      decoration:
-                                          _financeFilterDropdownDecoration(
-                                              'Status do lançamento',
-                                              Icons.filter_list_rounded),
-                                      label: 'Status do lançamento',
-                                      options: const [
-                                        LightFilterOption(
-                                            value: 'all',
-                                            label: 'Todos os status'),
-                                        LightFilterOption(
-                                            value: 'paid', label: 'Pago'),
-                                        LightFilterOption(
-                                            value: 'pending',
-                                            label: 'Pendente'),
-                                      ],
-                                      onChanged: (v) {
-                                        setState(() {
-                                          _statusFilter = v;
-                                          _resetTxPagination();
-                                        });
-                                        _requestMainPeriodReload();
-                                      },
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  RepaintBoundary(
-                                    child: Builder(
-                                      builder: (context) {
-                                        final accountFilterValid =
-                                            _financeAccountFilterId == null ||
-                                                _financeAccounts.any((a) =>
-                                                    a.id ==
-                                                    _financeAccountFilterId);
-                                        final accountValue = accountFilterValid
-                                            ? _financeAccountFilterId
-                                            : null;
-                                        final loadingAccounts =
-                                            !_financeAccountsStreamPrimed &&
-                                                _financeAccounts.isEmpty;
-                                        return LightFilterPicker<String?>(
-                                          key: ValueKey<String?>(
-                                              'acct-$accountValue-${_financeAccounts.length}'),
-                                          value: accountValue,
-                                          enabled: !loadingAccounts,
-                                          label: 'Conta (banco ou cartão)',
-                                          decoration:
-                                              _financeFilterDropdownDecoration(
-                                                  'Conta (banco ou cartão)',
-                                                  Icons
-                                                      .account_balance_rounded),
-                                          options: [
-                                            const LightFilterOption<String?>(
-                                              value: null,
-                                              label: 'Todas as contas',
-                                            ),
-                                            if (loadingAccounts)
-                                              const LightFilterOption<String?>(
-                                                enabled: false,
-                                                value: '__loading__',
-                                                label: 'A carregar contas…',
-                                              )
-                                            else
-                                              ..._financeAccounts.map(
-                                                (a) =>
-                                                    LightFilterOption<String?>(
-                                                  value: a.id,
-                                                  label: a.displayName,
-                                                ),
-                                              ),
-                                          ],
-                                          onChanged: (v) {
-                                            if (v == '__loading__') return;
-                                            _applyFinanceAccountFilter(v);
-                                          },
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                  if (_financeAccountsStreamPrimed &&
-                                      _financeAccounts.isEmpty) ...[
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      'Sem contas cadastradas. Use Bancos e cartões para criar contas e filtrar por banco aqui.',
-                                      style: TextStyle(
-                                          fontSize: 11.5,
-                                          color: AppColors.textMuted,
-                                          height: 1.35),
-                                    ),
-                                  ],
-                                  const SizedBox(height: 12),
-                                  RepaintBoundary(
-                                    child: LightFilterPicker<String>(
-                                      value: _typeFilter,
-                                      label: 'Tipo de lançamento',
-                                      decoration:
-                                          _financeFilterDropdownDecoration(
-                                              'Tipo de lançamento',
-                                              Icons.swap_vert_rounded),
-                                      options: const [
-                                        LightFilterOption(
-                                            value: 'all',
-                                            label: 'Receitas e despesas'),
-                                        LightFilterOption(
-                                            value: 'income',
-                                            label: 'Só receitas'),
-                                        LightFilterOption(
-                                            value: 'expense',
-                                            label: 'Só despesas'),
-                                      ],
-                                      onChanged: (v) {
-                                        setState(() {
-                                          _typeFilter = v;
-                                          _resetTxPagination();
-                                        });
-                                        _requestMainPeriodReload();
-                                      },
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  FutureBuilder<List<String>>(
-                                    future: _categoryFilterOptionsFuture,
-                                    builder: (context, catSnap) {
-                                      final loading = catSnap.connectionState ==
-                                              ConnectionState.waiting &&
-                                          !catSnap.hasData;
-                                      String? displayCategory = _categoryFilter;
-                                      if (_categoryFilter != null &&
-                                          catSnap.hasData) {
-                                        for (final o in catSnap.data!) {
-                                          if (FinanceCategoryMerger
-                                              .sameCategoryGroup(
-                                                  o, _categoryFilter!)) {
-                                            displayCategory = o;
-                                            break;
-                                          }
-                                        }
-                                      }
-                                      return FinanceCategoryFilterTile(
-                                        selectedCategory: displayCategory,
-                                        loading: loading,
-                                        onTap: _openCategoryFilterPicker,
-                                        onClear: _categoryFilter == null
-                                            ? null
-                                            : () => setState(() {
-                                                  _categoryFilter = null;
-                                                  _resetTxPagination();
-                                                }),
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                secondChild: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                              child: _buildPremiumReceitaButton(context,
-                                  dense: true)),
-                          const SizedBox(width: 8),
-                          Expanded(
-                              child: _buildPremiumDespesaButton(context,
-                                  dense: true)),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                              child: _buildDespesasFixasButtonCompact(context,
-                                  dense: true)),
-                          const SizedBox(width: 8),
-                          Expanded(
-                              child: _buildReceitasFixasButtonCompact(context,
-                                  dense: true)),
-                          const SizedBox(width: 6),
-                          Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTap: () => setState(() {
-                                _topoExpandido = true;
-                                _filtrosPainelAberto = true;
-                              }),
-                              borderRadius: BorderRadius.circular(14),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    vertical: 10, horizontal: 12),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(
-                                      color: AppColors.primary
-                                          .withValues(alpha: 0.12)),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: AppColors.deepBlueDark
-                                          .withValues(alpha: 0.08),
-                                      blurRadius: 14,
-                                      offset: const Offset(0, 6),
-                                    ),
-                                  ],
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(6),
-                                      decoration: BoxDecoration(
-                                        gradient: LinearGradient(
-                                          colors: [
-                                            AppColors.primary
-                                                .withValues(alpha: 0.85),
-                                            AppColors.accent
-                                                .withValues(alpha: 0.9),
-                                          ],
-                                          begin: Alignment.topLeft,
-                                          end: Alignment.bottomRight,
-                                        ),
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: const Icon(Icons.tune_rounded,
-                                          color: Colors.white, size: 18),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'Filtros',
-                                      style: TextStyle(
-                                          fontWeight: FontWeight.w900,
-                                          color: AppColors.primary,
-                                          fontSize: 12,
-                                          letterSpacing: 0.2),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      _buildTransferenciaButton(context, dense: true),
-                      const SizedBox(height: 8),
-                      Material(
-                        color: Colors.transparent,
-                        borderRadius: BorderRadius.circular(16),
-                        clipBehavior: Clip.antiAlias,
-                        child: InkWell(
-                          onTap: widget.profile.hasActiveLicense
-                              ? () => unawaited(_abrirLancamentoInteligente())
-                              : () => mostrarAvisoSeLicencaInativa(
-                                  context, widget.profile),
-                          borderRadius: BorderRadius.circular(16),
-                          child: Ink(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(16),
-                              gradient: const LinearGradient(
-                                begin: Alignment.centerLeft,
-                                end: Alignment.centerRight,
-                                colors: [
-                                  AppColors.deepBlueDark,
-                                  AppColors.deepBlue,
-                                  AppColors.primary
-                                ],
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color:
-                                      AppColors.primary.withValues(alpha: 0.32),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: const Padding(
-                              padding: EdgeInsets.symmetric(
-                                  vertical: 12, horizontal: 12),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.sms_outlined,
-                                      size: 22, color: Colors.white),
-                                  SizedBox(width: 8),
-                                  Flexible(
-                                    child: Text(
-                                      'Lançamento por mensagem (SMS / banco)',
-                                      textAlign: TextAlign.center,
-                                      maxLines: 2,
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 13,
-                                        height: 1.2,
-                                        letterSpacing: 0.1,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                crossFadeState: _topoExpandido
-                    ? CrossFadeState.showFirst
-                    : CrossFadeState.showSecond,
-                duration: const Duration(milliseconds: 250),
-              ),
-              Expanded(
-                child: Builder(
+          child: Builder(
                   builder: (context) {
                     final periodKey =
                         '${_from.year}-${_from.month}-${_from.day}';
@@ -6805,36 +6859,37 @@ class _FinanceScreenState extends State<FinanceScreen> {
                       _ensureSaldoAberturaForPeriod(_from);
                     }
                     if (sessionUid == null) {
-                      return Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.wifi_off_rounded,
-                                  size: 34, color: AppColors.textSecondary),
-                              const SizedBox(height: 12),
-                              const Text(
-                                'A preparar a sessão offline…',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                    fontSize: 14,
-                                    color: AppColors.textSecondary,
-                                    fontWeight: FontWeight.w600),
-                              ),
-                              const SizedBox(height: 10),
-                              OutlinedButton.icon(
-                                onPressed: () =>
-                                    unawaited(_onRetryLoadTransactions()),
-                                icon:
-                                    const Icon(Icons.refresh_rounded, size: 18),
-                                label: const Text('Tentar novamente'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }
+  return ListView(
+    controller: widget.shellScrollController,
+    physics: const AlwaysScrollableScrollPhysics(),
+    padding: const EdgeInsets.all(16),
+    children: [
+      _buildFinanceTopChrome(context, isNarrow: isNarrow),
+      const SizedBox(height: 48),
+      const Center(
+        child: SizedBox(
+          width: 32,
+          height: 32,
+          child: CircularProgressIndicator(strokeWidth: 2.5),
+        ),
+      ),
+      const SizedBox(height: 12),
+      const Text(
+        'A ligar a sua conta…',
+        textAlign: TextAlign.center,
+        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+      ),
+      const SizedBox(height: 10),
+      Center(
+        child: OutlinedButton.icon(
+          onPressed: () => unawaited(_onRetryLoadTransactions()),
+          icon: const Icon(Icons.refresh_rounded, size: 18),
+          label: const Text('Tentar novamente'),
+        ),
+      ),
+    ],
+  );
+}
                     return KeyedSubtree(
                       key: ValueKey(
                         'txlist_${_txStreamRetryKey}_${_from.millisecondsSinceEpoch}_${_to.millisecondsSinceEpoch}_$_statusFilter|$_typeFilter|${_categoryFilter ?? ''}|${_financeAccountFilterId ?? ''}',
@@ -6886,6 +6941,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                                   child: Column(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
+                                      _buildFinanceTopChrome(context, isNarrow: isNarrow),
                                       Icon(Icons.error_outline_rounded,
                                           size: 48,
                                           color: Colors.orange.shade700),
@@ -7067,6 +7123,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                                 physics: const AlwaysScrollableScrollPhysics(),
                                 padding: EdgeInsets.only(bottom: bottomPad),
                                 children: [
+                                  _buildFinanceTopChrome(context, isNarrow: isNarrow),
                                   Padding(
                                     padding:
                                         const EdgeInsets.fromLTRB(12, 8, 12, 4),
@@ -7262,6 +7319,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                               slivers: [
                                 SliverList(
                                   delegate: SliverChildListDelegate([
+                                    _buildFinanceTopChrome(context, isNarrow: isNarrow),
                                     if (_mainPeriodPullRefreshing &&
                                         _mainPeriodLoading)
                                       Padding(
@@ -7798,9 +7856,6 @@ class _FinanceScreenState extends State<FinanceScreen> {
                     );
                   },
                 ),
-              ),
-            ],
-          ),
         ),
       ),
     );

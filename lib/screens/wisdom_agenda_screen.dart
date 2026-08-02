@@ -12,6 +12,8 @@ import '../constants/currency_formats.dart';
 import '../models/finance_account.dart';
 import '../services/compromisso_reminder_service.dart';
 import '../services/finance_accounts_service.dart';
+import '../services/finance_instant_prefetch_service.dart';
+import '../services/finance_month_cache.dart';
 import '../services/fixed_expense_preferences_service.dart';
 import '../services/fixed_income_preferences_service.dart';
 import '../services/apple_calendar_sync_service.dart';
@@ -171,6 +173,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
   StartingDayOfWeek _calendarWeekStart =
       AgendaCalendarWeekStartPreferences.defaultValue;
 
+  /// Seed instantâneo do financeiro (cache) enquanto os streams Firestore aquecem.
+  Map<DateTime, List<AgendaFinancePendingItem>> _seedFinanceByDay = const {};
+
   _AgendaMesAba get _mesAba => _AgendaMesAba.values[_mesAbaIndex];
 
   String get _userDocId => firestoreUserDocIdForAppShell(widget.uid);
@@ -183,6 +188,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     unawaited(GoogleCalendarSyncService.completeWebOAuthReturnIfNeeded());
     unawaited(_bootstrapGoogleCalendar());
     unawaited(_bootstrapAppleCalendar());
+    unawaited(_warmFinanceForAgenda());
+    FinanceTransactionsHub.revision.addListener(_onFinanceHubForAgendaSeed);
     _googleEnabledSub =
         GoogleCalendarSyncService.enabledStream(_userDocId).listen(
       (enabled) {
@@ -208,17 +215,66 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     if (!oldWidget.isShellVisible && widget.isShellVisible) {
       _filledDayPrimedForAdd = null;
       _applyTodaySelection();
+      unawaited(_warmFinanceForAgenda());
     }
     if (oldWidget.uid != widget.uid) {
       _calendarWeekStart = AgendaCalendarWeekStartPreferences.defaultValue;
       unawaited(_loadCalendarWeekStart());
+      unawaited(_warmFinanceForAgenda());
     }
   }
 
   @override
   void dispose() {
+    FinanceTransactionsHub.revision.removeListener(_onFinanceHubForAgendaSeed);
     _googleEnabledSub?.cancel();
     super.dispose();
+  }
+
+  void _onFinanceHubForAgendaSeed() {
+    if (!mounted) return;
+    // Invalida seed e recarrega do cache/servidor — streams também atualizam.
+    unawaited(_warmFinanceForAgenda(forceServer: true));
+  }
+
+  Future<void> _warmFinanceForAgenda({bool forceServer = false}) async {
+    final uid = _userDocId;
+    if (uid.isEmpty) return;
+    unawaited(
+      FinanceInstantPrefetchService.warmUpForAgenda(uid, _focusedDay),
+    );
+    try {
+      final data = await FinanceMonthCache.fetchMonth(
+        uid,
+        _focusedDay,
+        forceServer: forceServer,
+      );
+      if (!mounted) return;
+      final byDay = <DateTime, List<AgendaFinancePendingItem>>{};
+      for (final e in data.entries) {
+        final day = agendaFinanceDayKey(e.date);
+        byDay.putIfAbsent(day, () => []).add(
+              AgendaFinancePendingItem(
+                docId: e.id,
+                type: e.type,
+                data: {
+                  'date': Timestamp.fromDate(e.date),
+                  'amount': e.amount,
+                  'type': e.type,
+                  'description': e.description,
+                  'category': e.category,
+                  'status': e.status,
+                  if (e.financeAccountId != null)
+                    'financeAccountId': e.financeAccountId,
+                  if (e.calendarColorHex != null)
+                    'calendarColorHex': e.calendarColorHex,
+                },
+              ),
+            );
+      }
+      setState(() => _seedFinanceByDay = byDay);
+      unawaited(FinanceMonthCache.prefetchAdjacentMonths(uid, _focusedDay));
+    } catch (_) {}
   }
 
   void _retryStream() => setState(() => _streamGeneration++);
@@ -3426,9 +3482,14 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
         ),
       ),
       onPageChanged: (focused) {
+        final monthChanged = focused.year != _focusedDay.year ||
+            focused.month != _focusedDay.month;
         setState(() => _focusedDay = focused);
         unawaited(_refreshGoogleDays());
         unawaited(_refreshAppleDays());
+        if (monthChanged) {
+          unawaited(_warmFinanceForAgenda());
+        }
       },
       eventLoader: (day) => byDay[_dayKey(day)] ?? [],
       onDaySelected: (selected, focused) {
@@ -3672,7 +3733,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
               onPressed: () => _adicionarNaData(day),
               icon: const Icon(Icons.add_rounded, size: 20),
               label: const Text(
-                'Adicionar compromisso ou audiência',
+                'Adicionar compromisso',
                 style: TextStyle(fontWeight: FontWeight.w800),
               ),
               style: FilledButton.styleFrom(
@@ -5148,31 +5209,45 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                           showFixedInPending: showFixedExpense,
                           limitDate: limitDate,
                         );
-                        final financeByDay = _mergeFinanceByDay(
-                            incomePendingAll, expensePendingAll);
+                        final streamsReady = incomePendingSnap.hasData ||
+                            expensePendingSnap.hasData;
+                        final financeByDay = streamsReady
+                            ? _mergeFinanceByDay(
+                                incomePendingAll, expensePendingAll)
+                            : _seedFinanceByDay;
                         final selectedKey = _selectedDay != null
                             ? _dayKey(_selectedDay!)
                             : null;
                         final selectedIncome = selectedKey == null
                             ? const <AgendaFinancePendingItem>[]
-                            : filterAgendaFinancePending(
-                                docs: incomePendingSnap.data?.docs ?? const [],
-                                type: 'income',
-                                creditCardAccountIds: ccIds,
-                                showFixedInPending: showFixedIncome,
-                                limitDate: limitDate,
-                                onlyDay: _selectedDay,
-                              );
+                            : streamsReady
+                                ? filterAgendaFinancePending(
+                                    docs: incomePendingSnap.data?.docs ??
+                                        const [],
+                                    type: 'income',
+                                    creditCardAccountIds: ccIds,
+                                    showFixedInPending: showFixedIncome,
+                                    limitDate: limitDate,
+                                    onlyDay: _selectedDay,
+                                  )
+                                : (financeByDay[selectedKey] ?? const [])
+                                    .where((e) => e.isIncome)
+                                    .toList();
                         final selectedExpense = selectedKey == null
                             ? const <AgendaFinancePendingItem>[]
-                            : filterAgendaFinancePending(
-                                docs: expensePendingSnap.data?.docs ?? const [],
-                                type: 'expense',
-                                creditCardAccountIds: ccIds,
-                                showFixedInPending: showFixedExpense,
-                                limitDate: limitDate,
-                                onlyDay: _selectedDay,
-                              );
+                            : streamsReady
+                                ? filterAgendaFinancePending(
+                                    docs: expensePendingSnap.data?.docs ??
+                                        const [],
+                                    type: 'expense',
+                                    creditCardAccountIds: ccIds,
+                                    showFixedInPending: showFixedExpense,
+                                    limitDate: limitDate,
+                                    onlyDay: _selectedDay,
+                                  )
+                                : (financeByDay[selectedKey] ?? const [])
+                                    .where((e) => !e.isIncome)
+                                    .toList();
 
                         return StreamBuilder<
                             QuerySnapshot<Map<String, dynamic>>>(
