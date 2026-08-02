@@ -108,7 +108,18 @@ class _AdminPartnerReceiptsTabState extends State<AdminPartnerReceiptsTab> {
     return null;
   }
 
+  static bool _isWisdomappPayment(Map<String, dynamic> data) {
+    if (data['skippedNonIntegration'] == true) return false;
+    final integ = (data['ct_integration'] ?? data['appId'] ?? data['integration'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+    if (integ == 'controletotal') return false;
+    return integ == 'wisdomapp' || integ == 'wisdom' || integ == 'wisdom_app';
+  }
+
   static bool _isPartnerPayment(Map<String, dynamic> data) {
+    if (!_isWisdomappPayment(data)) return false;
     final ownerLabel = (data['splitOwnerLabel'] ?? '').toString().toLowerCase();
     return ownerLabel.contains('johnathan') ||
         ownerLabel.contains('jhonathan') ||

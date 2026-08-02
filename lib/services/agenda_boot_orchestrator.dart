@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'agenda_notifications_refresher.dart';
 import 'agenda_server_sync_service.dart';
 import 'apple_calendar_sync_service.dart';
+import 'external_calendar_scheduled_sync.dart';
 import 'google_calendar_sync_service.dart';
 
 /// Boot de notificações **leve no cliente**: servidor monta a fila; app só
@@ -46,6 +47,8 @@ class AgendaBootOrchestrator {
     if (AppleCalendarSyncService.isPlatformSupported) {
       unawaited(AppleCalendarSyncService.warmUpIfEnabled(uid));
     }
+    // Sync Google/Apple 00:00 e 12:00 (só se o usuário ativou).
+    unawaited(ExternalCalendarScheduledSync.ensureStarted(uid));
     await AgendaNotificationsRefresher.refresh(
       uid: uid,
       coalesceWithin: const Duration(seconds: 30),

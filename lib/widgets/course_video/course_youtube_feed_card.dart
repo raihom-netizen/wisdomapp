@@ -159,7 +159,7 @@ class _CourseYoutubeFeedCardState extends State<CourseYoutubeFeedCard> {
         youtubeVideoId: _youtubeId,
         mp4Url: _resolvedMp4,
         courseId: _courseId,
-        startAtSeconds: _progress.positionSeconds,
+        startAtSeconds: 0,
         contentTitle: _title,
         contentType: _isDica ? 'dica' : 'curso',
         autoplay: false,
@@ -184,7 +184,6 @@ class _CourseYoutubeFeedCardState extends State<CourseYoutubeFeedCard> {
 
     return _CoverTap(
       data: widget.data,
-      progress: _progress,
       isDica: _isDica,
       hasVideo: _hasVideo,
       accent: _ctaColor,
@@ -274,33 +273,6 @@ class _CourseYoutubeFeedCardState extends State<CourseYoutubeFeedCard> {
                       accent: _ctaColor,
                       onTap: _toggleLike,
                     ),
-                    const SizedBox(width: 8),
-                    if (_hasVideo && _progress.hasResume)
-                      Flexible(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _ctaColor.withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(
-                              color: _ctaColor.withValues(alpha: 0.35),
-                            ),
-                          ),
-                          child: Text(
-                            _progress.resumeLabel,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: _ctaColor,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ),
                     const Spacer(),
                     TextButton.icon(
                       onPressed: widget.onActivate,
@@ -396,7 +368,6 @@ class _CourseYoutubeFeedCardState extends State<CourseYoutubeFeedCard> {
 class _CoverTap extends StatelessWidget {
   const _CoverTap({
     required this.data,
-    required this.progress,
     required this.isDica,
     required this.hasVideo,
     required this.accent,
@@ -404,7 +375,6 @@ class _CoverTap extends StatelessWidget {
   });
 
   final Map<String, dynamic> data;
-  final CourseProgress progress;
   final bool isDica;
   final bool hasVideo;
   final Color accent;
@@ -483,42 +453,9 @@ class _CoverTap extends StatelessWidget {
                       size: hasVideo ? 40 : 30,
                     ),
                   ),
-                  if (hasVideo && progress.hasResume) ...[
-                    const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.72),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        progress.resumeLabel,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
-            if (hasVideo && progress.progressFraction > 0.02)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: LinearProgressIndicator(
-                  value: progress.progressFraction,
-                  minHeight: 3.5,
-                  backgroundColor: Colors.white24,
-                  color: accent,
-                ),
-              ),
           ],
         ),
       ),

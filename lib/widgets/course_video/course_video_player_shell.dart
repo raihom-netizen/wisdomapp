@@ -1,8 +1,5 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
-import '../../services/course_progress_service.dart';
 import '../../utils/course_media_url_resolver.dart';
 import '../../utils/youtube_url_helper.dart';
 import '../course_media_preview.dart';
@@ -49,20 +46,14 @@ class _CourseVideoPlayerShellState extends State<CourseVideoPlayerShell> {
   var _embedReady = false;
   String? _posterUrl;
   var _posterLoading = true;
-  DateTime? _lastSave;
 
   bool get _showEmbed => widget.autoplay || _playbackStarted;
 
   bool get _isYoutube =>
       widget.youtubeVideoId != null && widget.youtubeVideoId!.trim().isNotEmpty;
 
-  double get _effectiveStart {
-    if (widget.startAtSeconds > 8) return widget.startAtSeconds;
-    final id = widget.courseId ?? widget.posterData?['id']?.toString();
-    if (id == null || id.isEmpty) return 0;
-    final p = CourseProgressService.instance.of(id);
-    return p.hasResume ? p.positionSeconds : 0;
-  }
+  /// Sem resume automático — evita remontar o embed e voltar ao início.
+  double get _effectiveStart => 0;
 
   @override
   void initState() {
@@ -143,38 +134,11 @@ class _CourseVideoPlayerShellState extends State<CourseVideoPlayerShell> {
 
   void _onProgress(double position, double duration) {
     widget.onProgress?.call(position, duration);
-    final id = widget.courseId ?? widget.posterData?['id']?.toString();
-    if (id == null || id.isEmpty) return;
-    final now = DateTime.now();
-    if (_lastSave != null &&
-        now.difference(_lastSave!) < const Duration(seconds: 3)) {
-      return;
-    }
-    _lastSave = now;
-    final title = widget.contentTitle ??
-        (widget.posterData?['title'] ?? '').toString();
-    final type = widget.contentType ??
-        (widget.posterData?['type'] ?? 'curso').toString();
-    unawaited(
-      CourseProgressService.instance.savePosition(
-        id,
-        positionSeconds: position,
-        durationSeconds: duration,
-        title: title,
-        type: type,
-      ),
-    );
+    // Sem save de posição/resume — o usuário controla no player nativo.
   }
 
   @override
   Widget build(BuildContext context) {
-    final startAt = _effectiveStart;
-    final progress = (() {
-      final id = widget.courseId ?? widget.posterData?['id']?.toString();
-      if (id == null) return const CourseProgress();
-      return CourseProgressService.instance.of(id);
-    })();
-
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -185,7 +149,7 @@ class _CourseVideoPlayerShellState extends State<CourseVideoPlayerShell> {
             mp4Url: widget.mp4Url,
             autoplay: widget.autoplay || _playbackStarted,
             posterUrl: _posterUrl,
-            startAtSeconds: startAt,
+            startAtSeconds: _effectiveStart,
             onReady: _onEmbedReady,
             onProgress: _onProgress,
           ),
@@ -194,13 +158,12 @@ class _CourseVideoPlayerShellState extends State<CourseVideoPlayerShell> {
             child: _posterOverlay(
               onPlay: _startPlayback,
               showPlayButton: true,
-              progress: progress,
             ),
           ),
         if (_showEmbed && !_embedReady)
           Positioned.fill(
             child: IgnorePointer(
-              child: _posterOverlay(showPlayButton: false, progress: progress),
+              child: _posterOverlay(showPlayButton: false),
             ),
           ),
       ],
@@ -210,7 +173,6 @@ class _CourseVideoPlayerShellState extends State<CourseVideoPlayerShell> {
   Widget _posterOverlay({
     VoidCallback? onPlay,
     bool showPlayButton = true,
-    CourseProgress progress = const CourseProgress(),
   }) {
     final data = widget.posterData;
     return Material(
@@ -257,43 +219,7 @@ class _CourseVideoPlayerShellState extends State<CourseVideoPlayerShell> {
                       accent: widget.accent,
                       accent2: widget.accent2,
                     ),
-                    if (progress.hasResume) ...[
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.72),
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.2),
-                          ),
-                        ),
-                        child: Text(
-                          progress.resumeLabel,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ],
                   ],
-                ),
-              ),
-            if (progress.progressFraction > 0.02)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: LinearProgressIndicator(
-                  value: progress.progressFraction,
-                  minHeight: 3.5,
-                  backgroundColor: Colors.white24,
-                  color: const Color(0xFFFF0000),
                 ),
               ),
           ],

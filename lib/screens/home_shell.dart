@@ -17,6 +17,7 @@ import '../services/pending_storage_upload_service.dart';
 import '../services/scale_rates_period_service.dart';
 import '../services/scale_rates_service.dart';
 import '../services/agenda_boot_orchestrator.dart';
+import '../services/external_calendar_scheduled_sync.dart';
 import '../services/finance_instant_prefetch_service.dart';
 import '../services/scale_notifications_service.dart';
 import '../services/scale_auto_confirm_service.dart';
@@ -495,7 +496,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
+      if (state == AppLifecycleState.resumed) {
       unawaited(DelegateAccessService.revalidateSession());
       // Repõe fila local (iOS ~60 slots): após avisos dispararem, reagenda os próximos eventos.
       if (!kIsWeb) {
@@ -515,6 +516,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       FirebaseFirestore.instance.enableNetwork().catchError((_) {});
       if (!kIsWeb) {
         FirebaseFirestore.instance.waitForPendingWrites().catchError((_) {});
+      }
+      final calUid = firestoreUserDocIdStrictFromSession();
+      if (calUid.isNotEmpty) {
+        unawaited(ExternalCalendarScheduledSync.onAppResumed(calUid));
       }
       if (mounted) setState(() {});
     }

@@ -259,6 +259,7 @@ void main() async {
     return;
   }
   // Prefs críticas para login instantâneo; locale formata depois do 1º frame.
+  // Web: só o essencial antes do 1º frame (boot leve como Controle Total).
   await Future.wait<void>([
     LoginPreferences.warmUpForStartup(),
     DelegateAccessService.loadFromPrefs(),
@@ -266,12 +267,22 @@ void main() async {
     BiometricStartupCache.warmUpEnabledHint(),
     UserProfileStartupCache.warmUp(),
     HomeStartModuleCache.warmUp(),
-    CourseVideosCacheService.warmUp(),
-    NotificationCenterStore.instance.warmUp(),
+    if (!kIsWeb) CourseVideosCacheService.warmUp(),
+    if (!kIsWeb) NotificationCenterStore.instance.warmUp(),
   ]);
   final reopenUid =
       FirebaseAuth.instance.currentUser?.uid ?? AppSessionCache.cachedUidSync();
   runApp(const ControleTotalApp());
+  if (kIsWeb) {
+    unawaited(() async {
+      try {
+        await CourseVideosCacheService.warmUp();
+      } catch (_) {}
+      try {
+        await NotificationCenterStore.instance.warmUp();
+      } catch (_) {}
+    }());
+  }
   unawaited(
     initializeDateFormatting('pt_BR', null).catchError((
       Object e,

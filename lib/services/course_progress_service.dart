@@ -18,9 +18,8 @@ class CourseProgress {
   final double positionSeconds;
   final double durationSeconds;
 
-  bool get hasResume =>
-      positionSeconds >= 8 &&
-      (durationSeconds <= 0 || positionSeconds < durationSeconds * 0.95);
+  /// Resume automático desligado — o usuário controla a posição no player.
+  bool get hasResume => false;
 
   double get progressFraction {
     if (durationSeconds <= 0) return 0;
@@ -138,7 +137,8 @@ class CourseProgressService {
     }
   }
 
-  /// Persiste posição (throttle interno no caller). Ignora início (<8s) e fim (≥95%).
+  /// Memória/resume de posição desligada (travava o player ao remontar o embed).
+  /// Mantém só telemetria leve para analytics admin — sem gravar posição local/cloud.
   Future<void> savePosition(
     String courseId, {
     required double positionSeconds,
@@ -147,33 +147,25 @@ class CourseProgressService {
     String? type,
   }) async {
     if (courseId.isEmpty) return;
-    final cur = of(courseId);
-    final dur = durationSeconds ?? cur.durationSeconds;
-    if (positionSeconds < 8) return;
-    if (dur > 0 && positionSeconds >= dur * 0.95) {
-      await _save(
-        courseId,
-        cur.copyWith(positionSeconds: 0, durationSeconds: dur),
-      );
+    if (positionSeconds < 12) return;
+    final uid = _uid;
+    if (uid == null || uid.isEmpty) return;
+    final now = DateTime.now();
+    if (_lastCloudWrite != null &&
+        now.difference(_lastCloudWrite!) < const Duration(seconds: 20)) {
       return;
     }
-    await _save(
-      courseId,
-      cur.copyWith(positionSeconds: positionSeconds, durationSeconds: dur),
+    _lastCloudWrite = now;
+    unawaited(
+      CourseAnalyticsService.instance.reportWatch(
+        uid: uid,
+        courseId: courseId,
+        positionSeconds: positionSeconds,
+        durationSeconds: durationSeconds ?? 0,
+        title: title,
+        type: type,
+      ),
     );
-    final uid = _uid;
-    if (uid != null && uid.isNotEmpty) {
-      unawaited(
-        CourseAnalyticsService.instance.reportWatch(
-          uid: uid,
-          courseId: courseId,
-          positionSeconds: positionSeconds,
-          durationSeconds: dur,
-          title: title,
-          type: type,
-        ),
-      );
-    }
   }
 
   Future<void> clearPosition(String courseId) async {

@@ -8056,6 +8056,17 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
     });
   }
 
+  /// Só pagamentos da integração WISDOMAPP (ignora legado Controle Total / sync avulso).
+  static bool _isWisdomappMpPayment(Map<String, dynamic> data) {
+    if (data['skippedNonIntegration'] == true) return false;
+    final integ = (data['ct_integration'] ?? data['appId'] ?? data['integration'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+    if (integ == 'controletotal') return false;
+    return integ == 'wisdomapp' || integ == 'wisdom' || integ == 'wisdom_app';
+  }
+
   static String? _splitRecipientLabel(Map<String, dynamic> data) {
     final ownerGross = data['splitOwnerShareGross'];
     final partnerGross = data['splitPartnerShareGross'];
@@ -8709,6 +8720,7 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
         DateTime(_filterEnd.year, _filterEnd.month, _filterEnd.day, 23, 59, 59);
     var docs = allDocs.where((d) {
       final data = d.data();
+      if (!_isWisdomappMpPayment(data)) return false;
       if (data['isOutgoing'] == true) return false;
       final dt = _parseApprovedDate(data);
       if (dt == null) return true;

@@ -45,11 +45,11 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
   @override
   void didUpdateWidget(covariant CourseVideoEmbed oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // NÃO remontar só por startAtSeconds — isso resetava o vídeo ao meio da reprodução.
     if (oldWidget.youtubeVideoId != widget.youtubeVideoId ||
         oldWidget.mp4Url != widget.mp4Url ||
         oldWidget.posterUrl != widget.posterUrl ||
-        oldWidget.autoplay != widget.autoplay ||
-        oldWidget.startAtSeconds != widget.startAtSeconds) {
+        oldWidget.autoplay != widget.autoplay) {
       _notifiedReady = false;
       _initController();
     }

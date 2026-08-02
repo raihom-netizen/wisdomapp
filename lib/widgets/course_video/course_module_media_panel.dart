@@ -178,7 +178,7 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
                   youtubeVideoId: _youtubeId,
                   mp4Url: _resolvedMp4,
                   courseId: widget.data['id']?.toString(),
-                  startAtSeconds: _progress.positionSeconds,
+                  startAtSeconds: 0,
                   autoplay: true,
                   accent: widget.accent,
                   accent2: widget.accent2,
@@ -265,7 +265,7 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
                                     youtubeVideoId: _youtubeId,
                                     mp4Url: _resolvedMp4,
                                     courseId: widget.data['id']?.toString(),
-                                    startAtSeconds: _progress.positionSeconds,
+                                    startAtSeconds: 0,
                                     autoplay: false,
                                     accent: widget.accent,
                                     accent2: widget.accent2,
@@ -368,19 +368,6 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
                           ),
                         ),
                       ),
-                      if (_progress.hasResume) ...[
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            _progress.resumeLabel,
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ],
                       const Spacer(),
                       if (_showVideo)
                         TextButton.icon(

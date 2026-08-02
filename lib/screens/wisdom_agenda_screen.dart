@@ -18,6 +18,8 @@ import '../services/fixed_expense_preferences_service.dart';
 import '../services/fixed_income_preferences_service.dart';
 import '../services/apple_calendar_sync_service.dart';
 import '../services/agenda_calendar_week_start_preferences.dart';
+import '../services/external_calendar_bidirectional_sync.dart';
+import '../services/external_calendar_scheduled_sync.dart';
 import '../services/google_calendar_sync_service.dart';
 import '../services/relatorio_service.dart';
 import 'report_preview_screen.dart';
@@ -33,8 +35,10 @@ import '../utils/firestore_user_doc_id.dart';
 import '../utils/premium_upgrade.dart';
 import '../widgets/finance_transaction_edit_dialog.dart';
 import '../widgets/agenda_pdf_export_sheet.dart';
+import '../widgets/modern_pdf_export_button.dart';
 import '../widgets/external_calendar_integration_panel.dart';
 import '../widgets/agenda/agenda_bulk_clear_confirm_dialog.dart';
+import '../widgets/agenda/agenda_bulk_clear_period_dialog.dart';
 import '../widgets/agenda/agenda_bulk_clear_toolbar.dart';
 import '../widgets/shell_keyboard_bottom_pad.dart';
 
@@ -166,6 +170,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
   bool _googleSyncLoading = false;
   bool _googleEnabled = false;
   bool _appleEnabled = false;
+  bool _calendarExtSyncBusy = false;
   StreamSubscription<bool>? _googleEnabledSub;
   int _streamGeneration = 0;
   int _mesAbaIndex = 0;
@@ -189,6 +194,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     unawaited(_bootstrapGoogleCalendar());
     unawaited(_bootstrapAppleCalendar());
     unawaited(_warmFinanceForAgenda());
+    if (_userDocId.isNotEmpty) {
+      unawaited(ExternalCalendarScheduledSync.ensureStarted(_userDocId));
+    }
     FinanceTransactionsHub.revision.addListener(_onFinanceHubForAgendaSeed);
     _googleEnabledSub =
         GoogleCalendarSyncService.enabledStream(_userDocId).listen(
@@ -216,6 +224,15 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
       _filledDayPrimedForAdd = null;
       _applyTodaySelection();
       unawaited(_warmFinanceForAgenda());
+      if (_userDocId.isNotEmpty) {
+        unawaited(
+          ExternalCalendarScheduledSync.runCatchUpIfNeeded(_userDocId).then((_) {
+            if (!mounted) return;
+            unawaited(_refreshGoogleDays());
+            unawaited(_refreshAppleDays());
+          }),
+        );
+      }
     }
     if (oldWidget.uid != widget.uid) {
       _calendarWeekStart = AgendaCalendarWeekStartPreferences.defaultValue;
@@ -487,29 +504,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
 
   Future<void> _onClearPeriod() async {
     final anchor = _selectedDay ?? _focusedDay;
-    final picked = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2020, 1, 1),
-      lastDate: DateTime(2035, 12, 31),
-      initialDateRange: DateTimeRange(
-        start: _dayKey(anchor),
-        end: _dayKey(anchor).add(const Duration(days: 6)),
-      ),
-      locale: const Locale('pt', 'BR'),
-      helpText: 'Período para limpar compromissos',
-      cancelText: 'Cancelar',
-      confirmText: 'Continuar',
-      builder: (ctx, child) {
-        return Theme(
-          data: Theme.of(ctx).copyWith(
-            colorScheme: Theme.of(ctx).colorScheme.copyWith(
-                  primary: const Color(0xFF7C3AED),
-                  onPrimary: Colors.white,
-                ),
-          ),
-          child: child!,
-        );
-      },
+    final picked = await showAgendaBulkClearPeriodDialog(
+      context,
+      initialRef: anchor,
     );
     if (picked == null || !mounted) return;
 
@@ -2895,10 +2892,12 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     }
 
     // 2+ compromissos: divide a célula pelas cores (padrão Controle Total).
+    // StackFit.expand evita a célula “encolher” ao tamanho do número.
     if (fillColors.length >= 2) {
       final cell = AnimatedContainer(
         duration: const Duration(milliseconds: 250),
         margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 2),
+        alignment: Alignment.center,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
@@ -2920,26 +2919,27 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(10.5),
           child: Stack(
+            fit: StackFit.expand,
             alignment: Alignment.center,
             children: [
-              Positioned.fill(
-                child: CustomPaint(
-                  painter: _CalendarDayNPartsPainter(colors: fillColors),
-                ),
+              CustomPaint(
+                painter: _CalendarDayNPartsPainter(colors: fillColors),
               ),
-              Text(
-                '${day.day}',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                  fontSize: numSize * (fillColors.length > 3 ? 0.84 : 0.92),
-                  shadows: const [
-                    Shadow(
-                      color: Colors.black54,
-                      blurRadius: 4,
-                      offset: Offset(0, 1),
-                    ),
-                  ],
+              Center(
+                child: Text(
+                  '${day.day}',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: numSize,
+                    shadows: const [
+                      Shadow(
+                        color: Colors.black54,
+                        blurRadius: 4,
+                        offset: Offset(0, 1),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               if (isSelected)
@@ -2995,23 +2995,27 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
           ],
         ),
         child: Stack(
+          fit: StackFit.expand,
           alignment: Alignment.center,
           children: [
-            Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  '${day.day}',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: numSize * 0.92,
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${day.day}',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: numSize,
+                    ),
                   ),
-                ),
-                if (googleOnly && fillColors.isEmpty)
-                  const Icon(Icons.cloud_rounded,
-                      color: Colors.white70, size: 10),
-              ],
+                  if (googleOnly && fillColors.isEmpty)
+                    const Icon(Icons.cloud_rounded,
+                        color: Colors.white70, size: 10),
+                ],
+              ),
             ),
             if (isSelected)
               Positioned(
@@ -3077,118 +3081,219 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     }
   }
 
-  /// Botão «Hoje / Voltar para hoje» acima do calendário — copiado do
-  /// Controle Total: ao navegar por outros meses, 1 clique volta para hoje.
+  /// Faixa Sync · Hoje · Config — compacta (padrão Escalas / Controle Total).
   Widget _buildVoltarHojeButton({required bool isNarrow}) {
-    final hoje = DateTime.now();
-    final noMesAtual =
-        _focusedDay.year == hoje.year && _focusedDay.month == hoje.month;
-    final label = noMesAtual ? 'Hoje' : 'Voltar para hoje';
+    final h = isNarrow ? 34.0 : 36.0;
+    final iconSize = isNarrow ? 14.0 : 15.0;
+    final fontSize = isNarrow ? 10.5 : 11.0;
+    final gap = isNarrow ? 5.0 : 6.0;
+    final hPad = isNarrow ? 9.0 : 10.0;
+    final radius = BorderRadius.circular(10);
+
+    Widget chip({
+      required List<Color> colors,
+      required VoidCallback? onTap,
+      required Widget child,
+      required String tooltip,
+      double? width,
+    }) {
+      return Tooltip(
+        message: tooltip,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: radius,
+            onTap: onTap,
+            child: Ink(
+              height: h,
+              width: width,
+              padding: EdgeInsets.symmetric(horizontal: width == null ? hPad : 0),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: colors,
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: radius,
+                boxShadow: [
+                  BoxShadow(
+                    color: colors.last.withValues(alpha: 0.18),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Center(child: child),
+            ),
+          ),
+        ),
+      );
+    }
+
+    TextStyle labelStyle() => TextStyle(
+          fontSize: fontSize,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.1,
+          color: Colors.white,
+          height: 1.0,
+        );
+
+    final syncBtn = chip(
+      colors: const [Color(0xFF34A853), Color(0xFF0F9D58)],
+      onTap: _calendarExtSyncBusy ? null : _onSyncCalendarioTap,
+      tooltip: 'Sincronizar Google/Apple',
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_calendarExtSyncBusy)
+            SizedBox(
+              width: iconSize,
+              height: iconSize,
+              child: const CircularProgressIndicator(
+                strokeWidth: 1.8,
+                color: Colors.white,
+              ),
+            )
+          else
+            Icon(Icons.sync_rounded, size: iconSize, color: Colors.white),
+          const SizedBox(width: 4),
+          Text('Sync', style: labelStyle()),
+        ],
+      ),
+    );
+
+    final hojeBtn = chip(
+      colors: AppColors.logoGradient,
+      onTap: _applyTodaySelection,
+      tooltip: 'Ir para hoje',
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.today_rounded, size: iconSize, color: Colors.white),
+          const SizedBox(width: 4),
+          Text('Hoje', style: labelStyle()),
+        ],
+      ),
+    );
+
+    final configBtn = chip(
+      colors: [
+        AppColors.primary.withValues(alpha: 0.95),
+        AppColors.deepBlue.withValues(alpha: 0.90),
+      ],
+      onTap: _openCalendarWeekStartSettings,
+      tooltip: 'Início da semana',
+      width: h,
+      child: Icon(
+        Icons.settings_rounded,
+        size: iconSize + 1,
+        color: Colors.white,
+      ),
+    );
+
     return Align(
       alignment: Alignment.center,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          ConstrainedBox(
-            constraints: BoxConstraints(
-              minWidth: isNarrow ? 132 : 148,
-              maxWidth: isNarrow ? 186 : 210,
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(14),
-                onTap: _applyTodaySelection,
-                child: Ink(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: isNarrow ? 10 : 12,
-                    vertical: isNarrow ? 8 : 9,
-                  ),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: AppColors.logoGradient,
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                    ),
-                    borderRadius: BorderRadius.circular(14),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.22),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.today_rounded,
-                        size: isNarrow ? 16.0 : 18.0,
-                        color: Colors.white,
-                      ),
-                      SizedBox(width: isNarrow ? 6 : 8),
-                      Flexible(
-                        child: Text(
-                          label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: isNarrow ? 11.5 : 12.5,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 0.2,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          SizedBox(width: isNarrow ? 8 : 10),
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(14),
-              onTap: _openCalendarWeekStartSettings,
-              child: Ink(
-                width: isNarrow ? 40 : 44,
-                height: isNarrow ? 40 : 44,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppColors.primary.withValues(alpha: 0.92),
-                      AppColors.deepBlue.withValues(alpha: 0.88),
-                    ],
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                  ),
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primary.withValues(alpha: 0.22),
-                      blurRadius: 10,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: Icon(
-                  Icons.calendar_view_week_rounded,
-                  size: isNarrow ? 20 : 22,
-                  color: Colors.white,
-                  semanticLabel: 'Configurar início da semana',
-                ),
-              ),
-            ),
-          ),
+          syncBtn,
+          SizedBox(width: gap),
+          hojeBtn,
+          SizedBox(width: gap),
+          configBtn,
         ],
       ),
     );
+  }
+
+  Future<void> _onSyncCalendarioTap() async {
+    if (_userDocId.isEmpty || _calendarExtSyncBusy) return;
+    final gOn = await GoogleCalendarSyncService.isEnabled(_userDocId);
+    final aOn = AppleCalendarSyncService.isPlatformSupported &&
+        await AppleCalendarSyncService.isEnabled(_userDocId);
+    if (!mounted) return;
+    setState(() {
+      _googleEnabled = gOn;
+      _appleEnabled = aOn;
+    });
+    if (!gOn && !aOn) {
+      await _openExternalCalendarSyncPreview();
+      return;
+    }
+    await _sincronizarCalendarioExterno();
+  }
+
+  Future<void> _openExternalCalendarSyncPreview() async {
+    if (_userDocId.isEmpty) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => ExternalCalendarSyncScreen(
+          userDocId: _userDocId,
+          onGoogleChanged: () {
+            unawaited(_refreshGoogleDays());
+            if (mounted) setState(() {});
+          },
+          onAppleChanged: () {
+            unawaited(_refreshAppleDays());
+            if (mounted) setState(() {});
+          },
+        ),
+      ),
+    );
+    if (!mounted) return;
+    final gOn = await GoogleCalendarSyncService.isEnabled(_userDocId);
+    final aOn = AppleCalendarSyncService.isPlatformSupported &&
+        await AppleCalendarSyncService.isEnabled(_userDocId);
+    if (!mounted) return;
+    setState(() {
+      _googleEnabled = gOn;
+      _appleEnabled = aOn;
+    });
+    unawaited(_refreshGoogleDays());
+    unawaited(_refreshAppleDays());
+    // Após ativar, puxa na hora + liga o timer 00h/12h.
+    if (gOn || aOn) {
+      unawaited(ExternalCalendarScheduledSync.ensureStarted(_userDocId));
+      await _sincronizarCalendarioExterno();
+    }
+  }
+
+  Future<void> _sincronizarCalendarioExterno() async {
+    if (_calendarExtSyncBusy || _userDocId.isEmpty) return;
+    setState(() => _calendarExtSyncBusy = true);
+    try {
+      final r = await ExternalCalendarBidirectionalSync.runNow(_userDocId);
+      if (!mounted) return;
+      unawaited(_refreshGoogleDays());
+      unawaited(_refreshAppleDays());
+      final msg = r.skipped
+          ? 'Sincronização já em andamento.'
+          : r.hadChanges
+              ? 'Calendário sincronizado: '
+                  '${r.totalPulled} importados'
+                  '${r.totalPushed > 0 ? ', ${r.totalPushed} enviados' : ''}.'
+              : 'Calendário já está atualizado '
+                  '(só compromissos deste mês em diante).';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(msg),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Falha ao sincronizar: $e'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _calendarExtSyncBusy = false);
+    }
   }
 
   Future<void> _openCalendarWeekStartSettings() async {
@@ -3460,6 +3565,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
       rowHeight: _dayRowHeight(isNarrow),
       calendarStyle: CalendarStyle(
         outsideDaysVisible: false,
+        // Cores dos compromissos vão na célula — sem pontinhos (padrão CT).
+        markersMaxCount: 0,
+        canMarkersOverflow: false,
         defaultTextStyle: TextStyle(
           fontWeight: FontWeight.w700,
           fontSize: _dayNumFontSize(isNarrow),
@@ -3520,6 +3628,10 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
         }
       },
       calendarBuilders: CalendarBuilders(
+        markerBuilder: (context, day, events) {
+          // Divisão de cor na célula; pontinhos encolhiam o dia com 2+ itens.
+          return const SizedBox.shrink();
+        },
         dowBuilder: (context, day) {
           const names = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB', 'DOM'];
           final idx = day.weekday - 1;
@@ -4321,20 +4433,14 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                 }).toList(),
               ),
             const SizedBox(height: 14),
-            FilledButton.icon(
+            ModernPdfExportButton(
               onPressed: () => _openExportPdfSheet(
                 context,
                 docs,
                 financeByDay: financeByDay,
               ),
-              icon: const Icon(Icons.picture_as_pdf_rounded, size: 20),
-              label: Text('Exportar PDF — $tituloMes'),
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFE65100),
-                foregroundColor: Colors.white,
-                minimumSize: const Size(double.infinity, 48),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
+              label: 'Exportar PDF',
+              subtitle: tituloMes,
             ),
           ],
         ),
@@ -5381,33 +5487,6 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  if (_userDocId.isNotEmpty)
-                    ExternalCalendarSyncCollapsedButton(
-                      googleActive: _googleEnabled,
-                      appleActive: _appleEnabled,
-                      onTap: () async {
-                        await Navigator.of(context).push<void>(
-                          MaterialPageRoute(
-                            fullscreenDialog: true,
-                            builder: (_) => ExternalCalendarSyncScreen(
-                              userDocId: _userDocId,
-                              onGoogleChanged: () {
-                                unawaited(_refreshGoogleDays());
-                                if (mounted) setState(() {});
-                              },
-                              onAppleChanged: () {
-                                unawaited(_refreshAppleDays());
-                                if (mounted) setState(() {});
-                              },
-                            ),
-                          ),
-                        );
-                        // Ao retornar, garante estado/chip atualizados.
-                        unawaited(_refreshGoogleDays());
-                        unawaited(_refreshAppleDays());
-                      },
-                    ),
-                  const SizedBox(height: 10),
                   Container(
                     padding: EdgeInsets.fromLTRB(
                       isNarrow ? 10 : 14,
@@ -5486,6 +5565,18 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                       incomePending: selectedIncomePending,
                       expensePending: selectedExpensePending,
                       googleOnly: googleOnly,
+                    ),
+                    const SizedBox(height: 10),
+                    ModernPdfExportButton(
+                      onPressed: () => _openExportPdfSheet(
+                        context,
+                        docs,
+                        financeByDay: financeByDay,
+                      ),
+                      label: 'Exportar PDF',
+                      subtitle: 'Agenda · ${DateFormat('MMMM yyyy', 'pt_BR').format(_focusedDay)}',
+                      compact: true,
+                      minimumHeight: 46,
                     ),
                   ],
                   const SizedBox(height: 12),

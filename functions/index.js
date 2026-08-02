@@ -32,8 +32,8 @@ const ALLOWED_MIME = new Set([
   "image/jpeg",
 ]);
 
-/** Domínio de produção: https://controletotalapp.com.br/ */
-const APP_DOMAIN = "https://controletotalapp.com.br";
+/** Domínio de produção WISDOMAPP (checkout / back_urls Mercado Pago). */
+const APP_DOMAIN = "https://wisdomapp-b9e98.web.app";
 
 /** Ícone premium (miniatura) — hosting público do PWA. */
 const APP_ICON_URL = `${APP_DOMAIN}/icons/Icon-192.png`;
@@ -977,8 +977,13 @@ const mpHeaders = (accessToken) => ({
   "Content-Type": "application/json",
 });
 
-/** Marca pagamentos criados pelo backend do app (checkout / PIX) — usado para filtrar webhooks e sync. */
-const CT_MP_METADATA_INTEGRATION = { ct_integration: "controletotal" };
+/** Marca pagamentos criados pelo backend WISDOMAPP (checkout / PIX) — filtra webhooks e sync. */
+const CT_MP_METADATA_INTEGRATION = {
+  ct_integration: "wisdomapp",
+  appId: "wisdomapp",
+  integration: "wisdomapp",
+};
+const MP_APP_ID = "wisdomapp";
 
 /** Fallback quando `app_config/mp_checkout_prices` não existe ou campo ausente. */
 const MP_PRICE_BY_PLAN_DEFAULT = {
@@ -3230,14 +3235,17 @@ function getPaymentMetadata(payment) {
 }
 
 /**
- * Pagamento “de licença” do Controle Total: checkout/PIX do app, legado com metadata coerente,
- * ou PIX pendente salvo em pending_payment (subcoleção do usuário). Não inclui depósitos/PIX avulsos na conta MP.
+ * Pagamento de licença WISDOMAPP: checkout/PIX do app, metadata wisdomapp,
+ * ou PIX pendente em pending_payment. Ignora depósitos/PIX avulsos e pagamentos de outros projetos.
  */
 async function isMercadoPagoPaymentFromControleTotalApp(payment) {
   if (!payment) return false;
   const meta = getPaymentMetadata(payment);
   const low = (v) => (v || "").toString().trim().toLowerCase();
-  if (low(meta.ct_integration) === "controletotal" || low(meta.integration) === "controletotal") {
+  const integ = low(meta.ct_integration) || low(meta.appId) || low(meta.integration);
+  // Outro projeto (ex.: Controle Total) — nunca ativar licença aqui.
+  if (integ === "controletotal") return false;
+  if (integ === MP_APP_ID || integ === "wisdom" || integ === "wisdom_app") {
     return true;
   }
   const paymentId = String(payment.id || "").trim();
@@ -3320,6 +3328,23 @@ async function processMpPayment(payment, overrideUid = null, options = {}) {
   const status = payment.status || "pending";
   const mpCfg = await getMpConfig();
   const splitSnapshot = buildPaymentSplitSnapshot(payment, mpCfg);
+  const wisdomTag = {
+    ct_integration: MP_APP_ID,
+    appId: MP_APP_ID,
+    licenseRelevant: true,
+  };
+
+  if (!options.bypassIntegrationFilter) {
+    const fromApp = await isMercadoPagoPaymentFromControleTotalApp(payment);
+    if (!fromApp) {
+      console.log(
+        `processMpPayment: ignorando pagamento ${payment.id} — não é checkout/PIX WISDOMAPP (outro projeto, depósito ou cobrança avulsa).`,
+      );
+      // Não grava em mp_payments — painel Admin só lista integração wisdomapp.
+      return;
+    }
+  }
+
   if (status !== "approved") {
     await admin.firestore().collection("mp_payments").doc(String(payment.id)).set(
       {
@@ -3328,45 +3353,12 @@ async function processMpPayment(payment, overrideUid = null, options = {}) {
         transaction_amount: payment.transaction_amount ?? null,
         currency_id: payment.currency_id || null,
         ...splitSnapshot,
+        ...wisdomTag,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       },
       { merge: true }
     );
     return;
-  }
-
-  if (!options.bypassIntegrationFilter) {
-    const fromCt = await isMercadoPagoPaymentFromControleTotalApp(payment);
-    if (!fromCt) {
-      console.log(
-        `processMpPayment: ignorando pagamento ${payment.id} — não é checkout/PIX Controle Total (ex.: depósito ou cobrança avulsa na mesma conta Mercado Pago).`,
-      );
-      await admin
-        .firestore()
-        .collection("mp_payments")
-        .doc(String(payment.id))
-        .set(
-          {
-            status,
-            licenseRelevant: false,
-            skippedNonIntegration: true,
-            skipReason: "not_controletotal_checkout",
-            transaction_amount: payment.transaction_amount ?? null,
-            currency_id: payment.currency_id || null,
-            ...splitSnapshot,
-            dateApprovedAt: mpDateApprovedTimestamp(payment),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            uid: admin.firestore.FieldValue.delete(),
-            plan: admin.firestore.FieldValue.delete(),
-            planCode: admin.firestore.FieldValue.delete(),
-            licenseDays: admin.firestore.FieldValue.delete(),
-            promoId: admin.firestore.FieldValue.delete(),
-            isOutgoing: admin.firestore.FieldValue.delete(),
-          },
-          { merge: true },
-        );
-      return;
-    }
   }
 
   const meta = getPaymentMetadata(payment);
@@ -3408,6 +3400,7 @@ async function processMpPayment(payment, overrideUid = null, options = {}) {
       transaction_amount: payment.transaction_amount ?? null,
       currency_id: payment.currency_id || null,
       ...splitSnapshot,
+      ...wisdomTag,
       dateApprovedAt: mpDateApprovedTimestamp(payment),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       ...(isOutgoing ? { isOutgoing: true } : {}),
@@ -3686,6 +3679,34 @@ exports.ctSyncAllMpPayments = onCall(async (req) => {
   const result = await runMpSyncPayments();
   if (!result.ok) throw new functions.https.HttpsError("failed-precondition", result.error || "Erro ao sincronizar.");
   return { ok: true, processed: result.processed, message: `${result.processed} pagamento(s) processado(s).` };
+});
+
+/**
+ * Admin: limpa coleção mp_payments (legado de outros projetos / testes).
+ * Após a limpeza, só entram pagamentos com tag wisdomapp.
+ */
+exports.ctPurgeMpPayments = onCall(async (req) => {
+  if (!req.auth) throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
+  await requireAdminPanel(req.auth.uid);
+  const db = admin.firestore();
+  let deleted = 0;
+  for (;;) {
+    const snap = await db.collection("mp_payments").limit(400).get();
+    if (snap.empty) break;
+    const batch = db.batch();
+    for (const doc of snap.docs) {
+      batch.delete(doc.ref);
+      deleted++;
+    }
+    await batch.commit();
+    if (snap.size < 400) break;
+  }
+  console.log(`ctPurgeMpPayments: removidos ${deleted} doc(s) por uid=${req.auth.uid}`);
+  return {
+    ok: true,
+    deleted,
+    message: `${deleted} pagamento(s) removido(s). Painel agora só lista integração wisdomapp.`,
+  };
 });
 
 /** Verifica status do pagamento PIX pendente do usuário. Chamado ao abrir o app após gerar PIX. */

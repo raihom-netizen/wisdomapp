@@ -907,6 +907,36 @@ class GoogleCalendarSyncService {
     return (pushed: pushed, pulled: pulled);
   }
 
+  /// Sync completa: busca meses, push e pull do Google.
+  /// [monthsBack] 0 = só a partir do 1º dia do mês atual.
+  static Future<({int pushed, int pulled})> syncBidirectionalNow({
+    required String userDocId,
+    int monthsBack = 0,
+    int monthsForward = 3,
+  }) async {
+    if (userDocId.isEmpty || !await isEnabled(userDocId)) {
+      return (pushed: 0, pulled: 0);
+    }
+    await warmUpIfEnabled(userDocId);
+    final now = DateTime.now();
+    final seen = <String>{};
+    final events = <GoogleCalendarEventItem>[];
+    for (var i = -monthsBack; i <= monthsForward; i++) {
+      final month = DateTime(now.year, now.month + i, 1);
+      final batch = await fetchEventsForMonth(month, userDocId: userDocId);
+      for (final e in batch) {
+        final id = e.id.trim();
+        if (id.isEmpty || seen.contains(id)) continue;
+        seen.add(id);
+        events.add(e);
+      }
+    }
+    return syncBidirectional(
+      userDocId: userDocId,
+      googleEvents: events,
+    );
+  }
+
   /// Cria/atualiza evento no Google Calendar e grava `googleEventId` no reminder.
   /// Retorna `true` se o Google confirmou o evento.
   static Future<bool> syncReminderToGoogle({

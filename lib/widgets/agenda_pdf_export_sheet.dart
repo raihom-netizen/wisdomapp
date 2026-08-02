@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/relatorio_service.dart';
 import '../theme/app_colors.dart';
+import 'modern_pdf_export_button.dart';
 
 /// Opções escolhidas no sheet de exportação PDF da Agenda.
 class AgendaPdfExportOptions {
@@ -91,18 +92,73 @@ class _AgendaPdfExportSheetState extends State<AgendaPdfExportSheet> {
   }
 
   void _confirm() {
-    final start = _useMonth
-        ? _monthStart
-        : (_customStart ?? _monthStart);
-    final end = _useMonth
-        ? _monthEnd
-        : (_customEnd ?? _monthEnd);
+    final start = _useMonth ? _monthStart : (_customStart ?? _monthStart);
+    final end = _useMonth ? _monthEnd : (_customEnd ?? _monthEnd);
     Navigator.of(context).pop(
       AgendaPdfExportOptions(
         contentFilter: _filter,
         rangeStart: start,
         rangeEnd: end,
         useFocusedMonth: _useMonth,
+      ),
+    );
+  }
+
+  Widget _filterChip({
+    required AgendaPdfContentFilter value,
+    required String label,
+    required IconData icon,
+    required Color accent,
+  }) {
+    final selected = _filter == value;
+    return Expanded(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => setState(() => _filter = value),
+          borderRadius: BorderRadius.circular(14),
+          child: Ink(
+            decoration: BoxDecoration(
+              color: selected
+                  ? accent.withValues(alpha: 0.14)
+                  : Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: selected
+                    ? accent.withValues(alpha: 0.55)
+                    : Colors.black.withValues(alpha: 0.12),
+                width: selected ? 1.6 : 1,
+              ),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: accent.withValues(alpha: 0.18),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ]
+                  : null,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 18, color: accent),
+                const SizedBox(height: 6),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w900,
+                    color: selected ? accent : AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -117,6 +173,13 @@ class _AgendaPdfExportSheetState extends State<AgendaPdfExportSheet> {
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(22),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
@@ -135,22 +198,23 @@ class _AgendaPdfExportSheetState extends State<AgendaPdfExportSheet> {
                 ),
               ),
               const SizedBox(height: 14),
-              const Row(
+              Row(
                 children: [
-                  Icon(Icons.picture_as_pdf_rounded, color: Color(0xFFE65100)),
-                  SizedBox(width: 10),
-                  Expanded(
+                  ModernPdfUi.iconBadge(size: 40),
+                  const SizedBox(width: 12),
+                  const Expanded(
                     child: Text(
                       'Exportar PDF da Agenda',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w900,
+                        color: AppColors.textPrimary,
                       ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 16),
               Text(
                 'Conteúdo',
                 style: TextStyle(
@@ -160,26 +224,29 @@ class _AgendaPdfExportSheetState extends State<AgendaPdfExportSheet> {
                 ),
               ),
               const SizedBox(height: 8),
-              SegmentedButton<AgendaPdfContentFilter>(
-                segments: const [
-                  ButtonSegment(
+              Row(
+                children: [
+                  _filterChip(
                     value: AgendaPdfContentFilter.financeiro,
-                    label: Text('Financeiro', style: TextStyle(fontSize: 11)),
-                    icon: Icon(Icons.payments_outlined, size: 16),
+                    label: 'Financeiro',
+                    icon: Icons.payments_outlined,
+                    accent: AppColors.logoOrange,
                   ),
-                  ButtonSegment(
+                  const SizedBox(width: 8),
+                  _filterChip(
                     value: AgendaPdfContentFilter.particular,
-                    label: Text('Particular', style: TextStyle(fontSize: 11)),
-                    icon: Icon(Icons.event_rounded, size: 16),
+                    label: 'Particular',
+                    icon: Icons.event_rounded,
+                    accent: AppColors.accent,
                   ),
-                  ButtonSegment(
+                  const SizedBox(width: 8),
+                  _filterChip(
                     value: AgendaPdfContentFilter.todos,
-                    label: Text('Todos', style: TextStyle(fontSize: 11)),
-                    icon: Icon(Icons.all_inclusive_rounded, size: 16),
+                    label: 'Todos',
+                    icon: Icons.grid_view_rounded,
+                    accent: AppColors.primary,
                   ),
                 ],
-                selected: {_filter},
-                onSelectionChanged: (s) => setState(() => _filter = s.first),
               ),
               const SizedBox(height: 16),
               Text(
@@ -191,23 +258,34 @@ class _AgendaPdfExportSheetState extends State<AgendaPdfExportSheet> {
                 ),
               ),
               const SizedBox(height: 8),
-              SwitchListTile.adaptive(
-                contentPadding: EdgeInsets.zero,
-                title: const Text(
-                  'Mês visível no calendário',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: AppColors.deepBlue.withValues(alpha: 0.12),
+                  ),
                 ),
-                subtitle: Text(
-                  '${_monthStart.day.toString().padLeft(2, '0')}/${_monthStart.month.toString().padLeft(2, '0')}/${_monthStart.year}'
-                  ' — '
-                  '${_monthEnd.day.toString().padLeft(2, '0')}/${_monthEnd.month.toString().padLeft(2, '0')}/${_monthEnd.year}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                child: SwitchListTile.adaptive(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                  title: const Text(
+                    'Mês visível no calendário',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                  ),
+                  subtitle: Text(
+                    '${_monthStart.day.toString().padLeft(2, '0')}/${_monthStart.month.toString().padLeft(2, '0')}/${_monthStart.year}'
+                    ' — '
+                    '${_monthEnd.day.toString().padLeft(2, '0')}/${_monthEnd.month.toString().padLeft(2, '0')}/${_monthEnd.year}',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  ),
+                  value: _useMonth,
+                  activeTrackColor: AppColors.primary.withValues(alpha: 0.45),
+                  onChanged: (v) => setState(() => _useMonth = v),
                 ),
-                value: _useMonth,
-                activeTrackColor: AppColors.primary.withValues(alpha: 0.45),
-                onChanged: (v) => setState(() => _useMonth = v),
               ),
-              if (!_useMonth)
+              if (!_useMonth) ...[
+                const SizedBox(height: 10),
                 OutlinedButton.icon(
                   onPressed: _pickRange,
                   icon: const Icon(Icons.date_range_rounded),
@@ -217,17 +295,25 @@ class _AgendaPdfExportSheetState extends State<AgendaPdfExportSheet> {
                           ' — '
                           '${_customEnd!.day.toString().padLeft(2, '0')}/${_customEnd!.month.toString().padLeft(2, '0')}/${_customEnd!.year}'
                         : 'Escolher intervalo de datas',
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 46),
+                    foregroundColor: AppColors.deepBlue,
+                    side: BorderSide(
+                      color: AppColors.deepBlue.withValues(alpha: 0.28),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                   ),
                 ),
+              ],
               const SizedBox(height: 18),
-              FilledButton.icon(
+              ModernPdfExportButton(
                 onPressed: _confirm,
-                icon: const Icon(Icons.picture_as_pdf_rounded),
-                label: const Text('Gerar PDF'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFFE65100),
-                  minimumSize: const Size(double.infinity, 48),
-                ),
+                label: 'Gerar PDF',
+                subtitle: RelatorioService.agendaPdfFilterLabel(_filter),
               ),
             ],
           ),

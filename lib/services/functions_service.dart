@@ -46,6 +46,17 @@ class FunctionsService {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  /// Admin: limpa `mp_payments` (legado outros projetos). Só entram pagamentos tagged wisdomapp.
+  Future<Map<String, dynamic>> purgeMpPayments() async {
+    final res = await _fn
+        .httpsCallable(
+          'ctPurgeMpPayments',
+          options: HttpsCallableOptions(timeout: const Duration(seconds: 120)),
+        )
+        .call<Map<String, dynamic>>({});
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   /// Sincroniza manualmente um pagamento do Mercado Pago (quando o webhook não disparou). Apenas admin.
   Future<Map<String, dynamic>> syncMpPayment({required String paymentId}) async {
     final res = await _fn.httpsCallable('ctSyncMpPayment').call({'paymentId': paymentId});

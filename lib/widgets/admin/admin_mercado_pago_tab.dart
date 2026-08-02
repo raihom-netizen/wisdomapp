@@ -29,6 +29,7 @@ class AdminMercadoPagoTabState extends State<AdminMercadoPagoTab>
   bool _loading = true;
   bool _saving = false;
   bool _syncingAll = false;
+  bool _purgingPayments = false;
   bool _splitEnabled = true;
   bool _splitModeFixed = true;
   bool _syncLanding = true;
@@ -260,6 +261,42 @@ class AdminMercadoPagoTabState extends State<AdminMercadoPagoTab>
       if (mounted) _snack('Erro: ${e.toString().split('\n').first}');
     } finally {
       if (mounted) setState(() => _syncingAll = false);
+    }
+  }
+
+  Future<void> _purgePayments() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Limpar pagamentos MP'),
+        content: const Text(
+          'Remove todos os registros de mp_payments (legado de outros projetos / testes). '
+          'Credenciais Raihom + Johnathan permanecem. A partir de agora só entram pagamentos da integração wisdomapp.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            child: const Text('Limpar banco'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _purgingPayments = true);
+    try {
+      final res = await FunctionsService().purgeMpPayments();
+      if (mounted) {
+        _snack(res['message']?.toString() ?? 'Pagamentos limpos.');
+      }
+    } catch (e) {
+      if (mounted) _snack('Erro: ${e.toString().split('\n').first}');
+    } finally {
+      if (mounted) setState(() => _purgingPayments = false);
     }
   }
 
@@ -830,7 +867,7 @@ class AdminMercadoPagoTabState extends State<AdminMercadoPagoTab>
           ),
         ),
         FilledButton.icon(
-          onPressed: (_saving || _syncingAll) ? null : _syncAll,
+          onPressed: (_saving || _syncingAll || _purgingPayments) ? null : _syncAll,
           icon: _syncingAll
               ? const SizedBox(
                   width: 18,
@@ -841,6 +878,28 @@ class AdminMercadoPagoTabState extends State<AdminMercadoPagoTab>
           label: Text(_syncingAll ? 'Sincronizando…' : 'Sync pagamentos (24h)'),
           style: FilledButton.styleFrom(
             backgroundColor: widget.brandBlue,
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          ),
+        ),
+        OutlinedButton.icon(
+          onPressed:
+              (_saving || _syncingAll || _purgingPayments) ? null : _purgePayments,
+          icon: _purgingPayments
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Icon(Icons.delete_sweep_rounded, color: Colors.red.shade700),
+          label: Text(
+            _purgingPayments ? 'Limpando…' : 'Limpar pagamentos (legado)',
+            style: TextStyle(
+              color: Colors.red.shade700,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          style: OutlinedButton.styleFrom(
+            side: BorderSide(color: Colors.red.shade300),
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
           ),
         ),

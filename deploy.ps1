@@ -59,10 +59,29 @@ if ((Test-Path $assetBin) -and (-not (Test-Path $assetJson))) {
 $bootstrapPath = Join-Path $publicDir "flutter_bootstrap.js"
 if (Test-Path $bootstrapPath) {
   $bc = Get-Content $bootstrapPath -Raw -Encoding UTF8
-  # Evita double-load: index.html chama load() com CanvasKit local (/canvaskit/) — Safari iOS.
-  if ($bc -match '_flutter\.loader\.load\s*\(') {
-    $bc = $bc -replace '_flutter\.loader\.load\s*\([^)]*\)\s*;', '// load() in index.html (Safari iOS + local CanvasKit)'
-    Set-Content -Path $bootstrapPath -Value $bc -NoNewline -Encoding UTF8
+  # Boot unico: index.html NAO chama load() — so o flutter_bootstrap.js deve chamar.
+  # (Versoes antigas do deploy removiam o load() e a web ficava no splash eterno.)
+  if ($bc -notmatch '_flutter\.loader\.load\s*\(') {
+    if ($bc -match '//\s*load\(\)\s*in index\.html') {
+      $inject = @'
+
+_flutter.loader.load({
+  serviceWorkerSettings: null,
+  config: {
+    canvasKitVariant: "full",
+    canvasKitBaseUrl: "/canvaskit/"
+  }
+});
+'@
+      $bc = $bc -replace '//\s*load\(\)\s*in index\.html[^\r\n]*', $inject.Trim()
+      Set-Content -Path $bootstrapPath -Value $bc -NoNewline -Encoding UTF8
+      Write-Host '  flutter_bootstrap.js: load() restaurado (CanvasKit local).' -ForegroundColor Yellow
+    } else {
+      Write-Host '  ERRO: flutter_bootstrap.js sem _flutter.loader.load() — web nao vai abrir.' -ForegroundColor Red
+      exit 1
+    }
+  } else {
+    Write-Host '  flutter_bootstrap.js: load() OK.' -ForegroundColor Green
   }
 }
 
