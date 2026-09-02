@@ -269,14 +269,9 @@ jobs:
 
       - name: Enviar para o TestFlight (App Store Connect)
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.enviar_testflight }}
-        run: |
-          set -e
-          IPA_FILE="build/ios/ipa/WISDOMAPP.ipa"
-          echo "Enviando: $IPA_FILE"
-          app-store-connect publish \
-            --path "$IPA_FILE" \
-            --testflight
-          echo "IPA enviado. Acompanhe em App Store Connect > TestFlight (o processamento leva alguns minutos)."
+        env:
+          GHA_IOS_IPA_PATH: build/ios/ipa/WISDOMAPP.ipa
+        run: bash scripts/gha_ios_publish_testflight.sh .
 
       - name: Guardar piso de build number (asc_build_number_floor)
         if: always()

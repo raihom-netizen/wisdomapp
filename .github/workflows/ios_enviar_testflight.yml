@@ -36,12 +36,20 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 30
 
+    # actions:read e o que permite baixar o artefato de OUTRO run; sem isso o
+    # download-artifact responde "Resource not accessible by integration".
+    permissions:
+      actions: read
+      contents: read
+
     env:
       APP_STORE_CONNECT_KEY_IDENTIFIER: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER }}
       APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
       APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Conferir secrets obrigatorios
         run: |
           faltou=0
@@ -75,8 +83,5 @@ jobs:
             ls -laR ipa || true
             exit 1
           fi
-          echo "Enviando: $IPA_FILE ($(du -h "$IPA_FILE" | cut -f1))"
-          app-store-connect publish \
-            --path "$IPA_FILE" \
-            --testflight
-          echo "IPA enviado. Acompanhe em App Store Connect > TestFlight (o processamento leva alguns minutos)."
+          # Mesmo script de envio do build normal: 3 tentativas e 90189 tratado.
+          GHA_IOS_IPA_PATH="$IPA_FILE" bash scripts/gha_ios_publish_testflight.sh .
