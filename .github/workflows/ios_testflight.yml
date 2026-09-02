@@ -187,13 +187,13 @@ jobs:
         run: bash scripts/codemagic_ios_sync_version_from_app_version_dart.sh
 
       - name: Build iOS IPA (instalavel)
+        env:
+          GHA_IOS_EXTRA_ARGS: '--no-tree-shake-icons'
         run: |
           set -e
-          IOS_BN="$(tr -d '\r\n[:space:]' < /tmp/cm_ios_build_number)"
-          IOS_NAME="$(tr -d '\r\n[:space:]' < /tmp/cm_ios_build_name)"
-          flutter build ipa --release --no-tree-shake-icons \
-            --build-number="$IOS_BN" \
-            --build-name="$IOS_NAME"
+          export GHA_IOS_BUILD_NUMBER="$(tr -d '[:space:]' < /tmp/cm_ios_build_number)"
+          export GHA_IOS_BUILD_NAME="$(tr -d '[:space:]' < /tmp/cm_ios_build_name)"
+          bash scripts/gha_ios_build_ipa.sh .
 
       - name: Renomear IPA para WISDOMAPP (nome pubspec legado controle_total_premium)
         run: |
