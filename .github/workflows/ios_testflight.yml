@@ -1,0 +1,287 @@
+# iOS — build IPA assinado + TestFlight + IPA no site (Firebase Storage)
+# Porte fiel do workflow "ios-workflow" do codemagic.yaml para o GitHub Actions.
+# O motor e o mesmo (codemagic-cli-tools, open source) e os scripts em scripts/codemagic_ios_*
+# sao reaproveitados sem alteracao — eles leem tudo por variavel de ambiente.
+#
+# ---------------------------------------------------------------------------
+# Configuracao UNICA (rode: .\scripts\configurar_github_ios.ps1)
+# Secrets em: Settings > Secrets and variables > Actions
+#   APP_STORE_CONNECT_PRIVATE_KEY     conteudo do .p8 da chave App Store Connect API
+#   APP_STORE_CONNECT_KEY_IDENTIFIER  Key ID (ex.: 4UMWWALR3U)
+#   APP_STORE_CONNECT_ISSUER_ID       Issuer ID (UUID)
+#   CERTIFICATE_PRIVATE_KEY           chave RSA PEM (o CI cria/busca o certificado Apple com ela)
+#   FIREBASE_SERVICE_ACCOUNT_JSON     (opcional) service account p/ subir o IPA ao site
+# ---------------------------------------------------------------------------
+# Disparo: manual (Actions > iOS TestFlight > Run workflow) ou push nas branches
+# codemagic-*-ready / ios-release-*.
+# Repo privado: runner macOS consome 10x os minutos gratuitos — por isso NAO dispara na master.
+
+name: iOS TestFlight (Flutter)
+
+on:
+  workflow_dispatch:
+    inputs:
+      setup_capabilities:
+        description: 'Ativar capabilities no App ID (Sign in with Apple, Push). Desmarque nos builds seguintes: economiza ~2 min de espera.'
+        type: boolean
+        default: true
+      enviar_testflight:
+        description: 'Enviar o IPA para o TestFlight'
+        type: boolean
+        default: true
+      subir_site:
+        description: 'Subir o IPA para o site (Firebase Storage)'
+        type: boolean
+        default: true
+  push:
+    branches:
+      - 'codemagic-*-ready'
+      - 'ios-release-*'
+
+concurrency:
+  group: ios-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      BUNDLE_ID: com.wisdomapp
+      WIDGET_BUNDLE_ID: com.wisdomapp.WisdomappWidget
+      APP_GROUP_ID: group.com.wisdomapp.widget
+      APPLE_TEAM_ID: '82RC6YL7KL'
+      # No Codemagic os scripts propagam variaveis entre passos escrevendo em $CM_ENV.
+      # github.env e o arquivo equivalente do GitHub Actions (mesmo formato NOME=valor).
+      CM_ENV: ${{ github.env }}
+      FIREBASE_STORAGE_BUCKET: wisdomapp-b9e98.firebasestorage.app
+      APP_STORE_CONNECT_KEY_IDENTIFIER: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+      CERTIFICATE_PRIVATE_KEY: ${{ secrets.CERTIFICATE_PRIVATE_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Conferir secrets obrigatorios
+        run: |
+          faltou=0
+          for v in APP_STORE_CONNECT_PRIVATE_KEY APP_STORE_CONNECT_KEY_IDENTIFIER APP_STORE_CONNECT_ISSUER_ID CERTIFICATE_PRIVATE_KEY; do
+            if [ -z "${!v}" ]; then echo "::error::Secret ausente: $v"; faltou=1; fi
+          done
+          if [ "$faltou" != "0" ]; then
+            echo "Rode scripts/configurar_github_ios.ps1 para preencher os secrets."
+            exit 1
+          fi
+          echo "Secrets OK."
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar codemagic-cli-tools
+        run: pip install --upgrade codemagic-cli-tools PyJWT cryptography
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      # A Apple so aceita upload de app construido com o SDK do iOS 26 (Xcode 26+).
+      # A imagem traz varios Xcode 26.x, mas nem todos tem a plataforma iOS instalada
+      # (o build morre em "iOS 26.0 is not installed"). Pega o mais novo que TENHA o SDK.
+      - name: Selecionar Xcode 26+ com SDK iOS instalado
+        run: |
+          set -e
+          LISTA=$(for app in /Applications/Xcode*.app; do
+            [ -d "$app" ] || continue
+            v=$(/usr/bin/defaults read "$app/Contents/Info" CFBundleShortVersionString 2>/dev/null || echo "")
+            [ -n "$v" ] && echo "$v|$app"
+          done | sort -t'|' -k1,1 -Vr)
+          if [ -z "$LISTA" ]; then echo "::error::nenhum Xcode encontrado no runner"; exit 1; fi
+          ESCOLHIDO=""
+          SDK_VER=""
+          while IFS='|' read -r v app; do
+            [ -n "$app" ] || continue
+            case "${v%%.*}" in ''|*[!0-9]*) continue ;; esac
+            [ "${v%%.*}" -ge 26 ] || continue
+            sdk=$(DEVELOPER_DIR="$app/Contents/Developer" xcrun --sdk iphoneos --show-sdk-version 2>/dev/null || echo "")
+            echo "Xcode $v -> SDK iphoneos: ${sdk:-<plataforma iOS nao instalada>}"
+            if [ -n "$sdk" ] && [ "${sdk%%.*}" -ge 26 ]; then ESCOLHIDO="$app"; SDK_VER="$sdk"; break; fi
+          done <<< "$LISTA"
+          if [ -z "$ESCOLHIDO" ]; then
+            echo "::error::nenhum Xcode 26+ com SDK iOS 26 instalado neste runner."
+            exit 1
+          fi
+          sudo xcode-select -s "$ESCOLHIDO/Contents/Developer"
+          echo "DEVELOPER_DIR=$ESCOLHIDO/Contents/Developer" >> "$GITHUB_ENV"
+          echo "Usando: $ESCOLHIDO (SDK iOS $SDK_VER)"
+
+      - name: Ambiente
+        run: |
+          xcodebuild -version
+          xcodebuild -showsdks | grep -i iphoneos || true
+          flutter --version
+          app-store-connect --version || true
+
+      - name: Get Flutter packages
+        run: flutter pub get
+
+      - name: Keychain para code signing
+        run: keychain initialize
+
+      - name: Configurar assinatura do Widget e App Group
+        run: bash scripts/codemagic_ios_prepare_widget_signing.sh
+
+      # --- Capabilities no App ID (mesmos passos usados no Codemagic) -------
+      - name: Ativar Sign In with Apple no App ID (API Apple)
+        if: inputs.setup_capabilities != false
+        run: |
+          set -e
+          python3 scripts/gha_ios_enable_sign_in_with_apple.py
+          echo "Aguardando propagacao (60s)..."
+          sleep 60
+
+      - name: Ativar Push Notifications no App ID (API Apple)
+        if: inputs.setup_capabilities != false
+        run: |
+          set -e
+          python3 scripts/gha_ios_enable_push.py
+          echo "Aguardando propagacao Push (60s)..."
+          sleep 60
+
+      # --- Certificado e perfis --------------------------------------------
+      - name: Remover perfis App Store antigos (forca perfil com capabilities atuais)
+        run: python3 scripts/codemagic_ios_delete_appstore_profiles.py
+
+      - name: Buscar ou criar certificado e perfil (Apple)
+        run: |
+          set -e
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create \
+            --delete-stale-profiles
+
+      - name: Instalar certificado no keychain
+        run: keychain add-certificates
+
+      - name: Aplicar perfis ao projeto Xcode
+        run: xcode-project use-profiles
+
+      # Google ML Kit (google_mlkit_commons) exige iOS 15.5+.
+      - name: Forcar iOS deployment target 15.5 (ML Kit)
+        run: |
+          set -e
+          if [ -f ios/Runner.xcodeproj/project.pbxproj ]; then
+            sed -i.bak "s/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*;/IPHONEOS_DEPLOYMENT_TARGET = 15.5;/g" ios/Runner.xcodeproj/project.pbxproj && rm -f ios/Runner.xcodeproj/project.pbxproj.bak
+          fi
+          if [ -f ios/Flutter/AppFrameworkInfo.plist ]; then
+            sed -i.bak -e "s/<string>13.0<\/string>/<string>15.5<\/string>/g" -e "s/<string>14.0<\/string>/<string>15.5<\/string>/g" ios/Flutter/AppFrameworkInfo.plist && rm -f ios/Flutter/AppFrameworkInfo.plist.bak
+          fi
+
+      - name: Versao iOS (auto-bump anti 90189; web/Android inalterados)
+        run: bash scripts/codemagic_ios_sync_version_from_app_version_dart.sh
+
+      - name: Build iOS IPA (instalavel)
+        run: |
+          set -e
+          IOS_BN="$(tr -d '\r\n[:space:]' < /tmp/cm_ios_build_number)"
+          IOS_NAME="$(tr -d '\r\n[:space:]' < /tmp/cm_ios_build_name)"
+          flutter build ipa --release --no-tree-shake-icons \
+            --build-number="$IOS_BN" \
+            --build-name="$IOS_NAME"
+
+      - name: Renomear IPA para WISDOMAPP (nome pubspec legado controle_total_premium)
+        run: |
+          set -e
+          IPA_DIR="build/ios/ipa"
+          NEW="$IPA_DIR/WISDOMAPP.ipa"
+          if [ ! -d "$IPA_DIR" ]; then
+            echo "::error::Pasta $IPA_DIR inexistente."
+            find build/ios -name "*.ipa" -print 2>/dev/null || true
+            exit 1
+          fi
+          echo "Conteudo de $IPA_DIR:"
+          ls -la "$IPA_DIR" || true
+          if [ -f "$NEW" ]; then
+            echo "IPA ja correto: $NEW"
+            exit 0
+          fi
+          for LEGACY in controle_total_premium.ipa Runner.ipa wisdomapp.ipa; do
+            if [ -f "$IPA_DIR/$LEGACY" ]; then
+              mv "$IPA_DIR/$LEGACY" "$NEW"
+              echo "Renomeado $LEGACY -> WISDOMAPP.ipa"
+              exit 0
+            fi
+          done
+          OLD=$(find "$IPA_DIR" -maxdepth 1 -name '*.ipa' -not -name 'WISDOMAPP.ipa' 2>/dev/null | head -1)
+          if [ -n "$OLD" ] && [ -f "$OLD" ]; then
+            mv "$OLD" "$NEW"
+            echo "Renomeado $OLD -> $NEW"
+            exit 0
+          fi
+          echo "::error::Nenhum IPA em $IPA_DIR"
+          find build/ios -name "*.ipa" -print 2>/dev/null || true
+          exit 1
+
+      - name: Guardar IPA como artefato do build
+        uses: actions/upload-artifact@v4
+        with:
+          name: WISDOMAPP-ipa
+          path: build/ios/ipa/*.ipa
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Subir IPA para o site (Firebase Storage)
+        if: inputs.subir_site != false
+        continue-on-error: true
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set +e
+          IPA_FILE="build/ios/ipa/WISDOMAPP.ipa"
+          if [ ! -f "$IPA_FILE" ]; then IPA_FILE=$(find build/ios/ipa -name '*.ipa' 2>/dev/null | head -1); fi
+          if [ -z "$IPA_FILE" ] || [ ! -f "$IPA_FILE" ]; then
+            echo "AVISO: IPA nao encontrado para upload Firebase."
+            exit 0
+          fi
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT_JSON" ]; then
+            echo "Secret FIREBASE_SERVICE_ACCOUNT_JSON ausente — pulando upload ao site."
+            exit 0
+          fi
+          if node scripts/upload_ipa_to_storage.js "$IPA_FILE"; then
+            echo "IPA no site: https://firebasestorage.googleapis.com/v0/b/${FIREBASE_STORAGE_BUCKET}/o/app%2Fipa%2FWISDOMAPP_app.ipa?alt=media"
+            echo "Para forcar atualizacao: Admin > Subir versao e forcar atualizacao."
+          else
+            echo "AVISO: upload do IPA para o Firebase falhou — o TestFlight segue normal."
+          fi
+          exit 0
+
+      - name: Validar IPA antes do TestFlight (90189 / binario invalido)
+        run: bash scripts/codemagic_ios_validate_ipa_before_upload.sh build/ios/ipa/WISDOMAPP.ipa
+
+      - name: Gate anti-90189 antes do Publishing
+        run: bash scripts/codemagic_ios_pre_publish_90189_gate.sh
+
+      - name: Enviar para o TestFlight (App Store Connect)
+        if: inputs.enviar_testflight != false
+        run: |
+          set -e
+          IPA_FILE="build/ios/ipa/WISDOMAPP.ipa"
+          echo "Enviando: $IPA_FILE"
+          app-store-connect publish \
+            --path "$IPA_FILE" \
+            --testflight
+          echo "IPA enviado. Acompanhe em App Store Connect > TestFlight (o processamento leva alguns minutos)."
+
+      - name: Guardar piso de build number (asc_build_number_floor)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WISDOMAPP-asc-floor
+          path: ios/asc_build_number_floor.txt
+          if-no-files-found: ignore
