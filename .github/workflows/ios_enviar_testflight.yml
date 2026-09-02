@@ -1,0 +1,82 @@
+# Envia ao TestFlight um IPA que JA foi gerado por um build anterior.
+#
+# Serve para quando o build deu certo mas o envio nao aconteceu (passo pulado,
+# credencial expirada, recusa da Apple que ja foi corrigida). Em vez de repetir
+# ~50 minutos de compilacao, baixa o artefato daquele run e so publica —
+# uns 5 minutos de runner.
+#
+# Como usar: Actions > "Enviar IPA ao TestFlight" > Run workflow e informe o
+# numero do run que gerou o IPA (esta na URL: .../actions/runs/<NUMERO>).
+#
+# O IPA nao muda: e o mesmo binario assinado do build original, com o mesmo
+# CFBundleVersion. Se aquele numero de build ja tiver sido aceito antes, a Apple
+# recusa com 90189 — nesse caso e preciso um build novo com numero maior.
+
+name: Enviar IPA ao TestFlight
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Numero do run que gerou o IPA (fim da URL em Actions > o run)'
+        required: true
+        type: string
+      nome_artefato:
+        description: 'Nome do artefato com o .ipa'
+        required: false
+        default: WISDOMAPP-ipa
+        type: string
+
+concurrency:
+  group: ios-release
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: macos-26
+    timeout-minutes: 30
+
+    env:
+      APP_STORE_CONNECT_KEY_IDENTIFIER: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+
+    steps:
+      - name: Conferir secrets obrigatorios
+        run: |
+          faltou=0
+          for v in APP_STORE_CONNECT_PRIVATE_KEY APP_STORE_CONNECT_KEY_IDENTIFIER APP_STORE_CONNECT_ISSUER_ID; do
+            if [ -z "${!v}" ]; then echo "::error::Secret ausente: $v"; faltou=1; fi
+          done
+          if [ "$faltou" != "0" ]; then exit 1; fi
+          echo "Secrets OK."
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar codemagic-cli-tools
+        run: pip install --upgrade codemagic-cli-tools PyJWT cryptography
+
+      - name: Baixar o IPA do build ${{ inputs.run_id }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.nome_artefato }}
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ipa
+
+      - name: Enviar para o TestFlight (App Store Connect)
+        run: |
+          set -e
+          IPA_FILE=$(find ipa -name '*.ipa' -type f | head -1)
+          if [ -z "$IPA_FILE" ]; then
+            echo "::error::nenhum .ipa no artefato ${{ inputs.nome_artefato }}"
+            ls -laR ipa || true
+            exit 1
+          fi
+          echo "Enviando: $IPA_FILE ($(du -h "$IPA_FILE" | cut -f1))"
+          app-store-connect publish \
+            --path "$IPA_FILE" \
+            --testflight
+          echo "IPA enviado. Acompanhe em App Store Connect > TestFlight (o processamento leva alguns minutos)."

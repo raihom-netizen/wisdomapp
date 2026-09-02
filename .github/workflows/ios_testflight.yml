@@ -139,7 +139,7 @@ jobs:
 
       # --- Capabilities no App ID (mesmos passos usados no Codemagic) -------
       - name: Ativar Sign In with Apple no App ID (API Apple)
-        if: inputs.setup_capabilities != false
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.setup_capabilities }}
         run: |
           set -e
           python3 scripts/gha_ios_enable_sign_in_with_apple.py
@@ -147,7 +147,7 @@ jobs:
           sleep 60
 
       - name: Ativar Push Notifications no App ID (API Apple)
-        if: inputs.setup_capabilities != false
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.setup_capabilities }}
         run: |
           set -e
           python3 scripts/gha_ios_enable_push.py
@@ -237,7 +237,7 @@ jobs:
           retention-days: 30
 
       - name: Subir IPA para o site (Firebase Storage)
-        if: inputs.subir_site != false
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.subir_site }}
         continue-on-error: true
         env:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
@@ -268,7 +268,7 @@ jobs:
         run: bash scripts/codemagic_ios_pre_publish_90189_gate.sh
 
       - name: Enviar para o TestFlight (App Store Connect)
-        if: inputs.enviar_testflight != false
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.enviar_testflight }}
         run: |
           set -e
           IPA_FILE="build/ios/ipa/WISDOMAPP.ipa"
