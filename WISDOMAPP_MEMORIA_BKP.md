@@ -1,0 +1,1191 @@
+# WISDOMAPP — MEMÓRIA / BACKUP DO PROJETO
+
+> **Ponto de partida oficial** para melhorias, correções e deploys.  
+> **Data do snapshot:** 02/08/2026 · **Release:** `10.05+26` (marketing `10.05`, build `26`, iOS build base `26`)  
+> **Repositório:** `c:\WISDOMAPP` · **Firebase:** `wisdomapp-b9e98`  
+> **Memória:** ficheiro único na raiz — **`WISDOMAPP_MEMORIA_BKP.md`** — **não** duplicar em `D:\TEMPORARIOS`.  
+> **Referência de padrão (paridade):** Controle Total em `C:\Controletotalapp_Independente\flutter_app`.
+
+---
+
+## 0. COMO USAR ESTE ARQUIVO (OBRIGATÓRIO)
+
+Este documento é a **memória viva** do que já está pronto e funcionando. Antes de qualquer alteração:
+
+1. **Consultar este arquivo** — entender o que existe e onde está.
+2. **Alteração mínima** — corrigir só o pedido; não refatorar módulos inteiros sem necessidade.
+3. **Não retroagir** — não remover, simplificar ou “limpar” funcionalidades que já funcionam.
+4. **Preservar padrões** — versão única, OAuth calendário, player de cursos, grid admin compacta, boot web leve, etc.
+5. **Testar impacto cruzado** — web + Android + iOS quando tocar auth, versão, push, calendário ou deploy.
+6. **Atualizar este arquivo** — após mudanças relevantes, registrar o que mudou na seção 16 (changelog memória). **Ficheiro fica só na raiz** (`WISDOMAPP_MEMORIA_BKP.md`); não copiar para `D:\TEMPORARIOS`.
+7. **Deploy só com ordem explícita** — `.\deploy.ps1 -WebOnly` (rápido) ou `.\deploy.ps1` (completo). CodeMagic = só iOS; AAB local em `D:\TEMPORARIOS\WISDOMAPP_*`.
+
+**Gatilhos de cautela extra (não quebrar):**
+
+| Área | Arquivo(s) sensível(is) | Risco se mexer errado |
+|------|-------------------------|------------------------|
+| Versão multi-plataforma | `lib/constants/app_version.dart`, `scripts/sync_app_version.ps1` | Desalinhamento web/Android/iOS, erro 90189 iOS |
+| Force update | `app_config/version`, `force_version_online.ps1` | Usuários presos ou sem atualização |
+| **Boot web Flutter** | `web/flutter_bootstrap.js`, `web/index.html`, `deploy.ps1`, `Validate-HostingPreDeploy.ps1` | **Splash eterno** se remover `_flutter.loader.load()` do bootstrap (index **não** chama `load()`) |
+| Google Calendar OAuth | `google_calendar_oauth_mobile.dart`, `web/google_calendar_oauth.html`, `functions/googleCalendarOAuth.js` | `UnimplementedError`, sync quebrada |
+| Apple Calendar | `apple_calendar_sync_service.dart`, `Info.plist` permissões | EventKit negado no iOS |
+| Player cursos | `course_video_player_shell.dart`, embeds web/mobile | Tela preta no vídeo |
+| Dicas admin grid | `admin_tip_grid_card.dart` | Cards grandes de novo |
+| HomeShell lazy | `home_shell.dart` `_materializedModuleIndices` | Memória/streams duplicados |
+| Financeiro instantâneo | `finance_instant_prefetch_service.dart`, `finance_month_cache.dart`, `finance_transactions_hub.dart` | Lista lenta / cache zerado |
+| Firestore offline web | `main.dart` `_configureFirebaseCore` long-polling | Crash Safari / assert SDK |
+| Domínio custom Hosting | DNS TXT `hosting-site=wisdomapp-b9e98` + Firebase customDomains | Apex OK (02/08); se TXT sumir → 404 / `OWNERSHIP_MISSING` |
+| Sync calendário auto | `external_calendar_scheduled_sync.dart`, `external_calendar_bidirectional_sync.dart` | Sync 00:00/12:00 ou chip Sync quebrados |
+| Deploy | `deploy.ps1` | Versão errada online / web quebrada |
+| Codemagic iOS | `codemagic.yaml`, `scripts/codemagic_ios_*.sh` | Rejeição App Store 90189 |
+
+---
+
+## 1. IDENTIDADE DO PROJETO
+
+| Campo | Valor |
+|-------|-------|
+| Nome comercial | WISDOMAPP / WISDOM APP |
+| Package Flutter | `controle_total_premium` |
+| Android `applicationId` | `com.wisdomapp.app` |
+| iOS `BUNDLE_ID` | `com.wisdomapp` |
+| iOS Widget Extension | `com.wisdomapp.WisdomappWidget` |
+| iOS App Group | `group.com.wisdomapp.widget` |
+| Domínio produção (custom) | `https://wisdomapp.com.br` (e `www`) — ver §10.4 DNS |
+| Hosting Firebase (sempre) | `https://wisdomapp-b9e98.web.app` |
+| Storage | `wisdomapp-b9e98.firebasestorage.app` |
+| Auth authorized domains | `wisdomapp-b9e98.web.app`, `wisdomapp-b9e98.firebaseapp.com`, `wisdomapp.com.br`, `www.wisdomapp.com.br`, `localhost` |
+| TestFlight | `https://testflight.apple.com/join/qWpWwhnN` |
+| Play Store | `https://play.google.com/store/apps/details?id=com.wisdomapp.app` |
+
+### Fonte única de versão
+
+```
+lib/constants/app_version.dart
+  ├── current          = '10.05'     (marketing, rodapé)
+  ├── buildNumber      = 26          (pubspec + web/version.json)
+  ├── iosBuildNumber   = 26          (base iOS; Codemagic pode elevar contra App Store Connect)
+  ├── versionCode      = 26          (Android versionCode)
+  └── releaseTag       = '10.05+26'
+```
+
+**Scripts de versão:**
+
+| Script | Função |
+|--------|--------|
+| `scripts/sync_app_version.ps1` | Sincroniza dart → pubspec, gradle, `web/version.json` |
+| `scripts/bump_build.ps1` | Incrementa build + sync |
+| `scripts/sync_app_version_from_dart.sh` | Validação bash (Codemagic) |
+| `deploy.ps1` | Chama sync no início do deploy |
+| `force_version_online.ps1` | Grava `app_config/version` no Firestore |
+
+**Regra:** `deploy.ps1` **não** força atualização automaticamente. Use Admin “Subir versão e forçar atualização” ou `force_version_online.ps1`.
+
+---
+
+## 2. ARQUITETURA GERAL
+
+```
+Flutter 3.x (Material 3, GeminiTheme)
+├── Web PWA (principal) — build/web → Firebase Hosting
+├── Android (AAB) — com.wisdomapp.app
+├── iOS (IPA Codemagic) — com.wisdomapp
+├── Cloud Functions (Node) — functions/index.js + módulos
+└── Firestore + Storage + FCM + Auth
+```
+
+### Boot do app (`lib/main.dart`)
+
+```
+AuthWrapper
+  → ForceUpdateScreen? (version_check_service + app_config/version)
+  → sem user → Landing/Login
+  → com user → LicenseGate → BiometricGate (resume) → HomeShell(uid)
+```
+
+**Safari/iOS Web:** retries Firebase init, `ensureWebDocumentHead`, Firestore long-polling (evita crash SDK 11.x).
+
+**Boot web leve (paridade Controle Total — 02/08/2026):**
+
+1. `web/flutter_bootstrap.js` **deve** chamar `_flutter.loader.load({ serviceWorkerSettings: null, config: { canvasKitVariant: "full", canvasKitBaseUrl: "/canvaskit/" } })`.
+2. `web/index.html` **não** chama `load()` de novo (evita double `initializeFirestore`).
+3. `deploy.ps1` **não** remove o `load()` do bootstrap; `Validate-HostingPreDeploy.ps1` falha se estiver ausente.
+4. GSI (`accounts.google.com/gsi/client`) e PDF.js CDN **fora** do caminho crítico do head (login Google web = popup Firebase).
+5. Em `main.dart` (web): warmUps de cursos/notificações **após** `runApp` — 1º frame mais rápido.
+6. Prefetch financeiro: `FinanceInstantPrefetchService` no boot do shell / ao abrir Financeiro e Agenda.
+
+### Shell logado (`lib/screens/home_shell.dart`)
+
+- `IndexedStack` com **10 módulos** (índices 0–9).
+- **Lazy materialization:** só instancia módulo ao visitar.
+- **Máx. 2 módulos retidos** em memória (atual + anterior).
+- **Rodapé rápido (5 atalhos):** índices `{0, 1, 2, 3, 7}`.
+
+| Idx | Tela | Label drawer / rodapé |
+|-----|------|------------------------|
+| 0 | `WisdomDashboardScreen` | Início |
+| 1 | `FinanceScreen` | Financeiro |
+| 2 | `MetaFinanceiraScreen` | **Objetivos Financeiros** (rodapé: "Objetivo") |
+| 3 | `WisdomAgendaScreen` | Agenda |
+| 4 | `CalculatorScreen` | Calculadora |
+| 5 | `WisdomDashboardScreen(onlyTips: true)` | Dicas Financeiras |
+| 6 | `ReportsScreen` | Relatórios |
+| 7 | `CursosVideosScreen` | Cursos em Vídeo (rodapé: "Cursos") |
+| 8 | `AnotacoesScreen` | Minhas Anotações |
+| 9 | `SettingsScreen` | Configurações |
+
+### Rotas nomeadas (`main.dart`)
+
+| Rota | Destino |
+|------|---------|
+| `/` | AuthWrapper |
+| `/login` | LoginScreen (web) / LandingScreen (mobile) |
+| `/signup` | SignUpScreen |
+| `/dashboard` | HomeShell se logado |
+| `/admin` | AdminRouteGate → AdminScreen |
+| `/divulgacao` | TelaDivulgacaoPage |
+| `/checkout`, `/escolha-plano`, `/premium-pro-paywall` | Fluxo planos |
+| `/premium-pro-success` | PremiumSuccessPage |
+| `/downloads` | DownloadsScreen |
+| `/privacidade`, `/termos`, `/suporte` | Legal |
+| `/assego_usuarios`, `/convenio_usuarios` | Cadastro convênio |
+| `/bancos-suportados` | SupportedBanksScreen |
+| `/licenca-expirada`, `/planos` | Licença expirada |
+
+---
+
+## 3. MÓDULOS DO APP (USUÁRIO) — ÍNDICE COMPLETO
+
+### 3.1 Início / Dashboard (`wisdom_dashboard_screen.dart`)
+
+- Dicas financeiras rotativas (Firestore `financial_tips` + `app_config/financial_tips_home`).
+- Cards de atalho, versículos, insights.
+- Motor: `lib/utils/insights_engine.dart`.
+- Sync admin → usuários: `financial_tips_home_sync_service.dart`.
+
+### 3.2 Financeiro (`finance_screen.dart` + satélites)
+
+**Telas principais:**
+
+- `finance_screen.dart` — hub financeiro (receitas, despesas, contas, cartão, pendentes).
+- `finance_accounts_screen.dart` — contas bancárias/cartão.
+- `finance_transactions_fullscreen_page.dart` — lista fullscreen.
+- `finance_categories_fullscreen_page.dart` — categorias.
+- `finance_bulk_assign_screen.dart` — atribuição em massa.
+- `novo_lancamento_page.dart` — novo lançamento.
+- `despesas_fixas_screen.dart` / `receitas_fixas_screen.dart` — fixas.
+- `planejamento_financeiro_screen.dart` — planejamento.
+- `finance_assistant_insights_page.dart` — insights IA.
+- `financial_tips_fullscreen_page.dart` — dicas fullscreen.
+- `smart_input_screen.dart` — OCR/voz (Cloud Functions).
+- `open_finance_connections_screen.dart` — Pluggy/Open Finance.
+- `bank_connection_screen.dart`, `pluggy_connect_webview_screen.dart`.
+- `extra_bank_connection_paywall_screen.dart` — paywall conexão extra.
+- `budget_screen.dart`, `new_budget_flow_screen.dart` — orçamento.
+- `payment_status_screen.dart`, `receipts_screen.dart`.
+- `anexo_viewer_screen.dart` (+ web/stub).
+
+**Serviços-chave:** `finance_service.dart`, `finance_accounts_service.dart`, `transaction_save_service.dart`, `fixed_expense_service.dart`, `billing_service.dart`, `pluggy_service.dart`, `bank_integration_service.dart`, **`finance_month_cache.dart`**, **`finance_instant_prefetch_service.dart`**, hub `finance_transactions_hub.dart`.
+
+**Performance financeiro (NÃO retroagir — 02/08/2026):**
+
+| Peça | Função |
+|------|--------|
+| `FinanceMonthCache` | Cache mensal cache-first; seed na Agenda enquanto streams aquecem |
+| `FinanceInstantPrefetchService` | Prefetch mês atual + adjacentes no boot / ao abrir módulo |
+| `FinanceScreen` | Prime cache → reload com `preserveExistingDocs`; listener do hub |
+| `FinanceAccountsService.listOnce` | Cache-first |
+| Hub mutações | Invalida `FinanceMonthCache` no mês afetado |
+| `fixed_pending_prefs_sheet.dart` | Sheet «definir meses» (chips Mês atual…12) em despesas/receitas fixas — port CT |
+
+**Índices:** `transactions` com `type+status+date` (e demais em `firestore.indexes.json`).
+
+**Regras:** `lib/constants/app_business_rules.dart` (biometria 525600 min, fatura cartão desde 16/06/2026, max parcelas, etc.).
+
+**Subcoleções Firestore:** `users/{uid}/transactions`, `fixed_incomes`, `finance_month_buckets`, `bank_connections`.
+
+### 3.3 Objetivos Financeiros (`meta_financeira_screen.dart`)
+
+- Metas com contribuições, gráficos, projeções.
+- Subcoleções: `users/{uid}/goals`, `goals/{id}/contributions`.
+
+### 3.4 Agenda (`wisdom_agenda_screen.dart`)
+
+- Compromissos, lembretes, integração escalas.
+- `compromisso_form_page.dart`, `reminder_detail_screen.dart`.
+- Campo **Contato WhatsApp** aceita digitação, colagem e seleção da agenda nativa (`flutter_native_contact_picker`), com normalização em `compromisso_contact_links.dart`.
+- Ao abrir o módulo, seleciona **hoje** e mostra o resumo; dia vazio abre cadastro; dia preenchido seleciona primeiro e permite adicionar em nova ação.
+- Dias com vários compromissos exibem **divisão de cores** na célula (2+ eventos; sem shrink/dots).
+- Preferência de início semanal **domingo (padrão) ou segunda-feira**, salva localmente e em `users/{uid}/settings/planning` por `agenda_calendar_week_start_preferences.dart`.
+- **Chips compactos (padrão Escalas CT)** no topo: **Sync** (verde) · **Hoje** · **Config** (início da semana). Removida a barra grande `ExternalCalendarSyncCollapsedButton`.
+  - Sync: se Google/Apple ativo → sync bidirecional agora; senão → preview de ativação.
+- **Limpeza por período:** `agenda_bulk_clear_period_dialog.dart` — datas inicial/final digitáveis (`DateFieldWithCalendarOrManual`) → contagem → `showAgendaBulkClearConfirm` (`agenda_bulk_clear_confirm_dialog.dart` / toolbar).
+- **UI sem «audiência»:** labels/abas focam em compromissos particulares; tipo legado `audiencia` pode existir no backend; deep link `audiencia` → compromissos; central de notificações oculta aba audiências.
+- Seed financeiro no calendário via `FinanceMonthCache` enquanto streams aquecem; warm ao abrir módulo / mudar mês.
+- `agenda_notifications_queue_screen.dart` — fila push/e-mail.
+- **Calendários externos:** `external_calendar_integration_panel.dart` (Settings + chip Config/Sync na Agenda).
+  - Google: OAuth web/mobile, `google_calendar_sync_service.dart`, CF `googleCalendarOAuth.js`.
+  - Apple: EventKit iOS via `device_calendar`, `apple_calendar_sync_service.dart`.
+  - Sync agora: `external_calendar_bidirectional_sync.dart`.
+  - Auto sync **00:00 e 12:00** (Timer + catch-up no boot/resume): `external_calendar_scheduled_sync.dart` — ligado em `agenda_boot_orchestrator.dart` + `home_shell.dart` resume.
+- Boot: `agenda_boot_orchestrator.dart` (inclui `completeWebOAuthReturnIfNeeded` + scheduled sync).
+- Subcoleções: `users/{uid}/reminders`, `agendaAlerts`, `settings/google_calendar`.
+
+### 3.5 Escalas / Plantões (`scales_screen.dart`)
+
+- Plantões, tarifas GO (AC4), horas extras, locais, naturezas.
+- `scale_rates_edit_screen.dart`, `horas_extras_config_screen.dart`, `locations_screen.dart`.
+- Notificações locais: `scale_notifications_service.dart` (+ io/web/stub).
+- Auto-confirmação: `scale_auto_confirm_service.dart` + CF `scaleAutoConfirmScheduled.js`.
+- Tarifas globais: coleção `config/scale_rates`.
+- Subcoleção: `users/{uid}/scales`.
+
+### 3.6 Calculadora (`calculator_screen.dart`)
+
+- Entradas salvas em `users/{uid}/calculator_entries`.
+
+### 3.7 Relatórios (`reports_screen.dart`)
+
+- PDF financeiro, super extrato (cliente + CF `financePdfSuperExtrato.js`).
+- `report_preview_screen.dart`.
+
+### 3.8 Cursos em Vídeo (`cursos_videos_screen.dart`)
+
+**Estado atual (funcionando — NÃO retroagir):**
+
+- Lista cursos/dicas de `course_videos` (cache: `course_videos_cache_service.dart`).
+- Player estilo YouTube: **`course_video_player_shell.dart`**
+  - Mostra thumbnail/capa colorida + ▶ antes do play.
+  - Só carrega embed após toque (inline) ou com poster enquanto carrega (autoplay).
+- Embeds: `course_video_embed_mobile.dart` (WebView), `course_video_embed_web.dart` (iframe/video nativo).
+- Thumbnails: `course_thumb_resolver.dart`, `course_media_url_resolver.dart`, YouTube `maxresdefault`.
+- Admin CRUD: `admin_cursos_tab.dart`.
+- Upload no Admin mostra progresso em tempo real; após gravar/publicar, fecha o formulário e retorna à lista.
+- Após mutações, o cache força leitura do servidor para o conteúdo aparecer imediatamente aos usuários.
+- Descrição completa fica aberta por padrão e selecionável no painel do curso.
+- Painel inline: `course_module_media_panel.dart`.
+- Tela assistir: `course_video_watch_screen.dart`.
+- Feed estilo YouTube + progresso/like; analytics admin: `course_analytics_service.dart` → coleção `course_stats` (+ regras Firestore).
+- CF limpeza expirados: `courseVideosExpiryCleanup.js`.
+- Storage path: `wisdomapp/course_videos/...`.
+
+### 3.9 Anotações / Produtividade
+
+- `anotacoes_screen.dart` → `notes_service.dart` → `users/{uid}/notes`.
+- `ocorrencias_screen.dart` → `users/{uid}/ocorrencias`.
+
+### 3.10 Configurações (`settings_screen.dart`)
+
+- Perfil, biometria, notificações, sons, backup/restore.
+- Integração calendários (painel unificado).
+- Links úteis, categorias, módulo inicial.
+- Premium/plano, Open Finance, telemetria.
+
+### 3.11 Premium / Planos / Pagamentos
+
+- `escolha_plano_page.dart`, `premium_pro_paywall_screen.dart`, `premium_success_page.dart`.
+- Mercado Pago **somente** projeto `wisdomapp-b9e98` (purge legado ok): callables `ctCreateMpCheckout`, `ctCreateMpPixPayment`, `ctPurgeMpPayments` + HTTP `mpWebhook`; coleções `mp_payments`, `app_config/mp_checkout_prices`, `settings/mercadopago`.
+- IAP Apple: `ios_iap_products.dart`, gate `ios_payments_gate.dart`.
+- Limites Premium Pro: `premium_pro_limits.dart`, `premium_pro_rollout.dart`.
+
+### 3.12 Auth / Onboarding / Gates
+
+- `landing_screen.dart`, `login_screen.dart`, `signup_screen.dart`, `onboarding_screen.dart`.
+- `biometric_gate_screen.dart`, `force_update_screen.dart`, `license_expired_screen.dart`.
+- `complete_profile_screen.dart`, `post_login_biometric_prompt.dart`.
+- CPF index: `cpf_index` + `cpf_auth_service.dart`.
+- Delegado: `delegate_access_service.dart`, `delegate_email_index`.
+
+---
+
+## 4. SITE / DIVULGAÇÃO
+
+### 4.1 Landing Flutter
+
+| Tela | Rota / uso | Firestore |
+|------|------------|-----------|
+| `landing_screen.dart` | Login inicial mobile / web entry | `landing_content/main` |
+| `tela_divulgacao_page.dart` | `/divulgacao` | mesmo conteúdo |
+| `editor_divulgacao_screen.dart` | Admin edita landing | `landing_content/main`, legado `settings/landing_page` |
+
+**Conteúdo típico:** hero, features, planos, depoimentos, CTAs, versículo Proverbs 16:3 no rodapé.
+
+### 4.2 Web estática (`web/`)
+
+| Arquivo | Função |
+|---------|--------|
+| `index.html` | Entry PWA Flutter — splash WISDOMAPP; canonical/OG dinâmicos por host; **sem** GSI/PDF no head |
+| `flutter_bootstrap.js` | **Boot único:** `_flutter.loader.load` + CanvasKit full local `/canvaskit/` |
+| `manifest.json` | PWA |
+| `version.json` | Versão force-update (sync com app_version.dart) — online `10.05+26` |
+| `firebase-config.js` | Config Firebase web |
+| `firebase-messaging-sw.js`, `sw.js` | Service workers push (FCM SW só desktop/Android Chrome; iOS/in-app skip) |
+| `google-oauth-config.js` | OAuth Google |
+| `google_calendar_oauth.html` | Callback OAuth Google Calendar |
+| `admin.html` | **Admin HTML legado** (separado do Flutter `/admin`) |
+| `404.html` | Fallback hosting |
+| `.well-known/assetlinks.json` | Android App Links |
+| `icons/` | PWA + push banners (`icons/wisdomapp_emblem.png` no splash) |
+
+**URLs oficiais:**
+
+| URL | Estado (02/08/2026) |
+|-----|---------------------|
+| `https://wisdomapp-b9e98.web.app/` | ✅ Online, boot com `load()` OK · `version.json` = `10.05+26` |
+| `https://wisdomapp.com.br/` | ✅ Apex OK (TXT ownership + Hosting) · `version.json` = `10.05+26` |
+| `https://www.wisdomapp.com.br/` | CNAME `ghs.googlehosted.com` (mesmo padrão CT); Auth já autoriza |
+
+### 4.3 Páginas públicas
+
+- `downloads_screen.dart` — `public_downloads`.
+- `privacidade_screen.dart`, `termos_screen.dart`, `suporte_screen.dart`.
+- `supported_banks_screen.dart` — bancos Open Finance.
+- `assego_public_signup_screen.dart` — convênio Assego.
+
+---
+
+## 5. PAINEL ADMIN — COMPLETO
+
+### 5.1 Entrada
+
+```
+/admin → admin_route_gate.dart
+  → Firebase Auth + admin_permissions_service.canAccessAdminPanel
+  → AdminScreen (lib/screens/admin_screen.dart ~12k linhas)
+```
+
+**Perfis:** admin total, gestor (`admin_gestor_config.dart`), parceiro (`admin_partner_config.dart`).
+
+### 5.2 Menu lateral (`AdminMenuItem` em `admin_menu_lateral.dart`)
+
+| Item enum | Título menu | Arquivo principal |
+|-----------|-------------|-------------------|
+| `resumo` | Resumo | Dentro de `admin_screen.dart` |
+| `usuarios` | Usuários | `admin_screen.dart` |
+| `usuarios360` | Inteligência 360° | `admin_usuarios_inteligencia_tab.dart` |
+| `equipe` | Equipe ADM | `gestao_equipe_adm.dart` |
+| `logs` | Logs | `logs_atividade_page.dart` → `activity_logs` |
+| `relatorios` | Relatórios | `admin_screen.dart` |
+| `sugestoes` | Sugestões | `admin_sugestoes_tab.dart` → `user_feedback` |
+| `dicasFinanceiras` | Dicas financeiras | `admin_financial_tips_page.dart` |
+| `downloads` | Downloads | `admin_screen.dart` → `public_downloads` |
+| `landing` | Landing / Divulgação | `editor_divulgacao_screen.dart` |
+| `acessosDominio` | Acessos domínio | `acessos_dominio_tab.dart` |
+| `escala` | Escala / Tarifas | `admin_screen.dart` + `config/scale_rates` |
+| `drive` | Google Drive | `admin_screen.dart` |
+| `mercadopago` | Mercado Pago | `admin_mercado_pago_tab.dart` |
+| `cursos` | Cursos em vídeo | `admin_cursos_tab.dart` → `course_videos` |
+| `pluggy` | Pluggy | `admin_pluggy_tab.dart` → `app_config/pluggy` |
+| `openFinanceExtras` | Open Finance extras | `admin_open_finance_extras_tab.dart` |
+| `premiumProMonitor` | Premium Pro monitor | `admin_premium_pro_monitor_tab.dart` |
+| `promocoes` | Promoções | `admin_promocoes_tab.dart` → `promotions` |
+| `convenios` | Convênios | `admin_screen.dart` → `partnerships` |
+| `lojas` | Lojas (Play/App Store) | `admin_screen.dart` |
+| `migracaoEmail` | Migração e-mail | `admin_migracao_email_tab.dart` |
+| `email` | E-mail / SMTP | `admin_screen.dart` → `settings/email` |
+| `manutencao` | Manutenção / Versão | `admin_screen.dart` → force update, `app_config/version` |
+| `voltar` | Voltar ao app | — |
+
+### 5.3 Widgets admin reutilizáveis (`lib/widgets/admin/`)
+
+- `admin_page_shell.dart` — layout padrão.
+- `admin_tip_grid_card.dart` — **cards compactos só cabeçalho colorido** (olho = detalhes).
+- `admin_financial_tip_editor_sheet.dart` — editor dica.
+- `admin_financial_tips_schedule_sheet.dart` — programar dicas no Início.
+- `admin_mercado_pago_tab.dart`, `admin_partner_*`, `admin_revenue_forecast_panel.dart`.
+- `admin_system_health_panel.dart`, `admin_alert_center.dart`.
+- `admin_bulk_actions_bar.dart`, `admin_global_search_delegate.dart`.
+- `admin_user_compare_sheet.dart`, `admin_user_360_extras.dart`.
+- `admin_notification_templates_tab.dart` — templates push/e-mail.
+
+### 5.4 Dicas financeiras admin (estado atual)
+
+**Arquivo:** `admin_financial_tips_page.dart`
+
+- Abas: **Bíblicas** / **Gerais**.
+- Grid compacto: 2 col mobile, 3 tablet, 4 desktop.
+- Card = gradiente + título + ref + ações (👁 detalhes, ⭐ favorita, 🏠 início, ✏ editar, 🗑 excluir).
+- Toque no card → bottom sheet detalhes completos.
+- Coleção: `financial_tips`.
+- Config Início: `app_config/financial_tips_home`.
+- Seed: `financial_tips_seed_service.dart`, catálogos em `lib/data/`.
+
+### 5.5 Cursos admin
+
+**Arquivo:** `admin_cursos_tab.dart`
+
+- CRUD `course_videos`: YouTube ID, MP4 upload Storage, thumbnails, validade, publicado.
+- `thumbnailUrl` nunca vazio (prioriza imagem → YouTube thumb).
+- Tipos: `curso` | `dica`.
+
+### 5.6 Auditoria
+
+- `admin_audit_service.dart` → `admin_audit_log`.
+- `logs_service.dart` → `activity_logs`.
+
+---
+
+## 6. SERVIÇOS — ÍNDICE POR DOMÍNIO
+
+> Pasta: `lib/services/` (~144 arquivos)
+
+| Domínio | Arquivos principais |
+|---------|---------------------|
+| Auth/sessão | `auth_service`, `cpf_auth_service`, `biometric_auth_service`, `session_restore_service`, `login_preferences`, `account_switch_flow` |
+| Firestore user | `firestore_service`, `firestore_user_doc_id` (utils) |
+| Cloud Functions | `functions_service` |
+| Financeiro | `finance_service`, `finance_accounts_service`, `finance_transfer_service`, `transaction_save_service`, `fixed_expense_service`, `billing_service`, `pluggy_service`, `bank_integration_service`, `finance_month_cache`, `finance_instant_prefetch_service` |
+| Agenda | `agenda_boot_orchestrator`, `agenda_managed_queue_service`, `agenda_alerts_queue_service`, `compromisso_reminder_service`, `google_calendar_sync_service`, `apple_calendar_sync_service`, `google_calendar_oauth_mobile/web`, `external_calendar_bidirectional_sync`, `external_calendar_scheduled_sync` (00:00/12:00) |
+| Escalas | `scale_rates_service`, `scale_notifications_service`, `scale_auto_confirm_service`, `goias_scale_rates_recalc_service` |
+| Push | `push_notification_service`, `fcm_local_notification_presenter`, `notification_sound_preferences` |
+| Dicas | `financial_tips_catalog_service`, `financial_tips_home_sync_service`, `financial_tips_seed_service` |
+| Cursos | `course_videos_cache_service`, `course_video_file_service`, `course_videos_expiry_cleanup_service` |
+| Admin | `admin_permissions_service`, `admin_audit_service`, `admin_user_plan_apply_service` |
+| Backup | `user_backup_service`, `user_restore_service`, `backup_save` |
+| Versão | `version_check_service` (+ web impl) |
+| Widget Android | `widget_update_service` (alias `WidgetDataService`), `widget_firestore_live_sync` |
+| Cursos analytics | `course_analytics_service` → `course_stats` |
+
+### Widgets Android (home screen) — port Controle Total
+
+**Package Kotlin:** `android/app/src/main/kotlin/com/raihom/controletotalapp/` (applicationId continua `com.wisdomapp.app`).
+
+| Provider | Tamanho | XML |
+|----------|---------|-----|
+| `ControleTotalWidgetSmallProvider` | 2×2 | `home_widget_controle_total_small` |
+| `ControleTotalWidgetMediumProvider` | 4×2 | `home_widget_controle_total_medium` |
+| `ControleTotalWidgetProvider` | 4×3 | `home_widget_controle_total` |
+
+- Serviço: `ControleTotalWidgetService` + `WidgetSyncAlarmReceiver` (alarme 00:00/12:00 + boot + rollover meia-noite).
+- Dados: compromissos + escalas + financeiro; brand **WISDOMAPP**; logo `@mipmap/ic_launcher`.
+- Dart: `widget_update_service.dart` (+ satélites); export via `widget_data_service.dart`.
+
+---
+
+## 7. CLOUD FUNCTIONS — ÍNDICE
+
+**Monolito:** `functions/index.js` (~9800+ linhas) — OCR, speech, MP webhooks, push agenda, partnerships, IAP Apple, course videos, version bump, etc.
+
+**Módulos separados:**
+
+| Arquivo | Função / gatilho |
+|---------|------------------|
+| `googleCalendarOAuth.js` | OAuth GCal (tokens servidor) |
+| `agenda_daily_digest.js` | Cron ~20h Brasília — resumo agenda e-mail+push |
+| `agenda_message_templates.js` | Templates premium (escala, compromisso, audiência…) |
+| `agenda_delivery_prefs.js` | Preferências entrega push/e-mail |
+| `agendaPeriodSnapshot.js` | Callable snapshot período reminders |
+| `notification_templates_config.js` | Cache `app_config/notification_templates` |
+| `scaleAutoConfirmScheduled.js` | Cron auto-confirma plantões passados |
+| `goiasScaleRatesRecalc.js` | Recálculo tarifas GO em massa |
+| `financePdfSuperExtrato.js` | PDF Super Extrato servidor |
+| `financeTransfers.js` | Transferências server-side |
+| `financeMonthBuckets.js` | Agregados mensais saldo abertura |
+| `financeMigrationImport.js` | Importação financeira migração legado |
+| `generateFinancialTipAI.js` | Dicas via Gemini |
+| `financialTipsInsightPushScheduled.js` | Cron push dicas por lançamentos |
+| `courseVideosExpiryCleanup.js` | Limpeza vídeos expirados |
+| `wisdomapp_firestore_bootstrap.js` | Bootstrap Firestore + Storage |
+| `set_mp_split_config.js` / `set_mp_webhook_secret.js` | Config MP |
+
+**MP (exports em `index.js`):** `ctCreateMpCheckout`, `ctCreateMpPixPayment`, `ctPurgeMpPayments`, `mpWebhook` — só Wisdomapp.
+
+**Canais Android FCM:** `controletotal_escala`, `_compromisso`, `_audiencia`, `_folga`, `_financeiro`.
+
+---
+
+## 8. FIRESTORE — COLEÇÕES E ÍNDICES
+
+### 8.1 Coleções raiz
+
+| Coleção | Uso |
+|---------|-----|
+| `users` | Documento principal usuário |
+| `users_uid` | Mapeamento UID alternativo |
+| `landing_content` | Landing (`main`) |
+| `app_config` | version, mp_checkout_prices, pluggy, pro_open_finance, notification_templates, financial_tips_home |
+| `settings` | mercadopago, googledrive, email, landing_page (legado) |
+| `config` | scale_rates (tarifas GO) |
+| `secure_config` | mercado_pago (segredos) |
+| `mp_project_config` | Config MP |
+| `mp_payments` | Pagamentos MP |
+| `promotions` | Promoções/cupons |
+| `partnerships` | Convênios (+ sub `members`) |
+| `course_videos` | Cursos em vídeo |
+| `course_stats` | Analytics cursos (views/likes — admin) |
+| `financial_tips` | Banco dicas financeiras |
+| `cpf_index` | CPF → uid |
+| `delegate_email_index` | Acesso delegado |
+| `activity_logs` | Logs atividade |
+| `admin_audit_log` | Auditoria admin |
+| `user_feedback` | Sugestões |
+| `notifications` | Broadcast |
+| `public_downloads` | Downloads públicos |
+| `news_rss_server_cache` | Cache RSS |
+
+### 8.2 Subcoleções `users/{uid}/`
+
+`transactions`, `scales`, `reminders`, `goals` (+ `contributions`), `settings`, `bank_connections`, `bank_connection_entitlements`, `entitlement_payments`, `locations`, `calculator_entries`, `ocorrencias`, `notes`, `fixed_incomes`, `budgets`, `agendaAlerts`, `insights_cache`, `notifications`, `deviceTokens`, `fcmTokens`, `prefs`, `finance_month_buckets`, `finance_account_month_buckets`.
+
+### 8.3 Índices compostos (`firestore.indexes.json`)
+
+Principais collection groups indexados:
+
+- `mp_payments` (status + dateApprovedAt)
+- `users` (app + licenseExpiresAt)
+- `user_feedback` (uid + createdAt)
+- `scales` (paid + date, autoViradaSourceId, createdByMagic, magicBatchId…)
+- `transactions` (fixedExpenseId + monthKey, accountId + date, type + date…)
+- `reminders` (vários combos date/type)
+- `course_videos` (published + type + ordem)
+- `financial_tips` (ativo + ordem, tipo + ordem)
+- `activity_logs`, `admin_audit_log`, `partnerships/members`
+
+**Regra:** novas queries compostas exigem entrada em `firestore.indexes.json` + deploy índices.
+
+---
+
+## 9. TEMA E CORES (NÃO ALTERAR SEM MOTIVO)
+
+### AppColors (`lib/theme/app_colors.dart`)
+
+| Token | Hex | Uso |
+|-------|-----|-----|
+| primary | `#2D5BFF` | Azul WISDOMAPP |
+| secondary | `#4B3DF0` | Roxo-azul |
+| accent | `#12B5A5` | Teal |
+| amber | `#FFB648` | Dourado/amarelo logo |
+| logoOrange | `#F97316` | Laranja |
+| deepBlue / deepBlueDark | `#122B6B` / `#0B1F4B` | Headers |
+| logoGradient | deepBlueDark → accent | Escudo/barra |
+
+### GeminiTheme (`lib/theme/gemini_theme.dart`)
+
+- Material 3, fonte Inter, border radius 20–24.
+
+### Paleta calendário (`color_palette.dart`)
+
+- Plantão `#2D5BFF`, Compromisso `#12B5A5`, legado Audiência `#D4AF37` (dourado — UI atual prioriza compromissos particulares).
+
+---
+
+## 10. DEPLOY E CI/CD
+
+### 10.1 Deploy web + functions (`deploy.ps1`)
+
+**Comandos padrão (Controle Total):**
+
+| Modo | Comando | Escopo |
+|------|---------|--------|
+| Rápido | `.\deploy.ps1 -WebOnly` | web + Firebase (hosting/rules/functions conforme script) |
+| Completo | `.\deploy.ps1` | web+Firebase → AAB/`Export-AabIosTemporarios` → CodeMagic |
+| Force version | **não** no deploy padrão | Admin ou `.\force_version_online.ps1` |
+| Clean | só com `-Clean` | `flutter clean` |
+
+**Passos internos:**
+
+1. `scripts/sync_app_version.ps1`
+2. `flutter pub get` (+ patch Gradle plugins se necessário)
+3. `flutter build web --release --pwa-strategy=none --no-wasm-dry-run --no-tree-shake-icons`
+4. **Garantir** `build/web/flutter_bootstrap.js` com `_flutter.loader.load(...)` (nunca stripar)
+5. Sync `web/version.json` / `build/web/version.json`
+6. `Validate-HostingPreDeploy.ps1` (exige `load()` no bootstrap)
+7. `scripts/Invoke-FirebaseDeploy.ps1` (token `.firebase-ci-token`)
+8. Completo: AAB → `D:\TEMPORARIOS\WISDOMAPP_*` · zip iOS · branches `codemagic-ios-ready` / `codemagic-10-05-ready`
+
+**Incidente corrigido 02/08/2026:** versão antiga do `deploy.ps1` comentava/removia `load()` assumindo que `index.html` chamava — a web ficava no splash («Quase pronto…» / timeout). **Nunca reintroduzir esse strip.**
+
+### 10.2 Codemagic iOS (`codemagic.yaml`)
+
+- Workflow `ios-workflow`, bundle `com.wisdomapp`.
+- Widget: target `WisdomappWidgetExtension`, bundle `com.wisdomapp.WisdomappWidget`, Team ID `82RC6YL7KL`, App Group `group.com.wisdomapp.widget`.
+- `scripts/codemagic_ios_prepare_widget_signing.sh` registra/configura o bundle e os perfis do Widget. Se a API Apple não aceitar o App Group, remove apenas o Widget daquela execução para não bloquear o IPA principal.
+- `fetch-signing-files` não usa `--strict-match-identifier`, permitindo buscar perfis do app e da extensão.
+- `scripts/codemagic_ios_delete_appstore_profiles.py` remove perfis antigos dos dois bundle IDs antes da recriação.
+- Scripts anti-erro **90189** (`CFBundleVersion` ≤ App Store Connect):
+  - `scripts/codemagic_ios_sync_version_from_app_version_dart.sh`
+  - `ios/asc_build_number_floor.txt` (= 11)
+  - `codemagic_ios_pre_publish_90189_gate.sh`
+- **Importante:** retry só Publishing reutiliza IPA antigo — precisa **Start new build** completo após bump de versão.
+
+### 10.3 Atalhos Windows
+
+- `Start-CodemagicIos.bat`, `Fix-CodemagicIos.bat`
+- `IOS_BUILD_README.md`
+- Scripts domínio (diagnóstico): `scripts/check-hosting-custom-domain.js`, `scripts/add-hosting-custom-domains.js`, `scripts/fix-hosting-custom-domain.js`
+
+### 10.4 Domínio custom `wisdomapp.com.br` (Hosting + DNS)
+
+| Item | Valor |
+|------|--------|
+| Site Hosting | `wisdomapp-b9e98` → `https://wisdomapp-b9e98.web.app` |
+| Apex A | `199.36.158.100` (Firebase Hosting) — já correto |
+| Apex TXT **obrigatório** | `hosting-site=wisdomapp-b9e98` (**ADD** — igual CT `hosting-site=controletotal-4c867`) |
+| Apex TXT legado | pode coexistir `wisdomapp-b9e98.web.app` |
+| www | CNAME → `ghs.googlehosted.com` (mesmo padrão CT) |
+| Cert | `CERT_ACTIVE` / grouped (já provisionado) |
+| Estado visto 02/08/2026 (tarde) | ✅ Apex `https://wisdomapp.com.br/version.json` = `10.05+26` (ownership OK após TXT) |
+| Auth | domains já incluem `wisdomapp.com.br` e `www.wisdomapp.com.br` |
+
+**Se apex voltar a 404:** revalidar TXT `hosting-site=wisdomapp-b9e98` no Registro.br + `node scripts/check-hosting-custom-domain.js` (ou Console Hosting → Verify).
+
+### 10.5 Artefatos release `10.05+26` (confirmados)
+
+| Artefato | Caminho |
+|----------|---------|
+| AAB Play | `D:\TEMPORARIOS\WISDOMAPP_10.05+26_26_release.aab` (127 939 181 bytes · SHA-256 `645754E5CCFDEDA8FD9F096E9A2638135591E3A7BA09D0E917BAAC1FDCAACD4D`) |
+| Alias AAB | `D:\TEMPORARIOS\WISDOMAPP_ultimo_release.aab` |
+| Pacote iOS CodeMagic | `D:\TEMPORARIOS\WISDOMAPP_ios_codemagic_10.05+26_26.zip` (1 235 566 bytes) |
+| Export note | `D:\TEMPORARIOS\WISDOMAPP_EXPORT_10.05+26_26.txt` |
+| Web `version.json` | `https://wisdomapp-b9e98.web.app/version.json` e `https://wisdomapp.com.br/version.json` → `10.05+26` (#26) |
+| Force update Firestore | `app_config/version` = `10.05+26`, `forceUpdate=true` (deploy completo 02/08) |
+
+---
+
+## 11. UTILITÁRIOS E CONSTANTES — ÍNDICE RÁPIDO
+
+### `lib/constants/`
+
+`app_version`, `app_brand`, `app_strings`, `app_business_rules`, `color_palette`, `currency_formats`, `date_time_formats`, `premium_pro_limits`, `premium_pro_rollout`, `finance_*`, `admin_gestor_config`, `admin_partner_config`, `google_oauth_config`, `ios_iap_products`, `promo_site_urls`, ícones módulos.
+
+### `lib/utils/` (destaques)
+
+| Área | Arquivos |
+|------|----------|
+| Firestore | `firestore_user_doc_id`, `firestore_retry`, `firestore_web_guard` |
+| Financeiro | `finance_transactions_realtime`, `finance_shell_navigation`, `pdf_financeiro_super_extrato` |
+| Agenda | `agenda_notification_plan`, `compromisso_schedule_dates` |
+| Cursos | `course_media_url_resolver`, `course_thumb_resolver`, `youtube_url_helper` |
+| Admin | `admin_financial_tip_utils`, `admin_panel_launch`, `admin_responsive` |
+| Web/PWA | `pwa_install_helper`, `ensure_web_document_head_web`, `gcal_web_url_clean` |
+| Insights | `insights_engine` |
+
+---
+
+## 12. WIDGETS COURSE VIDEO (REFERÊNCIA — NÃO REGREDIR)
+
+```
+lib/widgets/course_video/
+├── course_video_player_shell.dart    ← poster YouTube-style, tap ▶
+├── course_video_embed.dart           ← export conditional
+├── course_video_embed_mobile.dart    ← WebView + poster HTML
+├── course_video_embed_web.dart       ← iframe/video nativo
+├── course_module_media_panel.dart    ← painel inline módulo
+├── course_video_watch_screen.dart    ← tela assistir fullscreen
+├── course_media_preview.dart         ← thumbnails CourseMediaThumbnail
+├── course_protected_image*.dart
+└── course_media_view_policy.dart     ← bloqueio context menu
+```
+
+---
+
+## 13. INTEGRAÇÃO CALENDÁRIOS (REFERÊNCIA — NÃO REGREDIR)
+
+```
+lib/widgets/external_calendar_integration_panel.dart  ← painel unificado
+lib/services/google_calendar_sync_service.dart
+lib/services/google_calendar_oauth_mobile.dart        ← SEM canAccessScopes (só web)
+lib/services/google_calendar_oauth_web.dart
+lib/services/apple_calendar_sync_service.dart       ← EventKit iOS
+lib/services/external_calendar_bidirectional_sync.dart  ← sync agora (Google e/ou Apple)
+lib/services/external_calendar_scheduled_sync.dart     ← auto 00:00 + 12:00 + catch-up
+lib/widgets/agenda/agenda_bulk_clear_period_dialog.dart
+lib/widgets/agenda/agenda_bulk_clear_confirm_dialog.dart
+lib/widgets/agenda/agenda_bulk_clear_toolbar.dart
+web/google_calendar_oauth.html
+functions/googleCalendarOAuth.js
+ios/Info.plist → NSCalendarsUsageDescription, NSCalendarsFullAccessUsageDescription
+```
+
+**UI Agenda:** chips Sync · Hoje · Config (não usar barra grande colapsável antiga).
+
+**Web Apple Calendar:** explicar CalDAV/iCloud (sem API REST) — só EventKit no iOS nativo.
+
+---
+
+## 14. REGRAS DE NEGÓCIO FIXAS
+
+| Regra | Valor / local |
+|-------|---------------|
+| Biometria timeout | 525600 min (~1 ano) — `app_business_rules.dart` |
+| Usuário logado até Sair | session restore + Firestore offline-first |
+| Fatura cartão data mínima | 16/06/2026 |
+| Max parcelas lançamento | 120 |
+| Max parcelas fixa | 360 |
+| PWA prompt mínimo visitas | 2 |
+| Versão única 3 plataformas | `app_version.dart` |
+| Deploy não força update sozinho | Admin ou `force_version_online.ps1` |
+| thumbnailUrl cursos nunca vazio | `admin_cursos_tab` finalize |
+| MP4 curso: poster antes play | `CourseVideoPlayerShell` |
+| Admin dicas: só cabeçalho na grid | `AdminTipGridCard` compacto |
+| Label drawer idx 2 | "Objetivos Financeiros" (rodapé pode ser "Objetivo") |
+| Web boot: `load()` só no bootstrap | Nunca stripar em `deploy.ps1`; index não chama `load()` |
+| Domínio custom ownership | TXT `hosting-site=wisdomapp-b9e98` no apex (confirmado OK 02/08/2026) |
+| Agenda chips Sync/Hoje/Config | Compactos estilo Escalas CT — sem barra grande antiga |
+| Sync calendário auto | 00:00 e 12:00 via `ExternalCalendarScheduledSync` |
+| Temporários | Sempre `D:\TEMPORARIOS\WISDOMAPP_*` |
+| CodeMagic | Somente iOS; sem AAB/APK no CM |
+| Deploy | Só com ordem explícita do usuário |
+| Mercado Pago | Só Firebase `wisdomapp-b9e98` |
+
+---
+
+## 15. MAPA DE ARQUIVOS CRÍTICOS (ABSOLUTO)
+
+```
+c:\WISDOMAPP\lib\constants\app_version.dart          ← VERSÃO ÚNICA (10.05+26)
+c:\WISDOMAPP\lib\main.dart                           ← boot, rotas, Firebase web (warmUps leves)
+c:\WISDOMAPP\lib\screens\home_shell.dart             ← shell 10 módulos + prefetch financeiro + resume sync agenda
+c:\WISDOMAPP\lib\screens\admin_screen.dart           ← admin principal
+c:\WISDOMAPP\lib\screens\admin_financial_tips_page.dart
+c:\WISDOMAPP\lib\screens\admin_cursos_tab.dart
+c:\WISDOMAPP\lib\screens\cursos_videos_screen.dart
+c:\WISDOMAPP\lib\screens\landing_screen.dart
+c:\WISDOMAPP\lib\screens\wisdom_agenda_screen.dart   ← chips Sync/Hoje/Config + limpeza período
+c:\WISDOMAPP\lib\screens\finance_screen.dart
+c:\WISDOMAPP\lib\services\finance_instant_prefetch_service.dart
+c:\WISDOMAPP\lib\services\finance_month_cache.dart
+c:\WISDOMAPP\lib\services\external_calendar_bidirectional_sync.dart
+c:\WISDOMAPP\lib\services\external_calendar_scheduled_sync.dart
+c:\WISDOMAPP\lib\services\widget_update_service.dart
+c:\WISDOMAPP\lib\widgets\fixed_pending_prefs_sheet.dart
+c:\WISDOMAPP\lib\widgets\agenda\agenda_bulk_clear_period_dialog.dart
+c:\WISDOMAPP\deploy.ps1                              ← NÃO stripar load() do bootstrap
+c:\WISDOMAPP\scripts\Validate-HostingPreDeploy.ps1
+c:\WISDOMAPP\codemagic.yaml
+c:\WISDOMAPP\firebase.json
+c:\WISDOMAPP\firestore.indexes.json
+c:\WISDOMAPP\firestore.rules
+c:\WISDOMAPP\functions\index.js
+c:\WISDOMAPP\web\index.html
+c:\WISDOMAPP\web\flutter_bootstrap.js                ← _flutter.loader.load obrigatório
+c:\WISDOMAPP\web\version.json
+c:\WISDOMAPP\android\app\build.gradle
+c:\WISDOMAPP\android\app\src\main\AndroidManifest.xml  ← 3 widgets + service
+c:\WISDOMAPP\pubspec.yaml
+c:\WISDOMAPP\WISDOMAPP_MEMORIA_BKP.md                ← ESTE ARQUIVO
+```
+
+---
+
+## 16. CHANGELOG DA MEMÓRIA
+
+| Data | Release | Registro |
+|------|---------|----------|
+| 02/08/2026 | 10.05+26 | **Memória geral completa atualizada.** Release `10.05+26` (#26) web+force+AAB+iOS. **Domínio:** apex `wisdomapp.com.br` OK (`version.json` 10.05+26). **Agenda:** chips Sync·Hoje·Config (estilo Escalas CT); sync bidirecional + auto 00:00/12:00 (`external_calendar_*`); limpeza por período com datas digitáveis; células 2+ eventos com divisão de cores. Mantém boot web `load()`, financeiro prefetch, widgets 3 tamanhos, cursos/`course_stats`, UI sem audiência. Artefatos: `D:\TEMPORARIOS\WISDOMAPP_*_10.05+26_*`. |
+| 02/08/2026 | 10.05+25 | Memória intermediária (#25). Splash web corrigido (`load()` no bootstrap); domínio ainda `OWNERSHIP_MISSING`; financeiro prefetch; widgets 3 tamanhos; cursos analytics; agenda sem audiência. |
+
+| 30/07/2026 | 10.05+24 | **Deploy completo e memória atualizada.** Web publicada, force update ativo, AAB em `D:\TEMPORARIOS`, pacote iOS gerado e Codemagic acionado. Agenda alinhada ao Controle Total (hoje/resumo, cores, ações, início semanal domingo/segunda e limpeza rápida), contato WhatsApp pela agenda do celular, Admin Cursos com progresso/retorno/cache e descrição completa. Correção Codemagic para App Group, perfil e Team ID do Widget no commit `07f9e97`. |
+| 30/06/2026 | 10.04+21 | **Memória atualizada.** Build 21 web/Android; iOS 23. Paridade mídia alinhada ao padrão Gestão YAHWEH (Storage→URL→Firestore, gate único). Referência cruzada: `C:\gestao_yahweh_premium_final\docs\MAPEAMENTO_MIDIA_WISDOMAPP_IMPLEMENTACAO_CIRURGICA.md`. |
+| 28/06/2026 | 10.04+16 | **Criação deste backup.** Player cursos YouTube-style. Calendários Google+Apple. Grid admin dicas compacta. Versão alinhada. Codemagic anti-90189. Label "Objetivos Financeiros". |
+| 28/06/2026 | 10.04+16 | **Seção 18:** roadmap port WISDOMAPP → Controle Total (`C:\Controletotalapp_Independente`). |
+
+---
+
+## 18. PORT WISDOMAPP → CONTROLE TOTAL APP
+
+> **Projeto destino:** `C:\Controletotalapp_Independente\flutter_app`  
+> **Versão CT (referência recente):** `49.57+4957581` · **Versão origem WISDOMAPP:** `10.05+26`  
+> **Documento espelho no CT:** `CONTROLETOTAL_PORT_WISDOMAPP.md` / `PONTO_BASE_MEMORIA_*.md` (raiz do CT)  
+> **Regra de ouro:** copiar **comportamento e arquivos** do WISDOMAPP; **não retroagir** o que já funciona no CT (escalas, calculadora, deploy 49.x). Fluxo inverso também: widgets Android, sheet meses fixas e boot web leve já vieram do CT → WISDOMAPP.
+
+### 18.1 Objetivo geral
+
+Padronizar o **Controle Total** com as melhorias já validadas no WISDOMAPP:
+
+| # | Feature | Origem WISDOMAPP | Status no CT | Prioridade |
+|---|---------|------------------|--------------|------------|
+| A | Cofre pessoal (financeiro) | Spec + padrões CT/WISDOMAPP | ❌ Não existe | Alta |
+| B | Migração lançamentos entre bancos | `finance_bulk_assign_screen.dart` v2 | ⚠️ Só «sem conta» (v1) | Alta |
+| C | Alerta exclusão banco + remover lançamentos | `finance_delete_account_dialog.dart` | ❌ Dialog genérico | Alta |
+| D | Meta Financeiro completo + 52 semanas | `meta_financeira_screen` + widgets | ⚠️ Meta básica, sem 52 | Alta |
+| E | Painel Início: Meta + Financeiro integrados | `home_objective_finance_panel`, `home_finance_overview_panel` | ❌ Dashboard legado grande | Alta |
+| F | Dicas financeiras/gospel no Início | `wisdom_dashboard` + `financial_tips_catalog_service` | ❌ Sem catálogo Firestore | Média |
+| G | Lançamento expresso — compromisso particular UI | `lancamento_expresso_plantao_sheet.dart` | ✅ Similar | Média |
+| H | Compromisso particular **sem sync agenda externa** | N/A (CT não leva GCal) | A definir stub | Média |
+| I | Performance iOS/Android/Web | padrões cache/streams | Parcial | Alta |
+| J | Visualizar comprovantes | `anexo_viewer_*` | ✅ Existe | Verificar paridade |
+
+---
+
+### 18.2 Módulo financeiro — itens A, B, C
+
+#### A) Cofre pessoal
+
+**Situação:** termo «Cofre pessoal» ainda **não implementado** em nenhum dos dois repos (só «cofre do sistema» = Keychain em `offline_credentials_store.dart`).
+
+**Spec recomendada (implementar no CT, replicável no WISDOMAPP depois):**
+
+| Item | Detalhe |
+|------|---------|
+| Conceito | Reserva separada (dinheiro físico / emergência) fora da faixa principal de bancos |
+| Firestore | `users/{uid}/finance_accounts` com `productType: 'vault'` ou doc `settings/finance_prefs` → `vaultAccountId` |
+| UI | Card «Cofre pessoal» no Financeiro + saldo ocultável (`SensitiveBalancePreferences`) |
+| Lançamentos | Mesma coleção `transactions` com `financeAccountId` do cofre |
+| Regras | Não entra em Open Finance; não migra para banco externo sem confirmação |
+
+**Arquivos base CT (já existem):** `sensitive_balance_preferences.dart`, `finance_accounts_service.dart`, `finance_screen.dart`.
+
+**Gatilho:** não confundir com filtro «Ocultar saldo zero» (`financeStripHideZeroBalances`).
+
+#### B) Migração lançamentos entre bancos
+
+**Origem (WISDOMAPP — versão completa):**
+
+```
+lib/screens/finance_bulk_assign_screen.dart   ← enum _MigracaoModo { semConta, transferirBanco }
+lib/screens/finance_screen.dart               ← _openBulkAssignFromStrip + initialSourceAccountId
+lib/utils/finance_transactions_hub.dart
+lib/widgets/finance_bank_brand_thumb.dart
+lib/constants/finance_account_visuals.dart
+```
+
+**Destino CT:** substituir `flutter_app/lib/screens/finance_bulk_assign_screen.dart` pela versão WISDOMAPP (adaptar imports/branding).
+
+**Comportamento:**
+
+1. Modo «Sem conta» → atribuir `financeAccountId` em lote (já existe no CT).
+2. Modo «Transferir banco» → origem + destino + período + filtro receita/despesa → reescreve `financeAccountId` / `paidFromFinanceAccountId` / pares `transferPairId`.
+3. Abrir do Financeiro com conta filtrada → `initialSourceAccountId` pré-seleciona origem.
+
+**Regra:** usar `FinanceAccountsService` + batch Firestore; respeitar `firestoreUserDocIdForAppShell(uid)`.
+
+#### C) Excluir banco — alerta + remoção de lançamentos
+
+**Origem WISDOMAPP:**
+
+```
+lib/widgets/finance_delete_account_dialog.dart     ← showConfirmDeleteFinanceAccountDialog
+lib/services/finance_accounts_service.dart         ← countLinkedTransactions, deleteAccount
+lib/screens/finance_accounts_screen.dart           ← fluxo completo
+```
+
+**Destino CT:** hoje usa `AlertDialog` genérico («Lançamentos antigos podem continuar…») — **substituir** pelo dialog WISDOMAPP.
+
+**Fluxo obrigatório:**
+
+1. `countLinkedTransactions(uid, accountId)` antes do dialog.
+2. Dialog vermelho: «ATENÇÃO: removerá permanentemente N lançamentos».
+3. `deleteAccount` retorna quantidade removida → SnackBar confirmando.
+
+**Gatilho:** transferências (`transferPairId`) devem ser tratadas no service (já em WISDOMAPP `finance_accounts_service.dart`).
+
+---
+
+### 18.3 Meta Financeiro completo + Projeto 52 semanas (item D)
+
+**Nome no CT:** manter **«Meta Financeira»** (label drawer/sistema CT) — conteúdo igual WISDOMAPP «Objetivos Financeiros» + 52 semanas.
+
+**Copiar do WISDOMAPP → CT (`flutter_app/lib/`):**
+
+| Arquivo | Função |
+|---------|--------|
+| `screens/meta_financeira_screen.dart` | Tela principal (substituir CT) |
+| `widgets/create_financial_goal_dialog.dart` | Criar meta + toggle 52 semanas |
+| `widgets/home_objective_finance_panel.dart` | Card no Início |
+| `widgets/fifty_two_weeks_schedule_sheet.dart` | Grade 52 semanas + depósito |
+| `widgets/goal_52_weeks_summary_panel.dart` | Resumo semanas pagas |
+| `widgets/goal_52_weeks_pdf_button.dart` | Botão PDF (se existir) |
+| `utils/fifty_two_weeks_plan.dart` | Cálculo semanas 1→52 |
+| `services/goal_52_weeks_pdf_service.dart` | Export PDF cronograma |
+| `services/goal_deposit_service.dart` | Depósitos + marcar semanas |
+| `models/financial_goal.dart` | Modelo (se CT divergir, merge) |
+
+**Firestore (sem mudar schema CT):**
+
+- `users/{uid}/goals/{goalId}` — campos: `planType: '52weeks'`, `weeklyIncrement`, `planStart`, `paidWeeks[]`, `targetAmount`, `currentAmount`, `dueDate`.
+- `users/{uid}/goals/{goalId}/contributions` — aportes.
+
+**Integração Financeiro:**
+
+- Depósito na meta pode gerar lançamento em `transactions` (ver `goal_deposit_service.dart`).
+- Painel Início chama `onNavigateTo` índice Meta (CT: idx 2 no `home_shell.dart`).
+
+**52 semanas — regras:**
+
+- Semana 1 = menor valor; semana 52 = maior; incremento = `(target - week1*52)` distribuído.
+- `FiftyTwoWeeksPlan.currentWeekNumber(planStart)` para «semana atual».
+- PDF exportável (`Goal52WeeksPdfService`).
+
+---
+
+### 18.4 Painel Inicial integrado (item E)
+
+**Origem WISDOMAPP:**
+
+```
+lib/screens/wisdom_dashboard_screen.dart      ← layout Início moderno
+lib/widgets/home_finance_overview_panel.dart  ← resumo financeiro
+lib/widgets/home_objective_finance_panel.dart ← meta + 52 semanas
+lib/widgets/finance_tip_modern_card.dart
+```
+
+**Destino CT:** `dashboard_screen.dart` (~10k linhas) — **não apagar** funcionalidades CT (escalas, plantões, promo).
+
+**Estratégia:**
+
+1. Extrair seções WISDOMAPP como widgets reutilizáveis no topo do `dashboard_screen.dart`.
+2. Ordem sugerida no Início CT:
+   - Hero / atalhos (manter CT)
+   - **1 dica financeira** + botão «Veja mais» (item F)
+   - `HomeFinanceOverviewPanel`
+   - `HomeObjectiveFinancePanel`
+   - Restante CT (escalas, pendentes, etc.)
+
+**Gatilho:** CT usa `_hideSensitiveBalances` — propagar para novos painéis.
+
+---
+
+### 18.5 Dicas financeiras + gospel no Início (item F)
+
+**Origem WISDOMAPP:**
+
+```
+lib/services/financial_tips_catalog_service.dart   ← watchHomeTips, partitionForHome
+lib/services/financial_tips_home_sync_service.dart ← app_config/financial_tips_home
+lib/data/biblical_finance_tips.dart
+lib/data/financial_tips_firestore_seed_bank.dart
+lib/utils/insights_engine.dart                     ← coleção financial_tips
+lib/screens/financial_tips_fullscreen_page.dart
+lib/widgets/finance_tip_modern_card.dart
+lib/screens/wisdom_dashboard_screen.dart           ← 1 card + «Veja mais»
+```
+
+**Regras de exibição (OBRIGATÓRIO — igual WISDOMAPP):**
+
+| Local | Quantidade | Comportamento |
+|-------|------------|---------------|
+| **Painel Início** | **1 dica** (`tipOfDay`) | Card completo + botão **«Veja mais»** |
+| **Módulo Dicas** (se existir) | **últimos 3 dias** | `FinancialTipsCatalogService.kModuleHistoryDays = 3` |
+| Rotação | Por dia civil | `resolveTipForDate` + `app_config/financial_tips_home` |
+
+**CT:** copiar serviço + widget; criar aba/módulo ou fullscreen «Dicas» se não existir.
+
+**Admin (opcional CT):** portar `admin_financial_tips_page.dart` + grid compacta.
+
+---
+
+### 18.6 Lançamento expresso — compromisso particular (item G, H)
+
+**Origem:** `lib/widgets/lancamento_expresso_plantao_sheet.dart` (WISDOMAPP ≈ CT — mesma base).
+
+**Manter no CT (igual WISDOMAPP):**
+
+- Título «Compromisso particular» / «Editar compromisso particular»
+- **6 ícones coloridos** de compromissos frequentes (toque preenche descrição + cor)
+- Seletor de **datas** (calendário / série)
+- Toggle financeiro vs compromisso simples
+- Valor particular override
+- Lembrete personalizado (notificação local CT)
+
+**NÃO portar / DESLIGAR no CT:**
+
+- Sync **Google Calendar** / **Apple Calendar** (`google_calendar_sync_service`, EventKit)
+- Opcional: se CT não usar módulo Agenda WISDOMAPP, usar stub `ExpressCompromissoAgendaSync` que grava **só em `scales`** (sem `reminders` + espelho) — confirmar com produto
+
+**Arquivo a adaptar no CT:**
+
+```
+flutter_app/lib/widgets/lancamento_expresso_plantao_sheet.dart
+flutter_app/lib/services/express_compromisso_agenda_sync.dart  ← stub ou scales-only
+```
+
+**Gatilho:** manter `createdByLancamentoExpresso: true` e `source: 'lancamento_expresso'` para rastreio.
+
+---
+
+### 18.7 Performance — mesma velocidade WISDOMAPP (item I)
+
+**Padrões a replicar no CT:**
+
+| Padrão | Arquivo WISDOMAPP | Aplicar em |
+|--------|-------------------|------------|
+| Cache Firestore contas | `finance_accounts_service.dart` → `Source.cache` primeiro | CT finance |
+| HomeShell lazy modules | `home_shell.dart` `_materializedModuleIndices`, max 2 | CT `home_shell.dart` |
+| Debounce busca financeiro | `app_business_rules.searchDebounceMs = 300` | CT |
+| Streams paralelos | `finance_screen.dart` contas + hideZero em paralelo | CT |
+| Safari Firebase init | `main.dart` retries + long-polling | CT `main.dart` |
+| `DebouncedTextController` | bulk assign / filtros | CT bulk assign |
+| Optimistic UI pagamentos | `finance_screen.dart` `_optimisticPaidIds` | CT se faltar |
+
+**Regra:** toda tela financeira deve abrir **instantânea** com cache local; servidor atualiza depois.
+
+---
+
+### 18.8 Comprovantes (item J)
+
+**Origem = Destino (verificar paridade):**
+
+```
+lib/screens/anexo_viewer_screen.dart
+lib/screens/anexo_viewer_web.dart
+lib/screens/anexo_viewer_stub.dart
+lib/utils/anexo_viewer_helper.dart
+```
+
+**Fluxo:** lançamento com `receiptUrl` / Storage → ícone anexo → viewer PDF/imagem (web nativo, mobile WebView/PDF).
+
+**Gatilho:** upload em `transaction_save_service.dart` + `FinanceTransferService` (receiptBytes).
+
+---
+
+### 18.9 Mapa de arquivos — diff CT vs WISDOMAPP
+
+```
+ORIGEM (copiar)                              DESTINO CT
+─────────────────────────────────────────────────────────────────────────
+WISDOMAPP/lib/screens/finance_bulk_assign_screen.dart
+  → CT/flutter_app/lib/screens/finance_bulk_assign_screen.dart
+
+WISDOMAPP/lib/widgets/finance_delete_account_dialog.dart
+  → CT/flutter_app/lib/widgets/finance_delete_account_dialog.dart  (NOVO)
+
+WISDOMAPP/lib/screens/finance_accounts_screen.dart  (trecho delete)
+  → CT/flutter_app/lib/screens/finance_accounts_screen.dart
+
+WISDOMAPP/lib/screens/meta_financeira_screen.dart + deps 52 semanas
+  → CT/flutter_app/lib/...  (lista seção 18.3)
+
+WISDOMAPP/lib/widgets/home_objective_finance_panel.dart
+WISDOMAPP/lib/widgets/home_finance_overview_panel.dart
+  → CT/flutter_app/lib/widgets/ + integrar dashboard_screen.dart
+
+WISDOMAPP/lib/services/financial_tips_catalog_service.dart + widgets
+  → CT/flutter_app/lib/services/ + dashboard
+
+WISDOMAPP/lib/screens/wisdom_dashboard_screen.dart  (só padrão dicas 1+veja mais)
+  → referência para refatorar CT dashboard
+```
+
+---
+
+### 18.10 Regras de padronização CT ↔ WISDOMAPP
+
+1. **Nomenclatura CT:** drawer continua «Meta Financeira»; marketing pode citar «52 semanas».
+2. **Firestore paths:** idênticos (`users/{uid}/transactions`, `goals`, `finance_accounts`).
+3. **UID doc:** sempre `firestoreUserDocIdForAppShell(uid)`.
+4. **Cores:** CT mantém `AppColors` / tema CT; widgets portados adaptam gradientes.
+5. **Versão:** CT mantém pipeline `49.x` próprio — **não** misturar `app_version.dart` entre projetos.
+6. **Firebase:** projetos Firebase **diferentes** — não copiar `firebase_options.dart` entre repos.
+7. **Não retroagir CT:** escalas, calculadora HE, convênios, admin 49.x permanecem.
+8. **Commits:** port em branch `port/wisdom-finance-meta-52` no CT.
+
+---
+
+### 18.11 Ordem de implementação sugerida
+
+```
+Fase 1 — Financeiro crítico
+  [ ] C) Dialog exclusão banco + deleteAccount com contagem
+  [ ] B) finance_bulk_assign v2 (transferir banco)
+  [ ] A) Cofre pessoal (spec + UI)
+
+Fase 2 — Meta 52 semanas
+  [ ] Copiar utils/widgets/services 52 semanas
+  [ ] Substituir meta_financeira_screen.dart
+  [ ] goal_deposit_service integrado
+
+Fase 3 — Painel Início
+  [ ] home_finance_overview_panel + home_objective_finance_panel
+  [ ] Dicas: 1 card + «Veja mais» + módulo 3 dias
+
+Fase 4 — Polish
+  [ ] Lançamento expresso: confirmar UI ícones; stub agenda externa
+  [ ] Performance cache/streams
+  [ ] Teste comprovantes web/iOS/Android
+```
+
+---
+
+### 18.12 Checklist pós-port (Controle Total)
+
+- [ ] Excluir banco mostra contagem e remove lançamentos?
+- [ ] Migrar banco A → B funciona com transferências?
+- [ ] Meta 52 semanas cria cronograma + PDF + depósito?
+- [ ] Início mostra **1** dica + «Veja mais»?
+- [ ] Módulo dicas mostra só **3 dias**?
+- [ ] Compromisso particular: ícones + datas; **sem** GCal/Apple sync?
+- [ ] Comprovante abre em web e mobile?
+- [ ] CT escalas/calculadora/admin intactos?
+
+---
+
+*Seção 18 — roadmap portabilidade. Atualizar ao concluir cada fase.*
+
+---
+
+## 17. CHECKLIST ANTES DE ENTREGAR QUALQUER CORREÇÃO
+
+- [ ] Li a seção relevante desta memória?
+- [ ] Minha mudança é mínima e focada?
+- [ ] Não removi funcionalidade existente?
+- [ ] Web + mobile compilam (`flutter analyze` nos arquivos tocados)?
+- [ ] Se toquei versão → rodei/sync `sync_app_version.ps1`?
+- [ ] Se toquei Firestore query → atualizei `firestore.indexes.json`?
+- [ ] Se toquei OAuth/calendário → testei stub web vs mobile?
+- [ ] Se toquei web/deploy → `build/web/flutter_bootstrap.js` ainda tem `_flutter.loader.load(`?
+- [ ] Se toquei domínio → TXT `hosting-site=wisdomapp-b9e98` + Auth authorized domains?
+- [ ] Se toquei port CT → consultei seção 18?
+- [ ] Atualizei seção 16 desta memória se a mudança for estrutural?
+- [ ] Deploy só se o usuário pediu explicitamente?
+
+---
+
+*Documento gerado como backup de referência do WISDOMAPP. Manter atualizado a cada release ou mudança arquitetural significativa. Snapshot ativo: **02/08/2026 · 10.05+26**.*
+
+---
+
+## Build iOS no GitHub Actions (02/09/2026)
+
+Repo: `raihom-netizen/wisdomapp` (branch padrao `main`). O IPA e renomeado para
+`WISDOMAPP.ipa` e passa pelos gates anti-90189 antes do envio. Bundle `com.wisdomapp`,
+widget `com.wisdomapp.WisdomappWidget`.
+
+O build iOS saiu do Codemagic e roda no GitHub Actions, workflow **iOS TestFlight**
+(`.github/workflows/ios_testflight.yml`). O `codemagic.yaml` continua no repo como plano B.
+
+**Nao roda sozinho.** O gatilho e apenas `workflow_dispatch`: nenhum push inicia build.
+Para rodar:
+
+    gh workflow run ios_testflight.yml --ref <branch>
+
+ou GitHub > Actions > iOS TestFlight > Run workflow. Motivo: runner macOS conta **10x**
+na cota de minutos (um build de 50 min custa ~500), entao build iOS so acontece quando
+alguem pede — normalmente no fim do deploy completo.
+
+**Xcode 26 e obrigatorio.** Desde 2026 a Apple recusa upload de app compilado com SDK
+menor que o do iOS 26: `Validation failed (409) SDK version issue`. O runner `macos-15`
+usa Xcode 16.4 — por isso o job roda em `macos-26`. Pegadinha: essa imagem traz varios
+Xcode 26.x e **nem todos tem a plataforma iOS instalada**; escolher pelo numero maior cai
+num que nao tem e o build morre em `iOS 26.0 is not installed`. O passo "Selecionar Xcode
+26+ com SDK iOS instalado" ordena por versao completa e so aceita um cujo
+`xcrun --sdk iphoneos --show-sdk-version` responda 26+.
+
+**Como o IPA e gerado** (`scripts/gha_ios_build_ipa.sh`, igual nos quatro apps):
+`flutter build ios --release --no-codesign` -> `xcodebuild archive` -> `xcodebuild
+-exportArchive` com o ExportOptions escrito a partir dos perfis instalados no keychain.
+Nao usa `flutter build ipa`: ele monta o proprio ExportOptions e deixa o `.ipa` em
+caminhos que variam com o layout do repo.
+
+**Como e enviado** (`scripts/gha_ios_publish_testflight.sh`): `app-store-connect publish
+--testflight`, com 3 tentativas — sao ~130 MB e uma queda de rede no fim derrubava o build
+inteiro. Se a Apple responder **90189** ("build number ja usado"), o script trata como
+sucesso: o binario ja chegou, nao ha o que reenviar.
+
+**Se o build deu certo mas o envio nao:** workflow **Enviar IPA ao TestFlight**
+(`ios_enviar_testflight.yml`) baixa o IPA daquele run e so publica — ~5 min de runner em
+vez de recompilar. Informe o numero do run (esta na URL do run em Actions).
+
+**Secrets** (Settings > Secrets and variables > Actions), gravados por
+`.\scripts\configurar_github_ios.ps1`: `APP_STORE_CONNECT_PRIVATE_KEY` (.p8),
+`APP_STORE_CONNECT_KEY_IDENTIFIER`, `APP_STORE_CONNECT_ISSUER_ID` e
+`CERTIFICATE_PRIVATE_KEY` (chave RSA). Os quatro apps (Controle Total, WISDOMAPP,
+MOOVAUP, Gestao YAHWEH) estao na **mesma conta App Store Connect** (Issuer
+`77a1debb-...`), entao a mesma chave `.p8` e a mesma chave RSA servem para todos — e
+reusar a RSA e o que evita estourar o limite de 3 certificados Apple Distribution da
+conta. Chave `.p8` e credencial: quem roda o script e o dono da conta, nunca o assistente.
+
+**Armadilha ja paga:** condicao de passo escrita como `if: inputs.X != false` e pulada
+quando o build vem de push — em push o contexto `inputs` vem vazio, e no GitHub Actions
+string vazia compara igual a `false`. O run fica verde sem ter enviado nada. A forma certa
+e `if: ${{ github.event_name != 'workflow_dispatch' || inputs.X }}`.
