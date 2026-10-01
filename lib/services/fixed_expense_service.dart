@@ -164,8 +164,13 @@ class FixedExpenseService {
     }
     await _fixedRef(uid).doc(id).update(data);
     if (addToCalendar != null || calendarColorHex != null) {
+      // Só a cor mudou: respeita o opt-in gravado na fixa (ausente =
+      // desligado; regra 01/10/2026) — não liga sozinho.
+      final ligado = addToCalendar ??
+          ((await _fixedRef(uid).doc(id).get()).data()?['addToCalendar'] ==
+              true);
       await _updateFuturePendingCalendarFlags(
-          uid, id, addToCalendar ?? true, calendarColorHex);
+          uid, id, ligado, calendarColorHex);
     }
     if (dayOfMonth != null) {
       return updateFuturePendingEntries(uid, id, dayOfMonth.clamp(1, 31));
@@ -325,7 +330,9 @@ class FixedExpenseService {
       final description = (fe['description'] ?? 'Despesa fixa').toString();
       final feId = fe['id'].toString();
       final amount = (fe['amount'] as num?)?.toDouble() ?? 0;
-      final addToCalendar = fe['addToCalendar'] != false;
+      // Só aparece na Agenda com opt-in explícito; legado sem campo =
+      // DESLIGADO (port Controle Total, regra 01/10/2026).
+      final addToCalendar = fe['addToCalendar'] == true;
       final calHex = (fe['calendarColorHex'] ?? '').toString().trim();
 
       // Inclui monthKey explícito OU deriva do campo date (pagas/legado sem fixedExpenseMonthKey),

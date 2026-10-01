@@ -1770,8 +1770,19 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
                                   },
                                   addToCalendar: _addToCalendar,
                                   calendarColorHex: _calendarColorHex,
-                                  onAddToCalendarChanged: (v) =>
-                                      setState(() => _addToCalendar = v),
+                                  onAddToCalendarChanged: (v) async {
+                                    setState(() => _addToCalendar = v);
+                                    if (!v) return;
+                                    // Ao ativar: paleta padrão com a cor sugerida.
+                                    final hex = await FinanceCalendarColorPicker
+                                        .escolherAoAtivar(
+                                      context,
+                                      isIncome: _effectiveIsIncome,
+                                      currentHex: _calendarColorHex,
+                                    );
+                                    if (!mounted) return;
+                                    setState(() => _calendarColorHex = hex);
+                                  },
                                   onCalendarColorChanged: (v) =>
                                       setState(() => _calendarColorHex = v),
                                   onCategoryChanged: (v) {

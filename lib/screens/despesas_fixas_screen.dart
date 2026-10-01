@@ -224,7 +224,8 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
     int totalParcelas = (existing?['totalParcelas'] as num?)?.toInt() ?? 12;
     int parcelaInicial = (existing?['parcelaInicial'] as num?)?.toInt() ?? 1;
     // Mostrar no calendário Agenda/Escala + cor escolhida (novos começam desligados).
-    bool addToCalendar = existing != null && existing['addToCalendar'] != false;
+    // Só ligado com opt-in explícito (ausente = desligado; regra 01/10/2026).
+    bool addToCalendar = existing != null && existing['addToCalendar'] == true;
     String? calendarColorHex = existing?['calendarColorHex']?.toString();
     if (mode == FixedExpenseService.modeInstallments) {
       totalParcelas =
@@ -437,8 +438,19 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                           _buildAddToCalendarToggle(
                             isIncome: false,
                             value: addToCalendar,
-                            onChanged: (v) =>
-                                setModalState(() => addToCalendar = v),
+                            onChanged: (v) async {
+                              setModalState(() => addToCalendar = v);
+                              if (!v) return;
+                              // Ao ativar: paleta padrão com a cor sugerida.
+                              final hex = await FinanceCalendarColorPicker
+                                  .escolherAoAtivar(
+                                context,
+                                isIncome: false,
+                                currentHex: calendarColorHex,
+                              );
+                              if (!context.mounted) return;
+                              setModalState(() => calendarColorHex = hex);
+                            },
                           ),
                           if (addToCalendar) ...[
                             const SizedBox(height: 10),

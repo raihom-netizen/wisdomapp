@@ -49,8 +49,6 @@ class NovoLancamentoPage extends StatefulWidget {
 class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
   bool _isIncome = true;
   bool _loadingCategories = true;
-  List<String> _incomeCategories = [];
-  List<String> _expenseCategories = [];
   bool _hasReceipt = false;
   String _receiptName = '';
   Uint8List? _receiptBytes;
@@ -93,8 +91,6 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
   Brightness? _cachedThemeBrightness;
   ThemeData? _cachedDarkFormTheme;
 
-  List<String> get _currentCategories =>
-      _isIncome ? _incomeCategories : _expenseCategories;
 
   @override
   void didChangeDependencies() {
@@ -180,20 +176,15 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
   }
 
   Future<void> _initCategoriesAndDefaultAccount() async {
-    final c = await UserCategoriesService().load(widget.uid);
+    // Carrega (e aquece o cache) das categorias do usuário.
+    await UserCategoriesService().load(widget.uid);
     if (!mounted) return;
     setState(() {
-      _incomeCategories = List<String>.from(c.income);
-      _expenseCategories = List<String>.from(c.expense);
-      final list = _isIncome ? c.income : c.expense;
-      final incluirNova = UserCategoriesService.kIncluirNova;
-      _selectedCategory = list.length > 1 && list.first == incluirNova
-          ? list[1]
-          : (list.isNotEmpty ? list.first : '__outra__');
-      _categoryCtrl.text =
-          _selectedCategory == '__outra__' || _selectedCategory == incluirNova
-              ? ''
-              : _selectedCategory;
+      // Lançamento novo começa em «Escolher categoria» (port Controle Total,
+      // 30/09/2026): antes vinha a 1ª da lista e o gasto entrava na
+      // categoria errada quando a pessoa não trocava.
+      _selectedCategory = '';
+      _categoryCtrl.text = '';
       _loadingCategories = false;
     });
     _applyAutoDescriptionFromContext();
@@ -327,8 +318,13 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
         (_selectedCategory == '__outra__' || _selectedCategory == incluirNova)
             ? _categoryCtrl.text.trim()
             : _selectedCategory;
+    // Sem categoria escolhida: pede a escolha (abre a lista) em vez de gravar
+    // como «Despesa»/«Receita» genérica.
     if (categoryFinal.isEmpty) {
-      categoryFinal = _isIncome ? 'Receita' : 'Despesa';
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Escolha a categoria do lançamento.')));
+      await _openFinanceCategoryPicker();
+      return;
     }
     final installmentsTotal = _installmentMode
         ? (int.tryParse(_installmentsCtrl.text.trim()) ?? 12).clamp(1, 999)
@@ -961,7 +957,18 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
             value: _addToCalendar,
             activeThumbColor: accent,
             activeTrackColor: accent.withValues(alpha: 0.5),
-            onChanged: (v) => setState(() => _addToCalendar = v),
+            onChanged: (v) async {
+              setState(() => _addToCalendar = v);
+              if (!v) return;
+              // Ao ativar: paleta padrão já com a cor sugerida/atual.
+              final hex = await FinanceCalendarColorPicker.escolherAoAtivar(
+                context,
+                isIncome: _isIncome,
+                currentHex: _calendarColorHex,
+              );
+              if (!mounted) return;
+              setState(() => _calendarColorHex = hex);
+            },
           ),
         ],
       ),
@@ -1023,15 +1030,10 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
       onChanged: (income) {
         setState(() {
           _isIncome = income;
-          final list = _currentCategories;
-          final incluirNova = UserCategoriesService.kIncluirNova;
-          _selectedCategory = list.length > 1 && list.first == incluirNova
-              ? list[1]
-              : (list.isNotEmpty ? list.first : '__outra__');
-          _categoryCtrl.text = _selectedCategory == '__outra__' ||
-                  _selectedCategory == incluirNova
-              ? ''
-              : _selectedCategory;
+          // Trocou Receita/Despesa: a categoria volta para «Escolher
+          // categoria» (a lista é outra; nada de pré-selecionar a 1ª).
+          _selectedCategory = '';
+          _categoryCtrl.text = '';
         });
         _applyAutoDescriptionFromContext();
       },
@@ -1203,11 +1205,9 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
     );
     if (picked == null || !mounted) return;
     if (picked != '__outra__') {
-      final c = await UserCategoriesService().load(widget.uid);
+      await UserCategoriesService().load(widget.uid);
       if (!mounted) return;
       setState(() {
-        _incomeCategories = List<String>.from(c.income);
-        _expenseCategories = List<String>.from(c.expense);
         _selectedCategory = picked;
         _categoryCtrl.text = picked;
       });

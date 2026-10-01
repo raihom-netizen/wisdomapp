@@ -81,6 +81,16 @@ abstract final class FinanceCalendarBridge {
     }
   }
 
+  /// `true` se o lançamento deve aparecer no calendário (Agenda).
+  ///
+  /// Regra (port Controle Total, 01/10/2026): TODO lançamento financeiro só
+  /// aparece com opt-in explícito `addToCalendar == true`. Campo ausente =
+  /// desligado. [hideFromCalendar] explícito → oculto (sempre).
+  static bool _shouldShowOnCalendar(Map<String, dynamic> d) {
+    if (d['hideFromCalendar'] == true) return false;
+    return d['addToCalendar'] == true;
+  }
+
   /// `true` se a data do documento for hoje ou futura.
   static bool _isFutureOrToday(
       QueryDocumentSnapshot<Map<String, dynamic>> doc) {
@@ -117,7 +127,7 @@ abstract final class FinanceCalendarBridge {
       final seenFixedKeys = <String>{};
       for (final doc in snap.docs.where(_isFutureOrToday)) {
         final d = doc.data();
-        if (d['addToCalendar'] == false) continue;
+        if (!_shouldShowOnCalendar(d)) continue;
         // Pula duplicados da mesma despesa/receita fixa + mês.
         final feId = d['fixedExpenseId']?.toString() ?? '';
         final fiId = d['fixedIncomeId']?.toString() ?? '';
@@ -205,7 +215,7 @@ abstract final class FinanceCalendarBridge {
       bool hasExp = false;
       bool hasInc = false;
       for (final doc in snap.docs.where(_isFutureOrToday)) {
-        if (doc.data()['addToCalendar'] == false) continue;
+        if (!_shouldShowOnCalendar(doc.data())) continue;
         final type = (doc.data()['type'] ?? '').toString();
         if (type == 'expense') hasExp = true;
         if (type == 'income') hasInc = true;
@@ -372,7 +382,7 @@ abstract final class FinanceCalendarBridge {
     final seenFixedKeys = <String>{};
     for (final doc in docs) {
       final d = doc.data();
-      if (d['addToCalendar'] == false) continue;
+      if (!_shouldShowOnCalendar(d)) continue;
       final dateTs = d['date'];
       if (dateTs is! Timestamp) continue;
       final date = dateTs.toDate();
