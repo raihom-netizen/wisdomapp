@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../constants/date_time_formats.dart';
 import '../theme/app_colors.dart';
+import 'keyed_stream_builder.dart';
 
 /// Filtro da lista de ocorrências exibida pelo sheet do painel do módulo
 /// Produtividade.
@@ -183,8 +184,9 @@ Future<void> showProdutividadeEmAbertoSheet(
             ),
             const Divider(height: 1),
             Expanded(
-              child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: ref.snapshots(),
+              child: KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                streamKey: ref.path,
+                create: () => ref.snapshots(),
                 builder: (context, snap) {
                   if (snap.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());

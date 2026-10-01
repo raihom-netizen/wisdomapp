@@ -6,6 +6,7 @@ import '../theme/app_colors.dart';
 import '../constants/anotacoes_module_icons.dart';
 import '../constants/calculator_module_icons.dart';
 import 'home_start_module_picker.dart';
+import 'keyed_stream_builder.dart';
 
 /// Menu lateral esquerdo azul escuro — usuário (mesmo padrão admin).
 class UserMenuLateral extends StatelessWidget {
@@ -202,8 +203,9 @@ class UserMenuLateral extends StatelessWidget {
       child: Material(
         color: Colors.white.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(10),
-        child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-          stream: homePlanningRef(uid).snapshots(),
+        child: KeyedStreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          streamKey: homePlanningRef(uid).path,
+          create: () => homePlanningRef(uid).snapshots(),
           builder: (context, snap) {
             final data = snap.data?.data() ?? <String, dynamic>{};
             final raw = data[kHomeDefaultStartModuleField];

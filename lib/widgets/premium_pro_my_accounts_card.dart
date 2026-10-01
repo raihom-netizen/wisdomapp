@@ -9,6 +9,7 @@ import '../theme/app_colors.dart';
 import 'bank_card_widget.dart';
 import 'pluggy_sync_schedule_banner.dart';
 import 'premium_pro_value_copy.dart';
+import 'keyed_stream_builder.dart';
 
 /// Bloco "Minhas contas" (Open Finance) no módulo Financeiro — Premium PRO.
 class PremiumProMyAccountsCard extends StatelessWidget {
@@ -38,8 +39,9 @@ class PremiumProMyAccountsCard extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.all(14),
-        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: ref.snapshots(),
+        child: KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          streamKey: ref.path,
+          create: () => ref.snapshots(),
           builder: (context, snap) {
             final n = snap.data?.docs.length ?? 0;
             final included = PremiumProLimits.includedBankConnections(

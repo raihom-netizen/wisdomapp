@@ -7,6 +7,7 @@ import '../utils/app_update_launcher.dart';
 import '../utils/maintenance_app_update_links.dart';
 import '../utils/url_launcher_helper.dart';
 import '../widgets/maintenance_app_update_buttons.dart';
+import '../widgets/keyed_stream_builder.dart';
 
 bool _maintenanceFullScreenAppliesToUser(
     Map<String, dynamic>? data, String? uid) {
@@ -29,8 +30,9 @@ class MaintenanceScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance.doc('system/config').snapshots(),
+    return KeyedStreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      streamKey: 'system/config',
+      create: () => FirebaseFirestore.instance.doc('system/config').snapshots(),
       builder: (context, snap) {
         final data = snap.data?.data();
         final myUid = FirebaseAuth.instance.currentUser?.uid;

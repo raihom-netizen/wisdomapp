@@ -14,6 +14,7 @@ import '../utils/date_picker_a11y.dart';
 import '../constants/app_business_rules.dart';
 import '../utils/firestore_user_doc_id.dart';
 import '../widgets/brl_amount_text_field.dart';
+import '../widgets/keyed_stream_builder.dart';
 
 class BudgetScreen extends StatefulWidget {
   final String uid;
@@ -680,8 +681,9 @@ class _GoalsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: _goals.snapshots(),
+    return KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      streamKey: _goals.path,
+      create: () => _goals.snapshots(),
       builder: (context, snap) {
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         final docs = snap.data!.docs;
@@ -704,8 +706,9 @@ class _GoalsTab extends StatelessWidget {
               final dueTs = data['dueDate'] as Timestamp?;
 
               return Card(
-                child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                  stream: doc.reference.collection('contributions').snapshots(),
+                child: KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  streamKey: doc.reference.path,
+                  create: () => doc.reference.collection('contributions').snapshots(),
                   builder: (context, cSnap) {
                     final contribDocs = cSnap.data?.docs ?? [];
                     final contribSum = contribDocs.fold<double>(0, (total, d) => total + ((d.data()['amount'] ?? 0).toDouble()));
@@ -935,8 +938,9 @@ class _FixedVariableTab extends StatelessWidget {
           expenseByCategory[category] = (expenseByCategory[category] ?? 0) + amount;
         }
 
-        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: _types.snapshots(),
+        return KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          streamKey: _types.path,
+          create: () => _types.snapshots(),
           builder: (context, typeSnap) {
             final typeDocs = typeSnap.data?.docs ?? [];
             final typeMap = <String, String>{

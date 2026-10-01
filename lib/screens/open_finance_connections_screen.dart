@@ -17,6 +17,7 @@ import 'bank_connection_screen.dart';
 import 'open_finance_coverage_screen.dart';
 import 'supported_banks_screen.dart';
 import '../utils/firestore_user_doc_id.dart';
+import '../widgets/keyed_stream_builder.dart';
 
 /// Hub de conexões bancárias: lista `users/{uid}/bank_connections` (funcionalidade legada / desativada para novas ligações).
 ///
@@ -152,8 +153,9 @@ class _OpenFinanceConnectionsScreenState extends State<OpenFinanceConnectionsScr
           ),
         ],
       ),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: ref.snapshots(),
+      body: KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        streamKey: ref.path,
+        create: () => ref.snapshots(),
         builder: (context, snap) {
           if (snap.hasError) {
             return Center(child: Text('Erro: ${snap.error}', style: TextStyle(color: AppColors.error)));

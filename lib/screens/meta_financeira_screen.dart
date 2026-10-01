@@ -23,6 +23,7 @@ import '../widgets/fifty_two_weeks_schedule_sheet.dart';
 import '../widgets/goal_52_weeks_objective_card.dart';
 import '../widgets/goal_finance_account_field.dart';
 import '../widgets/goal_form_validation_alert.dart';
+import '../widgets/keyed_stream_builder.dart';
 
 /// Categorias de metas (estrutura base Premium).
 final List<GoalCategory> kGoalCategories = GoalCategory.values.toList();
@@ -523,11 +524,12 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             if (_userDocId.isNotEmpty)
-                              StreamBuilder<
+                              KeyedStreamBuilder<
                                   DocumentSnapshot<Map<String, dynamic>>>(
                                 key: ValueKey<String>(
                                     'meta-planning-$_userDocId'),
-                                stream: _planningRef.snapshots(),
+                                streamKey: _planningRef.path,
+                                create: () => _planningRef.snapshots(),
                                 builder: (context, snap) {
                                   final enabled =
                                       (snap.data?.data()?['dailyTipsEnabled'] ??

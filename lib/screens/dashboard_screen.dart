@@ -102,6 +102,7 @@ import '../utils/finance_fatura_transaction_sort.dart';
 import '../widgets/finance_transaction_sort_bar.dart';
 import '../widgets/shell_keyboard_bottom_pad.dart';
 import '../widgets/brl_amount_text_field.dart';
+import '../widgets/keyed_stream_builder.dart';
 
 /// Bora Investir — hub orçamento doméstico (abre no navegador; o site B3 bloqueia iframe).
 const String _kDicasBoraInvestirUrl =
@@ -2372,8 +2373,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return ValueListenableBuilder<int>(
       valueListenable: maintenanceDismissSync,
       builder: (context, _, __) {
-        return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance.doc('system/config').snapshots(),
+        return KeyedStreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          streamKey: 'system/config',
+          create: () => FirebaseFirestore.instance.doc('system/config').snapshots(),
           builder: (context, snap) {
             final data = snap.data?.data();
             if (data == null) return const SizedBox.shrink();
@@ -6820,8 +6822,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final data = goal.data();
     final title = (data['title'] ?? 'Meta').toString();
     final target = (data['targetAmount'] ?? 0).toDouble();
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: goal.reference.collection('contributions').snapshots(),
+    return KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      streamKey: goal.reference.path,
+      create: () => goal.reference.collection('contributions').snapshots(),
       builder: (context, contribSnap) {
         double current = 0;
         for (final doc in contribSnap.data?.docs ?? []) {

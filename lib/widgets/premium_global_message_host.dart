@@ -11,6 +11,7 @@ import '../utils/url_launcher_helper.dart';
 import 'maintenance_app_update_buttons.dart';
 import 'premium_center_message_dialog.dart';
 import 'weekly_summary_premium_body.dart';
+import 'keyed_stream_builder.dart';
 
 /// Preferências: último aviso manutenção/promo dispensado pelo diálogo central (alinha com banner do Início).
 const String kMaintenanceDismissedFingerprintPrefsKey =
@@ -388,8 +389,9 @@ class PremiumGlobalMessageHostState extends State<PremiumGlobalMessageHost> {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance.doc('system/config').snapshots(),
+    return KeyedStreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      streamKey: 'system/config',
+      create: () => FirebaseFirestore.instance.doc('system/config').snapshots(),
       builder: (context, snap) {
         final data = snap.data?.data();
         WidgetsBinding.instance.addPostFrameCallback((_) {

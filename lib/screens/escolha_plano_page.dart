@@ -10,6 +10,7 @@ import '../widgets/divulgacao_public_promo_card.dart';
 import '../widgets/plan_change_acknowledgment_card.dart';
 import '../widgets/plan_change_contract_sheet.dart';
 import 'payment_status_screen.dart';
+import '../widgets/keyed_stream_builder.dart';
 
 /// Paywall: Premium — preços em `app_config/mp_checkout_prices`; textos em `landing_content/main`.
 class EscolhaPlanoPage extends StatefulWidget {
@@ -249,8 +250,9 @@ class _EscolhaPlanoPageState extends State<EscolhaPlanoPage> {
         bottom: true,
         left: true,
         right: true,
-        child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance.collection('landing_content').doc('main').snapshots(),
+        child: KeyedStreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          streamKey: 'landing_content/main',
+          create: () => FirebaseFirestore.instance.collection('landing_content').doc('main').snapshots(),
           builder: (context, landSnap) {
             return StreamBuilder<MpCheckoutPricingSnapshot>(
               stream: MpCheckoutPricingService.watch(),

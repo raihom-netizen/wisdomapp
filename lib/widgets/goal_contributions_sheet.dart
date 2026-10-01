@@ -11,6 +11,7 @@ import '../theme/app_colors.dart';
 import '../utils/date_picker_a11y.dart';
 import '../utils/premium_upgrade.dart';
 import 'goal_deposit_edit_sheet.dart';
+import 'keyed_stream_builder.dart';
 import 'sheet_voltar_controls.dart';
 
 /// Sheet «Ver / Editar lançamentos» — compartilhado entre Início e módulo Objetivo.
@@ -78,8 +79,10 @@ Future<void> showGoalContributionsSheet({
             ),
             const Divider(height: 1),
             Expanded(
-              child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream:
+              child: KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                // Escuta guardada: arrastar a folha não reabre a consulta.
+                streamKey: '${contribRef.path}|date-desc',
+                create: () =>
                     contribRef.orderBy('date', descending: true).snapshots(),
                 builder: (context, snap) {
                   if (snap.hasError) {

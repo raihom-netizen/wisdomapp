@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/user_profile.dart';
 import '../screens/escolha_plano_page.dart';
 import '../theme/app_colors.dart';
+import 'keyed_stream_builder.dart';
 
 /// Garante que o fluxo Pluggy/Open Finance **não** abre para quem não tem
 /// [UserProfile.canUseOpenFinanceBanks], mesmo via link direto.
@@ -26,8 +27,9 @@ class OpenFinanceEntitlementGuard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
+    return KeyedStreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      streamKey: 'users/$uid',
+      create: () => FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
       builder: (context, snap) {
         if (snap.hasError) {
           return Scaffold(
