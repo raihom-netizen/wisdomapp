@@ -2,6 +2,10 @@
 importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js');
 
+// Marcador de versao (scripts/sync_app_version.ps1): sobe a cada release. Muda o conteudo do SW
+// (o navegador reinstala) e fura o cache de 30 dias dos icones do push.
+const BANNER_CACHE_V = "26";
+
 const firebaseConfig = {
   apiKey: "AIzaSyDLm_BNjBptj5ribo0YGHQ9Nqd4l_Inl-4",
   authDomain: "wisdomapp-b9e98.firebaseapp.com",
@@ -21,9 +25,9 @@ messaging.onBackgroundMessage((payload) => {
   const notificationTitle = payload?.notification?.title || "WISDOMAPP";
   const data = payload?.data || {};
   const channelKind = (data.channelKind || "").toString().toLowerCase();
-  const iconUrl = "/icons/Icon-192.png";
+  const iconUrl = `/icons/Icon-192.png?v=${BANNER_CACHE_V}`;
   const bannerByKind = ["audiencia", "compromisso", "escala"].includes(channelKind)
-    ? `/icons/push-banner-${channelKind}.png`
+    ? `/icons/push-banner-${channelKind}.png?v=${BANNER_CACHE_V}`
     : null;
   const richImage =
     bannerByKind ||

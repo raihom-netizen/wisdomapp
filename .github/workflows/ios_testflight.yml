@@ -12,10 +12,11 @@
 #   CERTIFICATE_PRIVATE_KEY           chave RSA PEM (o CI cria/busca o certificado Apple com ela)
 #   FIREBASE_SERVICE_ACCOUNT_JSON     (opcional) service account p/ subir o IPA ao site
 # ---------------------------------------------------------------------------
-# Disparo: SOMENTE manual — Actions > iOS TestFlight > Run workflow, ou
-#   gh workflow run ios_testflight.yml
-# (e o que o deploy_completo.ps1 faz no fim do release). Nao ha gatilho por push:
-# build iOS so acontece quando alguem pede, nunca sozinho.
+# Disparo: SOMENTE manual (o dono da o start no fim do deploy completo) —
+#   Actions > iOS TestFlight (Flutter) > Run workflow > "Use workflow from": codemagic-ios-ready
+#   ou: gh workflow run ios_testflight.yml --ref codemagic-ios-ready --repo raihom-netizen/wisdomapp
+# Sempre com a branch de build iOS (codemagic-ios-ready); sem --ref usa a main.
+# Nao ha gatilho por push: build iOS so acontece quando alguem pede, nunca sozinho.
 # Repo privado: runner macOS consome 10x os minutos gratuitos — por isso NAO dispara na master.
 
 name: iOS TestFlight (Flutter)

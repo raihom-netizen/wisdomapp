@@ -1,10 +1,9 @@
 name: Trigger Codemagic iOS
 
+# LEGADO / PLANO B. Desde 02/09/2026 o build iOS roda no proprio GitHub Actions
+# (ios_testflight.yml). Igual ao Controle Total: este workflow so roda quando disparado
+# a mao, para nao acionar o Codemagic a cada push nas branches de build.
 on:
-  push:
-    branches:
-      - main
-      - 'codemagic-*-ready'
   workflow_dispatch:
 
 jobs:

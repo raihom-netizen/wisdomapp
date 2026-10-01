@@ -1,4 +1,7 @@
-# Deploy Firebase: hosting + firestore + storage + functions.
+# Deploy Firebase (projeto wisdomapp-b9e98).
+#   -HostingOnly   -> so hosting (usado pelo deploy.ps1 -WebOnly)
+#   -FunctionsOnly -> todas as functions (prefira o deploy escopado: firebase deploy --only functions:<nome>)
+#   sem switch     -> hosting + firestore + storage + TODAS as functions (legado completo)
 param(
     [string]$Root = (Split-Path $PSScriptRoot -Parent),
     [switch]$HostingOnly,
@@ -20,7 +23,8 @@ Set-Location $Root
 $eap = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
 
-$fbArgs = @()
+# Projeto explicito: nunca depender do "firebase use" da maquina (o CLI pode estar apontando para o Controle Total).
+$fbArgs = @("--project", "wisdomapp-b9e98")
 if ($env:FIREBASE_TOKEN) { $fbArgs += @("--token", $env:FIREBASE_TOKEN) }
 
 if ($FunctionsOnly) {
