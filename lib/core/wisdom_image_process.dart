@@ -4,7 +4,7 @@ import 'package:image/image.dart' as img;
 
 /// Perfis de compressao de imagem - padrao Controle Total / YAHWEH.
 enum WisdomMediaProfile {
-  /// Capa de curso (1920px max, JPEG q88).
+  /// Capa de curso (3840px max, JPEG q88).
   courseCover,
 
   /// Thumbnail de curso (640px, JPEG q75).
@@ -30,7 +30,8 @@ enum WisdomMediaProfile {
 abstract final class WisdomImageProcess {
   WisdomImageProcess._();
 
-  static const int courseCoverMaxEdge = 1920;
+  /// Capa de curso aceita até 4K (3840x2160); maior que isso é reduzida.
+  static const int courseCoverMaxEdge = 3840;
   static const int courseThumbMaxEdge = 640;
   static const int providerLogoMaxEdge = 512;
   static const int ocorrenciaMaxEdge = 1280;

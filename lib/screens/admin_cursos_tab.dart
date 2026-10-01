@@ -8,6 +8,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard;
+import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -18,6 +20,7 @@ import '../services/course_video_image_service.dart';
 import '../services/course_media_storage_cleanup.dart';
 import '../services/course_videos_cache_service.dart';
 import '../services/course_analytics_service.dart';
+import '../services/youtube_oembed_service.dart';
 import '../widgets/admin/course_admin_analytics_panel.dart';
 import '../widgets/admin/course_content_sheet_header.dart';
 import '../theme/app_colors.dart';
@@ -44,9 +47,13 @@ class _PickedMedia {
     required this.mime,
     this.name,
     this.sizeBytes,
+    this.width,
+    this.height,
   });
 
   final Uint8List? bytes;
+  final int? width;
+  final int? height;
   final File? file;
   final String mime;
   final String? name;
@@ -97,11 +104,73 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
   bool _courseDocsLoading = true;
   Object? _courseDocsError;
 
+  // ── Envio rápido (colar link → prévia → Publicar) ──
+  CourseUploadCancelToken? _uploadCancel;
+  Timer? _linkDebounce;
+  String? _quickVideoId;
+  YoutubeOembedInfo? _quickInfo;
+  bool _quickLoading = false;
+  String _autoTitle = '';
+  /// idle | saving | done
+  String _publishState = 'idle';
+  Timer? _publishStateTimer;
+  bool _compactList = true;
+
+  /// Streams guardados (Firestore Web: nunca `.snapshots()` dentro do build).
+  late final Stream<DocumentSnapshot<Map<String, dynamic>>> _configStream =
+      FirebaseFirestore.instance
+          .collection('app_config')
+          .doc(_configDoc)
+          .snapshots();
+  late final Stream<List<CourseStatSummary>> _statsStream =
+      CourseAnalyticsService.instance.watchAllStats();
+
   @override
   void initState() {
     super.initState();
     _scheduleExpiryCleanup();
     unawaited(_reloadCourseVideos());
+    _youtubeCtrl.addListener(_onLinkChanged);
+  }
+
+  void _onLinkChanged() {
+    _linkDebounce?.cancel();
+    _linkDebounce = Timer(const Duration(milliseconds: 450), _resolveQuickLink);
+  }
+
+  /// Link colado → ID → prévia (oEmbed) → título preenchido sozinho.
+  Future<void> _resolveQuickLink() async {
+    if (!mounted) return;
+    final id = YoutubeUrlHelper.extractVideoId(_youtubeCtrl.text);
+    if (id == null) {
+      if (_quickVideoId != null || _quickInfo != null) {
+        setState(() {
+          _quickVideoId = null;
+          _quickInfo = null;
+          _quickLoading = false;
+        });
+      } else {
+        setState(() {});
+      }
+      return;
+    }
+    if (id == _quickVideoId) return;
+    setState(() {
+      _quickVideoId = id;
+      _quickInfo = YoutubeOembedInfo(videoId: id);
+      _quickLoading = true;
+    });
+    final info = await YoutubeOembedService.fetch(id);
+    if (!mounted || _quickVideoId != id) return;
+    setState(() {
+      _quickInfo = info;
+      _quickLoading = false;
+      final atual = _titleCtrl.text.trim();
+      if (info.title.isNotEmpty && (atual.isEmpty || atual == _autoTitle)) {
+        _titleCtrl.text = info.title;
+        _autoTitle = info.title;
+      }
+    });
   }
 
   Future<void> _afterContentMutation({String? snack}) async {
@@ -161,6 +230,10 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
 
   @override
   void dispose() {
+    _linkDebounce?.cancel();
+    _publishStateTimer?.cancel();
+    _uploadCancel?.cancel();
+    _youtubeCtrl.removeListener(_onLinkChanged);
     _titleCtrl.dispose();
     _descriptionCtrl.dispose();
     _bodyTextCtrl.dispose();
@@ -385,6 +458,14 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       for (final f in pick.files) {
         if (added.length >= remaining) break;
         var ext = (f.extension ?? 'mp4').toLowerCase();
+        final invalid = CourseVideoFileService.validate(
+          name: f.name,
+          sizeBytes: f.size,
+        );
+        if (invalid != null) {
+          _snack(invalid);
+          continue;
+        }
         final mime = ext == 'webm'
             ? 'video/webm'
             : (ext == 'mov' ? 'video/quicktime' : 'video/mp4');
@@ -549,6 +630,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
           docId: docId,
           index: startIndex + i,
           onProgress: reportVideoProgress,
+          cancelToken: _uploadCancel,
         ));
       } else {
         out.add(await CourseVideoFileService.uploadVideo(
@@ -557,6 +639,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
           docId: docId,
           index: startIndex + i,
           onProgress: reportVideoProgress,
+          cancelToken: _uploadCancel,
         ));
       }
     }
@@ -592,7 +675,27 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
         final mime = ext == 'png'
             ? 'image/png'
             : (ext == 'webp' ? 'image/webp' : 'image/jpeg');
-        added.add(_PickedMedia(bytes: bytes, mime: mime, name: f.name));
+        int? w, h;
+        try {
+          final info = img.findDecoderForData(bytes)?.startDecode(bytes);
+          w = info?.width;
+          h = info?.height;
+        } catch (_) {}
+        if (w == null || h == null || w <= 0 || h <= 0) {
+          _snack('${f.name}: imagem inválida ou formato não suportado.');
+          continue;
+        }
+        if (w > 3840 || h > 3840) {
+          _snack('${f.name}: ${w}x$h — será reduzida para até 3840 px no envio.');
+        }
+        added.add(_PickedMedia(
+          bytes: bytes,
+          mime: mime,
+          name: f.name,
+          sizeBytes: bytes.lengthInBytes,
+          width: w,
+          height: h,
+        ));
       }
       if (added.isEmpty) return;
       setState(() => _pickedImages.addAll(added));
@@ -749,11 +852,15 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       return false;
     }
 
+    _publishStateTimer?.cancel();
     setState(() {
       _savingVideo = true;
       _uploadProgress = 0;
+      _publishState = 'saving';
+      _uploadCancel = CourseUploadCancelToken();
     });
     onStateChanged?.call();
+    var publicado = false;
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
       final email = FirebaseAuth.instance.currentUser?.email?.trim() ?? '';
@@ -895,18 +1002,29 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
         _validityPermanent = true;
         _expiresAtDate = null;
       });
+      _autoTitle = '';
+      publicado = true;
       await _afterContentMutation(
           snack: 'Conteúdo publicado — já aparece no módulo Cursos.');
       return true;
     } catch (e) {
-      _snack('Erro ao publicar: ${_formatPublishError(e)}');
+      _snack(e is CourseUploadCancelledException
+          ? 'Envio cancelado — nada foi publicado.'
+          : 'Erro ao publicar: ${_formatPublishError(e)}');
       return false;
     } finally {
+      _uploadCancel = null;
       if (mounted) {
         setState(() {
           _savingVideo = false;
           _uploadProgress = 0;
+          _publishState = publicado ? 'done' : 'idle';
         });
+        if (publicado) {
+          _publishStateTimer = Timer(const Duration(seconds: 3), () {
+            if (mounted) setState(() => _publishState = 'idle');
+          });
+        }
         onStateChanged?.call();
       }
     }
@@ -2131,10 +2249,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('app_config')
-          .doc(_configDoc)
-          .snapshots(),
+      stream: _configStream,
       builder: (context, cfgSnap) {
         _hydrateConfig(cfgSnap.data?.data());
 
@@ -2167,7 +2282,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
         };
 
         return StreamBuilder<List<CourseStatSummary>>(
-          stream: CourseAnalyticsService.instance.watchAllStats(),
+          stream: _statsStream,
           builder: (context, statsSnap) {
             final stats = statsSnap.data ?? const <CourseStatSummary>[];
             final statsById = {
@@ -2183,6 +2298,8 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
               subtitle:
                   'Publique conteúdos, acompanhe quem assistiu e quantos curtiram — visual alinhado ao app.',
             ),
+            const SizedBox(height: 16),
+            _buildQuickPublishCard(),
             const SizedBox(height: 16),
             CourseAdminAnalyticsPanel(
               stats: stats,
@@ -2262,7 +2379,20 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                           child: const Text('Cancelar',
                               style: TextStyle(color: Colors.white70)),
                         ),
-                      ] else
+                      ] else ...[
+                        IconButton(
+                          tooltip: _compactList
+                              ? 'Ver como cards grandes'
+                              : 'Ver lista compacta',
+                          onPressed: () =>
+                              setState(() => _compactList = !_compactList),
+                          icon: Icon(
+                            _compactList
+                                ? Icons.view_agenda_rounded
+                                : Icons.view_list_rounded,
+                            color: Colors.white70,
+                          ),
+                        ),
                         IconButton(
                           tooltip: 'Seleção em lote',
                           onPressed: () =>
@@ -2270,6 +2400,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                           icon: const Icon(Icons.checklist_rounded,
                               color: Colors.white70),
                         ),
+                      ],
                     ],
                   ),
                   if (syncing)
@@ -2284,6 +2415,8 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                   const SizedBox(height: 12),
                   if (docs.isEmpty)
                     _emptyGrid(syncing)
+                  else if (_compactList)
+                    _buildCompactList(docs, statsById)
                   else
                     _buildVideoGrid(docs, statsById),
                   if (_selectionMode && _selectedIds.isNotEmpty)
@@ -2651,6 +2784,564 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
           },
         );
       },
+    );
+  }
+
+  // ── Envio rápido ─────────────────────────────────────────────────────
+
+  Future<void> _pasteLink() async {
+    try {
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      final t = data?.text?.trim() ?? '';
+      if (t.isEmpty) {
+        _snack('A área de transferência está vazia.');
+        return;
+      }
+      _youtubeCtrl.text = t;
+      _youtubeCtrl.selection =
+          TextSelection.collapsed(offset: _youtubeCtrl.text.length);
+      _linkDebounce?.cancel();
+      await _resolveQuickLink();
+    } catch (_) {
+      _snack('Não foi possível colar. Use Ctrl+V / segure e cole no campo.');
+    }
+  }
+
+  void _clearQuickForm() {
+    _youtubeCtrl.clear();
+    _titleCtrl.clear();
+    _descriptionCtrl.clear();
+    _bodyTextCtrl.clear();
+    _clearPickedImages();
+    _clearPickedVideos();
+    setState(() {
+      _autoTitle = '';
+      _quickVideoId = null;
+      _quickInfo = null;
+      _validityPermanent = true;
+      _expiresAtDate = null;
+      _published = true;
+    });
+  }
+
+  String _mb(int bytes) => bytes >= 1024 * 1024
+      ? '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB'
+      : '${(bytes / 1024).toStringAsFixed(0)} KB';
+
+  Widget _buildQuickPublishCard() {
+    final isDica = _type == 'dica';
+    final accent = isDica ? const Color(0xFFF59E0B) : const Color(0xFFEF4444);
+    final link = _youtubeCtrl.text.trim();
+    final linkError = (!isDica && link.isNotEmpty && _quickVideoId == null)
+        ? YoutubeUrlHelper.validationMessage(link)
+        : null;
+    final saving = _savingVideo;
+    final done = _publishState == 'done';
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: accent.withValues(alpha: 0.25)),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withValues(alpha: 0.10),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Cabeçalho com gradiente discreto
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  accent.withValues(alpha: 0.14),
+                  accent.withValues(alpha: 0.03),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(9),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [accent, accent.withValues(alpha: 0.75)],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.bolt_rounded,
+                      color: Colors.white, size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isDica ? 'Publicar dica rápida' : 'Enviar vídeo rápido',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
+                      Text(
+                        isDica
+                            ? 'Título, texto e (se quiser) link ou imagem'
+                            : 'Cole o link do YouTube — título e capa vêm sozinhos',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (!saving &&
+                    (link.isNotEmpty || _titleCtrl.text.trim().isNotEmpty))
+                  IconButton(
+                    tooltip: 'Limpar',
+                    onPressed: _clearQuickForm,
+                    icon: const Icon(Icons.restart_alt_rounded),
+                  ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _TypePillSelector(
+                  value: _type,
+                  onChanged: saving ? (_) {} : (v) => setState(() => _type = v),
+                ),
+                const SizedBox(height: 12),
+                // 1) Link
+                TextField(
+                  controller: _youtubeCtrl,
+                  enabled: !saving,
+                  keyboardType: TextInputType.url,
+                  autocorrect: false,
+                  decoration: InputDecoration(
+                    labelText: isDica
+                        ? 'Link (YouTube ou site) — opcional'
+                        : 'Link do YouTube',
+                    hintText: 'https://youtu.be/… ou youtube.com/watch?v=…',
+                    prefixIcon: Icon(Icons.link_rounded, color: accent),
+                    suffixIcon: link.isEmpty
+                        ? IconButton(
+                            tooltip: 'Colar',
+                            onPressed: saving ? null : _pasteLink,
+                            icon: const Icon(Icons.content_paste_rounded),
+                          )
+                        : IconButton(
+                            tooltip: 'Apagar link',
+                            onPressed: saving ? null : () => _youtubeCtrl.clear(),
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                    errorText: linkError,
+                    errorMaxLines: 3,
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+                // 2) Prévia
+                if (_quickVideoId != null) ...[
+                  const SizedBox(height: 10),
+                  _buildQuickPreview(accent),
+                ],
+                const SizedBox(height: 12),
+                // 3) Essenciais
+                FastTextField(
+                  controller: _titleCtrl,
+                  decoration: _fieldDeco('Título', accent: accent),
+                ),
+                const SizedBox(height: 10),
+                FastTextField(
+                  controller: _descriptionCtrl,
+                  decoration: _fieldDeco(
+                    'Descrição curta (opcional)',
+                    accent: accent,
+                  ),
+                  kind: FastTextFieldKind.multiline,
+                  maxLines: 3,
+                ),
+                if (isDica) ...[
+                  const SizedBox(height: 10),
+                  FastTextField(
+                    controller: _bodyTextCtrl,
+                    decoration: _fieldDeco('Texto da dica', accent: accent),
+                    kind: FastTextFieldKind.multiline,
+                    maxLines: 5,
+                  ),
+                ],
+                const SizedBox(height: 10),
+                // 4) Capa opcional
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: saving ? null : _pickCoverImages,
+                      icon: const Icon(Icons.image_rounded, size: 18),
+                      label: Text(_pickedImages.isEmpty
+                          ? 'Capa própria (opcional)'
+                          : 'Mais fotos'),
+                    ),
+                    for (var i = 0; i < _pickedImages.length; i++)
+                      InputChip(
+                        avatar: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: Image.memory(
+                            _pickedImages[i].bytes!,
+                            width: 28,
+                            height: 28,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                        label: Text(
+                          [
+                            if (_pickedImages[i].width != null)
+                              '${_pickedImages[i].width}x${_pickedImages[i].height}',
+                            _mb(_pickedImages[i].effectiveSize),
+                          ].join(' · '),
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        onDeleted: saving ? null : () => _removePickedImage(i),
+                      ),
+                  ],
+                ),
+                if (_pickedImages.isEmpty && _quickVideoId != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Sem capa própria, usamos a do YouTube. Aceita JPG, PNG '
+                      'ou WebP até 3840x2160 (12 MB).',
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                    ),
+                  ),
+                const SizedBox(height: 6),
+                // 5) Mais opções (recolhido)
+                Theme(
+                  data: Theme.of(context)
+                      .copyWith(dividerColor: Colors.transparent),
+                  child: ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    childrenPadding: const EdgeInsets.only(bottom: 8),
+                    leading: Icon(Icons.tune_rounded, color: accent),
+                    title: const Text(
+                      'Mais opções',
+                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                    ),
+                    subtitle: Text(
+                      [
+                        if (_pickedVideos.isNotEmpty)
+                          '${_pickedVideos.length} vídeo(s) MP4',
+                        _validityPermanent ? 'permanente' : 'com validade',
+                        _published ? 'publicado' : 'oculto',
+                      ].join(' · '),
+                      style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600),
+                    ),
+                    children: [
+                      if (!isDica) ...[
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: OutlinedButton.icon(
+                            onPressed: saving ? null : () => _addVideoWithChoice(),
+                            icon: const Icon(Icons.video_file_rounded, size: 18),
+                            label: const Text('Enviar vídeo MP4 / MOV / WebM'),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4, bottom: 6),
+                          child: Text(
+                            'Até ${CourseMediaUrlResolver.maxCourseVideos} vídeos, '
+                            '250 MB cada. Cada vídeo vira uma aula.',
+                            style: TextStyle(
+                                fontSize: 11, color: Colors.grey.shade600),
+                          ),
+                        ),
+                        for (var i = 0; i < _pickedVideos.length; i++)
+                          ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: const Icon(Icons.movie_rounded),
+                            title: Text(
+                              _pickedVideos[i].name ?? 'Vídeo ${i + 1}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(_mb(_pickedVideos[i].effectiveSize)),
+                            trailing: IconButton(
+                              tooltip: 'Remover',
+                              onPressed: saving ? null : () => _removePickedVideo(i),
+                              icon: const Icon(Icons.close_rounded),
+                            ),
+                          ),
+                      ],
+                      _buildValiditySection(
+                        permanent: _validityPermanent,
+                        expiresAt: _expiresAtDate,
+                        onPermanentChanged: (v) => setState(() {
+                          _validityPermanent = v;
+                          if (v) _expiresAtDate = null;
+                        }),
+                        onDateChanged: (d) => setState(() => _expiresAtDate = d),
+                        accent: accent,
+                        enabled: !saving,
+                      ),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Publicar já no módulo Cursos'),
+                        subtitle: const Text('Desligado = fica oculto (rascunho).'),
+                        value: _published,
+                        activeThumbColor: accent,
+                        onChanged: saving
+                            ? null
+                            : (v) => setState(() => _published = v),
+                      ),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: saving ? null : _openCreateSheet,
+                          icon: const Icon(Icons.open_in_full_rounded, size: 18),
+                          label: const Text('Abrir editor completo'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Progresso do envio (sem bloquear a tela)
+                if (saving) ...[
+                  const SizedBox(height: 4),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(99),
+                    child: LinearProgressIndicator(
+                      value: _uploadProgress > 0 ? _uploadProgress : null,
+                      minHeight: 6,
+                      color: accent,
+                      backgroundColor: accent.withValues(alpha: 0.12),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _pickedVideos.isNotEmpty && _uploadProgress < 1
+                              ? 'Enviando vídeo… ${(_uploadProgress * 100).round()}%'
+                              : 'Salvando…',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ),
+                      if (_pickedVideos.isNotEmpty && _uploadCancel != null)
+                        TextButton.icon(
+                          onPressed: () => _uploadCancel?.cancel(),
+                          icon: const Icon(Icons.cancel_rounded, size: 18),
+                          label: const Text('Cancelar envio'),
+                          style: TextButton.styleFrom(
+                              foregroundColor: Colors.red.shade700),
+                        ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 10),
+                // Botão principal
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  child: FilledButton.icon(
+                    key: ValueKey(_publishState),
+                    onPressed: saving ? null : () => _publishVideo(),
+                    style: FilledButton.styleFrom(
+                      backgroundColor:
+                          done ? const Color(0xFF16A34A) : accent,
+                      disabledBackgroundColor: accent.withValues(alpha: 0.55),
+                      disabledForegroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 54),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      textStyle: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    icon: saving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2.4, color: Colors.white),
+                          )
+                        : Icon(done
+                            ? Icons.check_circle_rounded
+                            : Icons.rocket_launch_rounded),
+                    label: Text(saving
+                        ? 'Salvando…'
+                        : (done ? 'Publicado ✓' : 'Publicar')),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickPreview(Color accent) {
+    final info = _quickInfo;
+    final id = _quickVideoId!;
+    final cover = info?.coverUrl ?? YoutubeUrlHelper.safeThumbnailUrl(id);
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F0F0F),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: SizedBox(
+              width: 136,
+              height: 76,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.network(
+                    cover,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const ColoredBox(
+                      color: Color(0xFF272727),
+                      child: Icon(Icons.smart_display_rounded,
+                          color: Colors.white38),
+                    ),
+                  ),
+                  const Center(
+                    child: Icon(Icons.play_circle_fill_rounded,
+                        color: Colors.white, size: 30),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _quickLoading
+                      ? 'Buscando dados do vídeo…'
+                      : ((info?.title.isNotEmpty ?? false)
+                          ? info!.title
+                          : 'Vídeo encontrado'),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13.5,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  [
+                    if ((info?.author ?? '').isNotEmpty) info!.author,
+                    'ID $id',
+                  ].join(' · '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: Colors.grey.shade400, fontSize: 11.5),
+                ),
+                if (!_quickLoading && (info?.title.isEmpty ?? true))
+                  Text(
+                    'Não deu para ler o título — digite abaixo.',
+                    style: TextStyle(color: Colors.amber.shade300, fontSize: 11),
+                  ),
+              ],
+            ),
+          ),
+          if (_quickLoading)
+            const Padding(
+              padding: EdgeInsets.only(left: 8),
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Colors.white54),
+              ),
+            )
+          else
+            IconButton(
+              tooltip: 'Assistir prévia',
+              onPressed: () => openYoutubeWatchScreen(
+                context,
+                videoId: id,
+                title: _titleCtrl.text.trim().isEmpty
+                    ? 'Prévia'
+                    : _titleCtrl.text.trim(),
+              ),
+              icon: const Icon(Icons.open_in_new_rounded, color: Colors.white70),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ── Lista compacta da biblioteca ─────────────────────────────────────
+
+  Widget _buildCompactList(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    Map<String, CourseStatSummary> statsById,
+  ) {
+    return Column(
+      children: [
+        for (final doc in docs)
+          _CompactCourseRow(
+            key: ValueKey('compact-${doc.id}'),
+            data: {...doc.data(), 'id': doc.id},
+            views: statsById[doc.id]?.viewCount ?? 0,
+            likes: statsById[doc.id]?.likeCount ?? 0,
+            selectionMode: _selectionMode,
+            selected: _selectedIds.contains(doc.id),
+            onTap: () {
+              if (_selectionMode) {
+                setState(() {
+                  if (!_selectedIds.remove(doc.id)) _selectedIds.add(doc.id);
+                });
+              } else {
+                _openContentPreview(doc);
+              }
+            },
+            onLongPress: () => setState(() {
+              _selectionMode = true;
+              _selectedIds.add(doc.id);
+            }),
+            onEdit: () => _openEditSheet(doc),
+            onDelete: () => _deleteVideo(doc.id),
+            onTogglePublished: (v) => _togglePublished(doc.id, v),
+          ),
+      ],
     );
   }
 
@@ -3868,4 +4559,195 @@ class _VideoGridCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Linha compacta da biblioteca do admin — capa pequena, título, selos e ações.
+class _CompactCourseRow extends StatelessWidget {
+  const _CompactCourseRow({
+    super.key,
+    required this.data,
+    required this.views,
+    required this.likes,
+    required this.selectionMode,
+    required this.selected,
+    required this.onTap,
+    required this.onLongPress,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onTogglePublished,
+  });
+
+  final Map<String, dynamic> data;
+  final int views;
+  final int likes;
+  final bool selectionMode;
+  final bool selected;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final ValueChanged<bool> onTogglePublished;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = (data['title'] ?? 'Sem título').toString();
+    final isDica = (data['type'] ?? 'curso').toString() == 'dica';
+    final published = data['published'] != false;
+    final yt = YoutubeUrlHelper.videoIdFromData(data) != null;
+    final mp4 = CourseMediaUrlResolver.collectVideoEntries(data).length;
+    final valid = CourseVideoValidity.isStillValid(data);
+    DateTime? created;
+    final c = data['createdAt'];
+    if (c is Timestamp) created = c.toDate();
+    final accent = isDica ? const Color(0xFFF59E0B) : const Color(0xFFEF4444);
+    final narrow = MediaQuery.sizeOf(context).width < 640;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: selected
+            ? accent.withValues(alpha: 0.18)
+            : const Color(0xFF1C1C1C),
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          onLongPress: onLongPress,
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Row(
+              children: [
+                if (selectionMode)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: Icon(
+                      selected
+                          ? Icons.check_box_rounded
+                          : Icons.check_box_outline_blank_rounded,
+                      color: selected ? accent : Colors.white38,
+                    ),
+                  ),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(9),
+                  child: SizedBox(
+                    width: narrow ? 84 : 104,
+                    height: narrow ? 48 : 58,
+                    child: CourseMediaThumbnail.fromData(
+                      data,
+                      fit: BoxFit.cover,
+                      showPlayButton: false,
+                      fallback: ColoredBox(
+                        color: const Color(0xFF272727),
+                        child: Icon(
+                          isDica
+                              ? Icons.lightbulb_rounded
+                              : Icons.smart_display_rounded,
+                          color: Colors.white38,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13.5,
+                          height: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 5,
+                        runSpacing: 4,
+                        children: [
+                          _tag(isDica ? 'DICA' : 'CURSO', accent),
+                          if (yt) _tag('YouTube', const Color(0xFFFF4D4D)),
+                          if (mp4 > 0)
+                            _tag(mp4 > 1 ? '$mp4 MP4' : 'MP4',
+                                const Color(0xFF60A5FA)),
+                          if (!published) _tag('OCULTO', Colors.grey),
+                          if (!valid) _tag('EXPIRADO', Colors.redAccent),
+                          _tag('$views views · $likes curtidas',
+                              Colors.white54),
+                          if (created != null)
+                            _tag(DateFormat('dd/MM/yy').format(created),
+                                Colors.white38),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                if (!selectionMode && narrow)
+                  PopupMenuButton<String>(
+                    iconColor: Colors.white70,
+                    tooltip: 'Ações',
+                    onSelected: (v) {
+                      if (v == 'pub') onTogglePublished(!published);
+                      if (v == 'edit') onEdit();
+                      if (v == 'del') onDelete();
+                    },
+                    itemBuilder: (_) => [
+                      PopupMenuItem(
+                        value: 'pub',
+                        child: Text(published ? 'Ocultar' : 'Publicar'),
+                      ),
+                      const PopupMenuItem(value: 'edit', child: Text('Editar')),
+                      const PopupMenuItem(value: 'del', child: Text('Excluir')),
+                    ],
+                  ),
+                if (!selectionMode && !narrow) ...[
+                  Tooltip(
+                    message: published ? 'Ocultar' : 'Publicar',
+                    child: Switch(
+                      value: published,
+                      onChanged: onTogglePublished,
+                      activeThumbColor: accent,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Editar',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: onEdit,
+                    icon: const Icon(Icons.edit_rounded, color: Colors.white70),
+                  ),
+                  IconButton(
+                    tooltip: 'Excluir',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: onDelete,
+                    icon: Icon(Icons.delete_outline_rounded,
+                        color: Colors.red.shade300),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _tag(String t, Color c) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: c.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          t,
+          style: TextStyle(
+            color: c,
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      );
 }
