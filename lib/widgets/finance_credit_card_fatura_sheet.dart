@@ -381,10 +381,15 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
         FilteringTextInputFormatter.allow(RegExp(r'[\d/]')),
         LengthLimitingTextInputFormatter(10),
       ],
+      // Fonte um pouco menor, padding e ícone compactos: «01/10/2026» cabe
+      // inteiro mesmo com os dois campos lado a lado (era «01/10/202…»).
+      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
       decoration: InputDecoration(
         isDense: true,
         labelText: label,
         hintText: 'dd/mm/aaaa',
+        contentPadding: const EdgeInsets.fromLTRB(10, 12, 0, 12),
+        suffixIconConstraints: const BoxConstraints(minWidth: 34, minHeight: 34),
         filled: true,
         fillColor: AppColors.primary.withValues(alpha: 0.06),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
@@ -395,7 +400,10 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
         suffixIcon: IconButton(
           tooltip: 'Calendário',
           onPressed: onCalendar,
-          icon: const Icon(Icons.calendar_month_rounded, size: 20),
+          padding: EdgeInsets.zero,
+          visualDensity: VisualDensity.compact,
+          constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+          icon: const Icon(Icons.calendar_month_rounded, size: 18),
         ),
       ),
       onSubmitted: (_) => onSubmitted(),
@@ -405,7 +413,7 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
   Widget _periodDateRangeEditor() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final narrow = constraints.maxWidth < 360;
+        final narrow = constraints.maxWidth < 300;
         final fields = narrow
             ? Column(
                 children: [
@@ -1753,13 +1761,18 @@ class _FaturaHeroCard extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              Text(
-                CurrencyFormats.formatBRL(openTotal),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 28,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -0.5,
+              // Valor inteiro mesmo em tela estreita (encolhe, nunca corta).
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  CurrencyFormats.formatBRL(openTotal),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -0.5,
+                  ),
                 ),
               ),
               const SizedBox(height: 6),
