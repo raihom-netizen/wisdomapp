@@ -12,6 +12,7 @@ import 'finance_bulk_assign_screen.dart';
 import '../utils/finance_export_csv.dart';
 import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter/material.dart' hide showDatePicker;
+import '../widgets/fixas_visao_geral.dart';
 import '../widgets/fast_text_field.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -254,8 +255,10 @@ class _FinanceScreenState extends State<FinanceScreen> {
           .snapshots(includeMetadataChanges: false)
           .asBroadcastStream();
       _pendingExpensesStreamCache = s;
-      _pendingExpensesTrackerSub =
-          s.listen((snap) => _lastPendingExpensesSnap = snap, onError: (_) {});
+      _pendingExpensesTrackerSub = s.listen((snap) {
+        _lastPendingExpensesSnap = snap;
+        _pendentesTentativas = 0;
+      }, onError: (_) {});
     }
     return _pendingExpensesStreamCache!;
   }
@@ -266,8 +269,10 @@ class _FinanceScreenState extends State<FinanceScreen> {
           .snapshots(includeMetadataChanges: false)
           .asBroadcastStream();
       _pendingIncomesStreamCache = s;
-      _pendingIncomesTrackerSub =
-          s.listen((snap) => _lastPendingIncomesSnap = snap, onError: (_) {});
+      _pendingIncomesTrackerSub = s.listen((snap) {
+        _lastPendingIncomesSnap = snap;
+        _pendentesTentativas = 0;
+      }, onError: (_) {});
     }
     return _pendingIncomesStreamCache!;
   }
@@ -302,6 +307,33 @@ class _FinanceScreenState extends State<FinanceScreen> {
           s.listen((v) => _lastFixedExpensePrefs = v, onError: (_) {});
     }
     return _fixedExpensePrefsStreamCache!;
+  }
+
+  /// Reconexão automática dos pendentes quando a escuta cai (comum na Web —
+  /// port Controle Total, 30/09/2026).
+  Timer? _pendentesRetry;
+  int _pendentesTentativas = 0;
+
+  /// Erro na escuta dos pendentes: tenta de novo sozinho (2 s, 4 s, 8 s, 16 s)
+  /// mantendo o último valor bom na tela. `permission-denied` não (sessão).
+  void _agendarRetentativaPendentes(Object? erro) {
+    if ('$erro'.contains('permission-denied')) return;
+    if (_pendentesRetry != null || _pendentesTentativas >= 4) return;
+    final espera = Duration(seconds: 2 << _pendentesTentativas);
+    _pendentesTentativas++;
+    _pendentesRetry = Timer(espera, () {
+      _pendentesRetry = null;
+      if (!mounted) return;
+      // Reabre só as escutas dos pendentes; o último valor bom continua.
+      setState(() {
+        _pendingExpensesTrackerSub?.cancel();
+        _pendingIncomesTrackerSub?.cancel();
+        _pendingExpensesTrackerSub = null;
+        _pendingIncomesTrackerSub = null;
+        _pendingExpensesStreamCache = null;
+        _pendingIncomesStreamCache = null;
+      });
+    });
   }
 
   void _resetPendingStreamCaches() {
@@ -596,6 +628,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
     _authStateSub?.cancel();
     _financeAccSub?.cancel();
     _stripHideZeroSub?.cancel();
+    _pendentesRetry?.cancel();
     _pendingExpensesTrackerSub?.cancel();
     _pendingIncomesTrackerSub?.cancel();
     _fixedIncomePrefsTrackerSub?.cancel();
@@ -4218,18 +4251,24 @@ class _FinanceScreenState extends State<FinanceScreen> {
           stream: _pendingIncomesStream,
           initialData: _lastPendingIncomesSnap,
           builder: (context, snap) {
+            // Com erro, segue com o último valor bom (não pisca o aviso) e
+            // reconecta sozinho em segundo plano (port Controle Total).
             if (snap.hasError) {
-              return _buildPendingStreamErrorBar(
-                'Receitas pendentes',
-                snap.error,
-                AppColors.financeReceita,
-              );
+              _agendarRetentativaPendentes(snap.error);
+              if (_lastPendingIncomesSnap == null) {
+                return _buildPendingStreamErrorBar(
+                  'Receitas pendentes',
+                  snap.error,
+                  AppColors.financeReceita,
+                );
+              }
             }
+            final dados = snap.hasError ? _lastPendingIncomesSnap : (snap.data ?? _lastPendingIncomesSnap);
             double total = 0;
             final list = <Map<String, dynamic>>[];
             final today = DateTime(
                 DateTime.now().year, DateTime.now().month, DateTime.now().day);
-            for (final doc in snap.data?.docs ?? []) {
+            for (final doc in dados?.docs ?? []) {
               final d = Map<String, dynamic>.from(doc.data());
               d['id'] = doc.id;
               if (FinanceAccountBalanceUtils.isOnCreditCardAccount(
@@ -4367,18 +4406,24 @@ class _FinanceScreenState extends State<FinanceScreen> {
           stream: _pendingExpensesStream,
           initialData: _lastPendingExpensesSnap,
           builder: (context, snap) {
+            // Com erro, segue com o último valor bom (não pisca o aviso) e
+            // reconecta sozinho em segundo plano (port Controle Total).
             if (snap.hasError) {
-              return _buildPendingStreamErrorBar(
-                'Despesas pendentes',
-                snap.error,
-                AppColors.financeDespesa,
-              );
+              _agendarRetentativaPendentes(snap.error);
+              if (_lastPendingExpensesSnap == null) {
+                return _buildPendingStreamErrorBar(
+                  'Despesas pendentes',
+                  snap.error,
+                  AppColors.financeDespesa,
+                );
+              }
             }
+            final dados = snap.hasError ? _lastPendingExpensesSnap : (snap.data ?? _lastPendingExpensesSnap);
             double total = 0;
             final list = <Map<String, dynamic>>[];
             final today = DateTime(
                 DateTime.now().year, DateTime.now().month, DateTime.now().day);
-            for (final doc in snap.data?.docs ?? []) {
+            for (final doc in dados?.docs ?? []) {
               final d = Map<String, dynamic>.from(doc.data());
               d['id'] = doc.id;
               if (FinanceAccountBalanceUtils.isOnCreditCardAccount(
@@ -4548,6 +4593,15 @@ class _FinanceScreenState extends State<FinanceScreen> {
         maxChildSize: 0.92,
         expand: false,
         builder: (ctx, scrollController) => _PendingListSheetContent(
+          // Visão geral no topo (port Controle Total): Em aberto × Previsão
+          // do mês, vencido × a vencer, com o seletor de período das fixas.
+          header: FixasVisaoGeral(
+            uid: widget.uid,
+            receita: true,
+            pendentes: true,
+            excluirContas: _creditCardAccountIds,
+            margem: const EdgeInsets.only(bottom: 14),
+          ),
           title: 'Receitas pendentes',
           iconColor: AppColors.financeReceita,
           list: list,
@@ -4797,6 +4851,15 @@ class _FinanceScreenState extends State<FinanceScreen> {
         maxChildSize: 0.92,
         expand: false,
         builder: (ctx, scrollController) => _PendingListSheetContent(
+          // Visão geral no topo (port Controle Total): Em aberto × Previsão
+          // do mês, vencido × a vencer, com o seletor de período das fixas.
+          header: FixasVisaoGeral(
+            uid: widget.uid,
+            receita: false,
+            pendentes: true,
+            excluirContas: _creditCardAccountIds,
+            margem: const EdgeInsets.only(bottom: 14),
+          ),
           title: 'Despesas pendentes',
           iconColor: AppColors.financeDespesa,
           list: list,
@@ -7893,7 +7956,11 @@ class _PendingListSheetContent extends StatefulWidget {
     required this.onDeleteBatch,
     this.onConfirmBatch,
     this.batchConfirmShortLabel = 'Confirmar',
+    this.header,
   });
+
+  /// Painel no topo da lista (o gráfico com seletor de período).
+  final Widget? header;
 
   @override
   State<_PendingListSheetContent> createState() =>
@@ -8030,7 +8097,7 @@ class _PendingListSheetContentState extends State<_PendingListSheetContent> {
                     ),
             ),
             Expanded(
-              child: widget.list.isEmpty
+              child: (widget.list.isEmpty && widget.header == null)
                   ? Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
@@ -8050,8 +8117,27 @@ class _PendingListSheetContentState extends State<_PendingListSheetContent> {
                       addAutomaticKeepAlives: false,
                       padding:
                           EdgeInsets.fromLTRB(20, 0, 20, 24 + bottomPadding),
-                      itemCount: widget.list.length,
-                      itemBuilder: (_, i) {
+                      // O painel entra como primeiro item: rola junto com a
+                      // lista, sem roubar altura fixa da folha.
+                      itemCount: (widget.header == null ? 0 : 1) +
+                          (widget.list.isEmpty ? 1 : widget.list.length),
+                      itemBuilder: (_, indice) {
+                        var i = indice;
+                        if (widget.header != null) {
+                          if (i == 0) return widget.header!;
+                          i -= 1;
+                        }
+                        if (widget.list.isEmpty) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 24),
+                            child: Center(
+                              child: Text(widget.emptyMessage,
+                                  style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey.shade600)),
+                            ),
+                          );
+                        }
                         final e = widget.list[i];
                         final id = (e['id'] ?? '').toString();
                         return widget.buildItem(
