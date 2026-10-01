@@ -3207,8 +3207,11 @@ class _FinanceScreenState extends State<FinanceScreen> {
       return;
     }
     if (docId.isEmpty) return;
-    final preSnap = await _txRef().doc(docId).get();
-    final preData = preSnap.data() ?? {};
+    // Dados já na tela: a folha de confirmar abre na hora (antes esperava uma
+    // leitura no servidor). Fora da lista, lê como antes.
+    final preData = _displayedTxData(docId) ??
+        (await _txRef().doc(docId).get()).data() ??
+        <String, dynamic>{};
     final txType = (preData['type'] ?? 'expense').toString();
     final isIncome = txType == 'income';
     final preEffectiveDate =
@@ -3426,8 +3429,12 @@ class _FinanceScreenState extends State<FinanceScreen> {
       ),
     );
     if (confirm != true) return;
-    final snap = await _txRef().doc(docId).get();
-    final data = snap.data() ?? {};
+    // Dados já na tela (sem ida ao servidor); só lê se não estiver visível.
+    var data = _displayedTxData(docId);
+    if (data == null) {
+      final snap = await _txRef().doc(docId).get();
+      data = snap.data() ?? {};
+    }
     final type = (data['type'] ?? 'expense').toString();
     final amount = (data['amount'] ?? 0).toDouble();
     final category = (data['category'] ?? '').toString();
@@ -3435,15 +3442,65 @@ class _FinanceScreenState extends State<FinanceScreen> {
     // Dados de cada perna excluída (transferência = as duas) para tirar dos
     // saldos na hora (port Controle Total, 30/09/2026).
     final removidos = <String, Map<String, dynamic>>{docId: data};
-    if (pairId.isNotEmpty) {
-      final pairSnap =
-          await _txRef().where('transferPairId', isEqualTo: pairId).get();
-      for (final pairDoc in pairSnap.docs) {
-        removidos[pairDoc.id] = pairDoc.data();
-        await pairDoc.reference.delete();
+    if (!context.mounted) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    void onLateError(Object _) {
+      // Servidor recusou: o Firestore já desfez localmente; relê o período.
+      if (mounted) {
+        _scheduleMainPeriodReloadAfterMutationDebounced(immediate: true);
       }
-    } else {
-      await _txRef().doc(docId).delete();
+    }
+
+    try {
+      if (pairId.isNotEmpty) {
+        // Cache primeiro (as duas pernas costumam estar no aparelho).
+        QuerySnapshot<Map<String, dynamic>> pairSnap;
+        try {
+          pairSnap = await _txRef()
+              .where('transferPairId', isEqualTo: pairId)
+              .get(const GetOptions(source: Source.cache));
+          if (pairSnap.docs.length < 2) {
+            pairSnap = await _txRef()
+                .where('transferPairId', isEqualTo: pairId)
+                .get();
+          }
+        } catch (_) {
+          pairSnap = await _txRef()
+              .where('transferPairId', isEqualTo: pairId)
+              .get();
+        }
+        final batch = FirebaseFirestore.instance.batch();
+        var incluiuEste = false;
+        for (final pairDoc in pairSnap.docs) {
+          removidos[pairDoc.id] = pairDoc.data();
+          batch.delete(pairDoc.reference);
+          if (pairDoc.id == docId) incluiuEste = true;
+        }
+        if (!incluiuEste) batch.delete(_txRef().doc(docId));
+        await TransactionSaveService.writeLocalFirst(
+          () => batch.commit(),
+          messenger: messenger,
+          failureMessage: 'Não foi possível excluir no servidor',
+          onLateError: onLateError,
+        );
+      } else {
+        // Local primeiro: some da lista e dos saldos na hora, sem esperar o
+        // servidor confirmar (offline: sincroniza quando voltar a internet).
+        await TransactionSaveService.writeLocalFirst(
+          () => _txRef().doc(docId).delete(),
+          messenger: messenger,
+          failureMessage: 'Não foi possível excluir no servidor',
+          onLateError: onLateError,
+        );
+      }
+    } catch (err) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Erro ao excluir: ${err.toString().split('\n').first}'),
+          backgroundColor: AppColors.error,
+        ));
+      }
+      return;
     }
     if (mounted) {
       final effectiveDate = FinanceLineOpening.effectiveDateTimeFromMap(data) ??
@@ -3462,12 +3519,15 @@ class _FinanceScreenState extends State<FinanceScreen> {
       ));
     }
     HapticFeedback.lightImpact();
-    await LogsService().saveLog(
-      modulo: 'Financeiro',
-      acao: type == 'income' ? 'Excluiu receita' : 'Excluiu despesa',
-      detalhes:
-          '${category.isEmpty ? 'Categoria' : category} • ${CurrencyFormats.formatBRL(amount)}',
-    );
+    // Log em segundo plano — não segura o aviso de «excluído».
+    unawaited(LogsService()
+        .saveLog(
+          modulo: 'Financeiro',
+          acao: type == 'income' ? 'Excluiu receita' : 'Excluiu despesa',
+          detalhes:
+              '${category.isEmpty ? 'Categoria' : category} • ${CurrencyFormats.formatBRL(amount)}',
+        )
+        .catchError((_) {}));
     if (context.mounted) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Lançamento excluído.')));
@@ -3501,12 +3561,33 @@ class _FinanceScreenState extends State<FinanceScreen> {
     if (confirm != true || !context.mounted) return;
     int deleted = 0;
     final deletedData = <String, Map<String, dynamic>>{};
-    for (final id in docIds) {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    // Lote único (até 450 por commit) e local primeiro — antes era um
+    // delete por vez, cada um esperando o servidor.
+    for (var i = 0; i < docIds.length; i += 450) {
+      final chunk = docIds.sublist(
+          i, i + 450 > docIds.length ? docIds.length : i + 450);
+      final batch = FirebaseFirestore.instance.batch();
+      for (final id in chunk) {
+        batch.delete(_txRef().doc(id));
+      }
       try {
-        final shown = _displayedTxData(id);
-        await _txRef().doc(id).delete();
-        deleted++;
-        if (shown != null) deletedData[id] = shown;
+        await TransactionSaveService.writeLocalFirst(
+          () => batch.commit(),
+          messenger: messenger,
+          failureMessage: 'Não foi possível excluir no servidor',
+          onLateError: (_) {
+            if (mounted) {
+              _scheduleMainPeriodReloadAfterMutationDebounced(
+                  immediate: true);
+            }
+          },
+        );
+        for (final id in chunk) {
+          final shown = _displayedTxData(id);
+          deleted++;
+          if (shown != null) deletedData[id] = shown;
+        }
       } catch (_) {}
     }
     if (mounted) {

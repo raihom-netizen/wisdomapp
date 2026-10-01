@@ -7,6 +7,33 @@ import '../utils/firestore_user_doc_id.dart';
 class UserCategoriesService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
+  /// Memo em memória do documento de categorias (por usuário). Antes cada
+  /// abertura de lançamento/edição/seletor ia ao servidor de novo.
+  /// Qualquer alteração feita por este serviço limpa o memo na hora.
+  static final Map<String, ({Map<String, dynamic>? data, DateTime at})> _memo =
+      {};
+  static const Duration _memoTtl = Duration(seconds: 90);
+
+  /// Limpa o memo (todos ou só [uid]).
+  static void invalidateCache([String? uid]) {
+    if (uid == null) {
+      _memo.clear();
+    } else {
+      _memo.remove(firestoreUserDocIdForAppShell(uid));
+    }
+  }
+
+  Future<Map<String, dynamic>?> _readCached(String uid) async {
+    final key = firestoreUserDocIdForAppShell(uid);
+    final hit = _memo[key];
+    final now = DateTime.now();
+    if (hit != null && now.difference(hit.at) < _memoTtl) return hit.data;
+    final snap = await _ref(uid).get();
+    final data = snap.data();
+    _memo[key] = (data: data, at: now);
+    return data;
+  }
+
   DocumentReference<Map<String, dynamic>> _ref(String uid) => _db
       .collection('users')
       .doc(firestoreUserDocIdForAppShell(uid))
@@ -80,8 +107,7 @@ class UserCategoriesService {
     List<String> hiddenDefaultIncome,
     List<String> hiddenDefaultExpense,
   })> load(String uid) async {
-    final snap = await _ref(uid).get();
-    final data = snap.data();
+    final data = await _readCached(uid);
     final customIncome = _listFrom(data?['income']);
     final customExpense = _listFrom(data?['expense']);
     final hiddenIncome = _listFrom(data?['hiddenDefaultIncome']);
@@ -126,11 +152,14 @@ class UserCategoriesService {
     if (list.any((c) => c.toLowerCase() == can.toLowerCase())) return;
     list.add(can);
     list.sort((a, b) => _sortKeyPt(a).compareTo(_sortKeyPt(b)));
+    invalidateCache(uid);
     await _ref(uid).set({
       ...data,
       key: list,
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+    // De novo: um load() durante a gravação pode ter lido do servidor o antigo.
+    invalidateCache(uid);
   }
 
   /// Traz de volta um nome padrão oculto.
@@ -144,11 +173,14 @@ class UserCategoriesService {
     final list = _listFrom(data[key]);
     final out = list.where((c) => c.toLowerCase() != can.toLowerCase()).toList();
     if (out.length == list.length) return;
+    invalidateCache(uid);
     await _ref(uid).set({
       ...data,
       key: out,
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+    // De novo: um load() durante a gravação pode ter lido do servidor o antigo.
+    invalidateCache(uid);
   }
 
   List<String> _listFrom(dynamic v) {
@@ -184,11 +216,15 @@ class UserCategoriesService {
       'updatedAt': FieldValue.serverTimestamp(),
     };
     if (snap.exists) {
+      invalidateCache(uid);
       await _ref(uid).update(payload);
+      invalidateCache(uid);
     } else {
       final otherKey = isIncome ? 'expense' : 'income';
       payload[otherKey] = [];
+      invalidateCache(uid);
       await _ref(uid).set(payload);
+      invalidateCache(uid);
     }
   }
 
@@ -206,11 +242,14 @@ class UserCategoriesService {
     final updated = current.where((c) => c.toLowerCase() != trimmed.toLowerCase()).toList();
     if (updated.length == current.length) return;
 
+    invalidateCache(uid);
     await _ref(uid).set({
       ...data,
       key: updated,
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+    // De novo: um load() durante a gravação pode ter lido do servidor o antigo.
+    invalidateCache(uid);
   }
 
   /// Renomeia categoria customizada. Padrão do app: use [hideDefault] + [addCustom].
@@ -231,10 +270,13 @@ class UserCategoriesService {
 
     final next = current.map((c) => c.toLowerCase() == o.toLowerCase() ? t : c).toList();
     next.sort((a, b) => _sortKeyPt(a).compareTo(_sortKeyPt(b)));
+    invalidateCache(uid);
     await _ref(uid).set({
       ...data,
       key: next,
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+    // De novo: um load() durante a gravação pode ter lido do servidor o antigo.
+    invalidateCache(uid);
   }
 }

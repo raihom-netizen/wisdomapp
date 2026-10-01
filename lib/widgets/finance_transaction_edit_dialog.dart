@@ -16,6 +16,7 @@ import '../services/finance_accounts_service.dart';
 import '../services/functions_service.dart';
 import '../services/goal_deposit_service.dart';
 import '../services/logs_service.dart';
+import '../services/transaction_save_service.dart';
 import '../services/user_categories_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/finance_line_opening.dart';
@@ -576,6 +577,7 @@ Future<bool> showFinanceTransactionEditDialog({
     return false;
   }
 
+  final messenger = ScaffoldMessenger.maybeOf(context);
   final amount = CurrencyFormats.parseBRLInput(amountCtrl.text) ?? 0;
   var categoryFinal = selectedCategory == '__outra__' ? catCtrl.text.trim() : selectedCategory;
   if (categoryFinal.isEmpty || categoryFinal == incluirNovaCat) {
@@ -638,7 +640,18 @@ Future<bool> showFinanceTransactionEditDialog({
   }
 
   try {
-    await FirebaseFirestore.instance.collection('users').doc(fsUid).collection('transactions').doc(docId).update(updateData);
+    // Local primeiro: a edição já vale no cache; não espera o servidor
+    // confirmar para fechar e atualizar a lista/saldos.
+    await TransactionSaveService.writeLocalFirst(
+      () => FirebaseFirestore.instance
+          .collection('users')
+          .doc(fsUid)
+          .collection('transactions')
+          .doc(docId)
+          .update(updateData),
+      messenger: messenger,
+      failureMessage: 'Não foi possível sincronizar a edição',
+    );
     final goalId = (current['goalId'] ?? '').toString().trim();
     if (goalId.isNotEmpty && type == 'income') {
       unawaited(

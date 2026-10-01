@@ -166,6 +166,23 @@ class TransactionSaveService {
     return o;
   }
 
+  /// Aviso de sucesso sem segurar o retorno do salvar (a checagem de rede
+  /// roda em paralelo).
+  static void _showSavedSnack(ScaffoldMessengerState? messenger, String base) {
+    if (messenger == null) return;
+    unawaited(() async {
+      var offline = false;
+      try {
+        offline =
+            isConnectivityOffline(await Connectivity().checkConnectivity());
+      } catch (_) {}
+      final msg = offline
+          ? '$base Guardado no aparelho; sincroniza quando houver internet.'
+          : base;
+      messenger.showSnackBar(SnackBar(content: Text(msg)));
+    }());
+  }
+
   static DateTime addMonths(DateTime d, int months) {
     final year = d.year + ((d.month - 1 + months) ~/ 12);
     final month = ((d.month - 1 + months) % 12) + 1;
@@ -197,6 +214,48 @@ class TransactionSaveService {
       }
     }
     throw last ?? StateError('firestore write failed');
+  }
+
+  /// Gravação «local primeiro» (Firestore offline-first).
+  ///
+  /// O `Future` do `set/commit/update/delete` só termina quando o SERVIDOR
+  /// confirma (offline: só quando voltar a internet). A escrita já vale no
+  /// cache local no instante em que é chamada — listas e saldos (cache-first)
+  /// enxergam na hora. Aqui esperamos só uma janela curta para pegar erro
+  /// imediato (dado inválido); o resto segue em segundo plano e, se o servidor
+  /// recusar depois, o Firestore desfaz a escrita local e avisamos.
+  static Future<void> writeLocalFirst(
+    Future<void> Function() write, {
+    ScaffoldMessengerState? messenger,
+    String failureMessage = 'Não foi possível sincronizar o lançamento',
+    Duration grace = const Duration(milliseconds: 120),
+    void Function(Object error)? onLateError,
+  }) async {
+    Object? early;
+    var done = false;
+    final f = _firestoreWriteWithRetry(write);
+    final watched = f.then<void>((_) {
+      done = true;
+    }, onError: (Object err) {
+      done = true;
+      early ??= err;
+    });
+    await Future.any<void>([watched, Future<void>.delayed(grace)]);
+    final err = early;
+    if (err != null) throw err;
+    if (done) return;
+    // Falha tardia (ex.: regra do servidor): avisa sem travar a tela.
+    unawaited(watched.then((_) {
+      final lateErr = early;
+      if (lateErr == null) return;
+      debugPrint('TransactionSaveService.writeLocalFirst: $lateErr');
+      onLateError?.call(lateErr);
+      messenger?.showSnackBar(SnackBar(
+        content: Text('$failureMessage: ${lateErr.toString().split('\n').first}'),
+        backgroundColor: const Color(0xFFB00020),
+        duration: const Duration(seconds: 5),
+      ));
+    }));
   }
 
   static Future<void> attachReceiptToTransaction({
@@ -300,11 +359,12 @@ class TransactionSaveService {
     }
 
     final col = txRef(uid);
+    final messenger = ScaffoldMessenger.maybeOf(context);
     final savedIds = <String>[];
     String? firstDocId;
     if (installments <= 1) {
       final ref = col.doc();
-      await _firestoreWriteWithRetry(
+      await writeLocalFirst(
         () => ref.set({
           'type': type,
           'amount': amount,
@@ -325,6 +385,7 @@ class TransactionSaveService {
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         }),
+        messenger: messenger,
       );
       firstDocId = ref.id;
       savedIds.add(ref.id);
@@ -340,16 +401,12 @@ class TransactionSaveService {
       );
       if (context.mounted && showSuccessSnack) {
         HapticFeedback.lightImpact();
-        final offline =
-            isConnectivityOffline(await Connectivity().checkConnectivity());
-        final base = type == 'income'
-            ? 'Receita registada no Financeiro.'
-            : 'Despesa registada no Financeiro.';
-        final msg = offline
-            ? '$base Guardado no aparelho; sincroniza quando houver internet.'
-            : base;
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(msg)));
+        _showSavedSnack(
+          messenger,
+          type == 'income'
+              ? 'Receita registada no Financeiro.'
+              : 'Despesa registada no Financeiro.',
+        );
       }
     } else {
       final batch = FirebaseFirestore.instance.batch();
@@ -385,7 +442,7 @@ class TransactionSaveService {
           'updatedAt': FieldValue.serverTimestamp(),
         });
       }
-      await _firestoreWriteWithRetry(() => batch.commit());
+      await writeLocalFirst(() => batch.commit(), messenger: messenger);
       unawaited(
         LogsService()
             .saveLog(
@@ -400,16 +457,12 @@ class TransactionSaveService {
       );
       if (context.mounted && showSuccessSnack) {
         HapticFeedback.lightImpact();
-        final offline =
-            isConnectivityOffline(await Connectivity().checkConnectivity());
-        final base = type == 'income'
-            ? 'Receitas parceladas registadas no Financeiro.'
-            : 'Despesas parceladas registadas no Financeiro.';
-        final msg = offline
-            ? '$base Guardado no aparelho; sincroniza quando houver internet.'
-            : base;
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(msg)));
+        _showSavedSnack(
+          messenger,
+          type == 'income'
+              ? 'Receitas parceladas registadas no Financeiro.'
+              : 'Despesas parceladas registadas no Financeiro.',
+        );
       }
     }
 
