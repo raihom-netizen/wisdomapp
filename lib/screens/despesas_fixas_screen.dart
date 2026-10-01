@@ -18,6 +18,10 @@ import '../utils/firestore_user_doc_id.dart';
 import '../widgets/brl_amount_text_field.dart';
 import '../widgets/finance_calendar_color_picker.dart';
 import '../widgets/fixed_pending_prefs_sheet.dart';
+import '../widgets/fixas_a_pagar_painel.dart';
+import '../widgets/fixas_mes_a_mes.dart';
+import '../widgets/fixas_totalizador_card.dart';
+import '../widgets/fixas_visao_geral.dart';
 
 /// Espaço extra para o [Scrollable] rolar o campo acima do teclado no sheet.
 const EdgeInsets _kFixedFlowKeyboardScrollPad =
@@ -1225,6 +1229,23 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
           return CustomScrollView(
             physics: const BouncingScrollPhysics(),
             slivers: [
+              // Ordem (port Controle Total, 01/10/2026): total com gráfico →
+              // fixas cadastradas → pesquisa por período → mês a mês → a pagar.
+              SliverToBoxAdapter(
+                child: FixasTotalizadorCard(items: items, receita: false, uid: _fsUid),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                  child: Text(
+                    'Suas despesas fixas (${items.length})',
+                    style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.textPrimary),
+                  ),
+                ),
+              ),
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                 sliver: SliverList(
@@ -1335,6 +1356,15 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                     childCount: items.length,
                   ),
                 ),
+              ),
+              SliverToBoxAdapter(
+                child: FixasVisaoGeral(uid: _fsUid, receita: false),
+              ),
+              SliverToBoxAdapter(
+                child: FixasPorMesCard(uid: _fsUid, receita: false),
+              ),
+              SliverToBoxAdapter(
+                child: FixasAPagarPainel(uid: _fsUid, receita: false),
               ),
               SliverPadding(
                   padding: EdgeInsets.only(
