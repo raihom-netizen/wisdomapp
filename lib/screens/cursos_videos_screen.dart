@@ -16,6 +16,11 @@ import '../services/course_progress_service.dart';
 import '../widgets/course_media_preview.dart';
 import '../widgets/course_video/course_module_media_panel.dart';
 import '../widgets/course_video/course_youtube_feed_card.dart';
+import '../widgets/course/course_showcase_card.dart';
+import 'course_detail_screen.dart';
+
+/// Filtros da vitrine de cursos.
+enum _CourseFilter { todos, andamento, concluidos, novos, curtidos }
 
 BoxFit _courseThumbFit(Map<String, dynamic> data) {
   final type = (data['type'] ?? 'curso').toString();
@@ -49,6 +54,13 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
   final _cache = CourseVideosCacheService.instance;
   String _cacheFingerprint = '';
 
+  /// Vitrine (padrão) × feed antigo com player inline (mantido como opção).
+  var _feedMode = false;
+  var _query = '';
+  var _filter = _CourseFilter.todos;
+  final _searchCtrl = TextEditingController();
+  StreamSubscription<String>? _progressSub;
+
   @override
   bool get wantKeepAlive => true;
 
@@ -58,11 +70,18 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
     _cache.addListener(_onCacheUpdate);
     unawaited(_cache.ensureLoaded());
     unawaited(CourseProgressService.instance.bindUser(widget.uid));
+    // Só a vitrine reage ao progresso: no feed, reconstruir pararia o vídeo inline.
+    _progressSub = CourseProgressService.instance.changes.listen((_) {
+      if (!mounted || _feedMode || _tabIndex != 0) return;
+      setState(() {});
+    });
   }
 
   @override
   void dispose() {
     _cache.removeListener(_onCacheUpdate);
+    _progressSub?.cancel();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -255,7 +274,14 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
                 duration: const Duration(milliseconds: 280),
                 layoutBuilder: (current, previous) =>
                     current ?? const SizedBox.shrink(),
-                child: _tabIndex == 0
+                child: _tabIndex == 0 && !_feedMode
+                    ? _buildCursosShowcase(
+                        key: const ValueKey('cursos-vitrine'),
+                        cfg: cfg,
+                        docs: cursos,
+                        syncing: syncing,
+                      )
+                    : _tabIndex == 0
                     ? _buildSection(
                         key: const ValueKey('cursos'),
                         cfg: cfg,
@@ -277,11 +303,24 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
                         label: 'Dicas',
                       ),
               ),
+            ] else if (!_feedMode) ...[
+              const SizedBox(height: 12),
+              _buildCursosShowcase(
+                key: const ValueKey('cursos-vitrine-solo'),
+                cfg: cfg,
+                docs: cursos,
+                syncing: syncing,
+              ),
             ] else ...[
               const SizedBox(height: 12),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: _sectionTitle(cfg.sectionTitle, Colors.white),
+                child: Row(
+                  children: [
+                    Expanded(child: _sectionTitle(cfg.sectionTitle, Colors.white)),
+                    _viewToggle(),
+                  ],
+                ),
               ),
               const SizedBox(height: 10),
               if (cursos.isEmpty)
@@ -478,9 +517,16 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-          child: _sectionTitle(
-            isDicas ? 'Todas as dicas' : 'Todos os cursos',
-            accent,
+          child: Row(
+            children: [
+              Expanded(
+                child: _sectionTitle(
+                  isDicas ? 'Todas as dicas' : 'Todos os cursos',
+                  accent,
+                ),
+              ),
+              if (!isDicas) _viewToggle(),
+            ],
           ),
         ),
         Padding(
@@ -511,6 +557,277 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
         ),
       ],
     );
+  }
+
+  // ── Vitrine de cursos ────────────────────────────────────────────────
+
+  Widget _viewToggle() {
+    return Tooltip(
+      message: _feedMode ? 'Ver vitrine de cursos' : 'Ver como feed (player na lista)',
+      child: IconButton(
+        onPressed: () => setState(() => _feedMode = !_feedMode),
+        icon: Icon(
+          _feedMode ? Icons.grid_view_rounded : Icons.view_agenda_rounded,
+          color: Colors.white70,
+        ),
+      ),
+    );
+  }
+
+  static String _fold(String s) {
+    const from = 'áàâãäéèêëíìîïóòôõöúùûüçñ';
+    const to = 'aaaaaeeeeiiiiooooouuuucn';
+    final low = s.toLowerCase();
+    final b = StringBuffer();
+    for (final ch in low.split('')) {
+      final i = from.indexOf(ch);
+      b.write(i >= 0 ? to[i] : ch);
+    }
+    return b.toString();
+  }
+
+  bool _matchesQuery(Map<String, dynamic> data) {
+    final q = _fold(_query.trim());
+    if (q.isEmpty) return true;
+    final hay = _fold(
+      '${data['title'] ?? ''} ${data['description'] ?? ''} ${data['bodyText'] ?? ''}',
+    );
+    return q.split(RegExp(r'\s+')).every(hay.contains);
+  }
+
+  bool _matchesFilter(CourseShowcaseInfo i) {
+    switch (_filter) {
+      case _CourseFilter.todos:
+        return true;
+      case _CourseFilter.andamento:
+        return i.inProgress;
+      case _CourseFilter.concluidos:
+        return i.completed;
+      case _CourseFilter.novos:
+        return i.isNew;
+      case _CourseFilter.curtidos:
+        return i.liked;
+    }
+  }
+
+  void _openCourse(CourseShowcaseInfo info, {bool resume = false}) {
+    openCourseDetail(
+      context,
+      data: {...info.data},
+      uid: widget.uid,
+      continueWhereStopped: resume,
+    );
+  }
+
+  Widget _buildCursosShowcase({
+    required Key key,
+    required WisdomCoursesModuleConfig cfg,
+    required List<CourseVideoDoc> docs,
+    required bool syncing,
+  }) {
+    final progress = CourseProgressService.instance;
+    final infos = [
+      for (final d in docs)
+        CourseShowcaseInfo({...d.data, 'id': d.id}, progress.of(d.id)),
+    ];
+    final counts = {
+      _CourseFilter.todos: infos.length,
+      _CourseFilter.andamento: infos.where((i) => i.inProgress).length,
+      _CourseFilter.concluidos: infos.where((i) => i.completed).length,
+      _CourseFilter.novos: infos.where((i) => i.isNew).length,
+      _CourseFilter.curtidos: infos.where((i) => i.liked).length,
+    };
+    final visible = infos
+        .where((i) => _matchesQuery(i.data) && _matchesFilter(i))
+        .toList();
+    final continuing = infos.where((i) => i.inProgress).toList()
+      ..sort((a, b) => b.lastOpenedMs.compareTo(a.lastOpenedMs));
+    final showContinue = continuing.isNotEmpty &&
+        _query.trim().isEmpty &&
+        _filter == _CourseFilter.todos;
+
+    return Column(
+      key: key,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _searchCtrl,
+                  onChanged: (v) => setState(() => _query = v),
+                  style: const TextStyle(color: Colors.white),
+                  cursorColor: const Color(0xFFFF0000),
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    filled: true,
+                    fillColor: const Color(0xFF1A1A1A),
+                    hintText: 'Buscar curso…',
+                    hintStyle: TextStyle(color: Colors.grey.shade600),
+                    prefixIcon:
+                        const Icon(Icons.search_rounded, color: Colors.white54),
+                    suffixIcon: _query.isEmpty
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.close_rounded,
+                                color: Colors.white54),
+                            onPressed: () => setState(() {
+                              _query = '';
+                              _searchCtrl.clear();
+                            }),
+                          ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              _viewToggle(),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 36,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            children: [
+              for (final f in _CourseFilter.values)
+                Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: _FilterPill(
+                    label: _filterLabel(f),
+                    icon: _filterIcon(f),
+                    count: counts[f] ?? 0,
+                    selected: _filter == f,
+                    onTap: () => setState(() => _filter = f),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        if (showContinue) ...[
+          const SizedBox(height: 14),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: _sectionTitle('Continuar assistindo', Colors.white),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 205,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              itemCount: continuing.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (_, i) => CourseContinueCard(
+                info: continuing[i],
+                onTap: () => _openCourse(continuing[i], resume: true),
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 14),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: _sectionTitle(
+            _filter == _CourseFilter.todos && _query.trim().isEmpty
+                ? cfg.sectionTitle
+                : '${visible.length} ${visible.length == 1 ? 'curso' : 'cursos'}',
+            Colors.white,
+          ),
+        ),
+        const SizedBox(height: 10),
+        if (docs.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: _emptyState(cfg, syncing, AppColors.primary),
+          )
+        else if (visible.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: _emptyState(
+              cfg,
+              false,
+              AppColors.primary,
+              emptyHint: _query.trim().isNotEmpty
+                  ? 'Nenhum curso encontrado para «${_query.trim()}».'
+                  : 'Nenhum curso neste filtro.',
+            ),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: LayoutBuilder(
+              builder: (context, c) {
+                final w = c.maxWidth;
+                final cols = w >= 1150 ? 4 : (w >= 820 ? 3 : (w >= 480 ? 2 : 1));
+                final rows = <Widget>[];
+                for (var r = 0; r < visible.length; r += cols) {
+                  final slice = visible.skip(r).take(cols).toList();
+                  rows.add(Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        for (var k = 0; k < cols; k++) ...[
+                          if (k > 0) const SizedBox(width: 12),
+                          Expanded(
+                            child: k < slice.length
+                                ? CourseShowcaseCard(
+                                    key: ValueKey('vitrine-${slice[k].id}'),
+                                    info: slice[k],
+                                    onTap: () => _openCourse(slice[k]),
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ));
+                }
+                return Column(children: rows);
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
+  String _filterLabel(_CourseFilter f) {
+    switch (f) {
+      case _CourseFilter.todos:
+        return 'Todos';
+      case _CourseFilter.andamento:
+        return 'Em andamento';
+      case _CourseFilter.concluidos:
+        return 'Concluídos';
+      case _CourseFilter.novos:
+        return 'Novos';
+      case _CourseFilter.curtidos:
+        return 'Curtidos';
+    }
+  }
+
+  IconData _filterIcon(_CourseFilter f) {
+    switch (f) {
+      case _CourseFilter.todos:
+        return Icons.apps_rounded;
+      case _CourseFilter.andamento:
+        return Icons.play_circle_outline_rounded;
+      case _CourseFilter.concluidos:
+        return Icons.verified_rounded;
+      case _CourseFilter.novos:
+        return Icons.fiber_new_rounded;
+      case _CourseFilter.curtidos:
+        return Icons.thumb_up_alt_rounded;
+    }
   }
 
   Future<void> _openContent(
@@ -661,6 +978,55 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FilterPill extends StatelessWidget {
+  const _FilterPill({
+    required this.label,
+    required this.icon,
+    required this.count,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final int count;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    const accent = Color(0xFFFF0000);
+    return Material(
+      color: selected ? accent : const Color(0xFF1A1A1A),
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon,
+                  size: 15,
+                  color: selected ? Colors.white : Colors.grey.shade500),
+              const SizedBox(width: 5),
+              Text(
+                count > 0 ? '$label · $count' : label,
+                style: TextStyle(
+                  color: selected ? Colors.white : Colors.grey.shade400,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12.5,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

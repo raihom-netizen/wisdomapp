@@ -6,20 +6,107 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'course_analytics_service.dart';
 
+/// Progresso de uma aula (vídeo) dentro do curso.
+class CourseLessonProgress {
+  const CourseLessonProgress({
+    this.positionSeconds = 0,
+    this.durationSeconds = 0,
+    this.done = false,
+  });
+
+  final double positionSeconds;
+  final double durationSeconds;
+  final bool done;
+
+  /// A partir de 92% assistido a aula conta como concluída.
+  static const doneThreshold = 0.92;
+
+  double get fraction {
+    if (done) return 1;
+    if (durationSeconds <= 0) return 0;
+    return (positionSeconds / durationSeconds).clamp(0.0, 1.0);
+  }
+
+  /// Retomar só quando faz sentido (passou de 10 s e não terminou).
+  bool get canResume => !done && positionSeconds >= 10;
+
+  Map<String, dynamic> toJson() => {
+        'p': positionSeconds,
+        'd': durationSeconds,
+        // Sempre grava (merge do Firestore é profundo: omitir manteria `true`).
+        'done': done,
+      };
+
+  factory CourseLessonProgress.fromJson(Map<String, dynamic>? m) {
+    if (m == null) return const CourseLessonProgress();
+    return CourseLessonProgress(
+      positionSeconds: (m['p'] as num?)?.toDouble() ?? 0,
+      durationSeconds: (m['d'] as num?)?.toDouble() ?? 0,
+      done: m['done'] == true,
+    );
+  }
+
+  CourseLessonProgress mergeWith(CourseLessonProgress other) {
+    return CourseLessonProgress(
+      positionSeconds: positionSeconds >= other.positionSeconds
+          ? positionSeconds
+          : other.positionSeconds,
+      durationSeconds:
+          durationSeconds > 0 ? durationSeconds : other.durationSeconds,
+      done: done || other.done,
+    );
+  }
+}
+
 /// Progresso e «gostei» por curso — local (rápido) + Firestore (sincroniza entre aparelhos).
 class CourseProgress {
   const CourseProgress({
     this.liked = false,
     this.positionSeconds = 0,
     this.durationSeconds = 0,
+    this.lessons = const {},
+    this.lastLessonKey,
+    this.lastOpenedMs = 0,
   });
 
   final bool liked;
   final double positionSeconds;
   final double durationSeconds;
 
-  /// Resume automático desligado — o usuário controla a posição no player.
+  /// Aulas assistidas (chave = id estável da aula, ver `CourseLessons`).
+  final Map<String, CourseLessonProgress> lessons;
+
+  /// Última aula aberta — base do «Continuar de onde parou».
+  final String? lastLessonKey;
+  final int lastOpenedMs;
+
+  /// Resume automático do embed desligado — o «Continuar» é explícito na tela do curso.
   bool get hasResume => false;
+
+  bool get hasActivity => lastOpenedMs > 0 || lessons.isNotEmpty;
+
+  CourseLessonProgress lesson(String key) =>
+      lessons[key] ?? const CourseLessonProgress();
+
+  /// Fração do curso (média das aulas) dado o conjunto de aulas.
+  double courseFraction(Iterable<String> lessonKeys) {
+    final keys = lessonKeys.toList();
+    if (keys.isEmpty) return 0;
+    var sum = 0.0;
+    for (final k in keys) {
+      sum += lesson(k).fraction;
+    }
+    return (sum / keys.length).clamp(0.0, 1.0);
+  }
+
+  int doneCount(Iterable<String> lessonKeys) =>
+      lessonKeys.where((k) => lessons[k]?.done == true).length;
+
+  bool isCompleted(Iterable<String> lessonKeys) {
+    final keys = lessonKeys.toList();
+    if (keys.isEmpty) return false;
+    return keys.every((k) => lessons[k]?.done == true);
+  }
 
   double get progressFraction {
     if (durationSeconds <= 0) return 0;
@@ -38,11 +125,17 @@ class CourseProgress {
     bool? liked,
     double? positionSeconds,
     double? durationSeconds,
+    Map<String, CourseLessonProgress>? lessons,
+    String? lastLessonKey,
+    int? lastOpenedMs,
   }) {
     return CourseProgress(
       liked: liked ?? this.liked,
       positionSeconds: positionSeconds ?? this.positionSeconds,
       durationSeconds: durationSeconds ?? this.durationSeconds,
+      lessons: lessons ?? this.lessons,
+      lastLessonKey: lastLessonKey ?? this.lastLessonKey,
+      lastOpenedMs: lastOpenedMs ?? this.lastOpenedMs,
     );
   }
 
@@ -50,14 +143,58 @@ class CourseProgress {
         'liked': liked,
         'positionSeconds': positionSeconds,
         'durationSeconds': durationSeconds,
+        if (lessons.isNotEmpty)
+          'lessons': {
+            for (final e in lessons.entries) e.key: e.value.toJson(),
+          },
+        if (lastLessonKey != null) 'lastLessonKey': lastLessonKey,
+        if (lastOpenedMs > 0) 'lastOpenedMs': lastOpenedMs,
       };
 
   factory CourseProgress.fromJson(Map<String, dynamic>? m) {
     if (m == null) return const CourseProgress();
+    final rawLessons = m['lessons'];
+    final lessons = <String, CourseLessonProgress>{};
+    if (rawLessons is Map) {
+      for (final e in rawLessons.entries) {
+        final v = e.value;
+        if (v is Map) {
+          lessons[e.key.toString()] =
+              CourseLessonProgress.fromJson(Map<String, dynamic>.from(v));
+        }
+      }
+    }
+    final last = (m['lastLessonKey'] ?? '').toString().trim();
     return CourseProgress(
       liked: m['liked'] == true,
       positionSeconds: (m['positionSeconds'] as num?)?.toDouble() ?? 0,
       durationSeconds: (m['durationSeconds'] as num?)?.toDouble() ?? 0,
+      lessons: lessons,
+      lastLessonKey: last.isEmpty ? null : last,
+      lastOpenedMs: (m['lastOpenedMs'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  /// União local × nuvem (maior posição, concluída vence, acesso mais recente).
+  CourseProgress mergeWith(CourseProgress other) {
+    final merged = <String, CourseLessonProgress>{...lessons};
+    for (final e in other.lessons.entries) {
+      final cur = merged[e.key];
+      merged[e.key] = cur == null ? e.value : cur.mergeWith(e.value);
+    }
+    final newer = other.lastOpenedMs > lastOpenedMs ? other : this;
+    return CourseProgress(
+      liked: liked || other.liked,
+      positionSeconds: positionSeconds >= other.positionSeconds
+          ? positionSeconds
+          : other.positionSeconds,
+      durationSeconds:
+          durationSeconds > 0 ? durationSeconds : other.durationSeconds,
+      lessons: merged,
+      lastLessonKey:
+          newer.lastLessonKey ?? lastLessonKey ?? other.lastLessonKey,
+      lastOpenedMs:
+          lastOpenedMs > other.lastOpenedMs ? lastOpenedMs : other.lastOpenedMs,
     );
   }
 }
@@ -73,6 +210,7 @@ class CourseProgressService {
   SharedPreferences? _prefs;
   var _loaded = false;
   DateTime? _lastCloudWrite;
+  DateTime? _lastLessonPersist;
   String? _uid;
 
   Stream<String> get changes => _controller.stream;
@@ -88,6 +226,13 @@ class CourseProgressService {
   CourseProgress of(String courseId) {
     if (courseId.isEmpty) return const CourseProgress();
     return _cache[courseId] ?? const CourseProgress();
+  }
+
+  /// Cursos com atividade, do acesso mais recente para o mais antigo.
+  List<MapEntry<String, CourseProgress>> recentCourses() {
+    final list = _cache.entries.where((e) => e.value.lastOpenedMs > 0).toList()
+      ..sort((a, b) => b.value.lastOpenedMs.compareTo(a.value.lastOpenedMs));
+    return list;
   }
 
   Future<void> toggleLike(
@@ -168,6 +313,113 @@ class CourseProgressService {
     );
   }
 
+  /// Marca a aula aberta (base do «Continuar de onde parou»).
+  Future<void> markLessonOpened(String courseId, String lessonKey) async {
+    if (courseId.isEmpty || lessonKey.isEmpty) return;
+    final cur = of(courseId);
+    await _save(
+      courseId,
+      cur.copyWith(
+        lastLessonKey: lessonKey,
+        lastOpenedMs: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
+  }
+
+  /// Marca/desmarca aula como concluída (manual pelo aluno).
+  Future<void> setLessonDone(
+    String courseId,
+    String lessonKey,
+    bool done,
+  ) async {
+    if (courseId.isEmpty || lessonKey.isEmpty) return;
+    final cur = of(courseId);
+    final l = cur.lesson(lessonKey);
+    final next = CourseLessonProgress(
+      positionSeconds: done ? l.positionSeconds : 0,
+      durationSeconds: l.durationSeconds,
+      done: done,
+    );
+    await _save(
+      courseId,
+      cur.copyWith(lessons: {...cur.lessons, lessonKey: next}),
+    );
+  }
+
+  /// Zera o progresso do curso (mantém o «gostei»).
+  Future<void> resetCourse(String courseId) async {
+    if (courseId.isEmpty) return;
+    final p = CourseProgress(liked: of(courseId).liked);
+    _cache[courseId] = p;
+    _controller.add(courseId);
+    await _persistLocal();
+    final uid = _uid;
+    if (uid == null || uid.isEmpty) return;
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('course_progress')
+          .doc(courseId)
+          .set({
+        ...p.toJson(),
+        'lessons': FieldValue.delete(),
+        'lastLessonKey': FieldValue.delete(),
+        'lastOpenedMs': FieldValue.delete(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (_) {}
+  }
+
+  /// Progresso vindo do player (a cada ~4 s). Memória imediata + gravação
+  /// espaçada. Quem escuta NÃO deve trocar parâmetros do embed (remontaria).
+  Future<void> recordLessonProgress(
+    String courseId,
+    String lessonKey, {
+    required double positionSeconds,
+    required double durationSeconds,
+    String? title,
+    String? type,
+  }) async {
+    if (courseId.isEmpty || lessonKey.isEmpty) return;
+    if (positionSeconds.isNaN || durationSeconds.isNaN) return;
+    if (positionSeconds <= 0 && durationSeconds <= 0) return;
+    final cur = of(courseId);
+    final prev = cur.lesson(lessonKey);
+    final dur = durationSeconds > 0 ? durationSeconds : prev.durationSeconds;
+    final reachedEnd =
+        dur > 0 && positionSeconds / dur >= CourseLessonProgress.doneThreshold;
+    final next = CourseLessonProgress(
+      positionSeconds: positionSeconds,
+      durationSeconds: dur,
+      done: prev.done || reachedEnd,
+    );
+    final updated = cur.copyWith(
+      lessons: {...cur.lessons, lessonKey: next},
+      lastLessonKey: lessonKey,
+      lastOpenedMs: DateTime.now().millisecondsSinceEpoch,
+    );
+    _cache[courseId] = updated;
+    _controller.add(courseId);
+
+    final now = DateTime.now();
+    final justFinished = next.done && !prev.done;
+    if (justFinished ||
+        _lastLessonPersist == null ||
+        now.difference(_lastLessonPersist!) >= const Duration(seconds: 15)) {
+      _lastLessonPersist = now;
+      await _persistLocal();
+      unawaited(_pushCloud(courseId, updated));
+    }
+    unawaited(savePosition(
+      courseId,
+      positionSeconds: positionSeconds,
+      durationSeconds: dur,
+      title: title,
+      type: type,
+    ));
+  }
+
   Future<void> clearPosition(String courseId) async {
     if (courseId.isEmpty) return;
     await _save(courseId, of(courseId).copyWith(positionSeconds: 0));
@@ -176,13 +428,17 @@ class CourseProgressService {
   Future<void> _save(String courseId, CourseProgress p) async {
     _cache[courseId] = p;
     _controller.add(courseId);
+    await _persistLocal();
+    unawaited(_pushCloud(courseId, p));
+  }
+
+  Future<void> _persistLocal() async {
     await _ensurePrefs();
     final map = <String, dynamic>{};
     for (final e in _cache.entries) {
       map[e.key] = e.value.toJson();
     }
     await _prefs!.setString(_prefsKey, jsonEncode(map));
-    unawaited(_pushCloud(courseId, p));
   }
 
   Future<void> _ensurePrefs() async {
@@ -223,45 +479,21 @@ class CourseProgressService {
       for (final doc in snap.docs) {
         final cloud = CourseProgress.fromJson(doc.data());
         final local = _cache[doc.id];
+        final merged = local == null ? cloud : local.mergeWith(cloud);
         if (local == null ||
-            cloud.positionSeconds > local.positionSeconds ||
-            (cloud.liked && !local.liked)) {
-          _cache[doc.id] = CourseProgress(
-            liked: cloud.liked || (local?.liked ?? false),
-            positionSeconds: cloud.positionSeconds >= (local?.positionSeconds ?? 0)
-                ? cloud.positionSeconds
-                : local!.positionSeconds,
-            durationSeconds: cloud.durationSeconds > 0
-                ? cloud.durationSeconds
-                : (local?.durationSeconds ?? 0),
-          );
+            jsonEncode(merged.toJson()) != jsonEncode(local.toJson())) {
+          _cache[doc.id] = merged;
           changed = true;
           _controller.add(doc.id);
         }
       }
-      if (changed) {
-        await _ensurePrefs();
-        final map = <String, dynamic>{};
-        for (final e in _cache.entries) {
-          map[e.key] = e.value.toJson();
-        }
-        await _prefs!.setString(_prefsKey, jsonEncode(map));
-      }
+      if (changed) await _persistLocal();
     } catch (_) {}
   }
 
   Future<void> _pushCloud(String courseId, CourseProgress p) async {
     final uid = _uid;
     if (uid == null || uid.isEmpty) return;
-    final now = DateTime.now();
-    if (_lastCloudWrite != null &&
-        now.difference(_lastCloudWrite!) < const Duration(seconds: 2)) {
-      // batch leve: ainda grava like imediatamente
-      if (!p.liked && of(courseId).liked == p.liked) {
-        // ok continue
-      }
-    }
-    _lastCloudWrite = now;
     try {
       await FirebaseFirestore.instance
           .collection('users')

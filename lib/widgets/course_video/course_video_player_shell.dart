@@ -52,8 +52,10 @@ class _CourseVideoPlayerShellState extends State<CourseVideoPlayerShell> {
   bool get _isYoutube =>
       widget.youtubeVideoId != null && widget.youtubeVideoId!.trim().isNotEmpty;
 
-  /// Sem resume automático — evita remontar o embed e voltar ao início.
-  double get _effectiveStart => 0;
+  /// Início explícito vindo de quem abriu o player (ex.: «Continuar» na tela
+  /// do curso). Fixado na abertura da aula — o embed NÃO remonta quando muda
+  /// (ver didUpdateWidget dos embeds). Feed e tela de assistir passam 0.
+  double get _effectiveStart => widget.startAtSeconds;
 
   @override
   void initState() {
