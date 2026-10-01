@@ -364,6 +364,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         _posterData,
         fit: BoxFit.cover,
         showPlayButton: false,
+        light: false,
         fallback: const ColoredBox(
           color: Colors.black,
           child: Center(

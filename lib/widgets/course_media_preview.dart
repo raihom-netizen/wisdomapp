@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../utils/course_media_url_resolver.dart';
 import '../utils/course_thumb_resolver.dart';
+import '../utils/youtube_url_helper.dart';
 import 'course_video/course_photo_lightbox.dart';
 import 'course_video/course_protected_image.dart';
 
@@ -477,6 +478,7 @@ class CourseMediaThumbnail extends StatefulWidget {
     this.isYoutube = false,
     this.showBottomGradient = true,
     this.playIconSize = 56,
+    this.light = true,
   });
 
   /// Construtor a partir de documento Firestore.
@@ -488,6 +490,7 @@ class CourseMediaThumbnail extends StatefulWidget {
     BorderRadius borderRadius = BorderRadius.zero,
     bool showPlayButton = true,
     double playIconSize = 56,
+    bool light = true,
   }) {
     final merged = docId != null
         ? CourseMediaUrlResolver.enrichWithDocId(data, docId)
@@ -505,6 +508,7 @@ class CourseMediaThumbnail extends StatefulWidget {
       isYoutube: isYt,
       showBottomGradient: showPlayButton,
       playIconSize: playIconSize,
+      light: light,
     );
   }
 
@@ -537,6 +541,9 @@ class CourseMediaThumbnail extends StatefulWidget {
   final bool showBottomGradient;
   final double playIconSize;
 
+  /// Capa leve do YouTube (hq/mq) — padrão para listas/cards/pôster.
+  final bool light;
+
   @override
   State<CourseMediaThumbnail> createState() => _CourseMediaThumbnailState();
 }
@@ -547,51 +554,96 @@ class _CourseMediaThumbnailState extends State<CourseMediaThumbnail> {
   bool _failedAll = false;
   bool _resolving = true;
   List<String> _resolvedUrls = const [];
+  String _fingerprint = '';
+  String? _ytId;
+
+  /// Identidade estável: o pai costuma recriar o Map a cada build
+  /// (`{...doc.data, 'id': doc.id}`) — comparar a instância refazia a
+  /// resolução (Storage) e a capa piscava a cada letra da busca.
+  String _computeFingerprint() {
+    final data = widget.firestoreData;
+    return data != null
+        ? CourseMediaUrlResolver.imageFingerprint(data,
+            docId: data['id']?.toString())
+        : widget.urls.join('|');
+  }
 
   @override
   void initState() {
     super.initState();
-    _resolveUrls();
+    _fingerprint = _computeFingerprint();
+    final data = widget.firestoreData;
+    _ytId = data != null ? CourseThumbResolver.videoIdFromData(data) : null;
+    // Capa já resolvida antes (outro card / volta da rolagem): sem spinner.
+    final cached = data != null
+        ? CourseMediaUrlResolver.cachedImageUrls(
+            data,
+            docId: data['id']?.toString(),
+            light: true,
+          )
+        : null;
+    if (cached != null && cached.isNotEmpty) {
+      _resolvedUrls = cached;
+      _resolving = false;
+    } else {
+      _resolveUrls(initial: true);
+    }
   }
 
   @override
   void didUpdateWidget(covariant CourseMediaThumbnail oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.firestoreData != widget.firestoreData ||
-        oldWidget.urls.join('|') != widget.urls.join('|')) {
+    final fp = _computeFingerprint();
+    if (fp != _fingerprint) {
+      _fingerprint = fp;
+      final data = widget.firestoreData;
+      _ytId = data != null ? CourseThumbResolver.videoIdFromData(data) : null;
       _urlIndex = 0;
       _loaded = false;
       _failedAll = false;
       _resolveUrls();
+    } else if (oldWidget.light != widget.light) {
+      _urlIndex = 0;
+      _failedAll = false;
     }
   }
 
-  Future<void> _resolveUrls() async {
-    setState(() {
+  Future<void> _resolveUrls({bool initial = false}) async {
+    if (initial) {
       _resolving = true;
-      _failedAll = false;
-      _urlIndex = 0;
-      _loaded = false;
-    });
+    } else {
+      setState(() {
+        _resolving = true;
+        _failedAll = false;
+        _urlIndex = 0;
+        _loaded = false;
+      });
+    }
+    final requestFp = _fingerprint;
     try {
       List<String> urls;
       if (widget.firestoreData != null) {
         final docId = widget.firestoreData!['id']?.toString();
+        // Sempre o modo leve no resolver (memo compartilhado, sem varrer o
+        // Storage quando há YouTube); a resolução do YouTube é escolhida no
+        // build conforme o tamanho real do quadro.
         urls = await CourseMediaUrlResolver.resolveImageUrls(
           widget.firestoreData!,
           docId: docId,
+          light: true,
         );
       } else {
         urls = await CourseMediaUrlResolver.resolveRawUrls(widget.urls);
       }
-      if (!mounted) return;
+      // Resposta atrasada de um conteúdo antigo não sobrescreve o atual.
+      if (!mounted || requestFp != _fingerprint) return;
       setState(() {
         _resolvedUrls = urls;
         _resolving = false;
         _failedAll = urls.isEmpty;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || requestFp != _fingerprint) return;
       setState(() {
         _resolvedUrls = const [];
         _resolving = false;
@@ -600,8 +652,37 @@ class _CourseMediaThumbnailState extends State<CourseMediaThumbnail> {
     }
   }
 
-  void _tryNextUrl() {
-    if (_urlIndex + 1 < _resolvedUrls.length) {
+  /// Largura em pixels físicos do quadro (cobre 16:9 quando a altura manda).
+  int _targetPx(BoxConstraints c, double dpr) {
+    var w = c.maxWidth.isFinite ? c.maxWidth : 0.0;
+    if (c.maxHeight.isFinite) {
+      final byH = c.maxHeight * 16 / 9;
+      if (byH > w) w = byH;
+    }
+    if (w <= 0) w = 320;
+    return (w * dpr).round().clamp(64, 3840);
+  }
+
+  /// Imagens enviadas primeiro (sempre); capa do YouTube na resolução certa:
+  /// lista = `mqdefault` (leve); destaque = escolha pela largura real × DPR.
+  List<String> _displayUrls(int targetPx) {
+    final yt = _ytId;
+    if (yt == null) return _resolvedUrls;
+    final own = _resolvedUrls
+        .where((u) => !YoutubeUrlHelper.isYoutubeThumbUrl(u))
+        .toList();
+    return [
+      ...own,
+      ...YoutubeUrlHelper.thumbnailUrlsForWidth(
+        yt,
+        targetPx,
+        light: widget.light,
+      ),
+    ];
+  }
+
+  void _tryNextUrl(int total) {
+    if (_urlIndex + 1 < total) {
       setState(() {
         _urlIndex++;
         _loaded = false;
@@ -627,41 +708,43 @@ class _CourseMediaThumbnailState extends State<CourseMediaThumbnail> {
       );
     }
 
-    final url = _resolvedUrls[_urlIndex.clamp(0, _resolvedUrls.length - 1)];
-    final bg = widget.fit == BoxFit.contain ? const Color(0xFF0F172A) : null;
-
     return ClipRRect(
       borderRadius: widget.borderRadius,
       child: ColoredBox(
-        color: bg ?? Colors.black,
+        color: const Color(0xFF0F172A),
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Image.network(
-              url,
-              fit: widget.fit,
-              width: double.infinity,
-              height: double.infinity,
-              filterQuality: FilterQuality.high,
-              gaplessPlayback: true,
-              loadingBuilder: (context, child, progress) {
-                if (progress == null) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted && !_loaded) setState(() => _loaded = true);
-                  });
-                  return child;
+            LayoutBuilder(
+              builder: (context, c) {
+                final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 2.0;
+                final px = _targetPx(c, dpr);
+                final urls = _displayUrls(px);
+                if (urls.isEmpty) {
+                  return widget.fallback ?? _defaultFallback();
                 }
-                return _loadingSkeleton();
-              },
-              errorBuilder: (_, __, ___) {
-                if (_urlIndex + 1 < _resolvedUrls.length) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) => _tryNextUrl());
-                  return _loadingSkeleton();
-                }
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted) setState(() => _failedAll = true);
-                });
-                return widget.fallback ?? _defaultFallback();
+                final url = urls[_urlIndex.clamp(0, urls.length - 1)];
+                return CourseFramedImage(
+                  url: url,
+                  cacheWidth: px,
+                  placeholder: _loadingSkeleton(),
+                  onLoaded: () {
+                    if (!_loaded) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted && !_loaded) setState(() => _loaded = true);
+                      });
+                    }
+                  },
+                  onError: () {
+                    final hasNext = _urlIndex + 1 < urls.length;
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) _tryNextUrl(urls.length);
+                    });
+                    return hasNext
+                        ? _loadingSkeleton()
+                        : (widget.fallback ?? _defaultFallback());
+                  },
+                );
               },
             ),
             if (widget.showBottomGradient)
@@ -724,16 +807,14 @@ class _CourseMediaThumbnailState extends State<CourseMediaThumbnail> {
     );
   }
 
+  /// Placeholder estático em gradiente (sem spinner girando em cada card).
   Widget _loadingSkeleton() {
-    return Container(
-      color: const Color(0xFF1E293B),
-      alignment: Alignment.center,
-      child: SizedBox(
-        width: 28,
-        height: 28,
-        child: CircularProgressIndicator(
-          strokeWidth: 2.5,
-          color: Colors.white.withValues(alpha: 0.55),
+    return const DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF1E293B), Color(0xFF334155), Color(0xFF0F172A)],
         ),
       ),
     );
@@ -748,6 +829,71 @@ class _CourseMediaThumbnailState extends State<CourseMediaThumbnail> {
         size: 40,
         color: Colors.white.withValues(alpha: 0.45),
       ),
+    );
+  }
+}
+
+/// Capa SEMPRE inteira (sem recorte): a imagem aparece com [BoxFit.contain]
+/// e a sobra do quadro é preenchida pela MESMA imagem ampliada e desfocada,
+/// levemente escurecida. O fundo usa a imagem decodificada minúscula (24 px)
+/// esticada — o próprio filtro bilinear dá o desfoque, sem custo de blur por
+/// frame (leve em listas).
+class CourseFramedImage extends StatelessWidget {
+  const CourseFramedImage({
+    super.key,
+    required this.url,
+    this.cacheWidth,
+    this.placeholder,
+    this.onLoaded,
+    this.onError,
+  });
+
+  final String url;
+  final int? cacheWidth;
+  final Widget? placeholder;
+  final VoidCallback? onLoaded;
+
+  /// Devolve o widget a mostrar quando a imagem falha.
+  final Widget Function()? onError;
+
+  @override
+  Widget build(BuildContext context) {
+    final ph = placeholder ?? const ColoredBox(color: Color(0xFF1E293B));
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Fundo desfocado (mesma URL → mesmo download em cache HTTP).
+        ExcludeSemantics(
+          child: Image.network(
+            url,
+            fit: BoxFit.cover,
+            cacheWidth: 24,
+            filterQuality: FilterQuality.medium,
+            gaplessPlayback: true,
+            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+          ),
+        ),
+        const ColoredBox(color: Color(0x73000000)),
+        Image.network(
+          url,
+          fit: BoxFit.contain,
+          alignment: Alignment.center,
+          width: double.infinity,
+          height: double.infinity,
+          cacheWidth: cacheWidth,
+          filterQuality: FilterQuality.medium,
+          gaplessPlayback: true,
+          loadingBuilder: (context, child, progress) {
+            if (progress == null) {
+              onLoaded?.call();
+              return child;
+            }
+            return ph;
+          },
+          errorBuilder: (_, __, ___) =>
+              onError?.call() ?? const SizedBox.shrink(),
+        ),
+      ],
     );
   }
 }

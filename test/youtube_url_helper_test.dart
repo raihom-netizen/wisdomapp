@@ -183,4 +183,28 @@ void main() {
       expect(YoutubeUrlHelper.startSecondsFromUrl('https://youtu.be/$id'), 0);
     });
   });
+
+  group('capa por resolução', () {
+    test('lista leve começa no mqdefault (16:9, sem tarjas)', () {
+      final urls = YoutubeUrlHelper.thumbnailUrlsForWidth(id, 2000, light: true);
+      expect(urls.first, endsWith('/mqdefault.jpg'));
+    });
+    test('quadro pequeno usa a leve mesmo fora da lista', () {
+      expect(YoutubeUrlHelper.thumbnailUrlsForWidth(id, 300).first,
+          endsWith('/mqdefault.jpg'));
+    });
+    test('destaque grande pede maxres e termina numa que sempre existe', () {
+      final urls = YoutubeUrlHelper.thumbnailUrlsForWidth(id, 1600);
+      expect(urls.first, endsWith('/maxresdefault.jpg'));
+      expect(urls.last, endsWith('/mqdefault.jpg'));
+    });
+    test('reconhece capa gerada pelo YouTube', () {
+      expect(YoutubeUrlHelper.isYoutubeThumbUrl(
+          'https://img.youtube.com/vi/$id/maxresdefault.jpg'), isTrue);
+      expect(YoutubeUrlHelper.isYoutubeThumbUrl(
+          'https://i.ytimg.com/vi/$id/hqdefault.jpg'), isTrue);
+      expect(YoutubeUrlHelper.isYoutubeThumbUrl(
+          'https://firebasestorage.googleapis.com/x.jpg'), isFalse);
+    });
+  });
 }

@@ -55,7 +55,9 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
     // NÃO remontar só por startAtSeconds — isso resetava o vídeo ao meio da reprodução.
     if (oldWidget.youtubeVideoId != widget.youtubeVideoId ||
         oldWidget.mp4Url != widget.mp4Url ||
-        oldWidget.posterUrl != widget.posterUrl ||
+        // A capa só importa ANTES do play: com autoplay, trocar o pôster
+        // (que chega depois, assíncrono) recarregava o player do zero.
+        (!widget.autoplay && oldWidget.posterUrl != widget.posterUrl) ||
         oldWidget.autoplay != widget.autoplay) {
       _notifiedReady = false;
       _initController();
@@ -248,7 +250,7 @@ function onYouTubeIframeAPIReady(){
 </style>
 <script>${CourseMediaViewPolicy.videoContextMenuBlockJs}</script>
 </head><body>
-<video id="v" controls playsinline preload="auto" controlslist="${CourseMediaViewPolicy.videoControlsList}" disablepictureinpicture oncontextmenu="return false;" $autoplayAttr $posterAttr src="$escaped"></video>
+<video id="v" controls playsinline preload="${widget.autoplay ? 'auto' : 'metadata'}" controlslist="${CourseMediaViewPolicy.videoControlsList}" disablepictureinpicture oncontextmenu="return false;" $autoplayAttr $posterAttr src="$escaped"></video>
 <script>
 (function(){
   var v=document.getElementById('v');

@@ -64,7 +64,9 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
     // NÃO remontar só por startAtSeconds — isso resetava o vídeo ao meio da reprodução.
     if (oldWidget.youtubeVideoId != widget.youtubeVideoId ||
         oldWidget.mp4Url != widget.mp4Url ||
-        oldWidget.posterUrl != widget.posterUrl ||
+        // A capa só importa ANTES do play: com autoplay, trocar o pôster
+        // (que chega depois, assíncrono) recarregava o player do zero.
+        (!widget.autoplay && oldWidget.posterUrl != widget.posterUrl) ||
         oldWidget.autoplay != widget.autoplay) {
       _notifiedReady = false;
       _registered = false;
@@ -124,7 +126,8 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
           ..setAttribute('playsinline', 'true')
           ..setAttribute('controlsList', CourseMediaViewPolicy.videoControlsList)
           ..setAttribute('disablePictureInPicture', 'true')
-          ..preload = 'auto'
+          // Só metadados até tocar (autoplay = carrega já).
+          ..preload = widget.autoplay ? 'auto' : 'metadata'
           ..style.width = '100%'
           ..style.height = '100%'
           ..style.objectFit = 'contain'

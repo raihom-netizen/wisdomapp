@@ -60,6 +60,7 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
   var _filter = _CourseFilter.todos;
   final _searchCtrl = TextEditingController();
   StreamSubscription<String>? _progressSub;
+  Timer? _searchDebounce;
 
   @override
   bool get wantKeepAlive => true;
@@ -81,6 +82,7 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
   void dispose() {
     _cache.removeListener(_onCacheUpdate);
     _progressSub?.cancel();
+    _searchDebounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -657,7 +659,17 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
               Expanded(
                 child: TextField(
                   controller: _searchCtrl,
-                  onChanged: (v) => setState(() => _query = v),
+                  // Debounce: filtra 250 ms depois da última tecla (antes
+                  // reconstruía a vitrine inteira a cada letra).
+                  onChanged: (v) {
+                    _searchDebounce?.cancel();
+                    _searchDebounce = Timer(
+                      const Duration(milliseconds: 250),
+                      () {
+                        if (mounted && _query != v) setState(() => _query = v);
+                      },
+                    );
+                  },
                   style: const TextStyle(color: Colors.white),
                   cursorColor: const Color(0xFFFF0000),
                   textInputAction: TextInputAction.search,
@@ -675,6 +687,7 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
                             icon: const Icon(Icons.close_rounded,
                                 color: Colors.white54),
                             onPressed: () => setState(() {
+                              _searchDebounce?.cancel();
                               _query = '';
                               _searchCtrl.clear();
                             }),

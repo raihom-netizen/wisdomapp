@@ -27,6 +27,14 @@ class CourseVideoEntry {
   final String? label;
 }
 
+class _ImageUrlsMemo {
+  _ImageUrlsMemo(this.future, this.at);
+
+  final Future<List<String>> future;
+  final DateTime at;
+  List<String>? result;
+}
+
 /// Resolve URLs HTTP e caminhos `wisdomapp/course_videos/...` do Firestore.
 class CourseMediaUrlResolver {
   CourseMediaUrlResolver._();
@@ -178,28 +186,106 @@ class CourseMediaUrlResolver {
     return CourseThumbResolver.videoIdFromData(data) != null;
   }
 
+  /// Memo das capas já resolvidas (getDownloadURL/listAll custam 1 ida ao
+  /// servidor CADA). Antes, cada rebuild da lista (busca, progresso, rolagem)
+  /// refazia tudo e a capa piscava no spinner.
+  static final Map<String, _ImageUrlsMemo> _imageMemo = {};
+  static const _imageMemoTtl = Duration(minutes: 15);
+  static const _imageMemoMax = 400;
+
+  /// Identidade estável da capa de um documento (não depende da instância do Map).
+  static String imageFingerprint(Map<String, dynamic> data, {String? docId}) {
+    final id = (docId ?? data['id'] ?? '').toString().trim();
+    return [
+      id,
+      ...collectHttpUrls(data),
+      ...collectStoragePaths(data),
+      CourseThumbResolver.videoIdFromData(data) ?? '',
+    ].join('|');
+  }
+
+  static String _memoKey(Map<String, dynamic> data, String? docId, bool light) =>
+      '${light ? 'L' : 'F'}#${imageFingerprint(data, docId: docId)}';
+
+  /// URLs já resolvidas (sem ir à rede) — `null` se ainda não houver.
+  static List<String>? cachedImageUrls(
+    Map<String, dynamic> data, {
+    String? docId,
+    bool light = false,
+  }) {
+    final hit = _imageMemo[_memoKey(data, docId, light)];
+    if (hit == null || hit.result == null) return null;
+    if (DateTime.now().difference(hit.at) > _imageMemoTtl) return null;
+    return hit.result;
+  }
+
+  /// Limpa o memo (ex.: admin trocou a capa de um conteúdo legado).
+  static void clearImageMemo() => _imageMemo.clear();
+
+  /// [light] = capa leve do YouTube (hq/mq) para listas, cards e pôster.
   static Future<List<String>> resolveImageUrls(
     Map<String, dynamic> data, {
     String? docId,
+    bool light = false,
+  }) {
+    final key = _memoKey(data, docId, light);
+    final now = DateTime.now();
+    final hit = _imageMemo[key];
+    if (hit != null && now.difference(hit.at) <= _imageMemoTtl) {
+      return hit.future;
+    }
+    if (_imageMemo.length >= _imageMemoMax) _imageMemo.clear();
+    final memo = _ImageUrlsMemo(
+      _resolveImageUrlsUncached(data, docId: docId, light: light),
+      now,
+    );
+    _imageMemo[key] = memo;
+    memo.future.then((urls) {
+      // Lista vazia pode ser falha de rede — não memoriza.
+      if (urls.isEmpty) {
+        _imageMemo.remove(key);
+      } else {
+        memo.result = urls;
+      }
+    }, onError: (_) => _imageMemo.remove(key));
+    return memo.future;
+  }
+
+  static Future<List<String>> _resolveImageUrlsUncached(
+    Map<String, dynamic> data, {
+    String? docId,
+    bool light = false,
   }) async {
     final seen = <String>{};
     final out = <String>[];
+    final ytId = CourseThumbResolver.videoIdFromData(data);
 
     for (final u in collectHttpUrls(data)) {
+      // Modo leve: capa gravada do YouTube (muitas vezes maxres) dá lugar à
+      // cascata hq → mq logo abaixo.
+      if (light && ytId != null && YoutubeUrlHelper.isYoutubeThumbUrl(u)) {
+        continue;
+      }
       if (seen.add(u)) out.add(u);
     }
 
-    for (final path in collectStoragePaths(data)) {
-      try {
-        final url = await FirebaseStorage.instance.ref(path).getDownloadURL();
-        if (seen.add(url)) out.add(url);
-      } catch (_) {
-        // ignora path inválido
-      }
+    // Em paralelo (antes: uma ida ao Storage por vez), mantendo a ordem.
+    final resolved = await Future.wait(
+      collectStoragePaths(data).map((path) async {
+        try {
+          return await FirebaseStorage.instance.ref(path).getDownloadURL();
+        } catch (_) {
+          return null; // ignora path inválido
+        }
+      }),
+    );
+    for (final url in resolved) {
+      if (url != null && seen.add(url)) out.add(url);
     }
 
     final id = (docId ?? data['id'] ?? '').toString().trim();
-    if (out.isEmpty && id.isNotEmpty) {
+    // Modo leve com YouTube: a capa do vídeo basta — não varre o Storage.
+    if (out.isEmpty && id.isNotEmpty && !(light && ytId != null)) {
       for (final url in await _discoverImagesInStorage(id)) {
         if (seen.add(url)) out.add(url);
       }
@@ -208,12 +294,12 @@ class CourseMediaUrlResolver {
     // YouTube: sempre acrescenta a cascata (maxres → sd → hq → mq). A capa
     // gravada costuma ser `maxresdefault`, que dá 404 em vídeos sem HD — sem
     // a cascata o card ficava sem imagem.
-    {
-      final yt = CourseThumbResolver.videoIdFromData(data);
-      if (yt != null) {
-        for (final u in YoutubeUrlHelper.thumbnailUrls(yt)) {
-          if (seen.add(u)) out.add(u);
-        }
+    if (ytId != null) {
+      final cascade = light
+          ? YoutubeUrlHelper.lightThumbnailUrls(ytId)
+          : YoutubeUrlHelper.thumbnailUrls(ytId);
+      for (final u in cascade) {
+        if (seen.add(u)) out.add(u);
       }
     }
     return out;

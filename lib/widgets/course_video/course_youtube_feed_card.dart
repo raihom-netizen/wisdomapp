@@ -374,8 +374,6 @@ class _CoverTap extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final yt = YoutubeUrlHelper.videoIdFromData(data);
-    final thumb = yt != null ? YoutubeUrlHelper.thumbnailUrl(yt) : null;
     final fit = CourseThumbResolver.isDicaPhoto(data)
         ? BoxFit.contain
         : BoxFit.cover;
@@ -387,23 +385,13 @@ class _CoverTap extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (thumb != null)
-              Image.network(
-                thumb,
-                fit: BoxFit.cover,
-                gaplessPlayback: true,
-                errorBuilder: (_, __, ___) => CourseMediaThumbnail.fromData(
-                  data,
-                  fit: fit,
-                  showPlayButton: false,
-                ),
-              )
-            else
-              CourseMediaThumbnail.fromData(
-                data,
-                fit: fit,
-                showPlayButton: false,
-              ),
+            // Capa leve (mqdefault no YouTube; antes baixava o maxres de cada
+            // card), inteira e com cache — o player só nasce ao tocar.
+            CourseMediaThumbnail.fromData(
+              data,
+              fit: fit,
+              showPlayButton: false,
+            ),
             DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(

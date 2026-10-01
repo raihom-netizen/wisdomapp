@@ -1,9 +1,28 @@
 import 'package:flutter/material.dart';
 
 import '../../utils/course_media_url_resolver.dart';
-import '../../utils/youtube_url_helper.dart';
 import '../course_media_preview.dart';
 import 'course_video_embed.dart';
+
+/// Um player por vez no app inteiro.
+///
+/// Quando um player começa a tocar ele «reivindica» a vez; qualquer outro
+/// player montado (feed com keep-alive, painel do módulo, tela de baixo da
+/// tela cheia…) volta para a capa — o embed (WebView/iframe) é DESTRUÍDO, o
+/// que libera memória e para o áudio duplicado.
+class CourseActivePlayer {
+  CourseActivePlayer._();
+
+  static final ValueNotifier<Object?> active = ValueNotifier<Object?>(null);
+
+  static void claim(Object token) {
+    if (!identical(active.value, token)) active.value = token;
+  }
+
+  static void release(Object token) {
+    if (identical(active.value, token)) active.value = null;
+  }
+}
 
 /// Player estilo YouTube — capa/thumbnail até o usuário tocar ▶; depois embed nativo.
 class CourseVideoPlayerShell extends StatefulWidget {
@@ -42,12 +61,16 @@ class CourseVideoPlayerShell extends StatefulWidget {
 }
 
 class _CourseVideoPlayerShellState extends State<CourseVideoPlayerShell> {
+  final Object _token = Object();
   var _playbackStarted = false;
   var _embedReady = false;
-  String? _posterUrl;
-  var _posterLoading = true;
 
-  bool get _showEmbed => widget.autoplay || _playbackStarted;
+  /// Outro player assumiu a vez — não religa sozinho (nem com autoplay).
+  var _stoppedByOther = false;
+  String? _posterUrl;
+  String _posterFp = '';
+
+  bool get _showEmbed => _playbackStarted;
 
   bool get _isYoutube =>
       widget.youtubeVideoId != null && widget.youtubeVideoId!.trim().isNotEmpty;
@@ -57,68 +80,113 @@ class _CourseVideoPlayerShellState extends State<CourseVideoPlayerShell> {
   /// (ver didUpdateWidget dos embeds). Feed e tela de assistir passam 0.
   double get _effectiveStart => widget.startAtSeconds;
 
+  /// Dados da capa: o documento ou, só com o ID do YouTube, um mínimo.
+  Map<String, dynamic>? get _posterSource {
+    final data = widget.posterData;
+    if (data != null) return data;
+    final yt = widget.youtubeVideoId?.trim();
+    if (yt != null && yt.isNotEmpty) return {'youtubeVideoId': yt};
+    return null;
+  }
+
+  /// Identidade estável do conteúdo — o pai costuma recriar o Map do
+  /// documento a cada build; comparar a instância PARAVA o vídeo em qualquer
+  /// rebuild (busca, progresso, rolagem do feed).
+  String _computePosterFp() {
+    final src = _posterSource;
+    return src == null
+        ? ''
+        : CourseMediaUrlResolver.imageFingerprint(src,
+            docId: src['id']?.toString());
+  }
+
   @override
   void initState() {
     super.initState();
     _playbackStarted = widget.autoplay;
+    _posterFp = _computePosterFp();
+    CourseActivePlayer.active.addListener(_onActiveChanged);
+    if (_playbackStarted) _claimAfterFrame();
     _resolvePoster();
+  }
+
+  @override
+  void dispose() {
+    CourseActivePlayer.active.removeListener(_onActiveChanged);
+    CourseActivePlayer.release(_token);
+    super.dispose();
   }
 
   @override
   void didUpdateWidget(covariant CourseVideoPlayerShell oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.posterData != widget.posterData ||
-        oldWidget.youtubeVideoId != widget.youtubeVideoId ||
-        oldWidget.mp4Url != widget.mp4Url) {
-      _embedReady = false;
-      if (!widget.autoplay) _playbackStarted = false;
+    final fp = _computePosterFp();
+    final sourceChanged = oldWidget.youtubeVideoId != widget.youtubeVideoId ||
+        oldWidget.mp4Url != widget.mp4Url;
+    if (sourceChanged || fp != _posterFp) {
+      _posterFp = fp;
+      if (sourceChanged) {
+        _embedReady = false;
+        if (!widget.autoplay) _playbackStarted = false;
+        _stoppedByOther = false;
+      }
       _resolvePoster();
     }
-    if (widget.autoplay && !_playbackStarted) {
+    if (widget.autoplay && !_playbackStarted && !_stoppedByOther) {
       _playbackStarted = true;
+      _claimAfterFrame();
     }
   }
 
-  Future<void> _resolvePoster() async {
-    setState(() {
-      _posterLoading = true;
-      _posterUrl = null;
+  /// Reivindica depois do frame — nunca chama setState de outro player
+  /// durante o build.
+  void _claimAfterFrame() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _playbackStarted) CourseActivePlayer.claim(_token);
     });
+  }
 
-    final data = widget.posterData;
-    if (data != null) {
-      try {
-        final docId = data['id']?.toString();
-        final urls = await CourseMediaUrlResolver.resolveImageUrls(
-          data,
-          docId: docId,
-        );
-        if (urls.isNotEmpty) {
-          if (mounted) {
-            setState(() {
-              _posterUrl = urls.first;
-              _posterLoading = false;
-            });
-          }
-          return;
-        }
-      } catch (_) {
-        // fallback abaixo
-      }
-    }
+  void _onActiveChanged() {
+    final current = CourseActivePlayer.active.value;
+    if (current == null || identical(current, _token)) return;
+    if (!mounted || !_playbackStarted) return;
+    setState(() {
+      _playbackStarted = false;
+      _embedReady = false;
+      _stoppedByOther = true;
+    });
+  }
 
-    final yt = widget.youtubeVideoId?.trim();
-    if (yt != null && yt.isNotEmpty) {
-      if (mounted) {
-        setState(() {
-          _posterUrl = YoutubeUrlHelper.thumbnailUrl(yt);
-          _posterLoading = false;
-        });
-      }
+  /// URL da capa só para o `poster` do embed (MP4). A capa visível é a
+  /// [CourseMediaThumbnail], que escolhe a resolução pelo tamanho do quadro.
+  Future<void> _resolvePoster() async {
+    final src = _posterSource;
+    final fp = _posterFp;
+    if (src == null) {
+      if (_posterUrl != null && mounted) setState(() => _posterUrl = null);
       return;
     }
-
-    if (mounted) setState(() => _posterLoading = false);
+    final cached = CourseMediaUrlResolver.cachedImageUrls(
+      src,
+      docId: src['id']?.toString(),
+      light: true,
+    );
+    if (cached != null && cached.isNotEmpty) {
+      _posterUrl = cached.first;
+      return;
+    }
+    try {
+      final urls = await CourseMediaUrlResolver.resolveImageUrls(
+        src,
+        docId: src['id']?.toString(),
+        light: true,
+      );
+      if (!mounted || fp != _posterFp) return;
+      final next = urls.isEmpty ? null : urls.first;
+      if (next != _posterUrl) setState(() => _posterUrl = next);
+    } catch (_) {
+      // capa é opcional
+    }
   }
 
   void _startPlayback() {
@@ -126,7 +194,9 @@ class _CourseVideoPlayerShellState extends State<CourseVideoPlayerShell> {
     setState(() {
       _playbackStarted = true;
       _embedReady = false;
+      _stoppedByOther = false;
     });
+    CourseActivePlayer.claim(_token);
   }
 
   void _onEmbedReady() {
@@ -149,7 +219,7 @@ class _CourseVideoPlayerShellState extends State<CourseVideoPlayerShell> {
             key: widget.embedKey,
             youtubeVideoId: widget.youtubeVideoId,
             mp4Url: widget.mp4Url,
-            autoplay: widget.autoplay || _playbackStarted,
+            autoplay: true,
             posterUrl: _posterUrl,
             startAtSeconds: _effectiveStart,
             onReady: _onEmbedReady,
@@ -176,7 +246,7 @@ class _CourseVideoPlayerShellState extends State<CourseVideoPlayerShell> {
     VoidCallback? onPlay,
     bool showPlayButton = true,
   }) {
-    final data = widget.posterData;
+    final src = _posterSource;
     return Material(
       color: Colors.black,
       child: InkWell(
@@ -184,17 +254,15 @@ class _CourseVideoPlayerShellState extends State<CourseVideoPlayerShell> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (_posterUrl != null)
-              _posterImage(_posterUrl!)
-            else if (data != null)
+            if (src != null)
+              // Destaque: maior capa disponível conforme a largura × DPR
+              // (maxres em telas grandes/retina), sempre inteira.
               CourseMediaThumbnail.fromData(
-                data,
-                fit: BoxFit.cover,
+                src,
                 showPlayButton: false,
+                light: false,
                 fallback: _gradientFallback(),
               )
-            else if (_posterLoading)
-              _gradientFallback(showSpinner: true)
             else
               _gradientFallback(),
             IgnorePointer(
@@ -230,34 +298,7 @@ class _CourseVideoPlayerShellState extends State<CourseVideoPlayerShell> {
     );
   }
 
-  Widget _posterImage(String url) {
-    return Image.network(
-      url,
-      fit: BoxFit.cover,
-      width: double.infinity,
-      height: double.infinity,
-      filterQuality: FilterQuality.high,
-      gaplessPlayback: true,
-      errorBuilder: (_, __, ___) {
-        final data = widget.posterData;
-        if (data != null) {
-          return CourseMediaThumbnail.fromData(
-            data,
-            fit: BoxFit.cover,
-            showPlayButton: false,
-            fallback: _gradientFallback(),
-          );
-        }
-        return _gradientFallback();
-      },
-      loadingBuilder: (context, child, progress) {
-        if (progress == null) return child;
-        return _gradientFallback(showSpinner: true);
-      },
-    );
-  }
-
-  Widget _gradientFallback({bool showSpinner = false}) {
+  Widget _gradientFallback() {
     return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -270,24 +311,13 @@ class _CourseVideoPlayerShellState extends State<CourseVideoPlayerShell> {
           end: Alignment.bottomRight,
         ),
       ),
-      child: showSpinner
-          ? Center(
-              child: SizedBox(
-                width: 32,
-                height: 32,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  color: Colors.white.withValues(alpha: 0.75),
-                ),
-              ),
-            )
-          : Center(
-              child: Icon(
-                Icons.ondemand_video_rounded,
-                size: 56,
-                color: Colors.white.withValues(alpha: 0.35),
-              ),
-            ),
+      child: Center(
+        child: Icon(
+          Icons.ondemand_video_rounded,
+          size: 56,
+          color: Colors.white.withValues(alpha: 0.35),
+        ),
+      ),
     );
   }
 }

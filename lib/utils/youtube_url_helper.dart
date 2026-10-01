@@ -251,6 +251,45 @@ class YoutubeUrlHelper {
 
   static String thumbnailUrl(String videoId) => thumbnailUrls(videoId).first;
 
+  /// Capa LEVE para listas e cards: `mqdefault` (320×180, 16:9 nativo, sem
+  /// tarjas, ~10 KB, sempre existe) → `hqdefault` (4:3 com tarjas embutidas,
+  /// só como reserva). Evita baixar o maxres (~150 KB) só para um card.
+  static List<String> lightThumbnailUrls(String videoId) => [
+        'https://img.youtube.com/vi/$videoId/mqdefault.jpg',
+        'https://img.youtube.com/vi/$videoId/hqdefault.jpg',
+      ];
+
+  static String lightThumbnailUrl(String videoId) =>
+      lightThumbnailUrls(videoId).first;
+
+  /// Cascata escolhida pelo tamanho REAL do quadro em pixels físicos
+  /// (largura lógica × devicePixelRatio).
+  ///
+  /// - [light] (listas) ou quadro ≤ 400 px → `mqdefault` primeiro.
+  /// - Senão → a MAIOR que o YouTube fornece, `maxresdefault` (1280×720,
+  ///   16:9 — não existe thumbnail 4K), com reserva sd → hq → mq (sd/hq são
+  ///   4:3 com tarjas pretas embutidas: só se o maxres não existir).
+  static List<String> thumbnailUrlsForWidth(
+    String videoId,
+    int targetPx, {
+    bool light = false,
+  }) {
+    if (light || targetPx <= 400) return lightThumbnailUrls(videoId);
+    return [
+      'https://img.youtube.com/vi/$videoId/maxresdefault.jpg',
+      'https://img.youtube.com/vi/$videoId/sddefault.jpg',
+      'https://img.youtube.com/vi/$videoId/hqdefault.jpg',
+      'https://img.youtube.com/vi/$videoId/mqdefault.jpg',
+    ];
+  }
+
+  /// `true` quando [url] é uma capa gerada pelo YouTube (img.youtube.com/ytimg).
+  static bool isYoutubeThumbUrl(String url) {
+    final u = url.toLowerCase();
+    return (u.contains('img.youtube.com/vi/') || u.contains('ytimg.com/vi/')) &&
+        u.endsWith('.jpg');
+  }
+
   /// Thumbnail que sempre existe (para gravar no Firestore).
   static String safeThumbnailUrl(String videoId) =>
       'https://img.youtube.com/vi/$videoId/hqdefault.jpg';
