@@ -14,7 +14,9 @@ class FinanceTransferService {
   FinanceTransferService._();
   static final FinanceTransferService instance = FinanceTransferService._();
 
-  Future<void> createTransfer({
+  /// Retorna os ids dos dois lançamentos (saída e entrada) — a tela usa para
+  /// colocar a transferência nos saldos na hora, sem recarregar o período.
+  Future<List<String>> createTransfer({
     required String uid,
     required FinanceAccount fromAcc,
     required FinanceAccount toAcc,
@@ -78,6 +80,7 @@ class FinanceTransferService {
       acao: 'Transferência entre contas',
       detalhes: '$histLine • ${CurrencyFormats.formatBRL(amount)}',
     );
+    return [outId, inId].whereType<String>().where((e) => e.isNotEmpty).toList();
   }
 
   Future<void> attachReceiptToTransferLegs({

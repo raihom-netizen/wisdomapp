@@ -106,6 +106,51 @@ class _HomeFinanceOverviewPanelState extends State<HomeFinanceOverviewPanel> {
     _loadPrefs();
     final (start, _) = _rangeForPeriod();
     _ensureSaldoAberturaForPeriod(start);
+    FinanceOpeningBalanceService.revision.addListener(_onOpeningRevision);
+  }
+
+  Timer? _openingReloadTimer;
+
+  @override
+  void dispose() {
+    FinanceOpeningBalanceService.revision.removeListener(_onOpeningRevision);
+    _openingReloadTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Saldo de abertura mudou em cache (pagamento confirmado/lançamento antes do
+  /// período, ou recálculo depois do servidor): troca o número dos cards na
+  /// hora. Antes o painel só relia a abertura ao trocar de período.
+  void _onOpeningRevision() {
+    if (!mounted) return;
+    final (start, _) = _rangeForPeriod();
+    final key = '${start.year}-${start.month}-${start.day}';
+    if (_saldoAberturaKey != key) return;
+    final peek = FinanceOpeningBalanceService.peekCached(
+      uid: widget.uid,
+      periodStart: start,
+      loadAccounts: true,
+    );
+    if (peek != null) {
+      setState(() => _saldoAberturaCached = peek);
+      return;
+    }
+    // Sem valor em cache: o Financeiro costuma recarregar junto — espera um
+    // pouco e reaproveita; senão recarrega aqui, mantendo o número exibido.
+    _openingReloadTimer?.cancel();
+    _openingReloadTimer = Timer(const Duration(milliseconds: 600), () {
+      if (!mounted || _saldoAberturaKey != key) return;
+      final again = FinanceOpeningBalanceService.peekCached(
+        uid: widget.uid,
+        periodStart: start,
+        loadAccounts: true,
+      );
+      if (again != null) {
+        setState(() => _saldoAberturaCached = again);
+        return;
+      }
+      unawaited(_loadSaldoAberturaIntoState(start, keepDisplayed: true));
+    });
   }
 
   Future<void> _loadPrefs() async {
@@ -128,16 +173,25 @@ class _HomeFinanceOverviewPanelState extends State<HomeFinanceOverviewPanel> {
     unawaited(_loadSaldoAberturaIntoState(periodStart));
   }
 
-  Future<void> _loadSaldoAberturaIntoState(DateTime periodStart) async {
-    final fast = await FinanceOpeningBalanceService.load(
-      uid: widget.uid,
-      periodStart: periodStart,
-      loadAccounts: false,
-    );
-    if (!mounted || _saldoAberturaKey != '${periodStart.year}-${periodStart.month}-${periodStart.day}') {
-      return;
+  /// [keepDisplayed]: recarga depois de mutação — sem a fase «só total» (vem
+  /// sem saldo por conta e fazia os cards do banco pularem).
+  Future<void> _loadSaldoAberturaIntoState(
+    DateTime periodStart, {
+    bool keepDisplayed = false,
+  }) async {
+    if (!keepDisplayed || _saldoAberturaCached == null) {
+      final fast = await FinanceOpeningBalanceService.load(
+        uid: widget.uid,
+        periodStart: periodStart,
+        loadAccounts: false,
+      );
+      if (!mounted ||
+          _saldoAberturaKey !=
+              '${periodStart.year}-${periodStart.month}-${periodStart.day}') {
+        return;
+      }
+      setState(() => _saldoAberturaCached = fast);
     }
-    setState(() => _saldoAberturaCached = fast);
     final full = await FinanceOpeningBalanceService.load(
       uid: widget.uid,
       periodStart: periodStart,

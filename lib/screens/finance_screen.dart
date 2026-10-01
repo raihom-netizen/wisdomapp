@@ -409,6 +409,14 @@ class _FinanceScreenState extends State<FinanceScreen> {
       );
       final start = DateTime(_from.year, _from.month, _from.day);
       if (!d.isBefore(start)) return;
+      // Gravação antes do período: recarrega a abertura em segundo plano
+      // MANTENDO o número exibido (antes zerava e mostrava o saldo antigo do
+      // disco até a carga terminar). O serviço também refaz depois que o
+      // bucket do servidor confirmar (evita cachear bucket defasado).
+      FinanceOpeningBalanceService.invalidateIfBefore(
+          widget.uid, transactionEffectiveDate);
+      unawaited(_loadSaldoAberturaIntoState(_from, keepDisplayed: true));
+      return;
     }
     _forceRefreshSaldoAberturaBundle();
   }
@@ -419,6 +427,32 @@ class _FinanceScreenState extends State<FinanceScreen> {
     FinanceOpeningBalanceService.invalidateForUser(widget.uid);
     _ensureSaldoAberturaForPeriod(_from);
   }
+
+  /// Cache de abertura mudou (mutação otimista, invalidação, recálculo depois
+  /// do bucket do servidor): troca o número exibido sem piscar.
+  void _onOpeningBalanceRevision() {
+    if (!mounted) return;
+    final key = '${_from.year}-${_from.month}-${_from.day}';
+    if (_saldoAberturaKey != key) return;
+    final peek = FinanceOpeningBalanceService.peekCached(
+      uid: widget.uid,
+      periodStart: _from,
+      loadAccounts: true,
+    );
+    if (peek != null) {
+      setState(() => _saldoAberturaCached = peek);
+      return;
+    }
+    if (!widget.isShellVisible) {
+      // Módulo escondido: recarrega quando voltar (sem varrer à toa).
+      _openingReloadWhenVisible = true;
+      return;
+    }
+    if (fa.FirebaseAuth.instance.currentUser == null) return;
+    unawaited(_loadSaldoAberturaIntoState(_from, keepDisplayed: true));
+  }
+
+  bool _openingReloadWhenVisible = false;
 
   /// Fase 1: total (buckets). Fase 2: saldos por conta em background.
   void _ensureSaldoAberturaForPeriod(DateTime periodStart) {
@@ -436,15 +470,44 @@ class _FinanceScreenState extends State<FinanceScreen> {
     unawaited(_loadSaldoAberturaIntoState(periodStart));
   }
 
-  Future<void> _loadSaldoAberturaIntoState(DateTime periodStart) async {
-    final fast =
-        await _loadSaldoAberturaBundle(periodStart, withAccounts: false);
-    if (!mounted) return;
-    setState(() => _saldoAberturaCached = fast);
+  /// [keepDisplayed]: recarga depois de uma mutação — pula a fase «só total»
+  /// (que vem sem saldo por conta e fazia os cards do banco pularem para só o
+  /// movimento do período) e troca o número só quando a carga completa chega.
+  Future<void> _loadSaldoAberturaIntoState(
+    DateTime periodStart, {
+    bool keepDisplayed = false,
+  }) async {
+    final key = '${periodStart.year}-${periodStart.month}-${periodStart.day}';
+    if (!keepDisplayed || _saldoAberturaCached == null) {
+      final fast =
+          await _loadSaldoAberturaBundle(periodStart, withAccounts: false);
+      if (!mounted || _saldoAberturaKey != key) return;
+      setState(() => _saldoAberturaCached = fast);
+    }
     final full =
         await _loadSaldoAberturaBundle(periodStart, withAccounts: true);
-    if (!mounted) return;
+    if (!mounted || _saldoAberturaKey != key) return;
     setState(() => _saldoAberturaCached = full);
+  }
+
+  /// Estado atual (cache local, sem rede) dos lançamentos — base da diferença
+  /// otimista quando eles não estão na lista do período. Ausentes ficam fora.
+  Future<Map<String, Map<String, dynamic>>> _readTxDataFromCache(
+      List<String> ids) async {
+    final out = <String, Map<String, dynamic>>{};
+    for (var i = 0; i < ids.length; i += 30) {
+      final end = i + 30 > ids.length ? ids.length : i + 30;
+      try {
+        final snap = await _txRef()
+            .where(FieldPath.documentId, whereIn: ids.sublist(i, end))
+            .get(const GetOptions(source: Source.cache))
+            .timeout(const Duration(milliseconds: 800));
+        for (final d in snap.docs) {
+          out[d.id] = d.data();
+        }
+      } catch (_) {}
+    }
+    return out;
   }
 
   /// Insere na lista do período os docs recém-gravados (cache local) para saldos na hora.
@@ -464,27 +527,28 @@ class _FinanceScreenState extends State<FinanceScreen> {
     for (var i = 0; i < ids.length; i += 30) {
       final end = i + 30 > ids.length ? ids.length : i + 30;
       final chunk = ids.sublist(i, end);
+      // 1º o cache local: a gravação feita neste aparelho já está nele (inclusive
+      // antes do servidor confirmar) — saldos atualizam em milissegundos.
+      // Antes: esperava o servidor (até 4 s por bloco) e, no timeout, não
+      // atualizava nada até a recarga completa do período.
+      var found = <String>{};
       try {
-        // Recém-gravados: prioriza servidor (cache local pode ainda não ter o doc).
-        var qSnap = await col
+        final cached = await col
             .where(FieldPath.documentId, whereIn: chunk)
+            .get(const GetOptions(source: Source.cache))
+            .timeout(const Duration(milliseconds: 800));
+        incoming.addAll(cached.docs);
+        found = cached.docs.map((d) => d.id).toSet();
+      } catch (_) {}
+      // Só o que não está no cache (ex.: criado por Cloud Function) vai ao servidor.
+      final missing = chunk.where((id) => !found.contains(id)).toList();
+      if (missing.isEmpty) continue;
+      try {
+        final qSnap = await col
+            .where(FieldPath.documentId, whereIn: missing)
             .get(const GetOptions(source: Source.serverAndCache))
             .timeout(const Duration(seconds: 4));
-        final found = qSnap.docs.map((d) => d.id).toSet();
-        final missing = chunk.where((id) => !found.contains(id)).toList();
-        if (missing.isNotEmpty) {
-          try {
-            final cached = await col
-                .where(FieldPath.documentId, whereIn: missing)
-                .get(const GetOptions(source: Source.cache))
-                .timeout(const Duration(milliseconds: 800));
-            incoming.addAll([...qSnap.docs, ...cached.docs]);
-          } catch (_) {
-            incoming.addAll(qSnap.docs);
-          }
-        } else {
-          incoming.addAll(qSnap.docs);
-        }
+        incoming.addAll(qSnap.docs);
       } catch (_) {}
     }
     if (!mounted || incoming.isEmpty) return false;
@@ -512,13 +576,19 @@ class _FinanceScreenState extends State<FinanceScreen> {
     Iterable<String>? docIds,
     Iterable<String>? removedDocIds,
     DateTime? transactionEffectiveDate,
+    // true: o saldo de abertura já recebeu a diferença otimista e o recálculo
+    // depois do bucket do servidor já está agendado — invalidar agora faria
+    // reler buckets ainda sem esta gravação.
+    bool openingHandled = false,
   }) async {
     if (!mounted) return;
     if (kIsWeb) {
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }
-    _invalidateRealtimeBalances(
-        transactionEffectiveDate: transactionEffectiveDate);
+    if (!openingHandled) {
+      _invalidateRealtimeBalances(
+          transactionEffectiveDate: transactionEffectiveDate);
+    }
 
     final removeSet = (removedDocIds ?? const [])
         .map((e) => e.trim())
@@ -625,6 +695,8 @@ class _FinanceScreenState extends State<FinanceScreen> {
         .removeListener(_onShellFinanceAccountFilterRequest);
     FinanceTransactionsHub.revision
         .removeListener(_onFinanceHubRevisionFromOutside);
+    FinanceOpeningBalanceService.revision
+        .removeListener(_onOpeningBalanceRevision);
     _authStateSub?.cancel();
     _financeAccSub?.cancel();
     _stripHideZeroSub?.cancel();
@@ -680,8 +752,13 @@ class _FinanceScreenState extends State<FinanceScreen> {
     final deduped = _dedupeMainPeriodDocs(_mainPeriodDocs);
     final paid = _sumPeriodTotalsFromDocs(deduped, statusFilter: 'paid');
     final strip = _netByFinanceAccountIdPaidEffective(deduped, _from, _to);
+    // Lista paginada com mais páginas no servidor: a lista em memória é só uma
+    // parte do período — recalcular dela encolhia os saldos até a recarga
+    // completa. Nesse caso o mapa atual (período inteiro + diferença otimista)
+    // continua valendo e _refreshMainPeriodStripAccountNets o substitui.
+    final partialList = _mainPeriodServerPagingActive && _mainPeriodHasMoreServer;
     setState(() {
-      if (deduped.isNotEmpty) {
+      if (deduped.isNotEmpty && !partialList) {
         _mainPeriodServerKpis = (income: paid.income, expense: paid.expense);
         _periodMergedKpis = (income: paid.income, expense: paid.expense);
         _serverPagingStripPaidNetByAccount = strip;
@@ -748,10 +825,34 @@ class _FinanceScreenState extends State<FinanceScreen> {
     final isScheduledFuture =
         result.faturaSchedule != null && payDay.isAfter(todayDay);
 
+    var openingHandled = false;
     if (!isScheduledFuture) {
+      // Compras do cartão costumam ser de outros meses (fora da lista): lê o
+      // estado atual do cache local (instantâneo) para aplicar a diferença
+      // exata no banco que paga a fatura — antes do servidor responder.
+      final preById = await _readTxDataFromCache(unique);
+      if (!mounted) return;
+      final confTs = Timestamp.fromDate(result.paymentDate);
+      final paidFrom = result.financeAccountId?.trim() ?? '';
+      openingHandled = true;
       setState(() {
         for (final id in unique) {
           _optimisticPaidIds.add(id);
+          final known = preById[id];
+          if (known == null && _displayedTxData(id) == null) {
+            openingHandled = false;
+          }
+          _setOptimisticTxPatch(
+            id,
+            {
+              'status': 'paid',
+              'paidAt': confTs,
+              'effectiveDate': confTs,
+              'financeAccountId': cardAccountId,
+              'paidFromFinanceAccountId': paidFrom,
+            },
+            knownBefore: known,
+          );
         }
       });
     }
@@ -766,23 +867,14 @@ class _FinanceScreenState extends State<FinanceScreen> {
       );
       if (!mounted) return;
       if (!isScheduledFuture) {
-        final confTs = Timestamp.fromDate(result.paymentDate);
-        final paidFrom = result.financeAccountId?.trim() ?? '';
         setState(() {
           for (final id in unique) {
             _optimisticPaidIds.remove(id);
-            final prev = _optimisticEditedTxById[id];
-            _optimisticEditedTxById[id] = {
-              if (prev != null) ...prev,
-              'status': 'paid',
-              'paidAt': confTs,
-              'effectiveDate': confTs,
-              'financeAccountId': cardAccountId,
-              if (paidFrom.isNotEmpty) 'paidFromFinanceAccountId': paidFrom,
-            };
           }
-          _invalidateRealtimeBalances(
-              transactionEffectiveDate: result.paymentDate);
+          if (!openingHandled) {
+            _invalidateRealtimeBalances(
+                transactionEffectiveDate: result.paymentDate);
+          }
         });
       } else {
         setState(() {});
@@ -790,6 +882,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
       unawaited(_applyFinanceMutationSync(
         docIds: unique,
         transactionEffectiveDate: result.paymentDate,
+        openingHandled: openingHandled,
       ));
       HapticFeedback.mediumImpact();
       if (context.mounted) {
@@ -817,6 +910,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
             _optimisticPaidIds.remove(id);
           }
         });
+        _revertOptimisticTxPatches(unique);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content:
@@ -1195,9 +1289,14 @@ class _FinanceScreenState extends State<FinanceScreen> {
     if (peekOpen != null) {
       _saldoAberturaCached = peekOpen;
       _saldoAberturaKey = '${_from.year}-${_from.month}-${_from.day}';
+      _openingReloadWhenVisible = false;
     }
     if (fa.FirebaseAuth.instance.currentUser != null) {
       _ensureSaldoAberturaForPeriod(_from);
+      if (_openingReloadWhenVisible) {
+        _openingReloadWhenVisible = false;
+        unawaited(_loadSaldoAberturaIntoState(_from, keepDisplayed: true));
+      }
     }
   }
 
@@ -1219,6 +1318,8 @@ class _FinanceScreenState extends State<FinanceScreen> {
     _lastFinanceHubRevisionSeen = FinanceTransactionsHub.revision.value;
     FinanceTransactionsHub.revision
         .addListener(_onFinanceHubRevisionFromOutside);
+    FinanceOpeningBalanceService.revision
+        .addListener(_onOpeningBalanceRevision);
     final (f, t) = _rangeForPeriod();
     _from = f;
     _to = t;
@@ -1960,10 +2061,12 @@ class _FinanceScreenState extends State<FinanceScreen> {
   void _scheduleMainPeriodReloadAfterMutation({
     DateTime? transactionEffectiveDate,
     Iterable<String>? savedDocIds,
+    bool openingHandled = false,
   }) {
     unawaited(_applyFinanceMutationSync(
       docIds: savedDocIds,
       transactionEffectiveDate: transactionEffectiveDate,
+      openingHandled: openingHandled,
     ));
   }
 
@@ -2066,9 +2169,21 @@ class _FinanceScreenState extends State<FinanceScreen> {
           matches = false;
         }
       }
-      if (matches) _optimisticEditedTxById.remove(id);
+      // Patch otimista antigo que não bate com o documento: o lançamento foi
+      // alterado depois (outra tela/aparelho) — vale o que está gravado, para
+      // o saldo nunca ficar preso num valor otimista.
+      final at = _optimisticPatchAt[id];
+      final expired = at != null &&
+          DateTime.now().difference(at) > const Duration(seconds: 45);
+      if (matches || expired) {
+        _optimisticEditedTxById.remove(id);
+        _optimisticPatchAt.remove(id);
+      }
     }
   }
+
+  /// Quando cada patch otimista feito por [_setOptimisticTxPatch] nasceu.
+  final Map<String, DateTime> _optimisticPatchAt = {};
 
   /// IDs selecionados na grelha que ainda estão pendentes (para confirmar em lote).
   List<String> _gridSelectedPendingIdsAmong(
@@ -2851,9 +2966,11 @@ class _FinanceScreenState extends State<FinanceScreen> {
     double sum = 0;
     var incomeCount = 0;
     var expenseCount = 0;
+    final preDataById = <String, Map<String, dynamic>>{};
     for (var i = 0; i < unique.length && i < 30; i++) {
       final snap = await _txRef().doc(unique[i]).get();
       final d = snap.data() ?? {};
+      if (snap.exists) preDataById[unique[i]] = d;
       sum += (d['amount'] as num?)?.toDouble() ?? 0;
       if ((d['type'] ?? 'expense').toString() == 'income') {
         incomeCount++;
@@ -2879,9 +2996,32 @@ class _FinanceScreenState extends State<FinanceScreen> {
     );
     if (result == null || !mounted) return;
 
+    // Saldos mudam NA HORA, antes do servidor confirmar o lote.
+    final confTs = Timestamp.fromDate(result.paymentDate);
+    final aid = result.financeAccountId?.trim() ?? '';
+    // Saldo de abertura: só dá para aplicar a diferença se conhecemos TODOS os
+    // lançamentos do lote (lista na tela ou lidos acima); senão, recarrega.
+    var openingHandled = true;
     setState(() {
       for (final id in unique) {
         _optimisticPaidIds.add(id);
+        final known = preDataById[id];
+        if (known == null && _displayedTxData(id) == null) {
+          openingHandled = false;
+        }
+        _setOptimisticTxPatch(
+          id,
+          {
+            'status': 'paid',
+            'paidAt': confTs,
+            'effectiveDate': confTs,
+            if (aid.isNotEmpty)
+              'financeAccountId': aid
+            else
+              'financeAccountId': '',
+          },
+          knownBefore: known,
+        );
       }
     });
 
@@ -2893,27 +3033,15 @@ class _FinanceScreenState extends State<FinanceScreen> {
         result: result,
       );
       if (!mounted) return;
-      final confTs = Timestamp.fromDate(result.paymentDate);
-      final aid = result.financeAccountId?.trim() ?? '';
       setState(() {
         for (final id in unique) {
           _optimisticPaidIds.remove(id);
-          final prev = _optimisticEditedTxById[id];
-          _optimisticEditedTxById[id] = {
-            if (prev != null) ...prev,
-            'status': 'paid',
-            'paidAt': confTs,
-            'effectiveDate': confTs,
-            if (aid.isNotEmpty)
-              'financeAccountId': aid
-            else
-              'financeAccountId': '',
-          };
         }
       });
       unawaited(_applyFinanceMutationSync(
         docIds: unique,
         transactionEffectiveDate: result.paymentDate,
+        openingHandled: openingHandled,
       ));
       HapticFeedback.mediumImpact();
       if (context.mounted) {
@@ -2929,6 +3057,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
             _optimisticPaidIds.remove(id);
           }
         });
+        _revertOptimisticTxPatches(unique);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Erro: ${e.toString().split('\n').first}'),
           backgroundColor: AppColors.error,
@@ -3025,8 +3154,9 @@ class _FinanceScreenState extends State<FinanceScreen> {
     final transferAt = FinanceTransactionDatetime.mergeCalendarDayWithClockNow(
         result.selectedCalendarDay);
 
+    var transferIds = const <String>[];
     try {
-      await FinanceTransferService.instance.createTransfer(
+      transferIds = await FinanceTransferService.instance.createTransfer(
         uid: widget.uid,
         fromAcc: fromAcc,
         toAcc: toAcc,
@@ -3051,8 +3181,13 @@ class _FinanceScreenState extends State<FinanceScreen> {
     }
 
     if (mounted) {
+      // Duas contas mudaram de saldo: as duas pernas entram na lista do
+      // período (cache local / servidor) e os saldos por conta são refeitos na
+      // hora (port Controle Total, 30/09/2026).
       _scheduleMainPeriodReloadAfterMutation(
-          transactionEffectiveDate: transferAt);
+        transactionEffectiveDate: transferAt,
+        savedDocIds: transferIds,
+      );
     }
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -3125,22 +3260,16 @@ class _FinanceScreenState extends State<FinanceScreen> {
     if (result == null || !mounted) return;
     final paymentResult = result;
 
-    setState(() => _optimisticPaidIds.add(docId));
-    try {
-      await commitFinanceConfirmPayment(
-        txRef: _txRef().doc(docId),
-        uid: widget.uid,
-        result: paymentResult,
-        creditCardFaturaPayment: isCardFatura,
-      );
-      if (!mounted) return;
-      final confTs = Timestamp.fromDate(paymentResult.paymentDate);
-      final aid = paymentResult.financeAccountId?.trim() ?? '';
-      setState(() {
-        _optimisticPaidIds.remove(docId);
-        final prev = _optimisticEditedTxById[docId];
-        _optimisticEditedTxById[docId] = {
-          if (prev != null) ...prev,
+    // Saldos mudam NA HORA (antes do servidor responder): mesmo patch que a
+    // linha usa, aplicado também ao carrossel e ao saldo de abertura.
+    final confTs = Timestamp.fromDate(paymentResult.paymentDate);
+    final aid = paymentResult.financeAccountId?.trim() ?? '';
+    var openingHandled = false;
+    setState(() {
+      _optimisticPaidIds.add(docId);
+      openingHandled = _setOptimisticTxPatch(
+        docId,
+        {
           'status': 'paid',
           'paidAt': confTs,
           'effectiveDate': confTs,
@@ -3151,15 +3280,31 @@ class _FinanceScreenState extends State<FinanceScreen> {
             'financeAccountId': aid
           else
             'financeAccountId': '',
-        };
-        _invalidateRealtimeBalances(
-          transactionEffectiveDate:
-              preEffectiveDate ?? paymentResult.paymentDate,
-        );
+        },
+        knownBefore: preData,
+      );
+    });
+    try {
+      await commitFinanceConfirmPayment(
+        txRef: _txRef().doc(docId),
+        uid: widget.uid,
+        result: paymentResult,
+        creditCardFaturaPayment: isCardFatura,
+      );
+      if (!mounted) return;
+      setState(() {
+        _optimisticPaidIds.remove(docId);
+        if (!openingHandled) {
+          _invalidateRealtimeBalances(
+            transactionEffectiveDate:
+                preEffectiveDate ?? paymentResult.paymentDate,
+          );
+        }
       });
       unawaited(_applyFinanceMutationSync(
         docIds: [docId],
         transactionEffectiveDate: paymentResult.paymentDate,
+        openingHandled: openingHandled,
       ));
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
@@ -3169,6 +3314,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _optimisticPaidIds.remove(docId));
+        _revertOptimisticTxPatches([docId]);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Erro ao confirmar: ${e.toString().split('\n').first}'),
           backgroundColor: AppColors.error,
@@ -3220,13 +3366,37 @@ class _FinanceScreenState extends State<FinanceScreen> {
       logModulo: 'Financeiro',
       onSaved: (id, patch, effectiveDate) {
         if (!mounted) return;
+        // Data mudou: a data efetiva gravada (pago usa paidAt) não vem no
+        // patch — aí o saldo de abertura recarrega como antes. Sem mudança de
+        // data (valor, conta, status), a diferença entra na hora.
+        final oldDate = (current['date'] as Timestamp?)?.toDate();
+        final newDate = (patch['date'] as Timestamp?)?.toDate();
+        final sameDate = oldDate != null &&
+            newDate != null &&
+            oldDate.isAtSameMomentAs(newDate);
+        var openingHandled = false;
         setState(() {
-          _invalidateRealtimeBalances(transactionEffectiveDate: effectiveDate);
-          _optimisticEditedTxById[id] = patch;
+          if (sameDate) {
+            openingHandled = _setOptimisticTxPatch(id, patch,
+                knownBefore: current, merge: false);
+          } else {
+            _optimisticEditedTxById[id] = patch;
+            _optimisticPatchAt[id] = DateTime.now();
+            _invalidateRealtimeBalances(
+                transactionEffectiveDate: effectiveDate);
+            // Saiu de antes do período para dentro dele: a abertura também muda.
+            final oldEffective =
+                FinanceLineOpening.effectiveDateTimeFromMap(current);
+            if (oldEffective != null) {
+              _invalidateRealtimeBalances(
+                  transactionEffectiveDate: oldEffective);
+            }
+          }
         });
         unawaited(_applyFinanceMutationSync(
           docIds: [id],
           transactionEffectiveDate: effectiveDate,
+          openingHandled: openingHandled,
         ));
       },
     );
@@ -3262,10 +3432,14 @@ class _FinanceScreenState extends State<FinanceScreen> {
     final amount = (data['amount'] ?? 0).toDouble();
     final category = (data['category'] ?? '').toString();
     final pairId = (data['transferPairId'] ?? '').toString().trim();
+    // Dados de cada perna excluída (transferência = as duas) para tirar dos
+    // saldos na hora (port Controle Total, 30/09/2026).
+    final removidos = <String, Map<String, dynamic>>{docId: data};
     if (pairId.isNotEmpty) {
       final pairSnap =
           await _txRef().where('transferPairId', isEqualTo: pairId).get();
       for (final pairDoc in pairSnap.docs) {
+        removidos[pairDoc.id] = pairDoc.data();
         await pairDoc.reference.delete();
       }
     } else {
@@ -3275,11 +3449,16 @@ class _FinanceScreenState extends State<FinanceScreen> {
       final effectiveDate = FinanceLineOpening.effectiveDateTimeFromMap(data) ??
           (data['date'] as Timestamp?)?.toDate();
       setState(() {
-        _mainPeriodDocs.removeWhere((d) => d.id == docId);
+        _applyOptimisticBalanceChanges({
+          for (final e in removidos.entries)
+            e.key: (before: _displayedTxData(e.key) ?? e.value, after: null),
+        });
+        _mainPeriodDocs.removeWhere((d) => removidos.containsKey(d.id));
       });
       unawaited(_applyFinanceMutationSync(
-        removedDocIds: [docId],
+        removedDocIds: removidos.keys.toList(),
         transactionEffectiveDate: effectiveDate,
+        openingHandled: true,
       ));
     }
     HapticFeedback.lightImpact();
@@ -3321,17 +3500,32 @@ class _FinanceScreenState extends State<FinanceScreen> {
     );
     if (confirm != true || !context.mounted) return;
     int deleted = 0;
+    final deletedData = <String, Map<String, dynamic>>{};
     for (final id in docIds) {
       try {
+        final shown = _displayedTxData(id);
         await _txRef().doc(id).delete();
         deleted++;
+        if (shown != null) deletedData[id] = shown;
       } catch (_) {}
     }
     if (mounted) {
+      // Todos os excluídos com dados conhecidos: tira dos saldos na hora e o
+      // saldo de abertura não precisa zerar e recarregar (port Controle Total).
+      final allKnown = deletedData.length == deleted;
       setState(() {
+        if (allKnown) {
+          _applyOptimisticBalanceChanges({
+            for (final e in deletedData.entries)
+              e.key: (before: e.value, after: null),
+          });
+        }
         _mainPeriodDocs.removeWhere((d) => docIds.contains(d.id));
       });
-      unawaited(_applyFinanceMutationSync(removedDocIds: docIds));
+      unawaited(_applyFinanceMutationSync(
+        removedDocIds: docIds,
+        openingHandled: allKnown,
+      ));
     }
     if (context.mounted) {
       HapticFeedback.lightImpact();
@@ -3425,12 +3619,117 @@ class _FinanceScreenState extends State<FinanceScreen> {
     DateTime from,
     DateTime to,
   ) {
-    return FinanceAccountBalanceUtils.netPaidByAccountEffective(
-      docs: docs,
+    // Mesma visão da lista e dos totais (_sumPeriodTotalsFromDocs): aplica a
+    // versão otimista do lançamento (pago/editado agora) — o saldo por conta
+    // muda junto com a linha, sem esperar o servidor. O patch sai sozinho
+    // quando o documento real já tem os mesmos campos (sem desvio).
+    return FinanceAccountBalanceUtils.netPaidByAccountEffectiveFromMaps(
+      items: docs.map(_txDataForMainPeriodDoc),
       from: from,
       to: to,
       creditCardIds: _creditCardAccountIds,
     );
+  }
+
+  /// Dados do lançamento como a tela mostra agora (documento + patch otimista).
+  Map<String, dynamic>? _displayedTxData(String id) {
+    for (final d in _mainPeriodDocs) {
+      if (d.id == id) return _txDataForMainPeriodDoc(d);
+    }
+    return null;
+  }
+
+  /// Aplica NA HORA, nos saldos exibidos (carrossel «Saldos por conta», total
+  /// e saldo de abertura), a diferença exata de lançamentos que acabaram de
+  /// mudar. [changes]: id → (antes, depois); `depois` nulo = excluído.
+  /// Retorna true se o saldo de abertura (antes do período) foi ajustado.
+  bool _applyOptimisticBalanceChanges(
+    Map<String, ({Map<String, dynamic>? before, Map<String, dynamic>? after})>
+        changes,
+  ) {
+    if (changes.isEmpty) return false;
+    final cards = _creditCardAccountIds;
+    var strip = _serverPagingStripPaidNetByAccount;
+    var openingTouched = false;
+    for (final c in changes.values) {
+      if (strip.isNotEmpty) {
+        strip = FinanceAccountBalanceUtils.applyMutationToPeriodNet(
+          base: strip,
+          before: c.before,
+          after: c.after,
+          from: _from,
+          to: _to,
+          creditCardIds: cards,
+        );
+      }
+      if (FinanceOpeningBalanceService.applyOptimisticMutation(
+        uid: widget.uid,
+        before: c.before,
+        after: c.after,
+        creditCardIds: cards,
+      )) {
+        openingTouched = true;
+      }
+    }
+    _serverPagingStripPaidNetByAccount = strip;
+    if (openingTouched) {
+      final peek = FinanceOpeningBalanceService.peekCached(
+            uid: widget.uid,
+            periodStart: _from,
+            loadAccounts: true,
+          ) ??
+          FinanceOpeningBalanceService.peekCached(
+            uid: widget.uid,
+            periodStart: _from,
+            loadAccounts: false,
+          );
+      if (peek != null) _saldoAberturaCached = peek;
+    }
+    return openingTouched;
+  }
+
+  /// Grava o patch otimista de um lançamento e já ajusta os saldos exibidos.
+  /// [knownBefore]: dados do lançamento quando ele não está na lista do período
+  /// (ex.: pendente de outro mês). [merge] false = o patch substitui o anterior.
+  /// Retorna true se o estado anterior era conhecido — então a diferença (mesmo
+  /// zero) já foi aplicada ao saldo de abertura e não é preciso invalidá-lo.
+  bool _setOptimisticTxPatch(
+    String id,
+    Map<String, dynamic> patch, {
+    Map<String, dynamic>? knownBefore,
+    bool merge = true,
+  }) {
+    final shown = _displayedTxData(id);
+    final prev = _optimisticEditedTxById[id];
+    _optimisticEditedTxById[id] = {
+      if (merge && prev != null) ...prev,
+      ...patch,
+    };
+    _optimisticPatchAt[id] = DateTime.now();
+    final before = shown ?? knownBefore;
+    if (before == null) return false;
+    final after = shown != null
+        ? _displayedTxData(id)
+        : <String, dynamic>{...before, ...patch};
+    _applyOptimisticBalanceChanges({id: (before: before, after: after)});
+    return true;
+  }
+
+  /// Desfaz o patch otimista (gravação falhou): volta os saldos e recarrega.
+  void _revertOptimisticTxPatches(Iterable<String> ids) {
+    if (!mounted) return;
+    final present =
+        ids.where(_optimisticEditedTxById.containsKey).toList();
+    if (present.isEmpty) return;
+    // Recalcula do que está gravado — nada de «desfazer delta» à mão.
+    setState(() {
+      for (final id in present) {
+        _optimisticEditedTxById.remove(id);
+      }
+      _serverPagingStripPaidNetByAccount = const {};
+    });
+    FinanceOpeningBalanceService.invalidateForUser(widget.uid);
+    _scheduleMainPeriodReloadAfterMutationDebounced(immediate: true);
   }
 
   static Map<String, double> _mergeAccountBalances(
