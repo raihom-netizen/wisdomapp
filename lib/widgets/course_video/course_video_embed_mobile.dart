@@ -6,6 +6,13 @@ import 'package:webview_flutter/webview_flutter.dart';
 import '../../utils/youtube_url_helper.dart';
 import 'course_media_view_policy.dart';
 
+/// Origem HTTPS do HTML do player no Android/iOS.
+///
+/// Sem `baseUrl`, o `loadHtmlString` roda em `about:blank` e o iframe do
+/// YouTube não recebe Referer/origin — desde 2025 o YouTube recusa esse embed
+/// com «Erro 153 · erro de configuração do player» (vídeo não toca no app).
+const String _kYoutubeEmbedBaseUrl = 'https://wisdomapp.com.br';
+
 /// YouTube / MP4 no Android/iOS — WebView com HTML5 (fullscreen nativo do player).
 class CourseVideoEmbed extends StatefulWidget {
   const CourseVideoEmbed({
@@ -101,9 +108,15 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
     if (yt != null && yt.isNotEmpty) {
       final thumb = poster ?? YoutubeUrlHelper.thumbnailUrl(yt);
       if (!widget.autoplay && thumb.isNotEmpty) {
-        c.loadHtmlString(_youtubePosterHtml(yt, thumb, start));
+        c.loadHtmlString(
+          _youtubePosterHtml(yt, thumb, start),
+          baseUrl: _kYoutubeEmbedBaseUrl,
+        );
       } else {
-        c.loadHtmlString(_youtubeApiHtml(yt, start, autoplay: widget.autoplay));
+        c.loadHtmlString(
+          _youtubeApiHtml(yt, start, autoplay: widget.autoplay),
+          baseUrl: _kYoutubeEmbedBaseUrl,
+        );
       }
     } else if (mp4 != null && mp4.isNotEmpty) {
       c.loadHtmlString(_mp4Html(mp4, poster, start));
@@ -158,7 +171,7 @@ function bootPlayer(){
   document.getElementById('player').style.display='block';
   ytPlayer=new YT.Player('player',{
     videoId:'$videoId',
-    playerVars:{autoplay:1,rel:0,modestbranding:1,playsinline:1,fs:1,start:startAt,iv_load_policy:3},
+    playerVars:{autoplay:1,rel:0,modestbranding:1,playsinline:1,fs:1,start:startAt,iv_load_policy:3,origin:'$_kYoutubeEmbedBaseUrl',widget_referrer:'$_kYoutubeEmbedBaseUrl'},
     events:{
       onReady:function(e){ try{e.target.playVideo();}catch(x){} setInterval(postProg,4000); },
       onStateChange:function(e){ if(e.data===1||e.data===2||e.data===0) postProg(); }
@@ -206,7 +219,7 @@ function postProg(){
 function onYouTubeIframeAPIReady(){
   ytPlayer=new YT.Player('player',{
     videoId:'$videoId',
-    playerVars:{autoplay:${autoplay ? 1 : 0},rel:0,modestbranding:1,playsinline:1,fs:1,start:startAt,iv_load_policy:3},
+    playerVars:{autoplay:${autoplay ? 1 : 0},rel:0,modestbranding:1,playsinline:1,fs:1,start:startAt,iv_load_policy:3,origin:'$_kYoutubeEmbedBaseUrl',widget_referrer:'$_kYoutubeEmbedBaseUrl'},
     events:{
       onReady:function(e){ try{ window.flutterReady && flutterReady.postMessage('1'); }catch(x){} if($autoplay){try{e.target.playVideo();}catch(x){}} setInterval(postProg,4000); },
       onStateChange:function(e){ if(e.data===1||e.data===2||e.data===0) postProg(); }

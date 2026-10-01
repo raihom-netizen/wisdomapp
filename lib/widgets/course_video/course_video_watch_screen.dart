@@ -59,15 +59,7 @@ String? _mp4FromData(Map<String, dynamic> data) {
 }
 
 String? _youtubeIdFromData(Map<String, dynamic> data) {
-  final stored = (data['youtubeVideoId'] ?? '').toString().trim();
-  if (stored.isNotEmpty) return stored;
-  final link = (data['linkUrl'] ??
-          data['externalUrl'] ??
-          data['youtubeUrl'] ??
-          data['videoUrl'] ??
-          '')
-      .toString();
-  return YoutubeUrlHelper.extractVideoId(link);
+  return YoutubeUrlHelper.videoIdFromData(data);
 }
 
 /// Tela de reprodução estilo YouTube — player 16:9, metadados e vídeos relacionados.

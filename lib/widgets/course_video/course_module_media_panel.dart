@@ -31,15 +31,7 @@ class CourseModuleMediaPanel extends StatefulWidget {
   final String? uid;
 
   static String? youtubeIdFrom(Map<String, dynamic> data) {
-    final stored = (data['youtubeVideoId'] ?? '').toString().trim();
-    if (stored.isNotEmpty) return stored;
-    final link = (data['linkUrl'] ??
-            data['externalUrl'] ??
-            data['youtubeUrl'] ??
-            data['videoUrl'] ??
-            '')
-        .toString();
-    return YoutubeUrlHelper.extractVideoId(link);
+    return YoutubeUrlHelper.videoIdFromData(data);
   }
 
   static String? mp4From(Map<String, dynamic> data) {

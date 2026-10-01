@@ -109,8 +109,10 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
           ..allowFullscreen = true
           ..setAttribute(
             'allow',
-            'accelerometer; autoplay; encrypted-media; gyroscope; fullscreen',
-          );
+            'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen',
+          )
+          // YouTube exige Referer/origin no embed (sem ele: erro 153).
+          ..setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
         iframe.onLoad.listen((_) => _notifyReady());
         return iframe;
       }
@@ -244,8 +246,9 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
       ..allowFullscreen = true
       ..setAttribute(
         'allow',
-        'accelerometer; autoplay; encrypted-media; gyroscope; fullscreen',
-      );
+        'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen',
+      )
+      ..setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
 
     void startPlay() {
       posterEl.style.display = 'none';

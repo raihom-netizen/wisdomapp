@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -723,7 +724,8 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
         return false;
       }
       if (hasYoutube && !YoutubeUrlHelper.isValidYoutubeUrl(youtubeRaw)) {
-        _snack('URL do YouTube inválida.');
+        _snack(YoutubeUrlHelper.validationMessage(youtubeRaw) ??
+            'URL do YouTube inválida.');
         return false;
       }
     } else {
@@ -1031,7 +1033,8 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
 
         if (linkRaw.isNotEmpty) {
           if (!YoutubeUrlHelper.isValidYoutubeUrl(linkRaw)) {
-            _snack('URL do YouTube inválida.');
+            _snack(YoutubeUrlHelper.validationMessage(linkRaw) ??
+                'URL do YouTube inválida.');
             return false;
           }
           videoId = YoutubeUrlHelper.extractVideoId(linkRaw)!;
@@ -1964,6 +1967,25 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       return 'Instabilidade do Firestore na Web. Toque em Publicar de novo '
           'ou atualize a página (F5).';
     }
+    if (e is FirebaseFunctionsException) {
+      switch (e.code) {
+        case 'permission-denied':
+          return 'Sem permissão para gravar cursos. A conta precisa ser '
+              'admin, master ou gestor (campo role no cadastro).';
+        case 'unauthenticated':
+          return 'Sessão expirada. Saia e entre de novo no painel.';
+        case 'not-found':
+          return 'Função de gravação de cursos não publicada no servidor '
+              '(ctAdminUpsertCourseVideo). Faça o deploy das functions.';
+        case 'invalid-argument':
+          return 'Dados inválidos: ${e.message ?? 'verifique os campos'}.';
+        case 'deadline-exceeded':
+        case 'unavailable':
+          return 'Servidor demorou a responder. Tente de novo em instantes.';
+      }
+      final m = (e.message ?? '').trim();
+      if (m.isNotEmpty) return '${e.code}: $m';
+    }
     final msg = e.toString().split('\n').first.trim();
     return msg.length > 180 ? '${msg.substring(0, 180)}…' : msg;
   }
@@ -1978,15 +2000,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
   }
 
   String? _videoId(Map<String, dynamic> data) {
-    final stored = (data['youtubeVideoId'] ?? '').toString().trim();
-    if (stored.isNotEmpty) return stored;
-    final link = (data['linkUrl'] ??
-            data['externalUrl'] ??
-            data['youtubeUrl'] ??
-            data['videoUrl'] ??
-            '')
-        .toString();
-    return YoutubeUrlHelper.extractVideoId(link);
+    return YoutubeUrlHelper.videoIdFromData(data);
   }
 
   String? _thumbUrl(Map<String, dynamic> data) =>

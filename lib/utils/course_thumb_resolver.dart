@@ -6,15 +6,7 @@ class CourseThumbResolver {
   CourseThumbResolver._();
 
   static String? videoIdFromData(Map<String, dynamic> data) {
-    final stored = (data['youtubeVideoId'] ?? '').toString().trim();
-    if (stored.isNotEmpty) return stored;
-    final link = (data['linkUrl'] ??
-            data['externalUrl'] ??
-            data['youtubeUrl'] ??
-            data['videoUrl'] ??
-            '')
-        .toString();
-    return YoutubeUrlHelper.extractVideoId(link);
+    return YoutubeUrlHelper.videoIdFromData(data);
   }
 
   /// URL principal (imagem enviada ou thumbnail gravada).
@@ -36,12 +28,15 @@ class CourseThumbResolver {
   /// Lista de URLs para tentar carregar (YouTube: maxres → hq; imagem: uma URL).
   static List<String> resolveUrls(Map<String, dynamic> data) {
     final primary = primaryImageUrl(data);
-    if (primary != null) return [primary];
-
     final id = videoIdFromData(data);
-    if (id != null) return YoutubeUrlHelper.thumbnailUrls(id);
-
-    return const [];
+    final out = <String>[];
+    if (primary != null) out.add(primary);
+    if (id != null) {
+      for (final u in YoutubeUrlHelper.thumbnailUrls(id)) {
+        if (!out.contains(u)) out.add(u);
+      }
+    }
+    return out;
   }
 
   static String? resolveBest(Map<String, dynamic> data) {

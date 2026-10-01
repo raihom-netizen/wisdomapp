@@ -134,15 +134,7 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
   }
 
   String? _videoId(Map<String, dynamic> data) {
-    final stored = (data['youtubeVideoId'] ?? '').toString().trim();
-    if (stored.isNotEmpty) return stored;
-    final link = (data['linkUrl'] ??
-            data['externalUrl'] ??
-            data['youtubeUrl'] ??
-            data['videoUrl'] ??
-            '')
-        .toString();
-    return YoutubeUrlHelper.extractVideoId(link);
+    return YoutubeUrlHelper.videoIdFromData(data);
   }
 
   String? _externalLink(Map<String, dynamic> data) {

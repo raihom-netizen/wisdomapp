@@ -55,15 +55,7 @@ class _CourseYoutubeFeedCardState extends State<CourseYoutubeFeedCard> {
   }
 
   String? get _youtubeId {
-    final stored = (widget.data['youtubeVideoId'] ?? '').toString().trim();
-    if (stored.isNotEmpty) return stored;
-    final link = (widget.data['linkUrl'] ??
-            widget.data['externalUrl'] ??
-            widget.data['youtubeUrl'] ??
-            widget.data['videoUrl'] ??
-            '')
-        .toString();
-    return YoutubeUrlHelper.extractVideoId(link);
+    return YoutubeUrlHelper.videoIdFromData(widget.data);
   }
 
   bool get _hasImage => CourseMediaUrlResolver.hasResolvableImage(widget.data);
@@ -382,8 +374,8 @@ class _CoverTap extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final yt = (data['youtubeVideoId'] ?? '').toString().trim();
-    final thumb = yt.isNotEmpty ? YoutubeUrlHelper.thumbnailUrl(yt) : null;
+    final yt = YoutubeUrlHelper.videoIdFromData(data);
+    final thumb = yt != null ? YoutubeUrlHelper.thumbnailUrl(yt) : null;
     final fit = CourseThumbResolver.isDicaPhoto(data)
         ? BoxFit.contain
         : BoxFit.cover;

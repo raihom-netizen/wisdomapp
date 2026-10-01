@@ -205,7 +205,10 @@ class CourseMediaUrlResolver {
       }
     }
 
-    if (out.isEmpty) {
+    // YouTube: sempre acrescenta a cascata (maxres → sd → hq → mq). A capa
+    // gravada costuma ser `maxresdefault`, que dá 404 em vídeos sem HD — sem
+    // a cascata o card ficava sem imagem.
+    {
       final yt = CourseThumbResolver.videoIdFromData(data);
       if (yt != null) {
         for (final u in YoutubeUrlHelper.thumbnailUrls(yt)) {
