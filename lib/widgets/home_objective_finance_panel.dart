@@ -6,8 +6,12 @@ import '../utils/firestore_user_doc_id.dart';
 import '../widgets/create_financial_goal_dialog.dart';
 import '../widgets/goal_52_weeks_objective_card.dart';
 
+/// Último snapshot dos objetivos por usuário — o Início pinta na hora ao
+/// voltar de outro módulo, sem piscar o card vazio.
+final Map<String, QuerySnapshot<Map<String, dynamic>>> _ultimosObjetivos = {};
+
 /// Card «Objetivo Financeiro» no Início — Projeto 52 semanas + progresso.
-class HomeObjectiveFinancePanel extends StatelessWidget {
+class HomeObjectiveFinancePanel extends StatefulWidget {
   const HomeObjectiveFinancePanel({
     super.key,
     required this.uid,
@@ -21,7 +25,41 @@ class HomeObjectiveFinancePanel extends StatelessWidget {
   final UserProfile profile;
   final VoidCallback onOpenObjetivoModule;
 
+  @override
+  State<HomeObjectiveFinancePanel> createState() => _HomeObjectiveFinancePanelState();
+}
+
+class _HomeObjectiveFinancePanelState extends State<HomeObjectiveFinancePanel> {
+  static const int maxGoalsOnHome = HomeObjectiveFinancePanel.maxGoalsOnHome;
+
+  String get uid => widget.uid;
+  UserProfile get profile => widget.profile;
+  VoidCallback get onOpenObjetivoModule => widget.onOpenObjetivoModule;
+
   String get _userFsId => firestoreUserDocIdForAppShell(uid);
+
+  // Escuta guardada no estado (antes era `.snapshots()` dentro do build:
+  // cada rebuild do Início abria uma escuta nova).
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _goals;
+  String _goalsUid = '';
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> _goalsStream() {
+    final id = _userFsId;
+    if (_goals == null || _goalsUid != id) {
+      _goalsUid = id;
+      _goals = FirebaseFirestore.instance
+          .collection('users')
+          .doc(id)
+          .collection('goals')
+          .where('status', isEqualTo: 'active')
+          .snapshots()
+          .map((s) {
+        _ultimosObjetivos[id] = s;
+        return s;
+      });
+    }
+    return _goals!;
+  }
 
   static bool _excludeGoal(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
     final title = ((doc.data()['title'] ?? '') as String).toLowerCase();
@@ -34,13 +72,14 @@ class HomeObjectiveFinancePanel extends StatelessWidget {
       return const SizedBox.shrink();
     }
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .doc(_userFsId)
-          .collection('goals')
-          .where('status', isEqualTo: 'active')
-          .snapshots(),
+      stream: _goalsStream(),
+      initialData: _ultimosObjetivos[_userFsId],
       builder: (context, snap) {
+        // Sem nenhum dado ainda: espaço discreto em vez de «Criar objetivo»
+        // piscando antes dos objetivos chegarem.
+        if (!snap.hasData && !snap.hasError) {
+          return const SizedBox(height: 8);
+        }
         final goals = (snap.data?.docs ?? [])
             .where((d) => !_excludeGoal(d))
             .toList();
