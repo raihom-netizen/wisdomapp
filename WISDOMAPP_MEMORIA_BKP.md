@@ -18,7 +18,7 @@ Este documento é a **memória viva** do que já está pronto e funcionando. Ant
 4. **Preservar padrões** — versão única, OAuth calendário, player de cursos, grid admin compacta, boot web leve, etc.
 5. **Testar impacto cruzado** — web + Android + iOS quando tocar auth, versão, push, calendário ou deploy.
 6. **Atualizar este arquivo** — após mudanças relevantes, registrar o que mudou na seção 16 (changelog memória). **Ficheiro fica só na raiz** (`WISDOMAPP_MEMORIA_BKP.md`); não copiar para `D:\TEMPORARIOS`.
-7. **Deploy só com ordem explícita** — `.\deploy.ps1 -WebOnly` (rápido) ou `.\deploy.ps1` (completo). CodeMagic = só iOS; AAB local em `D:\TEMPORARIOS\WISDOMAPP_*`.
+7. **Deploy só com ordem explícita** — roteiro oficial na seção **«Deploy completo (padrão Controle Total)»** (fim do arquivo): versão → commit escopado → push nas branches de build → `.\deploy.ps1 -WebOnly` (só hosting) → functions escopadas → `.\build_aab_release.ps1` → iOS no GitHub Actions (start do dono). Codemagic = legado.
 
 **Gatilhos de cautela extra (não quebrar):**
 
@@ -73,9 +73,9 @@ lib/constants/app_version.dart
 
 | Script | Função |
 |--------|--------|
-| `scripts/sync_app_version.ps1` | Sincroniza dart → pubspec, gradle, `web/version.json` |
-| `scripts/bump_build.ps1` | Incrementa build + sync |
-| `scripts/sync_app_version_from_dart.sh` | Validação bash (Codemagic) |
+| `scripts/sync_app_version.ps1` | **Script único de versão.** Sem parâmetro: alinha tudo a partir do dart. `-Build N` (+ `-Marketing X`): novo release (buildNumber = versionCode = N, iosBuildNumber = máx(ios+1, N)). `-Conferir [-Antigo N]`: tabela de todos os pontos + onde sobrou build antigo (exit 1 se divergir). Pontos: dart, pubspec, build.gradle, `web/index.html` (`flutter_bootstrap.js?v=`, `swVersion`), `web/firebase-messaging-sw.js` (`BANNER_CACHE_V`), `web/version.json` |
+| `scripts/bump_build.ps1` | Atalho: `sync_app_version.ps1 -Build <atual+1>` |
+| `scripts/sync_app_version_from_dart.sh` | Validação bash (CI iOS) |
 | `deploy.ps1` | Chama sync no início do deploy |
 | `force_version_online.ps1` | Grava `app_config/version` no Firestore |
 
@@ -578,8 +578,10 @@ Principais collection groups indexados:
 
 | Modo | Comando | Escopo |
 |------|---------|--------|
-| Rápido | `.\deploy.ps1 -WebOnly` | web + Firebase (hosting/rules/functions conforme script) |
-| Completo | `.\deploy.ps1` | web+Firebase → AAB/`Export-AabIosTemporarios` → CodeMagic |
+| **Web (padrão)** | `.\deploy.ps1 -WebOnly` | **SÓ hosting** (`firebase deploy --only hosting --project wisdomapp-b9e98`). Desde 01/10/2026 — antes publicava também firestore/storage/**todas as functions** + bootstrap |
+| Plano sem publicar | `.\deploy.ps1 -WebOnly -DryRun` | Confere versão, token e `load()`; não builda nem publica |
+| Completo legado | `.\deploy.ps1` | web + firestore/storage + TODAS as functions + bootstrap + `build_aab_release.ps1`. **Só com pedido explícito** — o roteiro padrão é `-WebOnly` + functions escopadas |
+| Codemagic legado | `.\deploy.ps1 -LegacyCodemagic` | + ZIP iOS (`Export-AabIosTemporarios`) + commit automático amplo + push + trigger Codemagic (fluxo antigo; `-NoCodemagicPush` virou no-op) |
 | Force version | **não** no deploy padrão | Admin ou `.\force_version_online.ps1` |
 | Clean | só com `-Clean` | `flutter clean` |
 
@@ -591,8 +593,8 @@ Principais collection groups indexados:
 4. **Garantir** `build/web/flutter_bootstrap.js` com `_flutter.loader.load(...)` (nunca stripar)
 5. Sync `web/version.json` / `build/web/version.json`
 6. `Validate-HostingPreDeploy.ps1` (exige `load()` no bootstrap)
-7. `scripts/Invoke-FirebaseDeploy.ps1` (token `.firebase-ci-token`)
-8. Completo: AAB → `D:\TEMPORARIOS\WISDOMAPP_*` · zip iOS · branches `codemagic-ios-ready` / `codemagic-10-05-ready`
+7. `scripts/Invoke-FirebaseDeploy.ps1` (token `.firebase-ci-token`; `--project wisdomapp-b9e98` explícito; `-HostingOnly` no `-WebOnly`)
+8. Completo: `build_aab_release.ps1` → `D:\TEMPORARIOS\WISDOMAPP_*`; git **não** é mais automático (push manual nas branches de build — ver seção «Deploy completo (padrão Controle Total)»)
 
 **Incidente corrigido 02/08/2026:** versão antiga do `deploy.ps1` comentava/removia `load()` assumindo que `index.html` chamava — a web ficava no splash («Quase pronto…» / timeout). **Nunca reintroduzir esse strip.**
 
@@ -774,6 +776,7 @@ c:\WISDOMAPP\WISDOMAPP_MEMORIA_BKP.md                ← ESTE ARQUIVO
 | Data | Release | Registro |
 |------|---------|----------|
 | 01/10/2026 | 10.05+26 (sem deploy) | **Leveza e velocidade — vídeos, lançamentos, app e Android** (commits `e8f420e`, `babf9de`, `d58bdb2`, `2024ebb`, `3103077`). **Vídeos:** capa do YouTube por resolução (`YoutubeUrlHelper.thumbnailUrlsForWidth`): listas = `mqdefault` (16:9, ~10 KB); destaque/tela do curso/tela cheia = largura × DPR → `maxresdefault` (1280×720 é o máximo que o YouTube fornece) com reserva sd→hq→mq. Capa **sempre inteira** (`CourseFramedImage`: `BoxFit.contain` + a mesma imagem decodificada a 24 px como fundo desfocado e escurecido — sem blur por frame), placeholder em gradiente sem spinner, `cacheWidth` pelo quadro (sem upscale). Memo das URLs de capa (`CourseMediaUrlResolver.resolveImageUrls`, TTL 15 min, `cachedImageUrls` síncrono, Storage em paralelo; modo leve com YouTube não varre o Storage). **Player:** identidade estável (`imageFingerprint`) — antes qualquer rebuild do pai com Map novo PARAVA o vídeo; embed não recarrega quando só o pôster chega (autoplay); **um player por vez** (`CourseActivePlayer` destrói o embed anterior — inclusive o de baixo da tela cheia); MP4 `preload=metadata` até tocar; busca da vitrine com debounce 250 ms; `web/index.html` com `dns-prefetch` (img.youtube.com, youtube-nocookie, youtube, ytimg) — boot intocado. Upload de capa do admin já aceita até 4K (sem redimensionar; só a exibição usa `cacheWidth`). **Lançamentos:** `TransactionSaveService.writeLocalFirst` — o Future do Firestore só termina com o OK do servidor (offline: nunca); agora espera 120 ms por erro imediato e segue (falha tardia: aviso + na exclusão relê o período). Vale para novo lançamento (Financeiro e Início), edição (`finance_transaction_edit_dialog`), exclusão (sem leitura prévia; transferência em 1 lote) e exclusão em lote (`WriteBatch` ≤450, antes 1 delete por vez); confirmar pagamento abre com os dados da tela; `UserCategoriesService.load` com memo de 90 s (limpo a cada alteração). **App:** `widgets/keyed_stream_builder.dart` — `StreamBuilder(stream: ref.snapshots())` no build trocado em menu lateral, Objetivos, Painel (`dashboard_screen`), Orçamento, folha de lançamentos do objetivo, mensagens globais, manutenção, escolha de plano, Open Finance e produtividade; cache de cursos lido depois do 1º frame também no celular. **Não tocado (outro agente):** `WisdomDashboardScreen`/home_* e `goal_52_weeks_objective_card`, `fifty_two_weeks_schedule_sheet` (ainda com `.snapshots()` no build — sugestão). **Web — não ligado:** `--tree-shake-icons` compila (MaterialIcons 1.645.184→90.948 B, Cupertino 257.628→1.472, FA Brands 215.132→2.304), MAS `firebase.json` serve `/assets/**` com `immutable` 1 ano e o nome da fonte não muda: depois de um deploy o navegador ficaria com a fonte cortada antiga (ícones em branco). Ligar só junto com cache curto/`no-cache` para `assets/fonts` e `AssetManifest*` (mesmo risco já existe hoje para assets novos). **Android R8:** removidos `-keep { *; }` de firebase/gms/gson/mercadopago; ficam só `io.flutter.plugins.firebase.firestore.**`, `com.dexterous.flutterlocalnotifications.models.**`, atributos e dontwarn. Medido no AAB release: dex 8.845.020→7.357.188 B (−16,8%), sem `missing_rules`. **Testar no aparelho (Android release):** login e-mail/Google/Apple; Firestore lendo/gravando offline e online; push FCM com app fechado; notificação agendada (criar, reiniciar o aparelho, conferir que dispara); widgets 3 tamanhos; OCR/ML Kit; upload de comprovante (Storage/Functions); player de cursos (YouTube e MP4) e tela cheia; calendário do aparelho; compra/assinatura se houver. **Testar cursos:** capas inteiras sem faixa/corte em lista e destaque, nitidez em tela grande, tocar um vídeo e abrir outro (o 1º para), digitar na busca com vídeo do feed tocando (não para). **Testar lançamentos:** salvar/editar/excluir com e sem internet (aparece na hora; sincroniza depois). |
+| 01/10/2026 | 10.05+26 (sem deploy) | **Deploy completo padronizado com o Controle Total** (commit `d065b80`; ver seção «Deploy completo (padrão Controle Total)» no fim). `sync_app_version.ps1` virou o script único (`-Build N`, `-Marketing`, `-Conferir`, `-Antigo`; regex case-sensitive — o `-replace` antigo casava `buildNumber` dentro de `iosBuildNumber`); marcadores de cache-bust novos: `web/index.html` (`flutter_bootstrap.js?v=26`, `swVersion = "v=26"` no registro do `firebase-messaging-sw.js`) e `BANNER_CACHE_V` no SW (ícones do push com `?v=`). `deploy.ps1 -WebOnly` = **só hosting** (antes ia functions/firestore/storage + bootstrap junto) + `-DryRun`; completo sem git automático (`-LegacyCodemagic` mantém o fluxo antigo). Novos: `build_aab_release.ps1` (analyze → appbundle → 16 KB → `D:\TEMPORARIOS` → conferência), `scripts/Validate-Aab16Kb.ps1`, `scripts/Conferir-Aab.ps1` (versionCode do manifest, READ_CONTACTS, strings em utf-8/latin-1/utf-16). `Invoke-FirebaseDeploy.ps1` com `--project wisdomapp-b9e98`. `codemagic-ios.yml` agora só manual (não dispara Codemagic a cada push). |
 | 01/10/2026 | 10.05+26 (sem deploy) | **Admin Cursos — envio rápido** (`f6fec69`). Card «Enviar vídeo rápido» no topo de `admin_cursos_tab.dart`: colar link → prévia via oEmbed público (`youtube_oembed_service.dart`, aceita CORS na web; falhou = só o ID) → título automático; essenciais visíveis e MP4/validade/publicado em «Mais opções»; botão «Publicar» com Salvando…/Publicado ✓ sem travar a tela; MP4 com progresso e «Cancelar envio» (`CourseUploadCancelToken` em `course_video_file_service.dart`); validação de formato/tamanho antes de enviar; capa até 3840x2160 (`courseCoverMaxEdge` 1920→3840). Biblioteca em lista compacta (cards grandes no botão). Streams `app_config`/`course_stats` guardados no estado. Sem campo de ordem em `course_videos` → sem arrastar para ordenar. |
 | 01/10/2026 | 10.05+26 (sem deploy) | **Início (`WisdomDashboardScreen`) modernizado no padrão do painel do Controle Total** (commits `87ece7f`, `c73277a`, `4ad11b5`, `f173c47`, `f385333`, `34d3449`). Ordem no celular: cabeçalho (marca, «Bom dia/Boa tarde/Boa noite, Nome», data por extenso) → **Acesso rápido** (grade com os 9 módulos do shell: 1 Financeiro, 2 Objetivos, 3 Agenda, 7 Cursos, 5 Dicas, 6 Relatórios, 4 Calculadora, 8 Anotações, 9 Ajustes; 4/5/9 por linha) → Dica do dia (+ Veja mais) → **Seu Financeiro** → Objetivos Financeiros. Tela ≥ 1100 px: 2 colunas (financeiro 3/5 · dica+objetivos 2/5); conteúdo centralizado até 1400 px. Os 4 chips do cabeçalho antigo viraram a grade (todos os destinos mantidos). **Financeiro do Início** (`home_finance_overview_panel.dart`): período (Mês anterior/Mensal/Anual/Por período), card do saldo (acumulado + abertura + receitas/despesas + barra receitas×despesas + «Sobrou/Faltou» + sparkline), carrossel de contas, «Em aberto» (`home_pendentes_cards.dart`: Receitas/Despesas pendentes com a MESMA regra das faixas do `finance_screen` + «Contas fixas de <mês>» A pagar/A receber que abre o `FixasAPagarPainel`; lista dos pendentes em folha com `FixasVisaoGeral` no topo e Pagar/Receber pelo `showFinanceConfirmPaymentSheet`), gráficos «Evolução do Saldo» (só o pago — `movimentoDiarioPago` + abertura real; para em hoje) e «Despesas por categoria» (`CategoriasRoscaModerna`, abas Ícones·Pizza 3D·Barras, despesas pagas do período), botão «Ir para o Financeiro». Toque em Receitas/Despesas agora abre o insight do escopo certo (antes os dois abriam «saldo»). Ocultar valores vale para tudo (gráficos inclusive). **Performance:** nenhuma leitura pesada nova — lançamentos do período = UMA escuta guardada no estado (troca só com o período), contas/objetivos/dicas com escuta guardada (antes `.snapshots()`/streams criados no build), último valor por usuário em memória (volta ao Início sem piscar), pendentes abrem depois do 1º quadro e reconectam 2/4/8/16 s mantendo o último valor bom. `financeTransactionsPeriodDocs` passou a FECHAR as 3 escutas no `onCancel` (antes ficavam vivas para sempre). Helpers puros + teste: `utils/home_painel_resumo.dart`, `test/home_painel_resumo_test.dart`. Fórmula de saldo intocada; `DashboardScreen` (reserva) não mexida. **Lição:** havia arquivos do Cursos já em stage por outro agente — commitar SEMPRE com `git commit --only -- <arquivos>` para não levar o stage alheio. |
 | 01/10/2026 | 10.05+26 (sem deploy) | **Financeiro — port do Controle Total (30/09–01/10)** (commits `d35ecdc`, `4140571`, `73ac1a2`, `9a841b0`, `30f094d`, `1eb528f`). **Fixas:** `utils/fixas_resumo.dart` + widgets `fixas_totalizador_card` (total do mês com valor LANÇADO, aviso de valor diferente, chips, pizza 3D), `fixas_visao_geral` (Mês atual padrão, Em aberto × Previsão do mês, valores em cima das barras), `fixas_mes_a_mes` (card + relatório), `fixas_a_pagar_painel` («O que tenho que pagar/receber»; sem Finance Pro → paga sempre pelo Confirmar pagamento normal). Ordem nas telas: total → fixas cadastradas → período → mês a mês → a pagar. Helpers novos: `theme/theme_context.dart` (cores neón locais, GeminiTheme não foi tocado), `periodo_campos`, `modern_module_ui`, `categorias_painel`, `categorias_rosca_moderna`. Visão geral também no topo das listas de Receitas/Despesas pendentes. **Calendário:** lançamento financeiro só aparece na Agenda com `addToCalendar == true` (ausente = desligado; bridge + `agenda_finance_pending_utils`); ao ligar abre a paleta com vermelho/verde (`FinanceCalendarColorPicker.escolherAoAtivar`); fixas legadas sem campo = desligado. **Novo lançamento** começa em «Escolher categoria» e pede a categoria ao confirmar. **Pendentes na Web:** último valor bom + reconexão 2/4/8/16 s. **Saldos na hora:** delta otimista (`applyMutationToOpening`/`applyMutationToPeriodNet`, `FinanceOpeningBalanceService.applyOptimisticMutation` + `revision`, refresh autoritativo quando o bucket confirma, também limpa `FinanceServerTotals`). **Painel (DashboardScreen):** Evolução do Saldo só com o pago (`movimentoDiarioPago`) e PDF com abertura real. **Fatura:** prévia sem cortes. Testes novos em `test/` (fixas_resumo, finance_calendar_opt_in, finance_balance_optimistic_delta, finance_evolucao_saldo). **Não portado (não se aplica):** Finance Pro/baixa de controle (sem contas `externalResourceId`/Polp), pagamento de fatura/transferência fora dos totais (nada no WISDOMAPP grava `faturaPagamento`/`transferenciaPropria`), faturas iguais ao banco (functions `cartao_faturas*`/Polp inexistentes), datas Fecha/Vence no card do cartão (modelo sem `cardDueDay` e card sem linha de info), pendentes do Vendas (sem módulo), «pendente fica pendente» (WISDOMAPP não converte pendente em pago). Sem functions para deploy. |
@@ -1195,3 +1198,145 @@ conta. Chave `.p8` e credencial: quem roda o script e o dono da conta, nunca o a
 quando o build vem de push — em push o contexto `inputs` vem vazio, e no GitHub Actions
 string vazia compara igual a `false`. O run fica verde sem ter enviado nada. A forma certa
 e `if: ${{ github.event_name != 'workflow_dispatch' || inputs.X }}`.
+
+---
+
+## Deploy completo (padrão Controle Total) — 01/10/2026
+
+Mesmo roteiro do Controle Total (`C:\Controletotalapp_Independente`), adaptado ao WISDOMAPP
+(Flutter na raiz, Firebase `wisdomapp-b9e98`, repo `raihom-netizen/wisdomapp`).
+**Atalho:** quando o dono disser só «deploy completo com versão N» (N = novo build, ex.: 27),
+executar os passos abaixo na ordem, sem pedir detalhes. Nada de deploy sem ordem explícita.
+
+### Onde mora a versão (todos com o MESMO build)
+
+| Ponto | Campo | Quem atualiza |
+|-------|-------|---------------|
+| `lib/constants/app_version.dart` | `buildNumber`, `versionCode` (= N), `iosBuildNumber` (= máx(ios+1, N)), `current` (marketing) | `sync_app_version.ps1 -Build N [-Marketing X]` |
+| `pubspec.yaml` | `version: 10.05.0+N` | sync |
+| `android/app/build.gradle` | `versionCode = N`, `versionName` — **no WISDOMAPP é fixo** (não usa `flutter.versionCode`), então é ele que vale no AAB | sync |
+| `web/index.html` | `flutter_bootstrap.js?v=N`, `swVersion = "v=N"` (registro do FCM SW — é o que atualiza o PWA instalado) | sync (só esses marcadores; nada mais do index) |
+| `web/firebase-messaging-sw.js` | `const BANNER_CACHE_V = "N"` | sync |
+| `web/version.json` | version / buildNumber / versionCode / releaseTag | sync (e o `deploy.ps1` regrava `build/web/version.json`) |
+| `ios/asc_build_number_floor.txt` | piso do App Store Connect | o CI iOS sobe o `iosBuildNumber` sozinho se ficar ≤ piso (anti-90189) |
+
+`functions/package.json` tem `"version": "49.57.0"` (herdado do CT) — não é ponto de versão do app; não mexer.
+
+### Roteiro passo a passo
+
+**1. Alinhar a versão**
+```powershell
+.\scripts\sync_app_version.ps1 -Build 27                 # (+ -Marketing 10.06 se mudar a versão)
+.\scripts\sync_app_version.ps1 -Conferir -Antigo 26      # tudo True e "Nenhum resto do build 26"
+```
+Se a versão de marketing mudar, a branch de build Android/web muda junto (`codemagic-10-06-ready`).
+
+**2. Confirmar as melhorias no código** — grep dos marcadores da sessão + `flutter analyze`
+(sem `error`). Conferir a §16 desta memória com o que vai sair.
+
+**3. Regras gerais do dono (TODO deploy completo, todos os projetos — `C:\Users\RAIHOM\.claude\CLAUDE.md`)**
+- **READ_CONTACTS / Play Console:** `Select-String android\app\src\main\AndroidManifest.xml -Pattern READ_CONTACTS`
+  e `targetSdk` em `android/app/build.gradle`. Situação 01/10/2026: WISDOMAPP **não** pede
+  READ_CONTACTS, `targetSdk = 36`. Se algum dia pedir: preferir o Seletor de Contatos; se precisar da
+  agenda inteira, a declaração em Play Console › Monitorar e aprimorar › Políticas e programas ›
+  Conteúdo do aplicativo › Permissões de contato é do dono (prazo 27/01/2027 para targetSdk 37+).
+  O `Conferir-Aab.ps1` também avisa se o AAB pedir a permissão. **Informar no resumo do deploy.**
+- **R8 / proguard:** `android/app/proguard-rules.pro` sem `-keep` amplo de biblioteca
+  (`com.google.**`, `com.google.firebase.**`, `androidx.**`…); release com `minifyEnabled true` +
+  `shrinkResources true` + `proguard-android-optimize.txt` (já está). O `build_aab_release.ps1`
+  avisa se achar keep amplo. Enxugado em `3103077` (01/10/2026). Se mexer no proguard: testar o release
+  em aparelho (login, Firestore, push, compras, widgets, câmera, vídeo) e depois ver a taxa no Play Console.
+
+**4. Commit escopado** — só os arquivos da sessão; nunca `git add -A` (o working tree tem muita
+coisa alheia). Se já houver stage de outro agente: `git commit --only -- <arquivos>`.
+```powershell
+git add lib/constants/app_version.dart pubspec.yaml android/app/build.gradle web/version.json web/index.html web/firebase-messaging-sw.js <arquivos da sessão>
+git commit -m "release(10.05+27): <resumo>"     # termina com a linha Co-Authored-By
+```
+Atenção: se `web/index.html` tiver mudança alheia não commitada, stage só os marcadores
+(`git show HEAD:web/index.html` + marcadores → `git hash-object -w --stdin` → `git update-index --cacheinfo 100644,<hash>,web/index.html`).
+
+**5. Push nas branches de build e conferência no GitHub** (remote `origin` =
+`https://github.com/raihom-netizen/wisdomapp.git`; branch local de trabalho = `master`; padrão do repo = `main`)
+
+| Branch | Uso |
+|--------|-----|
+| `codemagic-10-05-ready` | Android/web (nome segue a versão de marketing: `codemagic-<current com ->-ready`) |
+| `codemagic-ios-ready` | iOS — é a que o dono escolhe no Run workflow |
+| `main` | padrão do repo (o workflow aparece na UI a partir dela); manter em dia |
+
+```powershell
+git push origin HEAD:refs/heads/codemagic-10-05-ready
+git push origin HEAD:refs/heads/codemagic-ios-ready
+git push origin HEAD:refs/heads/main
+git push origin master                                   # opcional: espelho da branch local
+git rev-parse --short HEAD
+gh api repos/raihom-netizen/wisdomapp/commits/codemagic-ios-ready --jq '.sha[0:7] + " " + .commit.message'
+gh api repos/raihom-netizen/wisdomapp/commits/codemagic-10-05-ready --jq '.sha[0:7]'
+gh api -H "Accept: application/vnd.github.raw" "repos/raihom-netizen/wisdomapp/contents/lib/constants/app_version.dart?ref=codemagic-ios-ready" | Select-String "buildNumber|versionCode"
+```
+O SHA das branches tem de bater com o `HEAD` local e o `app_version.dart` remoto com o build N.
+Desde 01/10/2026 o push **não** dispara o Codemagic (`codemagic-ios.yml` virou só manual).
+
+**6. WEB online primeiro** (só hosting — nunca functions junto)
+```powershell
+.\deploy.ps1 -WebOnly -DryRun     # plano + versão + token + load()
+.\deploy.ps1 -WebOnly             # build web → load() garantido → version.json → Validate-HostingPreDeploy → hosting
+curl.exe -s https://wisdomapp.com.br/version.json
+curl.exe -s https://wisdomapp-b9e98.web.app/version.json
+curl.exe -s https://wisdomapp-b9e98.web.app/ | Select-String "flutter_bootstrap.js\?v="
+curl.exe -s https://wisdomapp-b9e98.web.app/flutter_bootstrap.js | Select-String "_flutter.loader.load\("
+```
+Nunca remover o `_flutter.loader.load()` do `web/flutter_bootstrap.js` (splash eterno — §2/§10.1).
+
+**7. Backend escopado** (só se a sessão mexeu) — compatível com o app antigo que está nas lojas;
+mudança que quebra vai em fases.
+```powershell
+firebase deploy --only functions:<nome1>,functions:<nome2> --project wisdomapp-b9e98
+firebase deploy --only firestore:rules --project wisdomapp-b9e98
+firebase deploy --only firestore:indexes --project wisdomapp-b9e98
+firebase deploy --only storage --project wisdomapp-b9e98
+```
+`functions/index.js` é grande: se der «Timeout after 10000» na descoberta, `$env:FUNCTIONS_DISCOVERY_TIMEOUT="300"`.
+Sempre `--project wisdomapp-b9e98` (o CLI da máquina pode estar no projeto do Controle Total).
+
+**8. AAB** (10–20 min; rodar em background)
+```powershell
+.\build_aab_release.ps1 -DryRun
+.\build_aab_release.ps1 -Strings "texto novo 1","texto novo 2"
+# saída: D:\TEMPORARIOS\WISDOMAPP_10.05+27_27_release.aab  (+ WISDOMAPP_ultimo_release.aab)
+.\scripts\Conferir-Aab.ps1 -StringsArquivo C:\caminho\strings.txt   # textos com acento: arquivo UTF-8, 1 por linha
+```
+O script: confere a versão → `flutter analyze` (falha só em `error`) → `flutter build appbundle --release
+--no-tree-shake-icons` → `Validate-Aab16Kb.ps1` (libs 64-bit com alinhamento ≥ 0x4000) → cópia →
+`Conferir-Aab.ps1` (versionCode REAL do manifest do AAB, package, versionName, READ_CONTACTS e strings no
+`libapp.so` em utf-8/latin-1/utf-16-le, com controles «WISDOMAPP» deve existir / «zzz_nao_existe_zzz» não).
+Exige `android/key.properties` (senão sairia assinado com debug). Envio ao Play Console = dono.
+
+**9. iOS — o dono dá o start** (GitHub Actions; Codemagic é legado)
+- GitHub › `raihom-netizen/wisdomapp` › **Actions** › **iOS TestFlight (Flutter)** › **Run workflow** ›
+  «Use workflow from»: **`codemagic-ios-ready`** › opções:
+  - `setup_capabilities` — marcar só no 1º build depois de mudar capabilities (economiza ~2 min);
+  - `enviar_testflight` — marcado;
+  - `subir_site` — só funciona com o secret opcional `FIREBASE_SERVICE_ACCOUNT_JSON` (hoje ausente → passo pula sem erro).
+- Linha de comando (só se o dono pedir): `gh workflow run ios_testflight.yml --ref codemagic-ios-ready --repo raihom-netizen/wisdomapp`
+- Acompanhar: `gh run list --repo raihom-netizen/wisdomapp --workflow ios_testflight.yml -L 3` e
+  `gh run view <id> --repo raihom-netizen/wisdomapp` (o `headSha` tem de ser o commit do release).
+- Runner `macos-26` com Xcode 26 escolhido pelo SDK; assinatura via `app-store-connect fetch-signing-files`
+  (perfis do app + widget), IPA `WISDOMAPP.ipa`, gates anti-90189, envio com 3 tentativas.
+- Build OK e envio falhou → workflow **Enviar IPA ao TestFlight** com o número do run.
+- Secrets já gravados (02/09/2026): `APP_STORE_CONNECT_PRIVATE_KEY`, `APP_STORE_CONNECT_KEY_IDENTIFIER`,
+  `APP_STORE_CONNECT_ISSUER_ID`, `CERTIFICATE_PRIVATE_KEY`. Regravar: `.\scripts\configurar_github_ios.ps1` (dono).
+
+**10. Atualizar esta memória** — §1 (versão), §10.5 (artefatos: AAB + SHA-256, version.json online,
+run do iOS), §16 (linha do release); commit `docs(memoria): registrar o release 10.05+N` e push nas
+mesmas branches.
+
+**11. Forçar atualização** — só o dono, depois das lojas aprovarem: Admin › «Subir versão e forçar
+atualização» ou `.\force_version_online.ps1`. O deploy nunca faz isso sozinho.
+
+### Legado (não apagar)
+`codemagic.yaml`, `scripts/codemagic_ios_*`, `Start-CodemagicIos.*`, `Fix-CodemagicIos.*`,
+`scripts/Export-AabIosTemporarios.ps1` (AAB + ZIP iOS), `scripts/push-codemagic-ready.ps1` (faz `git add`
+amplo de `lib/ ios/ packages/` e commit automático — só roda com `.\deploy.ps1 -LegacyCodemagic`),
+workflow `codemagic-ios.yml` (só manual).
