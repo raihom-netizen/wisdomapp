@@ -86,20 +86,37 @@ Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>> financeTransactionsPer
     controller.add(_mergeTransactionSnapshots([lastA!, lastB!, lastC!]));
   }
 
+  // As 3 escutas eram abertas no onListen e NUNCA fechadas: cada StreamBuilder
+  // que trocava de stream (ex.: painel do Início recriando a cada build)
+  // deixava 3 listeners do Firestore vivos para sempre. Agora fecham quando o
+  // último ouvinte sai e reabrem se alguém voltar a ouvir.
+  final subs = <StreamSubscription<QuerySnapshot<Map<String, dynamic>>>>[];
+  // Erro numa das 3 consultas: só registra (como antes, não chega às telas —
+  // elas seguem com o último valor emitido).
+  void forwardError(Object e, StackTrace st) {
+    debugPrint('financeTransactionsPeriodDocs: $e');
+  }
+
   controller = StreamController<List<QueryDocumentSnapshot<Map<String, dynamic>>>>.broadcast(
     onListen: () {
-      byDate.listen((s) {
+      subs.add(byDate.listen((s) {
         lastA = s;
         emit();
-      });
-      byEffective.listen((s) {
+      }, onError: forwardError));
+      subs.add(byEffective.listen((s) {
         lastB = s;
         emit();
-      });
-      byPaidAt.listen((s) {
+      }, onError: forwardError));
+      subs.add(byPaidAt.listen((s) {
         lastC = s;
         emit();
-      });
+      }, onError: forwardError));
+    },
+    onCancel: () {
+      for (final s in subs) {
+        s.cancel();
+      }
+      subs.clear();
     },
   );
   return controller.stream;
