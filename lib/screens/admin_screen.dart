@@ -44,6 +44,7 @@ import 'admin_migracao_email_tab.dart';
 import 'admin_tips_page.dart';
 import 'admin_notification_templates_tab.dart';
 import 'admin_sugestoes_tab.dart';
+import 'admin_painel_geral_tab.dart';
 import '../services/functions_service.dart';
 import 'package:intl/intl.dart';
 import '../utils/url_launcher_helper.dart' as url_helper;
@@ -1984,6 +1985,8 @@ class _AdminScreenState extends State<AdminScreen> {
     switch (item) {
       case AdminMenuItem.resumo:
         return 'Resumo';
+      case AdminMenuItem.painelGeral:
+        return 'Painel geral';
       case AdminMenuItem.usuarios:
         return 'Usuários';
       case AdminMenuItem.usuarios360:
@@ -2216,6 +2219,12 @@ class _AdminScreenState extends State<AdminScreen> {
     switch (_selectedItem) {
       case AdminMenuItem.resumo:
         return _buildResumoTab(brandBlue, brandTeal);
+      case AdminMenuItem.painelGeral:
+        return AdminPainelGeralTab(
+          onAbrir: _onAdminMenuSelected,
+          podeAbrir: (i) =>
+              _adminPermissions.canAccessMenuItem(_adminCapability, i),
+        );
       case AdminMenuItem.usuarios:
         return _buildUsuariosTab(brandBlue, brandTeal);
       case AdminMenuItem.usuarios360:

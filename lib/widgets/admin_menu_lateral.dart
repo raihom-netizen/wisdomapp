@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
-enum AdminMenuItem { resumo, usuarios, usuarios360, equipe, logs, relatorios, sugestoes, dicasFinanceiras, downloads, landing, acessosDominio, escala, drive, mercadopago, cursos, pluggy, openFinanceExtras, premiumProMonitor, promocoes, convenios, lojas, migracaoEmail, email, manutencao, voltar }
+enum AdminMenuItem { resumo, painelGeral, usuarios, usuarios360, equipe, logs, relatorios, sugestoes, dicasFinanceiras, downloads, landing, acessosDominio, escala, drive, mercadopago, cursos, pluggy, openFinanceExtras, premiumProMonitor, promocoes, convenios, lojas, migracaoEmail, email, manutencao, voltar }
 
 /// Cor de destaque por módulo — menu admin moderno e colorido.
 Color adminMenuAccentColor(AdminMenuItem item) {
   switch (item) {
     case AdminMenuItem.resumo:
       return const Color(0xFF6366F1);
+    case AdminMenuItem.painelGeral:
+      return const Color(0xFF2563EB);
     case AdminMenuItem.usuarios:
       return const Color(0xFF2D5BFF);
     case AdminMenuItem.usuarios360:
@@ -97,40 +99,99 @@ class AdminMenuLateral extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final allowed = allowedItems?.toSet();
-    final filteredEntries = <({AdminMenuItem item, String title, IconData icon})>[
-      (item: AdminMenuItem.resumo, title: 'Resumo', icon: Icons.dashboard_rounded),
-      (item: AdminMenuItem.usuarios, title: 'Usuários', icon: Icons.people_rounded),
-      (item: AdminMenuItem.usuarios360, title: 'WISDOMAPP 360°', icon: Icons.hub_rounded),
-      (item: AdminMenuItem.equipe, title: 'Equipe', icon: Icons.groups_rounded),
-      (item: AdminMenuItem.logs, title: 'Logs', icon: Icons.history_rounded),
-      (item: AdminMenuItem.relatorios, title: 'Relatórios', icon: Icons.bar_chart_rounded),
-      (item: AdminMenuItem.sugestoes, title: 'Sugestões', icon: Icons.feedback_rounded),
-      (item: AdminMenuItem.dicasFinanceiras, title: 'Dicas financeiras', icon: Icons.lightbulb_rounded),
-      (item: AdminMenuItem.downloads, title: 'Downloads', icon: Icons.download_rounded),
-      (item: AdminMenuItem.landing, title: 'Landing / Divulgação', icon: Icons.web_rounded),
-      (item: AdminMenuItem.acessosDominio, title: 'Acessos domínio', icon: Icons.analytics_rounded),
-      (item: AdminMenuItem.escala, title: 'Escala', icon: Icons.calendar_month_rounded),
-      (item: AdminMenuItem.drive, title: 'Backups', icon: Icons.cloud_rounded),
-      (item: AdminMenuItem.mercadopago, title: 'Mercado Pago', icon: Icons.payment_rounded),
-      (item: AdminMenuItem.cursos, title: 'Cursos em vídeo', icon: Icons.ondemand_video_rounded),
-      (item: AdminMenuItem.promocoes, title: 'Promoções', icon: Icons.local_offer_rounded),
-      (item: AdminMenuItem.convenios, title: 'Convênios', icon: Icons.handshake_rounded),
-      (item: AdminMenuItem.lojas, title: 'Publicar nas Lojas', icon: Icons.store_rounded),
-      (item: AdminMenuItem.migracaoEmail, title: 'Migração e-mail', icon: Icons.swap_horiz_rounded),
-      (item: AdminMenuItem.email, title: 'E-mail', icon: Icons.email_rounded),
-      (item: AdminMenuItem.manutencao, title: 'Manutenção', icon: Icons.construction_rounded),
+    // Seções coloridas (padrão Controle Total): cada área com a sua cor no
+    // cabeçalho e no ícone. Nenhum item saiu — só foram agrupados; seção sem
+    // item permitido para o perfil (gestor/sócio) some sozinha.
+    const azul = Color(0xFF60A5FA);
+    const verde = Color(0xFF4ADE80);
+    const ambar = Color(0xFFFBBF24);
+    const vermelho = Color(0xFFF87171);
+    const teal = Color(0xFF2DD4BF);
+    const rosa = Color(0xFFF472B6);
+    const cinza = Color(0xFF94A3B8);
+    final secoes = <({String titulo, Color cor, List<({AdminMenuItem item, String title, IconData icon})> itens})>[
+      (
+        titulo: 'VISÃO GERAL',
+        cor: azul,
+        itens: [
+          (item: AdminMenuItem.painelGeral, title: 'Painel geral', icon: Icons.space_dashboard_rounded),
+          (item: AdminMenuItem.resumo, title: 'Resumo', icon: Icons.dashboard_rounded),
+          (item: AdminMenuItem.relatorios, title: 'Relatórios', icon: Icons.bar_chart_rounded),
+          (item: AdminMenuItem.logs, title: 'Logs', icon: Icons.history_rounded),
+        ],
+      ),
+      (
+        titulo: 'USUÁRIOS',
+        cor: verde,
+        itens: [
+          (item: AdminMenuItem.usuarios, title: 'Usuários', icon: Icons.people_rounded),
+          (item: AdminMenuItem.usuarios360, title: 'WISDOMAPP 360°', icon: Icons.hub_rounded),
+          (item: AdminMenuItem.equipe, title: 'Equipe', icon: Icons.groups_rounded),
+          (item: AdminMenuItem.sugestoes, title: 'Sugestões', icon: Icons.feedback_rounded),
+        ],
+      ),
+      (
+        titulo: 'FINANCEIRO',
+        cor: ambar,
+        itens: [
+          (item: AdminMenuItem.mercadopago, title: 'Mercado Pago', icon: Icons.payment_rounded),
+          (item: AdminMenuItem.promocoes, title: 'Promoções', icon: Icons.local_offer_rounded),
+          (item: AdminMenuItem.convenios, title: 'Convênios', icon: Icons.handshake_rounded),
+        ],
+      ),
+      (
+        titulo: 'CONTEÚDO',
+        cor: vermelho,
+        itens: [
+          (item: AdminMenuItem.cursos, title: 'Cursos em vídeo', icon: Icons.ondemand_video_rounded),
+          (item: AdminMenuItem.dicasFinanceiras, title: 'Dicas financeiras', icon: Icons.lightbulb_rounded),
+          (item: AdminMenuItem.landing, title: 'Landing / Divulgação', icon: Icons.web_rounded),
+          (item: AdminMenuItem.downloads, title: 'Downloads', icon: Icons.download_rounded),
+          (item: AdminMenuItem.acessosDominio, title: 'Acessos domínio', icon: Icons.analytics_rounded),
+        ],
+      ),
+      (
+        titulo: 'MÓDULOS',
+        cor: teal,
+        itens: [
+          (item: AdminMenuItem.escala, title: 'Escala', icon: Icons.calendar_month_rounded),
+        ],
+      ),
+      (
+        titulo: 'COMUNICAÇÃO',
+        cor: rosa,
+        itens: [
+          (item: AdminMenuItem.email, title: 'E-mail', icon: Icons.email_rounded),
+          (item: AdminMenuItem.migracaoEmail, title: 'Migração e-mail', icon: Icons.swap_horiz_rounded),
+        ],
+      ),
+      (
+        titulo: 'SISTEMA',
+        cor: cinza,
+        itens: [
+          (item: AdminMenuItem.manutencao, title: 'Manutenção', icon: Icons.construction_rounded),
+          (item: AdminMenuItem.drive, title: 'Backups', icon: Icons.cloud_rounded),
+          (item: AdminMenuItem.lojas, title: 'Publicar nas Lojas', icon: Icons.store_rounded),
+        ],
+      ),
     ];
-    final visibleMenu = allowed == null
-        ? filteredEntries
-        : filteredEntries.where((e) => allowed.contains(e.item)).toList();
-    final menuWidgets = visibleMenu
-        .map((e) => _menuItem(
-              context,
-              e.item,
-              titleOverrides?[e.item] ?? e.title,
-              e.icon,
-            ))
-        .toList();
+    final menuWidgets = <Widget>[];
+    for (final sec in secoes) {
+      final visiveis = allowed == null
+          ? sec.itens
+          : sec.itens.where((e) => allowed.contains(e.item)).toList();
+      if (visiveis.isEmpty) continue;
+      menuWidgets.add(_secao(sec.titulo, sec.cor));
+      for (final e in visiveis) {
+        menuWidgets.add(_menuItem(
+          context,
+          e.item,
+          titleOverrides?[e.item] ?? e.title,
+          e.icon,
+          cor: sec.cor,
+        ));
+      }
+    }
     final content = Container(
       width: asDrawer ? null : (isCollapsed ? 72 : 260),
       decoration: const BoxDecoration(
@@ -195,10 +256,42 @@ class AdminMenuLateral extends StatelessWidget {
     return content;
   }
 
+  /// Cabeçalho de seção (vira só um divisor com o menu recolhido).
+  Widget _secao(String titulo, Color cor) {
+    if (isCollapsed && !asDrawer) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 6),
+        child: Divider(color: Colors.white10, height: 1),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: cor, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            titulo,
+            style: TextStyle(
+              color: cor,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// BLINDAGEM: InkWell com área mínima 48px (ver blindagem-ux-menus-touch.mdc).
-  Widget _menuItem(BuildContext context, AdminMenuItem item, String title, IconData icon) {
+  Widget _menuItem(BuildContext context, AdminMenuItem item, String title, IconData icon, {Color? cor}) {
     final selected = selectedItem == item;
-    final accent = adminMenuAccentColor(item);
+    final accent = cor ?? adminMenuAccentColor(item);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       child: Material(
