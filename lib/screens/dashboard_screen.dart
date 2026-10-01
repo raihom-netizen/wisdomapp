@@ -4464,62 +4464,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return m;
   }
 
-  /// Saldo de abertura **por conta** (lançamentos pagos com data efetiva antes do início do período).
-  /// Igual [FinanceScreen]._loadSaldoAberturaPorContaFor — necessário para o modal bater com «Saldo (acum.)».
-  Map<String, double> _openingNetByFinanceAccountBefore(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
-    DateTime periodStartDay,
-  ) {
-    final start =
-        DateTime(periodStartDay.year, periodStartDay.month, periodStartDay.day);
-    final byAcc = <String, double>{};
-    for (final doc in docs) {
-      final d = doc.data();
-      final ts = d['date'];
-      final effectiveDate = FinanceLineOpening.effectiveDateTimeFromMap(d) ??
-          (ts is Timestamp ? ts.toDate() : null);
-      if (effectiveDate == null || !effectiveDate.isBefore(start)) continue;
-      final isPaid = (d['status'] ?? 'paid').toString() == 'paid';
-      if (!isPaid) continue;
-      final aid = (d['financeAccountId'] ?? '').toString().trim();
-      if (aid.isEmpty) continue;
-      final amount = (d['amount'] ?? 0).toDouble();
-      final type = (d['type'] ?? 'expense').toString();
-      final delta = type == 'income' ? amount : -amount.abs();
-      byAcc[aid] = (byAcc[aid] ?? 0) + delta;
-    }
-    return byAcc;
-  }
-
-  /// Saldo de abertura total (todas as transações antes do período), igual ao cartão «Saldo de abertura» da faixa verde.
-  double _openingSaldoTotalBefore(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
-    DateTime periodStartDay,
-  ) {
-    final start =
-        DateTime(periodStartDay.year, periodStartDay.month, periodStartDay.day);
-    double saldo = 0;
-    for (final doc in docs) {
-      final d = doc.data();
-      final ts = d['date'];
-      if (ts is! Timestamp) continue;
-      final date = ts.toDate();
-      final effectiveDate =
-          FinanceLineOpening.effectiveDateTimeFromMap(d) ?? date;
-      if (!effectiveDate.isBefore(start)) continue;
-      final isPaid = (d['status'] ?? 'paid').toString() == 'paid';
-      if (!isPaid) continue;
-      final amount = (d['amount'] ?? 0).toDouble();
-      final type = (d['type'] ?? 'expense').toString();
-      if (type == 'income') {
-        saldo += amount;
-      } else {
-        saldo -= amount.abs();
-      }
-    }
-    return saldo;
-  }
-
   Map<String, double> _mergeOpeningAndPeriodByAccount(
     Map<String, double> openingByAccount,
     Map<String, double> periodByAccount,
@@ -5374,12 +5318,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
         return;
       }
-      final saldoAbertura = openingBalanceHint ??
-          ((financeAccountId == null || financeAccountId.isEmpty)
-              ? _openingSaldoTotalBefore(sourceDocs, f)
-              : (_openingNetByFinanceAccountBefore(
-                      sourceDocs, f)[financeAccountId] ??
-                  0.0));
+      // Sem valor vindo da tela: saldo de abertura REAL (buckets do servidor
+      // + parcial do mês), a mesma fonte do saldo do app. Antes era somado só
+      // com os lançamentos do período (≈ 0) — port Controle Total.
+      double saldoAbertura;
+      if (openingBalanceHint != null) {
+        saldoAbertura = openingBalanceHint;
+      } else {
+        final open = await FinanceOpeningBalanceService.load(
+          uid: widget.uid,
+          periodStart: f,
+          loadAccounts: true,
+        );
+        saldoAbertura = (financeAccountId == null || financeAccountId.isEmpty)
+            ? open.total
+            : (open.byAccount[financeAccountId] ?? 0.0);
+      }
       double totalIncome = 0, totalExpense = 0;
       for (final doc in periodDocs) {
         final d = doc.data();
@@ -6635,39 +6589,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (saldoAnteriorOverride != null) {
       saldoAnterior = saldoAnteriorOverride;
     } else {
+      // Mesma regra do saldo: pago com data efetiva antes do início.
       for (final doc in docs) {
         final d = doc.data();
-        final ts = d['date'];
-        if (ts is! Timestamp) continue;
-        final date = ts.toDate();
-        final paidAtTs = d['paidAt'];
-        final paidAt = paidAtTs is Timestamp ? paidAtTs.toDate() : null;
-        final effectiveDate = paidAt ?? date;
-        final amount = (d['amount'] ?? 0).toDouble();
-        final type = (d['type'] ?? 'expense').toString();
-        final isPaid = (d['status'] ?? 'paid').toString() == 'paid';
-        if (effectiveDate.isBefore(limiteAnterior)) {
-          if (type == 'income' && isPaid) saldoAnterior += amount;
-          if (type != 'income' && isPaid) saldoAnterior -= amount.abs();
+        final effectiveDate = FinanceLineOpening.effectiveDateTimeFromMap(d);
+        if (effectiveDate == null || !effectiveDate.isBefore(limiteAnterior)) {
+          continue;
         }
+        saldoAnterior += FinanceLineOpening.openingContribution(d);
       }
     }
-    for (final doc in docs) {
-      final d = doc.data();
-      final ts = d['date'];
-      if (ts is! Timestamp) continue;
-      final date = ts.toDate();
-      final amount = (d['amount'] ?? 0).toDouble();
-      final type = (d['type'] ?? 'expense').toString();
-      final isPaid = (d['status'] ?? 'paid').toString() == 'paid';
-      final dayKey = DateTime(date.year, date.month, date.day);
-      if (!byDay.containsKey(dayKey)) continue;
-      if (type == 'income') {
-        byDay[dayKey] = byDay[dayKey]! + amount;
-      } else if (isPaid) {
-        byDay[dayKey] = byDay[dayKey]! - amount.abs();
-      }
-    }
+    // Só o que está pago, no dia da data efetiva (mesma regra do saldo).
+    // Antes a receita pendente entrava no dia do vencimento.
+    FinanceAccountBalanceUtils.movimentoDiarioPago(
+      items: docs.map((doc) => doc.data()),
+      from: rangeStart,
+      to: rangeEnd,
+    ).forEach((dia, v) {
+      if (byDay.containsKey(dia)) byDay[dia] = byDay[dia]! + v;
+    });
     final sortedDays = byDay.keys.toList()..sort();
     double acum = saldoAnterior;
     final spots = <FlSpot>[];

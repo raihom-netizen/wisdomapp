@@ -213,6 +213,33 @@ class FinanceAccountBalanceUtils {
     return out;
   }
 
+  /// Movimento do saldo dia a dia (gráfico «Evolução do Saldo» do painel):
+  /// só o que está PAGO, no dia da data efetiva (effectiveDate › paidAt ›
+  /// date) — a mesma regra do saldo de abertura. Antes a receita PENDENTE
+  /// entrava e o dia era o do vencimento (port Controle Total, 30/09/2026).
+  /// Chave = dia civil; só dias dentro de [from]..[to].
+  static Map<DateTime, double> movimentoDiarioPago({
+    required Iterable<Map<String, dynamic>> items,
+    required DateTime from,
+    required DateTime to,
+  }) {
+    final rs = DateTime(from.year, from.month, from.day);
+    final re = DateTime(to.year, to.month, to.day);
+    final m = <DateTime, double>{};
+    for (final d in items) {
+      if ((d['status'] ?? 'paid').toString() != 'paid') continue;
+      final eff = FinanceLineOpening.effectiveDateTimeFromMap(d);
+      if (eff == null) continue;
+      final dia = DateTime(eff.year, eff.month, eff.day);
+      if (dia.isBefore(rs) || dia.isAfter(re)) continue;
+      final raw = d['amount'];
+      final amount = raw is num ? raw.toDouble() : (double.tryParse('$raw') ?? 0);
+      final type = (d['type'] ?? 'expense').toString();
+      m[dia] = (m[dia] ?? 0) + (type == 'income' ? amount : -amount.abs());
+    }
+    return m;
+  }
+
   /// Movimento líquido pago no período — cartão não entra no saldo; pagamento de fatura debita o banco escolhido.
   static Map<String, double> netPaidByAccountEffective({
     required Iterable<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
