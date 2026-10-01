@@ -267,12 +267,16 @@ void main() async {
     BiometricStartupCache.warmUpEnabledHint(),
     UserProfileStartupCache.warmUp(),
     HomeStartModuleCache.warmUp(),
-    if (!kIsWeb) CourseVideosCacheService.warmUp(),
     if (!kIsWeb) NotificationCenterStore.instance.warmUp(),
   ]);
   final reopenUid =
       FirebaseAuth.instance.currentUser?.uid ?? AppSessionCache.cachedUidSync();
   runApp(const ControleTotalApp());
+  if (!kIsWeb) {
+    // Cache de cursos (JSON do disco) fora do caminho do 1º frame também no
+    // celular — o módulo Cursos chama ensureLoaded(), que lê o disco se faltar.
+    unawaited(CourseVideosCacheService.warmUp().catchError((_) {}));
+  }
   if (kIsWeb) {
     unawaited(() async {
       try {
