@@ -1316,9 +1316,8 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Future<void> _reloadResumoStats() async {
-    if (kIsWeb) {
-      await FirestoreWebGuard.recoverFirestoreWebSession().catchError((_) {});
-    }
+    // Sem recoverFirestoreWebSession() (terminate) aqui: matava todas as
+    // escutas abertas nos outros módulos do painel (02/10/2026).
     if (!mounted) return;
     setState(() {
       _overlayPartnershipMetrics = null;
@@ -1334,7 +1333,7 @@ class _AdminScreenState extends State<AdminScreen> {
     if (kIsWeb) {
       return AdminLoadGuard.comPrazo(
         runFirestoreWithRetry(
-          () => FirestoreWebGuard.runWithWebRecovery(core),
+          () => FirestoreWebGuard.runFirestoreOpSafe(core),
         ),
         prazo: const Duration(seconds: 90),
         oQue: 'os indicadores',
@@ -4809,7 +4808,7 @@ class _AdminScreenState extends State<AdminScreen> {
           );
 
       final result = kIsWeb
-          ? await FirestoreWebGuard.runWithWebRecovery(call)
+          ? await FirestoreWebGuard.runFirestoreOpSafe(call)
           : await call();
 
       if (!mounted) return;
@@ -7911,13 +7910,18 @@ class _RecebimentosResumoWidgetState extends State<_RecebimentosResumoWidget> {
                 isGreaterThanOrEqualTo: Timestamp.fromDate(queryStart))
             .orderBy('dateApprovedAt', descending: true)
             .limit(800)
-            .get();
+            .get()
+            .timeout(AdminLoadGuard.curto);
       } catch (_) {
-        snap = await FirebaseFirestore.instance
-            .collection('mp_payments')
-            .where('status', isEqualTo: 'approved')
-            .limit(1200)
-            .get();
+        snap = await AdminLoadGuard.comPrazo(
+          FirebaseFirestore.instance
+              .collection('mp_payments')
+              .where('status', isEqualTo: 'approved')
+              .limit(1200)
+              .get(),
+          prazo: AdminLoadGuard.longo,
+          oQue: 'os recebimentos',
+        );
       }
       final list = snap.docs
           .map((d) => d.data())
@@ -8200,11 +8204,17 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
       _loadPaymentsError = null;
     });
     try {
-      if (kIsWeb) {
-        await FirestoreWebGuard.recoverFirestoreWebSession().catchError((_) {});
-      }
-      final snap = await firestoreQueryGetReliable(
-        FirebaseFirestore.instance.collection('mp_payments').limit(500),
+      // NÃO chamar recoverFirestoreWebSession() aqui (02/10/2026): ele faz
+      // terminate() do Firestore a CADA abertura do Mercado Pago e mata todas
+      // as escutas já abertas no painel (perfil, dicas, promoções, sugestões…)
+      // — depois disso os outros módulos ficavam só girando. E sem prazo, a
+      // própria lista girava para sempre se a leitura não voltasse.
+      final snap = await AdminLoadGuard.comPrazo(
+        firestoreQueryGetReliable(
+          FirebaseFirestore.instance.collection('mp_payments').limit(500),
+        ),
+        prazo: AdminLoadGuard.longo,
+        oQue: 'os pagamentos',
       );
       if (!mounted) return;
       setState(() {
@@ -8216,9 +8226,7 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
       setState(() {
         _allPaymentDocs = [];
         _loadingPayments = false;
-        _loadPaymentsError = FirestoreWebGuard.isInternalAssertionError(e)
-            ? 'Instabilidade do Firestore na Web. Toque em Atualizar ou recarregue a página (F5).'
-            : 'Não foi possível carregar os pagamentos.';
+        _loadPaymentsError = AdminLoadGuard.mensagem(e);
       });
     }
   }

@@ -46,60 +46,62 @@ class AdminLoadGuard {
   /// segue normal (silêncio entre atualizações é esperado). Se o 1º evento não
   /// chega em [prazo], entrega um erro e encerra — a tela mostra «Tentar de
   /// novo» em vez de girar para sempre.
+  ///
+  /// Pode ser escutada MAIS DE UMA VEZ (Stream.multi): cada escuta assina a
+  /// origem de novo, com o próprio prazo. Antes era um StreamController de
+  /// assinatura única guardado no State do AdminScreen — ao sair do módulo e
+  /// voltar, o StreamBuilder escutava de novo e dava «Stream has already been
+  /// listened to» (02/10/2026).
   static Stream<T> primeiroDadoComPrazo<T>(
     Stream<T> origem, {
     Duration prazo = curto,
     String oQue = 'os dados',
   }) {
-    late StreamController<T> ctrl;
-    StreamSubscription<T>? sub;
-    Timer? timer;
-    var recebeu = false;
+    return Stream<T>.multi((ctrl) {
+      StreamSubscription<T>? sub;
+      Timer? timer;
+      var recebeu = false;
 
-    void encerrarComErro(Object e, [StackTrace? st]) {
-      timer?.cancel();
-      if (ctrl.isClosed) return;
-      ctrl.addError(e, st);
-      sub?.cancel();
-      ctrl.close();
-    }
+      void encerrarComErro(Object e, [StackTrace? st]) {
+        timer?.cancel();
+        if (ctrl.isClosed) return;
+        ctrl.addError(e, st);
+        sub?.cancel();
+        ctrl.close();
+      }
 
-    ctrl = StreamController<T>(
-      onListen: () {
-        timer = Timer(prazo, () {
-          if (recebeu) return;
-          encerrarComErro(TimeoutException(
-            'O servidor não respondeu a tempo ao carregar $oQue.',
-            prazo,
-          ));
-        });
-        sub = origem.listen(
-          (v) {
-            recebeu = true;
-            timer?.cancel();
-            if (!ctrl.isClosed) ctrl.add(v);
-          },
-          onError: (Object e, StackTrace st) {
-            if (!recebeu) {
-              encerrarComErro(e, st);
-            } else if (!ctrl.isClosed) {
-              ctrl.addError(e, st);
-            }
-          },
-          onDone: () {
-            timer?.cancel();
-            if (!ctrl.isClosed) ctrl.close();
-          },
-        );
-      },
-      onPause: () => sub?.pause(),
-      onResume: () => sub?.resume(),
-      onCancel: () async {
+      timer = Timer(prazo, () {
+        if (recebeu) return;
+        encerrarComErro(TimeoutException(
+          'O servidor não respondeu a tempo ao carregar $oQue.',
+          prazo,
+        ));
+      });
+      sub = origem.listen(
+        (v) {
+          recebeu = true;
+          timer?.cancel();
+          if (!ctrl.isClosed) ctrl.add(v);
+        },
+        onError: (Object e, StackTrace st) {
+          if (!recebeu) {
+            encerrarComErro(e, st);
+          } else if (!ctrl.isClosed) {
+            ctrl.addError(e, st);
+          }
+        },
+        onDone: () {
+          timer?.cancel();
+          if (!ctrl.isClosed) ctrl.close();
+        },
+      );
+      ctrl.onPause = () => sub?.pause();
+      ctrl.onResume = () => sub?.resume();
+      ctrl.onCancel = () async {
         timer?.cancel();
         await sub?.cancel();
-      },
-    );
-    return ctrl.stream;
+      };
+    });
   }
 
   /// Mensagem em português, curta e acionável, para qualquer erro de leitura.

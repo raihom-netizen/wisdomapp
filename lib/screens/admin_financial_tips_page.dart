@@ -12,6 +12,7 @@ import '../services/financial_tips_seed_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/theme_context.dart';
 import '../utils/admin_financial_tip_utils.dart';
+import '../utils/admin_load_guard.dart';
 import '../utils/insights_engine.dart';
 import '../widgets/admin/admin_financial_tip_editor_sheet.dart';
 import '../widgets/admin/admin_financial_tips_schedule_sheet.dart';
@@ -40,7 +41,15 @@ class _AdminFinancialTipsPageState extends State<AdminFinancialTipsPage>
   String? _bookFilter;
   final Set<String> _selectedIds = {};
   late TabController _tabs;
-  late final Stream<QuerySnapshot<Map<String, dynamic>>> _tipsStream;
+
+  /// Escuta em tempo real COM PRAZO no 1º dado + leitura única em paralelo.
+  /// Antes era `_col.snapshots()` puro: no Firestore Web a escuta às vezes
+  /// nunca entrega o 1º evento (nem erro) e a tela ficava só no spinner; e o
+  /// «Tentar novamente» não recriava a escuta (02/10/2026).
+  late Stream<QuerySnapshot<Map<String, dynamic>>> _tipsStream;
+  QuerySnapshot<Map<String, dynamic>>? _firstLoad;
+  Object? _firstLoadError;
+  int _loadGen = 0;
 
   CollectionReference<Map<String, dynamic>> get _col =>
       FirebaseFirestore.instance.collection(InsightsEngine.kFinancialTipsCollection);
@@ -53,9 +62,28 @@ class _AdminFinancialTipsPageState extends State<AdminFinancialTipsPage>
     _tabs = TabController(length: 2, vsync: this);
     _tabs.addListener(_onTabChanged);
     _searchCtrl.addListener(() => setState(() {}));
-    _tipsStream = _col.snapshots();
+    _startTipsLoad();
     _loadHomeConfig();
   }
+
+  void _startTipsLoad() {
+    final gen = ++_loadGen;
+    _firstLoadError = null;
+    _tipsStream = AdminLoadGuard.primeiroDadoComPrazo(
+      _col.snapshots(),
+      oQue: 'as dicas',
+    );
+    AdminLoadGuard.comPrazo(_col.get(), oQue: 'as dicas').then(
+      (s) {
+        if (mounted && gen == _loadGen) setState(() => _firstLoad = s);
+      },
+      onError: (Object e) {
+        if (mounted && gen == _loadGen) setState(() => _firstLoadError = e);
+      },
+    );
+  }
+
+  void _retryTipsLoad() => setState(_startTipsLoad);
 
   void _onTabChanged() {
     if (!_tabs.indexIsChanging) {
@@ -561,14 +589,20 @@ class _AdminFinancialTipsPageState extends State<AdminFinancialTipsPage>
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: _tipsStream,
       builder: (context, snap) {
-        if (snap.hasError) {
-          return _ErrorState(message: snap.error.toString(), onRetry: () => setState(() {}));
-        }
-        if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
+        // Tempo real se chegou; senão a leitura única (que costuma chegar
+        // antes no Web). Só é erro quando NENHUMA das duas trouxe dados.
+        final data = snap.data ?? _firstLoad;
+        if (data == null) {
+          if (snap.hasError || _firstLoadError != null) {
+            return _ErrorState(
+              message: AdminLoadGuard.mensagem(snap.error ?? _firstLoadError),
+              onRetry: _retryTipsLoad,
+            );
+          }
           return const Center(child: CircularProgressIndicator());
         }
 
-        final allDocs = _sortDocs(snap.data?.docs ?? []);
+        final allDocs = _sortDocs(data.docs);
         _maybeOfferBootstrap(allDocs.length);
 
         final filtered = _filterDocs(allDocs);
@@ -775,6 +809,34 @@ class _AdminFinancialTipsPageState extends State<AdminFinancialTipsPage>
                     _selectedIds.clear();
                     _selectionMode = false;
                   }),
+                ),
+              ),
+            // Mostrando a leitura única, mas o tempo real falhou: avisa e
+            // deixa recarregar (senão edições somem da tela sem explicação).
+            if (snap.data == null && snap.hasError)
+              Positioned(
+                left: pad.left,
+                right: pad.right,
+                top: 8,
+                child: Material(
+                  color: Colors.orange.shade700,
+                  borderRadius: BorderRadius.circular(12),
+                  child: ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.sync_problem_rounded,
+                        color: Colors.white),
+                    title: const Text(
+                      'Atualização em tempo real parou.',
+                      style: TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.w700),
+                    ),
+                    trailing: TextButton(
+                      onPressed: _retryTipsLoad,
+                      style:
+                          TextButton.styleFrom(foregroundColor: Colors.white),
+                      child: const Text('Tentar de novo'),
+                    ),
+                  ),
                 ),
               ),
           ],

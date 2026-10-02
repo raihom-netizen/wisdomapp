@@ -2129,7 +2129,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
   Future<T> _courseFirestoreOp<T>(Future<T> Function() fn) async {
     if (kIsWeb) {
       return runFirestoreWithRetry(
-        () => FirestoreWebGuard.runWithWebRecovery(fn),
+        () => FirestoreWebGuard.runFirestoreOpSafe(fn),
       );
     }
     return runFirestoreWithRetry(fn);

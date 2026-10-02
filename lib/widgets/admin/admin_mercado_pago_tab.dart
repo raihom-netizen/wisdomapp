@@ -7,6 +7,7 @@ import '../../services/functions_service.dart';
 import '../../services/mp_admin_config_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/theme_context.dart';
+import '../../utils/admin_load_guard.dart';
 import '../../widgets/fast_text_field.dart';
 import 'admin_ui_kit.dart';
 
@@ -76,7 +77,12 @@ class AdminMercadoPagoTabState extends State<AdminMercadoPagoTab>
       _loadError = null;
     });
     try {
-      final c = await MpAdminConfigService.instance.load();
+      // Com prazo: callable sem resposta não pode deixar o card girando.
+      final c = await AdminLoadGuard.comPrazo(
+        MpAdminConfigService.instance.load(),
+        prazo: AdminLoadGuard.longo,
+        oQue: 'a configuração do Mercado Pago',
+      );
       if (!mounted) return;
       _applySnapshot(c);
     } catch (e) {
