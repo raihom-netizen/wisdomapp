@@ -227,11 +227,52 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
 
   Future<void> _hydrateCategoriesAndAccounts() async {
     final seq = ++_hydrateSeq;
-    final cats = await UserCategoriesService().load(widget.uid);
-    final accounts = await FinanceAccountsService().listOnce(widget.uid);
-    final defId = await FinanceAdvancedSettingsService()
-        .getDefaultFinanceAccountId(widget.uid);
+    // Contas da sessão primeiro (o Início/Financeiro já carregaram): a tela abre
+    // na hora em vez de ficar em «Carregando contas e categorias…».
+    final memo = FinanceAccountsService.peekLastKnown(widget.uid);
+    if (memo != null && memo.isNotEmpty && _loadingLists && mounted) {
+      setState(() => _accounts = memo);
+    }
+    // As 3 leituras juntas, cada uma com prazo e sem derrubar a tela: antes eram
+    // em série e sem prazo/catch — uma leitura presa (web sem cache) deixava o
+    // spinner para sempre.
+    const prazo = Duration(seconds: 12);
+    final res = await Future.wait<Object?>([
+      UserCategoriesService()
+          .load(widget.uid)
+          .timeout(prazo)
+          .then<Object?>((v) => v)
+          .catchError((Object _) => null),
+      FinanceAccountsService()
+          .listOnce(widget.uid)
+          .timeout(prazo)
+          .then<Object?>((v) => v)
+          .catchError((Object _) => null),
+      FinanceAdvancedSettingsService()
+          .getDefaultFinanceAccountId(widget.uid)
+          .timeout(prazo)
+          .then<Object?>((v) => v)
+          .catchError((Object _) => null),
+    ]);
     if (!mounted || seq != _hydrateSeq) return;
+    final catsOrNull = res[0];
+    final accountsOrNull = res[1] as List<FinanceAccount>?;
+    final defId = res[2] as String?;
+    if (catsOrNull == null) {
+      // Sem categorias do servidor: libera a tela com as que já houver.
+      setState(() {
+        if (accountsOrNull != null) _accounts = accountsOrNull;
+        _loadingLists = false;
+      });
+      return;
+    }
+    final cats = catsOrNull as ({
+      List<String> income,
+      List<String> expense,
+      List<String> hiddenDefaultIncome,
+      List<String> hiddenDefaultExpense,
+    });
+    final accounts = accountsOrNull ?? _accounts;
     setState(() {
       _incomeCategories = cats.income
           .where((e) => e != UserCategoriesService.kIncluirNova)
