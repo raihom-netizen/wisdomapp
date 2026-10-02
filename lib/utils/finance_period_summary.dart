@@ -1,3 +1,4 @@
+import 'finance_fora_dos_totais.dart';
 import 'finance_line_opening.dart';
 import 'finance_server_totals.dart';
 import 'finance_transactions_realtime.dart';
@@ -18,7 +19,11 @@ class FinancePeriodSummary {
     return cat == categoryExact;
   }
 
-  static Future<({double income, double expense, int docCount})> load({
+  /// `ajusteSaldo`: líquido PAGO (receitas − despesas) do que ficou FORA dos
+  /// totais (pagamento de fatura, transferência própria, meta). Quem calcula
+  /// saldo a partir de income − expense soma este ajuste — o saldo não muda
+  /// (mesma assinatura do Controle Total).
+  static Future<({double income, double expense, int docCount, double ajusteSaldo})> load({
     required String uid,
     required DateTime from,
     required DateTime to,
@@ -28,7 +33,7 @@ class FinancePeriodSummary {
     /// `all` | `income` | `expense` — só afeta agregação/caminho em lote quando sem categoria.
     String typeFilter = 'all',
   }) async {
-    if (uid.isEmpty) return (income: 0.0, expense: 0.0, docCount: 0);
+    if (uid.isEmpty) return (income: 0.0, expense: 0.0, docCount: 0, ajusteSaldo: 0.0);
     var f = DateTime(from.year, from.month, from.day);
     var t = DateTime(to.year, to.month, to.day, 23, 59, 59);
     if (t.isBefore(f)) {
@@ -49,7 +54,12 @@ class FinancePeriodSummary {
               ? typeFilter
               : 'all',
         );
-        return (income: server.income, expense: server.expense, docCount: 0);
+        return (
+          income: server.income,
+          expense: server.expense,
+          docCount: 0,
+          ajusteSaldo: server.goalReserveNet,
+        );
       } catch (_) {
         // Fallback: agregação local abaixo.
       }
@@ -67,6 +77,7 @@ class FinancePeriodSummary {
     );
     double inc = 0;
     double exp = 0;
+    double ajuste = 0;
     var n = 0;
     // Sem categoria, este cálculo é a RESERVA do servidor (que caiu): mesma
     // regra dele — «Todos» soma só o pago e depósito/resgate de meta fica fora
@@ -79,17 +90,23 @@ class FinancePeriodSummary {
       if (statusEfetivo != 'all') {
         if ((d['status'] ?? 'paid').toString() != statusEfetivo) continue;
       }
-      if (canUseServer && d['goalReserve'] == true) continue;
       final effective = FinanceLineOpening.effectiveDateTimeFromMap(d);
       if (effective == null || effective.isBefore(f) || effective.isAfter(t)) continue;
       if (typeFilter == 'income' && (d['type'] ?? 'expense').toString() != 'income') continue;
       if (typeFilter == 'expense' && (d['type'] ?? 'expense').toString() != 'expense') continue;
       if (!docMatchesCategory(d, categoryExact, semCategoriaToken)) continue;
       n++;
+      // Pagamento de fatura / transferência própria / meta: fora de receita e
+      // despesa, mas volta no saldo (FinancePeriodSummary do Controle Total e
+      // o servidor).
+      if (financeForaDosTotais(d)) {
+        if ((d['status'] ?? 'paid').toString() == 'paid') ajuste += financeValorComSinal(d);
+        continue;
+      }
       final amount = (d['amount'] ?? 0).toDouble();
       if (d['type'] == 'income') inc += amount;
       if (d['type'] == 'expense') exp += amount.abs();
     }
-    return (income: inc, expense: exp, docCount: n);
+    return (income: inc, expense: exp, docCount: n, ajusteSaldo: ajuste);
   }
 }

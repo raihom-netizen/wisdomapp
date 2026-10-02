@@ -16,6 +16,7 @@ import '../theme/theme_context.dart';
 import 'finance_bank_brand_thumb.dart';
 import '../utils/finance_account_balance_utils.dart';
 import '../utils/finance_line_opening.dart';
+import '../utils/finance_fora_dos_totais.dart';
 import '../services/finance_opening_balance_service.dart';
 import '../utils/finance_transactions_realtime.dart';
 import '../utils/premium_upgrade.dart';
@@ -379,23 +380,34 @@ class _FinanceAccountCategorySheetState extends State<FinanceAccountCategoryShee
                           _passEffectiveDateInPeriod(d);
                     }).toList();
 
-                    double inc = 0, exp = 0;
+                    double inc = 0, exp = 0, ajusteFora = 0;
                     for (final doc in raw) {
                       final d = doc.data();
-                      // Depósito/resgate de meta: reserva, não receita nem
-                      // despesa (mesma regra do Financeiro); o saldo abaixo
-                      // continua contando.
-                      if (d['goalReserve'] == true) continue;
+                      // Pagamento de fatura, transferência própria e
+                      // depósito/resgate de meta: fora das receitas/despesas,
+                      // mas o saldo continua igual (regra do Controle Total).
+                      if (financeForaDosTotais(d)) {
+                        ajusteFora += financeValorComSinal(d);
+                        continue;
+                      }
                       final amt = (d['amount'] ?? 0).toDouble();
                       if (d['type'] == 'income') inc += amt;
                       if (d['type'] == 'expense') exp += amt.abs();
                     }
-                    final net = inc - exp;
+                    final net = inc - exp + ajusteFora;
                     final periodStart =
                         DateTime(widget.from.year, widget.from.month, widget.from.day);
 
-                    final expenseDocs = raw.where((doc) => doc.data()['type'] == 'expense').toList();
-                    final incomeDocs = raw.where((doc) => doc.data()['type'] == 'income').toList();
+                    final expenseDocs = raw
+                        .where((doc) =>
+                            doc.data()['type'] == 'expense' &&
+                            !financeForaDosTotais(doc.data()))
+                        .toList();
+                    final incomeDocs = raw
+                        .where((doc) =>
+                            doc.data()['type'] == 'income' &&
+                            !financeForaDosTotais(doc.data()))
+                        .toList();
 
                     final expenseByCat = _aggregateByCategory(expenseDocs);
                     final incomeByCat = _aggregateByCategory(incomeDocs);

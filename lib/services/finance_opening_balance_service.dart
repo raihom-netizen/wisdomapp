@@ -17,7 +17,9 @@ import '../utils/firestore_user_doc_id.dart';
 class FinanceOpeningBalanceService {
   FinanceOpeningBalanceService._();
 
-  static const int _openingBucketsVersionExpected = 3;
+  /// 4 (02/10/2026): bucket por conta com a regra do Controle Total — compra
+  /// paga pela fatura (`paidFromFinanceAccountId`) entra na conta que pagou.
+  static const int _openingBucketsVersionExpected = 4;
 
   static final Map<String, ({double total, Map<String, double> byAccount, DateTime at})>
       _cache = {};
@@ -426,7 +428,12 @@ class FinanceOpeningBalanceService {
       if (c == 0) return;
       partial += c;
       if (loadAccounts) {
-        final aid = (d['financeAccountId'] ?? '').toString().trim();
+        // Mesma regra do bucket por conta (v4, `accountBucketDelta`): despesa
+        // paga pela fatura sai da conta que pagou.
+        final paidFrom = (d['paidFromFinanceAccountId'] ?? '').toString().trim();
+        final aid = paidFrom.isNotEmpty && (d['type'] ?? 'expense').toString() == 'expense'
+            ? paidFrom
+            : (d['financeAccountId'] ?? '').toString().trim();
         if (aid.isNotEmpty) {
           byAcc[aid] = (byAcc[aid] ?? 0) + c;
         }

@@ -153,7 +153,14 @@ abstract final class SmartCategoryHintsService {
     }
     return _inflight.putIfAbsent(key, () async {
       try {
-        final snap = await _ref(uid).get();
+        final DocumentSnapshot<Map<String, dynamic>> snap;
+        try {
+          // Com prazo: sem rede (web sem cache) a leitura não pode prender a
+          // sugestão de categoria — cai nas dicas padrão, sem gravar no cache.
+          snap = await _ref(uid).get().timeout(const Duration(seconds: 8));
+        } catch (_) {
+          return _HintsSnapshot(_mergeKeywordMaps(null), const <dynamic>[]);
+        }
         final data = snap.data();
         Map<String, String>? remote;
         final raw = data?['keywordToCategory'];

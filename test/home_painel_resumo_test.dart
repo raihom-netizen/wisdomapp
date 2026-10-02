@@ -71,10 +71,12 @@ void main() {
     });
   });
 
-  test('fixas do mês: vencidas × a vencer', () {
+  test('fixas do mês: vencidas × a vencer (só o mês atual, igual à visão geral)', () {
     final r = resumirFixasDoMes(
       pendentes: [
-        {'fixedExpenseId': 'x', 'date': Timestamp.fromDate(DateTime(2026, 9, 5)), 'amount': 100},
+        // Vencida de mês anterior: fora (a visão geral «Mês atual» não mostra).
+        {'fixedExpenseId': 'w', 'date': Timestamp.fromDate(DateTime(2026, 9, 5)), 'amount': 55},
+        {'fixedExpenseId': 'x', 'date': Timestamp.fromDate(DateTime(2026, 10, 5)), 'amount': 100},
         {'fixedExpenseId': 'y', 'date': Timestamp.fromDate(DateTime(2026, 10, 20)), 'amount': 40},
         {'date': Timestamp.fromDate(DateTime(2026, 10, 20)), 'amount': 999}, // não é fixa
         {'fixedExpenseId': 'z', 'date': Timestamp.fromDate(DateTime(2026, 11, 2)), 'amount': 7},

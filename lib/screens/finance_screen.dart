@@ -46,6 +46,7 @@ import '../utils/finance_line_opening.dart';
 import '../utils/finance_transaction_datetime.dart';
 import '../utils/finance_period_summary.dart';
 import '../utils/finance_server_totals.dart';
+import '../utils/finance_fora_dos_totais.dart';
 import '../utils/home_shell_layout.dart';
 import '../utils/finance_main_period_server.dart';
 import '../utils/finance_insight_query.dart';
@@ -1922,20 +1923,12 @@ class _FinanceScreenState extends State<FinanceScreen>
         typeFilter: _typeFilter,
       );
       if (!mounted) return;
-      // Totais do servidor: a reserva de meta vem à parte (goalReserveNet).
-      // Caminho local (servidor falhou): FinancePeriodSummary já soma tudo, sem
-      // cache do servidor → 0.
-      final srv = FinanceServerTotals.peekCached(
-        uid: firestoreUserDocIdForAppShell(widget.uid),
-        from: DateTime(_from.year, _from.month, _from.day),
-        to: DateTime(_to.year, _to.month, _to.day, 23, 59, 59),
-        statusFilter: _statusFilter == 'all' ? 'paid' : _statusFilter,
-        typeFilter: _typeFilter == 'income' || _typeFilter == 'expense' ? _typeFilter : 'all',
-      );
+      // Fatura, transferência própria e meta ficam fora das receitas/despesas
+      // e voltam no saldo pelo ajuste — servidor ou cálculo local, o mesmo.
       setState(() {
         _mainPeriodServerKpis = (income: r.income, expense: r.expense);
         _periodMergedKpis = (income: r.income, expense: r.expense);
-        _mainPeriodGoalReserveNet = srv?.goalReserveNet ?? 0;
+        _mainPeriodGoalReserveNet = r.ajusteSaldo;
       });
     } catch (_) {}
   }
@@ -3780,9 +3773,10 @@ class _FinanceScreenState extends State<FinanceScreen>
           effective.isAfter(re)) {
         continue;
       }
-      // Depósito/resgate de meta: reserva, não receita nem despesa (mesma
-      // regra do servidor) — volta no saldo por [_goalReserveNetFromDocs].
-      if (d['goalReserve'] == true) continue;
+      // Pagamento de fatura, transferência própria e depósito/resgate de
+      // meta: não são receita nem despesa (mesma regra do servidor e do
+      // Controle Total) — voltam no saldo por [_goalReserveNetFromDocs].
+      if (financeForaDosTotais(d)) continue;
       final amount = _financeAmountToDouble(d['amount']);
       final type = (d['type'] ?? 'expense').toString();
       if (type == 'income') {
@@ -3794,7 +3788,8 @@ class _FinanceScreenState extends State<FinanceScreen>
     return (income: inc, expense: exp);
   }
 
-  /// Líquido PAGO das reservas de meta no período (resgate +, depósito −).
+  /// Líquido PAGO do que ficou fora dos totais no período
+  /// ([financeForaDosTotais]: meta, pagamento de fatura, transferência própria).
   double _goalReserveNetFromDocs(
       List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
     final rs = DateTime(_from.year, _from.month, _from.day);
@@ -3804,7 +3799,7 @@ class _FinanceScreenState extends State<FinanceScreen>
     for (final doc in docs) {
       if (!seen.add(doc.id)) continue;
       final d = _txDataForMainPeriodDoc(doc);
-      if (d['goalReserve'] != true) continue;
+      if (!financeForaDosTotais(d)) continue;
       if ((d['status'] ?? 'paid').toString() != 'paid') continue;
       final effective = FinanceLineOpening.effectiveDateTimeFromMap(d);
       if (effective == null || effective.isBefore(rs) || effective.isAfter(re)) {
@@ -6882,7 +6877,7 @@ class _FinanceScreenState extends State<FinanceScreen>
               );
             }
             final r = snap.data!;
-            final prevBal = r.income - r.expense;
+            final prevBal = r.income - r.expense + r.ajusteSaldo;
             return Padding(
               padding: const EdgeInsets.only(bottom: 4),
               child: _PremiumSaldoPeriodoCard(
@@ -10876,9 +10871,9 @@ class _FinanceReportsPremiumSheetState
   /// Resumo «antes de exportar»: um Future por combinação de filtros (antes
   /// cada redesenho da folha chamava o servidor de novo).
   String? _resumoKey;
-  Future<({double income, double expense, int docCount})>? _resumoFuture;
+  Future<({double income, double expense, int docCount, double ajusteSaldo})>? _resumoFuture;
 
-  Future<({double income, double expense, int docCount})> _resumoPara(
+  Future<({double income, double expense, int docCount, double ajusteSaldo})> _resumoPara(
       String key, DateTime rf, DateTime rt) {
     if (_resumoKey == key && _resumoFuture != null) return _resumoFuture!;
     _resumoKey = key;
@@ -11253,7 +11248,7 @@ class _FinanceReportsPremiumSheetState
                       fontSize: 14,
                       color: AppColors.primary)),
               const SizedBox(height: 8),
-              FutureBuilder<({double income, double expense, int docCount})>(
+              FutureBuilder<({double income, double expense, int docCount, double ajusteSaldo})>(
                 key: ValueKey<String>(
                   '${rf.millisecondsSinceEpoch}|${rt.millisecondsSinceEpoch}|${_categoryChoice ?? ''}|${widget.statusFilter}',
                 ),
@@ -11279,7 +11274,7 @@ class _FinanceReportsPremiumSheetState
                   }
                   final inc = snap.data?.income ?? 0.0;
                   final exp = snap.data?.expense ?? 0.0;
-                  final saldo = inc - exp;
+                  final saldo = inc - exp + (snap.data?.ajusteSaldo ?? 0.0);
                   String line(String k, String v) => '$k: $v';
                   final fname = _previewFilenameBase(rf, rt);
                   return Container(

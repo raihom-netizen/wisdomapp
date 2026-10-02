@@ -257,6 +257,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   double? _dashboardFinanceIncomeCached;
   double? _dashboardFinanceExpenseCached;
   int _dashboardFinancePendingCountCached = 0;
+
+  /// Líquido pago do que fica fora de Receitas/Despesas (fatura, transferência
+  /// própria, meta) — volta no «Saldo (acum.)», como no Financeiro.
+  double _dashboardFinanceAjusteCached = 0;
   bool _dashboardFinanceKpiLoading = false;
 
   Timer? _agendaAutoCloseDebounce;
@@ -274,6 +278,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _dashboardFinanceIncomeCached = null;
       _dashboardFinanceExpenseCached = null;
       _dashboardFinancePendingCountCached = 0;
+      _dashboardFinanceAjusteCached = 0;
     }
   }
 
@@ -367,6 +372,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _dashboardFinanceIncomeCached = null;
       _dashboardFinanceExpenseCached = null;
       _dashboardFinancePendingCountCached = 0;
+      _dashboardFinanceAjusteCached = 0;
     });
     FinanceServerTotals.invalidateForUser(_userFsId);
     final (rs, re) = _rangeForPeriod();
@@ -3597,6 +3603,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _dashboardFinanceIncomeCached = peek.income;
       _dashboardFinanceExpenseCached = peek.expense;
       _dashboardFinancePendingCountCached = peek.pendingExpenseCount;
+      _dashboardFinanceAjusteCached = peek.goalReserveNet;
     }
     unawaited(_loadDashboardFinanceKpis(rangeStart, rangeEnd, key));
   }
@@ -3620,6 +3627,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _dashboardFinanceIncomeCached = totals.income;
         _dashboardFinanceExpenseCached = totals.expense;
         _dashboardFinancePendingCountCached = totals.pendingExpenseCount;
+        _dashboardFinanceAjusteCached = totals.goalReserveNet;
         _dashboardFinanceKpiLoading = false;
       });
     } catch (_) {
@@ -3674,7 +3682,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final receitasVal = receitas ?? 0.0;
     final despesasVal = despesasPagas ?? 0.0;
-    final saldoPeriodo = receitasVal - despesasVal;
+    // Fatura/transferência/meta: fora de Receitas e Despesas, mas no saldo.
+    final saldoPeriodo =
+        receitasVal - despesasVal + _dashboardFinanceAjusteCached;
     final saldoAnterior = _dashboardOpeningBalanceCached ?? 0.0;
     final saldoAcumulado = saldoAnterior + saldoPeriodo;
     return Container(
@@ -4490,34 +4500,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  /// Saldo líquido por conta no período (só lançamentos pagos, mesma lógica da faixa verde).
+  /// Saldo líquido por conta no período (só lançamentos pagos, mesma regra do
+  /// Financeiro e do Controle Total): cartão de crédito fora do saldo e compra
+  /// paga pela fatura debitando a conta que pagou (`paidFromFinanceAccountId`).
   Map<String, double> _netByFinanceAccountInPeriod(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
     DateTime rangeStart,
-    DateTime rangeEnd,
-  ) {
-    final m = <String, double>{};
-    final rs = DateTime(rangeStart.year, rangeStart.month, rangeStart.day);
-    final re =
-        DateTime(rangeEnd.year, rangeEnd.month, rangeEnd.day, 23, 59, 59);
-    for (final doc in docs) {
-      final d = doc.data();
-      final type = (d['type'] ?? 'expense').toString();
-      final isPending = (d['status'] ?? 'paid').toString() != 'paid';
-      if (isPending) continue;
-      final effectiveDate = FinanceLineOpening.effectiveDateTimeFromMap(d);
-      if (effectiveDate == null ||
-          effectiveDate.isBefore(rs) ||
-          effectiveDate.isAfter(re)) {
-        continue;
-      }
-      final aid = (d['financeAccountId'] ?? '').toString().trim();
-      if (aid.isEmpty) continue;
-      final amount = (d['amount'] ?? 0).toDouble();
-      final delta = type == 'income' ? amount : -amount.abs();
-      m[aid] = (m[aid] ?? 0) + delta;
-    }
-    return m;
+    DateTime rangeEnd, {
+    Set<String> creditCardIds = const {},
+  }) {
+    return FinanceAccountBalanceUtils.netPaidByAccountEffective(
+      docs: docs,
+      from: rangeStart,
+      to: rangeEnd,
+      creditCardIds: creditCardIds,
+    );
   }
 
   Map<String, double> _mergeOpeningAndPeriodByAccount(
@@ -4660,21 +4657,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     openSnap.data?.byAccount ?? const <String, double>{},
                   );
                   final openingTotal = openSnap.data?.total ?? 0.0;
-                  final netById = _netByFinanceAccountInPeriod(
-                      periodDocs, rangeStart, rangeEnd);
-                  final mergedById =
-                      _mergeOpeningAndPeriodByAccount(openingById, netById);
-                  var sumOpeningAssigned = 0.0;
-                  for (final v in openingById.values) {
-                    sumOpeningAssigned += v;
-                  }
-                  final orphanOpening = openingTotal - sumOpeningAssigned;
-                  final showOrphanOpening = orphanOpening.abs() > 0.005;
-                  final periodOrphan =
-                      _periodNetUnassigned(periodDocs, rangeStart, rangeEnd);
-                  final showPeriodOrphan = periodOrphan.abs() > 0.005;
-                  final trailingSaldoTiles =
-                      (showOrphanOpening ? 1 : 0) + (showPeriodOrphan ? 1 : 0);
                   final docs = periodDocs;
                   return StreamBuilder<List<FinanceAccount>>(
                     stream: FinanceAccountsService().streamAccounts(_userFsId),
@@ -4683,6 +4665,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       final ccIds =
                           FinanceAccountBalanceUtils.creditCardAccountIds(
                               accounts);
+                      // Por conta com a regra do Financeiro (port Controle
+                      // Total): precisa dos cartões, então fica aqui dentro.
+                      final netById = _netByFinanceAccountInPeriod(
+                        periodDocs,
+                        rangeStart,
+                        rangeEnd,
+                        creditCardIds: ccIds,
+                      );
+                      final mergedById =
+                          _mergeOpeningAndPeriodByAccount(openingById, netById);
+                      var sumOpeningAssigned = 0.0;
+                      for (final v in openingById.values) {
+                        sumOpeningAssigned += v;
+                      }
+                      final orphanOpening = openingTotal - sumOpeningAssigned;
+                      final showOrphanOpening = orphanOpening.abs() > 0.005;
+                      final periodOrphan = _periodNetUnassigned(
+                          periodDocs, rangeStart, rangeEnd);
+                      final showPeriodOrphan = periodOrphan.abs() > 0.005;
+                      final trailingSaldoTiles = (showOrphanOpening ? 1 : 0) +
+                          (showPeriodOrphan ? 1 : 0);
                       // Diferencia "ainda carregando do servidor" de "realmente
                       // sem contas cadastradas". Sem isso o usuário via "Cadastre
                       // contas em Financeiro" mesmo quando tinha contas — só não

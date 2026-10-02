@@ -138,7 +138,10 @@ FixasMesResumo resumirFixasDoMes({
   Set<String> contasCartao = const {},
 }) {
   final dia = DateTime(hoje.year, hoje.month, hoje.day);
-  final inicioJanela = DateTime(hoje.year, hoje.month - 2, 1);
+  // Mês atual, igual à visão geral das fixas (`fixasIntervalo(mesAtual)`,
+  // «Em aberto»): antes a janela começava 2 meses atrás e o card do Início
+  // contava vencidas de meses anteriores que a visão geral não mostra.
+  final inicioJanela = DateTime(hoje.year, hoje.month, 1);
   final fimMes = DateTime(hoje.year, hoje.month + 1, 1);
   var vencidas = 0, aVencer = 0;
   var totV = 0.0, totA = 0.0;

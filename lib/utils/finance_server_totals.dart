@@ -131,7 +131,9 @@ class FinanceServerTotals {
       expense: (raw['expense'] as num?)?.toDouble() ?? 0,
       periodByAccount: periodByAccount,
       pendingExpenseCount: (raw['pendingExpenseCount'] as num?)?.toInt() ?? 0,
-      goalReserveNet: (raw['goalReserveNet'] as num?)?.toDouble() ?? 0,
+      // Servidor novo: ajuste inteiro (meta + fatura + transferência própria);
+      // servidor antigo: só a meta.
+      goalReserveNet: ((raw['ajusteSaldoForaDosTotais'] ?? raw['goalReserveNet']) as num?)?.toDouble() ?? 0,
     );
     _cache[key] = _FinanceServerTotalsCacheEntry(result: result, at: DateTime.now());
     return result;
@@ -156,9 +158,10 @@ class FinanceServerTotalsResult {
   final Map<String, double> periodByAccount;
   final int pendingExpenseCount;
 
-  /// Depósitos (−) / retiradas (+) de meta no período (`goalReserve: true`).
-  /// Ficam FORA de [income]/[expense] (não são receita nem despesa de
-  /// consumo), mas o saldo continua descontando — 02/10/2026.
+  /// Líquido PAGO do que ficou FORA de [income]/[expense] mas mexe no saldo
+  /// (`financeForaDosTotais`): depósito (−) / resgate (+) de meta, pagamento
+  /// de fatura e transferência própria — 02/10/2026. O nome ficou por
+  /// compatibilidade (antes era só a meta).
   final double goalReserveNet;
 
   double get balance => openingTotal + income - expense + goalReserveNet;

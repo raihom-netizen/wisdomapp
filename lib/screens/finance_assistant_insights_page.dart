@@ -182,7 +182,7 @@ class _FinanceAssistantInsightsPageState extends State<FinanceAssistantInsightsP
           final data = snap.data!;
           final expList = data[0] as List<Map<String, dynamic>>;
           final incList = data[1] as List<Map<String, dynamic>>;
-          final prev = data[2] as ({double income, double expense, int docCount});
+          final prev = data[2] as ({double income, double expense, int docCount, double ajusteSaldo});
           final fireTips = data[3] as List<FinancialTipInsight>;
 
           double? fixedMonthly;

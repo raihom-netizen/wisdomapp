@@ -18,6 +18,7 @@ import '../services/sensitive_balance_preferences.dart';
 import '../screens/finance_screen.dart' show FinanceInsightScope;
 import '../utils/finance_account_category_sheet_launcher.dart';
 import '../utils/finance_account_balance_utils.dart';
+import '../utils/finance_fora_dos_totais.dart';
 import '../utils/finance_line_opening.dart';
 import '../utils/finance_transactions_realtime.dart';
 import '../utils/firestore_user_doc_id.dart';
@@ -480,7 +481,7 @@ class _HomeFinanceOverviewPanelState extends State<HomeFinanceOverviewPanel> {
                 final falhou = txSnap.data == null &&
                     (txSnap.hasError || _demorou);
                 final carregando = txSnap.data == null && !falhou;
-                double receitas = 0, despesas = 0;
+                double receitas = 0, despesas = 0, ajusteFora = 0;
                 final despesasPagas = <Map<String, dynamic>>[];
 
                 for (final doc in docs) {
@@ -493,6 +494,13 @@ class _HomeFinanceOverviewPanelState extends State<HomeFinanceOverviewPanel> {
                           (d['date'] as Timestamp?)?.toDate();
                   if (effective == null) continue;
                   if (effective.isBefore(start) || effective.isAfter(end)) {
+                    continue;
+                  }
+                  // Pagamento de fatura, transferência própria e reserva/
+                  // resgate de meta: fora de receitas e despesas, mas o saldo
+                  // continua igual (regra do Controle Total e do Financeiro).
+                  if (financeForaDosTotais(d)) {
+                    ajusteFora += type == 'income' ? amt : -amt;
                     continue;
                   }
                   if (type == 'income') {
@@ -515,7 +523,7 @@ class _HomeFinanceOverviewPanelState extends State<HomeFinanceOverviewPanel> {
                 final byAcc =
                     _mergeAccountBalances(openingByAccount, byAccPeriod);
 
-                final saldoPeriodo = receitas - despesas;
+                final saldoPeriodo = receitas - despesas + ajusteFora;
                 final saldoAcum = saldoAbertura + saldoPeriodo;
 
                 // «Evolução do Saldo»: só o pago, partindo da abertura real.
