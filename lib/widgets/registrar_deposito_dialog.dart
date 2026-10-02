@@ -3,6 +3,7 @@ import 'package:flutter/material.dart' hide showDatePicker;
 import 'package:intl/intl.dart';
 
 import '../constants/currency_formats.dart';
+import '../theme/theme_context.dart';
 import '../models/user_profile.dart';
 import '../services/goal_deposit_service.dart';
 import '../utils/premium_upgrade.dart';
@@ -223,7 +224,7 @@ class _RegistrarDepositoDialogContentState
                       : '${widget.weekNumbers!.length} semanas: ${widget.weekNumbers!.join(', ')}',
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
-                    color: Colors.grey.shade700,
+                    color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                     fontSize: 13,
                   ),
                 ),
@@ -256,7 +257,7 @@ class _RegistrarDepositoDialogContentState
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: Colors.teal.shade700,
+                  color: context.isDarkMode ? Colors.teal.shade300 : Colors.teal.shade700,
                 ),
               ),
             ],

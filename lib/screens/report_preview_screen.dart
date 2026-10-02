@@ -7,6 +7,7 @@ import 'package:printing/printing.dart';
 import '../services/pdf_launcher.dart';
 import '../services/relatorio_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 
 /// Tela de pré-visualização do relatório PDF: usuário vê o preview primeiro,
 /// pode ampliar/reduzir livremente (pinch ou botões), depois compartilhar, imprimir ou salvar.
@@ -77,8 +78,9 @@ class _ReportPreviewScreenState extends State<ReportPreviewScreen> {
       return PopupMenuButton<String>(
         icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
         tooltip: 'Zoom, compartilhar, imprimir, salvar',
-        color: Colors.white,
-        surfaceTintColor: Colors.white,
+        color: context.isDarkMode ? context.appSurface : Colors.white,
+        surfaceTintColor:
+            context.isDarkMode ? Colors.transparent : Colors.white,
         onSelected: (value) {
           switch (value) {
             case 'zoom_out':
@@ -132,7 +134,8 @@ class _ReportPreviewScreenState extends State<ReportPreviewScreen> {
     }
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor:
+          context.isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
       appBar: AppBar(
         leading: IconButton(
           style: _iconBtnStyle,
@@ -190,7 +193,7 @@ class _ReportPreviewScreenState extends State<ReportPreviewScreen> {
               ],
       ),
       body: ColoredBox(
-        color: Colors.white,
+        color: context.isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
         child: SafeArea(
           child: InteractiveViewer(
             transformationController: _transformationController,

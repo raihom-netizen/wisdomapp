@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../constants/currency_formats.dart';
+import '../theme/theme_context.dart';
 import 'finance_category_pie_panel.dart';
 import 'report_layout_responsive.dart';
 
@@ -729,17 +730,25 @@ class ReportFinanceBiCharts extends StatelessWidget {
             return Container(
               padding: EdgeInsets.all(narrow ? 12 : 16),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: context.isDarkMode ? context.appSurface : Colors.white,
                 borderRadius: BorderRadius.circular(_kRadiusMd),
                 boxShadow: _kSoftShadow,
-                border: Border.all(color: const Color(0xFFF1F5F9)),
+                border: Border.all(
+                    color: context.isDarkMode
+                        ? context.appBorderSubtle
+                        : const Color(0xFFF1F5F9)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     'Receitas vs despesas (totais no período)',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.grey.shade800),
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: context.isDarkMode
+                            ? context.appTextPrimary
+                            : Colors.grey.shade800),
                   ),
                   const SizedBox(height: 8),
                   SizedBox(

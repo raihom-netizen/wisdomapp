@@ -7,6 +7,7 @@ import '../models/user_profile.dart';
 import '../services/goal_52_weeks_pdf_service.dart';
 import '../services/goal_deposit_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/fifty_two_weeks_plan.dart';
 import '../utils/goal_objective_visuals.dart';
 import '../utils/premium_upgrade.dart';
@@ -345,7 +346,9 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
                   ? AppColors.success.withValues(alpha: 0.1)
                   : isSelected
                       ? accent.withValues(alpha: 0.12)
-                      : Colors.white,
+                      : (context.isDarkMode
+                          ? context.appSurface
+                          : Colors.white),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
                 color: isPaid
@@ -356,7 +359,7 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
                             ? accent.withValues(alpha: 0.55)
                             : isPast && !isPaid
                                 ? AppColors.error.withValues(alpha: 0.35)
-                                : const Color(0xFFE2E8F0),
+                                : context.appChipIdleBorder,
                 width: isSelected || isCurrent ? 2 : 1,
               ),
               boxShadow: [
@@ -402,7 +405,11 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
                         style: TextStyle(
                           fontWeight: FontWeight.w900,
                           fontSize: 14,
-                          color: isPaid ? AppColors.success : const Color(0xFF0B1B4B),
+                          color: isPaid
+                              ? AppColors.success
+                              : (context.isDarkMode
+                                  ? context.appTextPrimary
+                                  : const Color(0xFF0B1B4B)),
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -411,7 +418,9 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade600,
+                          color: context.isDarkMode
+                              ? context.appTextSecondary
+                              : Colors.grey.shade600,
                         ),
                       ),
                     ],
@@ -444,7 +453,9 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
                               ? accent
                               : isCurrent
                                   ? accent.withValues(alpha: 0.7)
-                                  : Colors.grey.shade400,
+                                  : (context.isDarkMode
+                                      ? context.appTextMuted
+                                      : Colors.grey.shade400),
                     ),
                   ],
                 ),
@@ -477,7 +488,7 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
       child: Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.isDarkMode ? context.appSurface : Colors.white,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         boxShadow: [
           BoxShadow(
@@ -611,7 +622,9 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: Colors.grey.shade700,
+              color: context.isDarkMode
+                  ? context.appTextSecondary
+                  : Colors.grey.shade700,
             ),
           ),
           const SizedBox(height: 14),
@@ -687,9 +700,12 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
 
         if (inDepositForm) {
           return Container(
-            decoration: const BoxDecoration(
-              color: Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            decoration: BoxDecoration(
+              color: context.isDarkMode
+                  ? context.appScaffold
+                  : const Color(0xFFF8FAFC),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(24)),
             ),
             child: Column(
               children: [
@@ -698,7 +714,9 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
                   width: 44,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
+                    color: context.isDarkMode
+                        ? context.appBorderSubtle
+                        : Colors.grey.shade300,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -717,9 +735,11 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
         }
 
         return Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFFF8FAFC),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          decoration: BoxDecoration(
+            color: context.isDarkMode
+                ? context.appScaffold
+                : const Color(0xFFF8FAFC),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
           child: Stack(
             children: [
@@ -734,7 +754,9 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
                           width: 44,
                           height: 4,
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade300,
+                            color: context.isDarkMode
+                                ? context.appBorderSubtle
+                                : Colors.grey.shade300,
                             borderRadius: BorderRadius.circular(2),
                           ),
                         ),
@@ -761,10 +783,12 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
                                       widget.depositMode
                                           ? 'Semanas para depositar'
                                           : 'Projeto 52 semanas',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontWeight: FontWeight.w900,
                                         fontSize: 17,
-                                        color: AppColors.deepBlueDark,
+                                        color: context.isDarkMode
+                                            ? context.appTextPrimary
+                                            : AppColors.deepBlueDark,
                                       ),
                                     ),
                                     Text(
@@ -774,7 +798,9 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
                                       style: TextStyle(
                                         fontWeight: FontWeight.w600,
                                         fontSize: 13,
-                                        color: Colors.grey.shade700,
+                                        color: context.isDarkMode
+                                            ? context.appTextSecondary
+                                            : Colors.grey.shade700,
                                       ),
                                     ),
                                   ],
@@ -851,7 +877,9 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.grey.shade700,
+                                color: context.isDarkMode
+                                    ? context.appTextSecondary
+                                    : Colors.grey.shade700,
                               ),
                             ),
                           ),
@@ -868,10 +896,12 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
                           children: [
                             Text(
                               group.label,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.w900,
                                 fontSize: 14,
-                                color: Color(0xFF0B1B4B),
+                                color: context.isDarkMode
+                                    ? context.appTextPrimary
+                                    : const Color(0xFF0B1B4B),
                               ),
                             ),
                             const Spacer(),
@@ -880,7 +910,9 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
                               style: TextStyle(
                                 fontWeight: FontWeight.w700,
                                 fontSize: 11,
-                                color: Colors.grey.shade700,
+                                color: context.isDarkMode
+                                    ? context.appTextSecondary
+                                    : Colors.grey.shade700,
                               ),
                             ),
                           ],

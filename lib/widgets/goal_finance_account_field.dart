@@ -4,6 +4,7 @@ import '../constants/finance_bank_presets.dart';
 import '../constants/finance_account_visuals.dart';
 import '../models/finance_account.dart';
 import '../services/finance_accounts_service.dart';
+import '../theme/theme_context.dart';
 import '../utils/finance_account_balance_utils.dart';
 import '../widgets/finance_bank_brand_thumb.dart';
 import '../widgets/fast_text_field.dart';
@@ -95,7 +96,7 @@ class GoalFinanceAccountField extends StatelessWidget {
                 margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: ctx.isDarkMode ? ctx.appSurface : Colors.white,
                   borderRadius: BorderRadius.circular(22),
                 ),
                 child: SingleChildScrollView(
@@ -110,7 +111,12 @@ class GoalFinanceAccountField extends StatelessWidget {
                       const SizedBox(height: 6),
                       Text(
                         'A conta aparece no Financeiro e recebe os depósitos desta meta.',
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade700, height: 1.35),
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: ctx.isDarkMode
+                                ? ctx.appTextSecondary
+                                : Colors.grey.shade700,
+                            height: 1.35),
                       ),
                       const SizedBox(height: 14),
                       FastTextField(
@@ -122,7 +128,12 @@ class GoalFinanceAccountField extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      Text('Instituição', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.grey.shade800)),
+                      Text('Instituição',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              color: ctx.isDarkMode
+                                  ? ctx.appTextPrimary
+                                  : Colors.grey.shade800)),
                       const SizedBox(height: 8),
                       Wrap(
                         spacing: 8,
@@ -140,10 +151,16 @@ class GoalFinanceAccountField extends StatelessWidget {
                                   decoration: BoxDecoration(
                                     color: preset.id == p.id
                                         ? p.color1.withValues(alpha: 0.18)
-                                        : Colors.grey.shade100,
+                                        : (ctx.isDarkMode
+                                            ? ctx.appChipIdleBg
+                                            : Colors.grey.shade100),
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
-                                      color: preset.id == p.id ? p.color1 : Colors.grey.shade300,
+                                      color: preset.id == p.id
+                                          ? p.color1
+                                          : (ctx.isDarkMode
+                                              ? ctx.appChipIdleBorder
+                                              : Colors.grey.shade300),
                                     ),
                                   ),
                                   child: Text(
@@ -151,7 +168,11 @@ class GoalFinanceAccountField extends StatelessWidget {
                                     style: TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w800,
-                                      color: preset.id == p.id ? p.color1 : Colors.grey.shade800,
+                                      color: preset.id == p.id
+                                          ? p.color1
+                                          : (ctx.isDarkMode
+                                              ? ctx.appChipIdleLabel
+                                              : Colors.grey.shade800),
                                     ),
                                   ),
                                 ),
@@ -194,7 +215,7 @@ class GoalFinanceAccountField extends StatelessWidget {
     if (created != null) onChanged(created);
   }
 
-  Widget _accountDropdownItem(FinanceAccount account) {
+  Widget _accountDropdownItem(BuildContext context, FinanceAccount account) {
     final vis = financeAccountVisualFor(account);
     return Row(
       children: [
@@ -216,7 +237,11 @@ class GoalFinanceAccountField extends StatelessWidget {
               ),
               Text(
                 account.productTypeLabel,
-                style: TextStyle(fontSize: 10.5, color: Colors.grey.shade600),
+                style: TextStyle(
+                    fontSize: 10.5,
+                    color: context.isDarkMode
+                        ? context.appTextSecondary
+                        : Colors.grey.shade600),
                 overflow: TextOverflow.ellipsis,
               ),
             ],
@@ -246,14 +271,14 @@ class GoalFinanceAccountField extends StatelessWidget {
         prefixIcon: Icon(Icons.savings_rounded, color: Colors.teal.shade700, size: 22),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
         filled: true,
-        fillColor: Colors.white,
+        fillColor: context.isDarkMode ? context.appInputFill : Colors.white,
         isDense: dense,
       ),
       items: [
         for (final a in accounts)
           DropdownMenuItem<String?>(
             value: a.id,
-            child: _accountDropdownItem(a),
+            child: _accountDropdownItem(context, a),
           ),
       ],
       onChanged: accounts.isEmpty ? null : onChanged,
@@ -264,16 +289,23 @@ class GoalFinanceAccountField extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.isDarkMode ? context.appSurface : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade300),
+        border: Border.all(
+            color: context.isDarkMode
+                ? context.appChipIdleBorder
+                : Colors.grey.shade300),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Icon(Icons.info_outline_rounded, size: 18, color: Colors.grey.shade700),
+              Icon(Icons.info_outline_rounded,
+                  size: 18,
+                  color: context.isDarkMode
+                      ? context.appTextSecondary
+                      : Colors.grey.shade700),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -281,7 +313,9 @@ class GoalFinanceAccountField extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade800,
+                    color: context.isDarkMode
+                        ? context.appTextPrimary
+                        : Colors.grey.shade800,
                     height: 1.35,
                   ),
                 ),
@@ -290,6 +324,7 @@ class GoalFinanceAccountField extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           _modernAddTile(
+            context,
             onTap: () => _createCaixaPessoal(context),
             gradient: const [Color(0xFF059669), Color(0xFF10B981)],
             icon: Icons.savings_rounded,
@@ -299,6 +334,7 @@ class GoalFinanceAccountField extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           _modernAddTile(
+            context,
             onTap: () => _openQuickBankSheet(context),
             borderColor: const Color(0xFF6366F1),
             icon: Icons.account_balance_rounded,
@@ -311,7 +347,8 @@ class GoalFinanceAccountField extends StatelessWidget {
     );
   }
 
-  Widget _modernAddTile({
+  Widget _modernAddTile(
+    BuildContext context, {
     required VoidCallback onTap,
     List<Color>? gradient,
     Color? borderColor,
@@ -330,7 +367,9 @@ class GoalFinanceAccountField extends StatelessWidget {
             gradient: gradient != null
                 ? LinearGradient(colors: gradient, begin: Alignment.topLeft, end: Alignment.bottomRight)
                 : null,
-            color: gradient == null ? Colors.white : null,
+            color: gradient == null
+                ? (context.isDarkMode ? context.appSurfaceHigh : Colors.white)
+                : null,
             borderRadius: BorderRadius.circular(16),
             border: borderColor != null ? Border.all(color: borderColor.withValues(alpha: 0.45), width: 2) : null,
             boxShadow: gradient != null
@@ -373,7 +412,11 @@ class GoalFinanceAccountField extends StatelessWidget {
                       Text(
                         subtitle,
                         style: TextStyle(
-                          color: light ? Colors.white70 : Colors.grey.shade700,
+                          color: light
+                              ? Colors.white70
+                              : (context.isDarkMode
+                                  ? context.appTextSecondary
+                                  : Colors.grey.shade700),
                           fontWeight: FontWeight.w600,
                           fontSize: 11,
                         ),
@@ -451,7 +494,7 @@ class GoalFinanceAccountField extends StatelessWidget {
     );
   }
 
-  Widget _buildHeaderRow() {
+  Widget _buildHeaderRow(BuildContext context) {
     return Row(
       children: [
         Container(
@@ -482,7 +525,12 @@ class GoalFinanceAccountField extends StatelessWidget {
               ),
               Text(
                 'Vinculado ao Financeiro - depósitos entram nesta conta.',
-                style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700, height: 1.3),
+                style: TextStyle(
+                    fontSize: 11.5,
+                    color: context.isDarkMode
+                        ? context.appTextSecondary
+                        : Colors.grey.shade700,
+                    height: 1.3),
               ),
             ],
           ),
@@ -505,7 +553,7 @@ class GoalFinanceAccountField extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildHeaderRow(),
+                  _buildHeaderRow(context),
                   const SizedBox(height: 12),
                   _buildEmptyAccountActions(context),
                 ],
@@ -526,7 +574,7 @@ class GoalFinanceAccountField extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _buildHeaderRow(),
+              _buildHeaderRow(context),
               const SizedBox(height: 12),
               if (accounts.isEmpty)
                 _buildEmptyAccountActions(context)
@@ -576,20 +624,31 @@ Widget goalFormDialogHeader({
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 19,
-                fontWeight: FontWeight.w900,
-                color: Color(0xFF0B1B4B),
-                height: 1.2,
+            Builder(
+              builder: (context) => Text(
+                title,
+                style: TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.w900,
+                  color: context.isDarkMode
+                      ? context.appTextPrimary
+                      : const Color(0xFF0B1B4B),
+                  height: 1.2,
+                ),
               ),
             ),
             if (subtitle != null && subtitle.isNotEmpty) ...[
               const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+              Builder(
+                builder: (context) => Text(
+                  subtitle,
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: context.isDarkMode
+                          ? context.appTextSecondary
+                          : Colors.grey.shade700),
+                ),
               ),
             ],
           ],

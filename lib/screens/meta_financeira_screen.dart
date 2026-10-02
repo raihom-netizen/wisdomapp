@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../models/user_profile.dart';
 import '../models/financial_goal.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../constants/finance_tips.dart';
 import '../constants/currency_formats.dart';
 import '../utils/premium_upgrade.dart';
@@ -200,17 +201,17 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
           ),
           const Spacer(),
           Material(
-            color: Colors.grey.shade100,
+            color: ctx.isDarkMode ? ctx.appSurfaceHigh : Colors.grey.shade100,
             shape: const CircleBorder(),
             child: InkWell(
               customBorder: const CircleBorder(),
               onTap: () => Navigator.of(ctx).pop(),
-              child: const Padding(
-                padding: EdgeInsets.all(8),
+              child: Padding(
+                padding: const EdgeInsets.all(8),
                 child: Icon(
                   Icons.close_rounded,
                   size: 22,
-                  color: Color(0xFF1A237E),
+                  color: ctx.appDeepTitle,
                   semanticLabel: 'Fechar',
                 ),
               ),
@@ -305,7 +306,10 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                             ? 'Sem prazo'
                             : 'Prazo: ${DateFormat('dd/MM/yyyy').format(dueDate!)}',
                         style: TextStyle(
-                            fontSize: 13, color: Colors.grey.shade700),
+                            fontSize: 13,
+                            color: ctx.isDarkMode
+                                ? ctx.appTextSecondary
+                                : Colors.grey.shade700),
                       ),
                     ),
                     FilledButton.icon(
@@ -485,16 +489,20 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
       ),
       backgroundColor: Colors.transparent,
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Color(0xFFF5F8FC),
-              Color(0xFFEEF3FA),
-              Color(0xFFE8F0F8),
-            ],
-            stops: [0.0, 0.55, 1.0],
+            colors: context.isDarkMode
+                ? context.appBodyGradient
+                : const [
+                    Color(0xFFF5F8FC),
+                    Color(0xFFEEF3FA),
+                    Color(0xFFE8F0F8),
+                  ],
+            stops: context.isDarkMode
+                ? const [0.0, 0.5, 1.0]
+                : const [0.0, 0.55, 1.0],
           ),
         ),
         child: SafeArea(
@@ -552,11 +560,11 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                                 children: [
                                   _buildModuleHeroHeader(isCompact: true),
                                   const SizedBox(height: 16),
-                                  const Text('Meus objetivos',
+                                  Text('Meus objetivos',
                                       style: TextStyle(
                                           fontSize: 20,
                                           fontWeight: FontWeight.w900,
-                                          color: Color(0xFF1A237E))),
+                                          color: context.appDeepTitle)),
                                   const SizedBox(height: 12),
                                   _buildNovaMetaButton(
                                       expand: true, label: 'Novo objetivo'),
@@ -574,11 +582,11 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.center,
                                     children: [
-                                      const Text('Meus objetivos',
+                                      Text('Meus objetivos',
                                           style: TextStyle(
                                               fontSize: 20,
                                               fontWeight: FontWeight.w900,
-                                              color: Color(0xFF1A237E))),
+                                              color: context.appDeepTitle)),
                                       _buildNovaMetaButton(
                                           expand: false,
                                           label: 'Novo objetivo'),
@@ -597,7 +605,9 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                                   style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w700,
-                                    color: Colors.grey.shade700,
+                                    color: context.isDarkMode
+                                        ? context.appTextSecondary
+                                        : Colors.grey.shade700,
                                   ),
                                 ),
                                 _buildSortChip(
@@ -790,12 +800,16 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
           curve: Curves.easeOutCubic,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: selected ? active : Colors.white,
+            color: selected
+                ? active
+                : (context.isDarkMode ? context.appChipIdleBg : Colors.white),
             borderRadius: BorderRadius.circular(22),
             border: Border.all(
               color: selected
                   ? active.withValues(alpha: 0.95)
-                  : Colors.grey.shade300,
+                  : (context.isDarkMode
+                      ? context.appChipIdleBorder
+                      : Colors.grey.shade300),
               width: selected ? 0 : 1.2,
             ),
             boxShadow: selected
@@ -826,7 +840,11 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 13,
-                  color: selected ? muted : Colors.grey.shade700,
+                  color: selected
+                      ? muted
+                      : (context.isDarkMode
+                          ? context.appChipIdleLabel
+                          : Colors.grey.shade700),
                   letterSpacing: 0.1,
                 ),
               ),
@@ -870,10 +888,10 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
         Expanded(
           child: Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 19,
               fontWeight: FontWeight.w800,
-              color: Color(0xFF1A237E),
+              color: context.appDeepTitle,
               height: 1.2,
             ),
           ),
@@ -897,11 +915,16 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
       prefixText: prefixText,
       suffixText: suffixText,
       filled: true,
-      fillColor: const Color(0xFFF8FAFC),
+      fillColor: context.isDarkMode
+          ? context.appInputFill
+          : const Color(0xFFF8FAFC),
       border: OutlineInputBorder(borderRadius: r),
       enabledBorder: OutlineInputBorder(
         borderRadius: r,
-        borderSide: BorderSide(color: Colors.grey.shade300),
+        borderSide: BorderSide(
+            color: context.isDarkMode
+                ? context.appChipIdleBorder
+                : Colors.grey.shade300),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: r,
@@ -914,10 +937,16 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
     return OutlinedButton(
       onPressed: onPressed,
       style: OutlinedButton.styleFrom(
-        foregroundColor: const Color(0xFF334155),
+        foregroundColor: context.isDarkMode
+            ? context.appTextPrimary
+            : const Color(0xFF334155),
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        side: BorderSide(color: Colors.grey.shade300, width: 1.2),
+        side: BorderSide(
+            color: context.isDarkMode
+                ? context.appChipIdleBorder
+                : Colors.grey.shade300,
+            width: 1.2),
       ),
       child:
           const Text('Cancelar', style: TextStyle(fontWeight: FontWeight.w700)),
@@ -1074,7 +1103,10 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                 const SizedBox(height: 16),
                 Text('Erro ao carregar metas. Tente novamente.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey.shade700)),
+                    style: TextStyle(
+                        color: context.isDarkMode
+                            ? context.appTextSecondary
+                            : Colors.grey.shade700)),
                 const SizedBox(height: 16),
                 FilledButton.icon(
                     onPressed: () => setState(() {}),
@@ -1125,32 +1157,42 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
   Widget _buildEmptyGoals() {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 16,
-              offset: const Offset(0, 6))
-        ],
-      ),
+      decoration: context.isDarkMode
+          ? context.appPanelDecoration(radius: 24)
+          : BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6))
+              ],
+            ),
       child: Column(
         children: [
-          Icon(Icons.flag_rounded, size: 64, color: Colors.grey.shade300),
+          Icon(Icons.flag_rounded,
+              size: 64,
+              color: context.isDarkMode
+                  ? context.appTextMuted
+                  : Colors.grey.shade300),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             'Nenhum objetivo ainda',
             style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
-                color: Color(0xFF1A237E)),
+                color: context.appDeepTitle),
           ),
           const SizedBox(height: 8),
           Text(
             'Crie um objetivo com Projeto 52 semanas - o app monta a programação semanal automaticamente.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+            style: TextStyle(
+                fontSize: 14,
+                color: context.isDarkMode
+                    ? context.appTextSecondary
+                    : Colors.grey.shade600),
           ),
           const SizedBox(height: 24),
           _buildNovaMetaButton(

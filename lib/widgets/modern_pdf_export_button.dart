@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 
 /// Ícone e gradiente padrão WISDOMAPP para exportação PDF.
 abstract final class ModernPdfUi {
@@ -67,8 +68,9 @@ class ModernPdfExportButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final active = enabled && !loading && onPressed != null;
     final radius = compact ? 14.0 : 16.0;
-    final idleBg = Colors.grey.shade200;
-    final idleFg = Colors.grey.shade700;
+    final dark = context.isDarkMode;
+    final idleBg = dark ? context.appSurfaceHigh : Colors.grey.shade200;
+    final idleFg = dark ? context.appTextSecondary : Colors.grey.shade700;
 
     Widget child = Material(
       color: Colors.transparent,
@@ -153,7 +155,9 @@ class ModernPdfExportButton extends StatelessWidget {
                             style: TextStyle(
                               color: active
                                   ? Colors.white.withValues(alpha: 0.92)
-                                  : Colors.grey.shade600,
+                                  : (dark
+                                      ? context.appTextMuted
+                                      : Colors.grey.shade600),
                               fontWeight: FontWeight.w700,
                               fontSize: 11,
                             ),

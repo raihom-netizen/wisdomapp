@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../constants/currency_formats.dart';
 import '../services/goal_deposit_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/date_picker_a11y.dart';
 import '../utils/fifty_two_weeks_plan.dart';
 import 'goal_deposit_ui.dart';
@@ -92,7 +93,7 @@ Future<bool> showGoalDepositEditSheet({
               margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
               padding: EdgeInsets.fromLTRB(20, 16, 20, 16 + bottom),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: ctx.isDarkMode ? ctx.appSurface : Colors.white,
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
@@ -122,12 +123,14 @@ Future<bool> showGoalDepositEditSheet({
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
+                              Text(
                                 'Editar depósito',
                                 style: TextStyle(
                                   fontWeight: FontWeight.w900,
                                   fontSize: 18,
-                                  color: Color(0xFF0F172A),
+                                  color: ctx.isDarkMode
+                                      ? ctx.appTextPrimary
+                                      : const Color(0xFF0F172A),
                                 ),
                               ),
                               Text(
@@ -137,7 +140,9 @@ Future<bool> showGoalDepositEditSheet({
                                 style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
-                                  color: Colors.grey.shade600,
+                                  color: ctx.isDarkMode
+                                      ? ctx.appTextSecondary
+                                      : Colors.grey.shade600,
                                 ),
                               ),
                             ],
@@ -201,7 +206,9 @@ Future<bool> showGoalDepositEditSheet({
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
+                        color: ctx.isDarkMode
+                            ? ctx.appInputFill
+                            : const Color(0xFFF8FAFC),
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
                       ),
@@ -216,7 +223,9 @@ Future<bool> showGoalDepositEditSheet({
                                   style: TextStyle(
                                     fontWeight: FontWeight.w700,
                                     fontSize: 13,
-                                    color: Colors.grey.shade800,
+                                    color: ctx.isDarkMode
+                                        ? ctx.appTextPrimary
+                                        : Colors.grey.shade800,
                                   ),
                                 ),
                                 const SizedBox(height: 4),

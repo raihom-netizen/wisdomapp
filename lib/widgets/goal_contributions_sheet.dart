@@ -8,6 +8,7 @@ import '../models/user_profile.dart';
 import '../services/finance_accounts_service.dart';
 import '../services/goal_deposit_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/date_picker_a11y.dart';
 import '../utils/premium_upgrade.dart';
 import 'goal_deposit_edit_sheet.dart';
@@ -39,10 +40,7 @@ Future<void> showGoalContributionsSheet({
       maxChildSize: 0.95,
       expand: false,
       builder: (ctx, scrollController) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
+        decoration: ctx.appSheetDecoration(),
         child: Column(
           children: [
             const SizedBox(height: 8),
@@ -50,7 +48,9 @@ Future<void> showGoalContributionsSheet({
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.grey.shade300,
+                color: ctx.isDarkMode
+                    ? ctx.appBorderSubtle
+                    : Colors.grey.shade300,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -66,10 +66,10 @@ Future<void> showGoalContributionsSheet({
                   Expanded(
                     child: Text(
                       'Lançamentos · $goalTitle',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
-                        color: Color(0xFF1A237E),
+                        color: ctx.appDeepTitle,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -89,7 +89,10 @@ Future<void> showGoalContributionsSheet({
                     return Center(
                       child: Text(
                         'Erro: ${snap.error}',
-                        style: TextStyle(color: Colors.grey.shade700),
+                        style: TextStyle(
+                            color: context.isDarkMode
+                                ? context.appTextSecondary
+                                : Colors.grey.shade700),
                       ),
                     );
                   }
@@ -108,18 +111,27 @@ Future<void> showGoalContributionsSheet({
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(Icons.inbox_rounded,
-                                  size: 64, color: Colors.grey.shade400),
+                                  size: 64,
+                                  color: context.isDarkMode
+                                      ? context.appTextMuted
+                                      : Colors.grey.shade400),
                               const SizedBox(height: 16),
                               Text(
                                 'Nenhum depósito ainda',
                                 style: TextStyle(
-                                    fontSize: 16, color: Colors.grey.shade600),
+                                    fontSize: 16,
+                                    color: context.isDarkMode
+                                        ? context.appTextSecondary
+                                        : Colors.grey.shade600),
                               ),
                               const SizedBox(height: 8),
                               Text(
                                 'Use "Depositar" no card da meta.',
                                 style: TextStyle(
-                                    fontSize: 13, color: Colors.grey.shade500),
+                                    fontSize: 13,
+                                    color: context.isDarkMode
+                                        ? context.appTextMuted
+                                        : Colors.grey.shade500),
                               ),
                             ],
                           ),
@@ -211,7 +223,9 @@ Future<void> showGoalContributionsSheet({
                                     DateFormat('dd/MM/yyyy').format(date),
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Colors.grey.shade700,
+                                      color: context.isDarkMode
+                                          ? context.appTextSecondary
+                                          : Colors.grey.shade700,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
@@ -232,7 +246,9 @@ Future<void> showGoalContributionsSheet({
                                       style: TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w700,
-                                        color: Colors.grey.shade800,
+                                        color: context.isDarkMode
+                                            ? context.appTextPrimary
+                                            : Colors.grey.shade800,
                                       ),
                                     ),
                                 ],

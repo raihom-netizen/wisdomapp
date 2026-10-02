@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/goal_deposit_service.dart';
+import '../theme/theme_context.dart';
 import '../utils/fifty_two_weeks_plan.dart';
 import 'brl_amount_text_field.dart';
 
@@ -97,7 +98,9 @@ class GoalDepositAmountField extends StatelessWidget {
           style: TextStyle(
             fontWeight: FontWeight.w800,
             fontSize: 13,
-            color: Colors.grey.shade800,
+            color: context.isDarkMode
+                ? context.appTextPrimary
+                : Colors.grey.shade800,
           ),
         ),
         const SizedBox(height: 8),
@@ -106,7 +109,10 @@ class GoalDepositAmountField extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
             gradient: LinearGradient(
-              colors: [accent.withValues(alpha: 0.1), Colors.white],
+              colors: [
+                accent.withValues(alpha: context.isDarkMode ? 0.18 : 0.1),
+                context.isDarkMode ? context.appInputFill : Colors.white,
+              ],
             ),
             border:
                 Border.all(color: accent.withValues(alpha: 0.28), width: 1.5),
@@ -122,17 +128,21 @@ class GoalDepositAmountField extends StatelessWidget {
             controller: controller,
             focusNode: focusNode,
             onChanged: onChanged,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.w900,
-              color: Color(0xFF0F172A),
+              color: context.isDarkMode
+                  ? context.appTextPrimary
+                  : const Color(0xFF0F172A),
             ),
             decoration: InputDecoration(
               hintText: hint ?? 'R\$ 0,00',
               hintStyle: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.w700,
-                color: Colors.grey.shade400,
+                color: context.isDarkMode
+                    ? context.appTextMuted
+                    : Colors.grey.shade400,
               ),
               prefixText: 'R\$ ',
               prefixStyle: TextStyle(

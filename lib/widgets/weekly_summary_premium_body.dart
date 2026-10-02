@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/weekly_summary_ui_data.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 
 /// Corpo do resumo semanal — financeiro (WISDOMAPP).
 class WeeklySummaryPremiumBody extends StatelessWidget {
@@ -17,42 +18,44 @@ class WeeklySummaryPremiumBody extends StatelessWidget {
         Text(
           'Semana ${data.weekRangeLabel}',
           textAlign: TextAlign.center,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w800,
-            color: Color(0xFF0F172A),
+            color: context.isDarkMode
+                ? context.appTextPrimary
+                : const Color(0xFF0F172A),
             letterSpacing: 0.2,
           ),
         ),
         const SizedBox(height: 14),
-        _sectionTitle('Financeiro'),
+        _sectionTitle(context, 'Financeiro'),
         const SizedBox(height: 8),
         _twoCol(
-          _miniCard('Contas a pagar', '${data.despesasPendentesCount} · ${data.despesasPendentesValor}', const Color(0xFFEA580C)),
-          _miniCard('Pago (desp.)', data.despesasPagasValor, AppColors.financeDespesa),
+          _miniCard(context, 'Contas a pagar', '${data.despesasPendentesCount} · ${data.despesasPendentesValor}', const Color(0xFFEA580C)),
+          _miniCard(context, 'Pago (desp.)', data.despesasPagasValor, AppColors.financeDespesa),
         ),
         const SizedBox(height: 8),
         _twoCol(
-          _miniCard('A receber', '${data.receitasPendentesCount} · ${data.receitasPendentesValor}', const Color(0xFFCA8A04)),
-          _miniCard('Recebido', data.receitasRecebidasValor, AppColors.financeReceita),
+          _miniCard(context, 'A receber', '${data.receitasPendentesCount} · ${data.receitasPendentesValor}', const Color(0xFFCA8A04)),
+          _miniCard(context, 'Recebido', data.receitasRecebidasValor, AppColors.financeReceita),
         ),
         const SizedBox(height: 8),
         _twoCol(
-          _miniCard('Saldo acumulado', data.saldoAcumulado, AppColors.deepBlue),
-          _miniCard('Saldo período', data.saldoPeriodo, AppColors.primary),
+          _miniCard(context, 'Saldo acumulado', data.saldoAcumulado, AppColors.deepBlue),
+          _miniCard(context, 'Saldo período', data.saldoPeriodo, AppColors.primary),
         ),
       ],
     );
   }
 
-  Widget _sectionTitle(String t) {
+  Widget _sectionTitle(BuildContext context, String t) {
     return Text(
       t.toUpperCase(),
       style: TextStyle(
         fontSize: 11,
         fontWeight: FontWeight.w900,
         letterSpacing: 0.9,
-        color: AppColors.textMuted,
+        color: context.appTextMuted,
       ),
     );
   }
@@ -69,6 +72,7 @@ class WeeklySummaryPremiumBody extends StatelessWidget {
   }
 
   Widget _miniCard(
+    BuildContext context,
     String title,
     String value,
     Color accent, {
@@ -79,8 +83,8 @@ class WeeklySummaryPremiumBody extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            accent.withValues(alpha: 0.12),
-            Colors.white,
+            accent.withValues(alpha: context.isDarkMode ? 0.20 : 0.12),
+            context.isDarkMode ? context.appSurface : Colors.white,
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../utils/course_media_url_resolver.dart';
 import '../../utils/youtube_url_helper.dart';
+import '../course/course_yt_palette.dart';
 import '../course_media_preview.dart';
 import 'course_video_player_shell.dart';
 
@@ -147,14 +148,15 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
         .toList();
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F0F0F),
+      backgroundColor: CourseYt.background(context),
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
             pinned: true,
             elevation: 0,
-            backgroundColor: const Color(0xFF0F0F0F),
-            foregroundColor: Colors.white,
+            backgroundColor: CourseYt.background(context),
+            foregroundColor: CourseYt.text(context),
+            surfaceTintColor: Colors.transparent,
             leading: IconButton(
               icon: const Icon(Icons.arrow_back_rounded),
               onPressed: () => Navigator.pop(context),
@@ -230,11 +232,11 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
                   // Title
                   Text(
                     _title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w800,
                       fontSize: 17,
                       height: 1.25,
-                      color: Colors.white,
+                      color: CourseYt.text(context),
                     ),
                   ),
                   if (widget.mp4Label != null &&
@@ -243,7 +245,7 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
                     Text(
                       widget.mp4Label!,
                       style: TextStyle(
-                        color: Colors.grey.shade500,
+                        color: CourseYt.textSecondary(context),
                         fontWeight: FontWeight.w600,
                         fontSize: 12,
                       ),
@@ -275,10 +277,10 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
                           children: [
                             Text(
                               _typeLabel,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.w800,
                                 fontSize: 13,
-                                color: Colors.white,
+                                color: CourseYt.text(context),
                               ),
                             ),
                             Text(
@@ -286,7 +288,7 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
                                   ? 'YouTube · até 4K'
                                   : 'HD · MP4',
                               style: TextStyle(
-                                color: Colors.grey.shade600,
+                                color: CourseYt.textMuted(context),
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -325,7 +327,7 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
-                              color: Colors.grey.shade600,
+                              color: CourseYt.textMuted(context),
                             ),
                           ),
                         ],
@@ -341,7 +343,9 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
                         width: double.infinity,
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1A1A1A),
+                          color: CourseYt.isDark(context)
+                              ? CourseYt.card(context)
+                              : CourseYt.surfaceAlt(context),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Column(
@@ -353,7 +357,9 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
                               overflow:
                                   _descExpanded ? null : TextOverflow.ellipsis,
                               style: TextStyle(
-                                color: Colors.grey.shade300,
+                                color: CourseYt.isDark(context)
+                                    ? Colors.grey.shade300
+                                    : CourseYt.text(context),
                                 height: 1.45,
                                 fontSize: 13,
                               ),
@@ -361,10 +367,10 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
                             const SizedBox(height: 4),
                             Text(
                               _descExpanded ? 'Mostrar menos' : 'Mostrar mais',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.w800,
                                 fontSize: 12,
-                                color: Colors.white,
+                                color: CourseYt.text(context),
                               ),
                             ),
                           ],
@@ -385,7 +391,7 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 15,
-                    color: Colors.white,
+                    color: CourseYt.text(context),
                   ),
                 ),
               ),
@@ -488,7 +494,7 @@ class _RelatedVideoTile extends StatelessWidget {
                     data,
                     fit: BoxFit.cover,
                     fallback: Container(
-                      color: const Color(0xFF272727),
+                      color: CourseYt.surfaceAlt(context),
                       child: Icon(Icons.play_circle_fill_rounded,
                           color: accent, size: 36),
                     ),
@@ -506,18 +512,18 @@ class _RelatedVideoTile extends StatelessWidget {
                       title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 13,
                         height: 1.25,
-                        color: Colors.white,
+                        color: CourseYt.text(context),
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       type == 'dica' ? 'Dica Wisdom' : 'Wisdom Cursos',
                       style: TextStyle(
-                        color: Colors.grey.shade600,
+                        color: CourseYt.textMuted(context),
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                       ),
@@ -526,7 +532,7 @@ class _RelatedVideoTile extends StatelessWidget {
                 ),
               ),
               Icon(Icons.more_vert_rounded,
-                  color: Colors.grey.shade700, size: 20),
+                  color: CourseYt.textMuted(context), size: 20),
             ],
           ),
         ),
@@ -560,7 +566,9 @@ class _SpeedControlBarState extends State<_SpeedControlBar> {
       height: 36,
       padding: const EdgeInsets.symmetric(horizontal: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
+        color: CourseYt.isDark(context)
+            ? CourseYt.card(context)
+            : CourseYt.surfaceAlt(context),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -570,7 +578,7 @@ class _SpeedControlBarState extends State<_SpeedControlBar> {
           Text(
             'Velocidade:',
             style: TextStyle(
-              color: Colors.grey.shade500,
+              color: CourseYt.textSecondary(context),
               fontSize: 11,
               fontWeight: FontWeight.w600,
             ),
@@ -603,7 +611,7 @@ class _SpeedControlBarState extends State<_SpeedControlBar> {
                             style: TextStyle(
                               color: _speed == s
                                   ? widget.accent
-                                  : Colors.grey.shade600,
+                                  : CourseYt.textMuted(context),
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
                             ),
@@ -638,7 +646,7 @@ class _VideoPickerSheet extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
+        color: CourseYt.card(context),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -647,10 +655,10 @@ class _VideoPickerSheet extends StatelessWidget {
         children: [
           Text(
             'Escolha o vídeo · $title',
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.w800,
               fontSize: 15,
-              color: Colors.white,
+              color: CourseYt.text(context),
             ),
           ),
           const SizedBox(height: 12),
@@ -661,7 +669,7 @@ class _VideoPickerSheet extends StatelessWidget {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
-                tileColor: const Color(0xFF272727),
+                tileColor: CourseYt.surfaceAlt(context),
                 leading: CircleAvatar(
                   backgroundColor:
                       const Color(0xFFFF0000).withValues(alpha: 0.15),
@@ -670,9 +678,9 @@ class _VideoPickerSheet extends StatelessWidget {
                 ),
                 title: Text(
                   videos[i].label ?? 'Vídeo ${i + 1}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                    color: CourseYt.text(context),
                   ),
                 ),
                 onTap: () => onPick(

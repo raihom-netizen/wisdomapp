@@ -10,6 +10,7 @@ import '../constants/currency_formats.dart';
 import '../models/financial_goal.dart';
 import '../models/user_profile.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/date_picker_a11y.dart';
 import '../utils/fifty_two_weeks_plan.dart';
 import '../utils/firestore_user_doc_id.dart';
@@ -163,6 +164,7 @@ Future<void> showCreateFinancialGoalDialog(
                 FastTextField(
                   controller: titleCtrl,
                   decoration: _inputDecoration(
+                    ctx,
                     labelText: 'Nome da meta',
                     hintText: 'Ex: Comprar um carro, Reserva de emergência, Viagem',
                   ),
@@ -171,6 +173,7 @@ Future<void> showCreateFinancialGoalDialog(
                 BrlAmountTextField(
                   controller: targetCtrl,
                   decoration: _inputDecoration(
+                    ctx,
                     labelText: 'Valor alvo (R\$)',
                     hintText: 'Ex: 50.000,00',
                     prefixText: 'R\$ ',
@@ -204,7 +207,9 @@ Future<void> showCreateFinancialGoalDialog(
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade800,
+                              color: ctx.isDarkMode
+                                  ? ctx.appTextPrimary
+                                  : Colors.grey.shade800,
                             ),
                           ),
                         ),
@@ -254,7 +259,11 @@ Future<void> showCreateFinancialGoalDialog(
                         ),
                         Text(
                           'Total programado: ${CurrencyFormats.formatBRL(target)} em 52 semanas',
-                          style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700),
+                          style: TextStyle(
+                              fontSize: 11.5,
+                              color: ctx.isDarkMode
+                                  ? ctx.appTextSecondary
+                                  : Colors.grey.shade700),
                         ),
                       ],
                     ],
@@ -269,7 +278,11 @@ Future<void> showCreateFinancialGoalDialog(
                           dueDate == null
                               ? 'Sem prazo'
                               : 'Prazo: ${DateFormat('dd/MM/yyyy').format(dueDate!)}',
-                          style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                          style: TextStyle(
+                              fontSize: 13,
+                              color: ctx.isDarkMode
+                                  ? ctx.appTextSecondary
+                                  : Colors.grey.shade700),
                         ),
                       ),
                       FilledButton.icon(
@@ -310,6 +323,7 @@ Future<void> showCreateFinancialGoalDialog(
                   children: GoalPriority.values.map((p) {
                     final sel = priority == p;
                     return _priorityChip(
+                      ctx,
                       label: p.label,
                       selected: sel,
                       onTap: () => setState(() => priority = p),
@@ -334,6 +348,7 @@ Future<void> showCreateFinancialGoalDialog(
                     controller: interestCtrl,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     decoration: _inputDecoration(
+                      ctx,
                       labelText: 'Taxa mensal estimada (%)',
                       hintText: 'Ex: 0.5 (CDI)',
                       suffixText: '%',
@@ -466,13 +481,15 @@ Widget _dialogTitleRow({required IconData icon, required String title}) {
       ),
       const SizedBox(width: 12),
       Expanded(
-        child: Text(
-          title,
-          style: const TextStyle(
-            fontSize: 19,
-            fontWeight: FontWeight.w800,
-            color: Color(0xFF1A237E),
-            height: 1.2,
+        child: Builder(
+          builder: (context) => Text(
+            title,
+            style: TextStyle(
+              fontSize: 19,
+              fontWeight: FontWeight.w800,
+              color: context.appDeepTitle,
+              height: 1.2,
+            ),
           ),
         ),
       ),
@@ -480,7 +497,8 @@ Widget _dialogTitleRow({required IconData icon, required String title}) {
   );
 }
 
-InputDecoration _inputDecoration({
+InputDecoration _inputDecoration(
+  BuildContext context, {
   required String labelText,
   String? hintText,
   Widget? prefixIcon,
@@ -495,11 +513,15 @@ InputDecoration _inputDecoration({
     prefixText: prefixText,
     suffixText: suffixText,
     filled: true,
-    fillColor: const Color(0xFFF8FAFC),
+    fillColor:
+        context.isDarkMode ? context.appInputFill : const Color(0xFFF8FAFC),
     border: OutlineInputBorder(borderRadius: r),
     enabledBorder: OutlineInputBorder(
       borderRadius: r,
-      borderSide: BorderSide(color: Colors.grey.shade300),
+      borderSide: BorderSide(
+          color: context.isDarkMode
+              ? context.appChipIdleBorder
+              : Colors.grey.shade300),
     ),
     focusedBorder: OutlineInputBorder(
       borderRadius: r,
@@ -516,7 +538,8 @@ Color _priorityColor(GoalPriority p) {
   };
 }
 
-Widget _priorityChip({
+Widget _priorityChip(
+  BuildContext context, {
   required String label,
   required bool selected,
   required VoidCallback onTap,
@@ -531,10 +554,16 @@ Widget _priorityChip({
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: selected ? active : Colors.white,
+          color: selected
+              ? active
+              : (context.isDarkMode ? context.appChipIdleBg : Colors.white),
           borderRadius: BorderRadius.circular(22),
           border: Border.all(
-            color: selected ? active : Colors.grey.shade300,
+            color: selected
+                ? active
+                : (context.isDarkMode
+                    ? context.appChipIdleBorder
+                    : Colors.grey.shade300),
           ),
         ),
         child: Text(
@@ -542,7 +571,11 @@ Widget _priorityChip({
           style: TextStyle(
             fontWeight: FontWeight.w800,
             fontSize: 13,
-            color: selected ? Colors.white : Colors.grey.shade700,
+            color: selected
+                ? Colors.white
+                : (context.isDarkMode
+                    ? context.appChipIdleLabel
+                    : Colors.grey.shade700),
           ),
         ),
       ),

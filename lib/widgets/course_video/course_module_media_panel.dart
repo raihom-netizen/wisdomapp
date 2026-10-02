@@ -6,6 +6,7 @@ import '../../services/course_progress_service.dart';
 import '../../utils/course_media_url_resolver.dart';
 import '../../utils/course_thumb_resolver.dart';
 import '../../utils/youtube_url_helper.dart';
+import '../course/course_yt_palette.dart';
 import '../course_media_preview.dart';
 import 'course_video_player_shell.dart';
 
@@ -208,7 +209,7 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
               colors: [
                 widget.accent.withValues(alpha: 0.08),
                 widget.accent2.withValues(alpha: 0.04),
-                Colors.white,
+                CourseYt.card(context),
               ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
@@ -309,7 +310,9 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
                       Material(
                         color: _progress.liked
                             ? const Color(0xFFFF0000).withValues(alpha: 0.12)
-                            : Colors.grey.shade100,
+                            : (CourseYt.isDark(context)
+                                ? CourseYt.surfaceAlt(context)
+                                : Colors.grey.shade100),
                         borderRadius: BorderRadius.circular(999),
                         child: InkWell(
                           onTap: () async {
@@ -342,15 +345,21 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
                                   size: 18,
                                   color: _progress.liked
                                       ? const Color(0xFFFF0000)
-                                      : Colors.grey.shade700,
+                                      : (CourseYt.isDark(context)
+                                          ? CourseYt.textSecondary(context)
+                                          : Colors.grey.shade700),
                                 ),
                                 const SizedBox(width: 6),
                                 Text(
                                   'Gostei',
                                   style: TextStyle(
                                     color: _progress.liked
-                                        ? const Color(0xFFB91C1C)
-                                        : Colors.grey.shade800,
+                                        ? (CourseYt.isDark(context)
+                                            ? CourseYt.progressText(context)
+                                            : const Color(0xFFB91C1C))
+                                        : (CourseYt.isDark(context)
+                                            ? CourseYt.text(context)
+                                            : Colors.grey.shade800),
                                     fontWeight: FontWeight.w800,
                                     fontSize: 13,
                                   ),
@@ -502,9 +511,11 @@ class _DescriptionCard extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1A),
+          color: CourseYt.isDark(context)
+              ? CourseYt.card(context)
+              : CourseYt.surfaceAlt(context),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          border: Border.all(color: CourseYt.border(context)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -530,7 +541,9 @@ class _DescriptionCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 14,
                 height: 1.5,
-                color: Colors.grey.shade300,
+                color: CourseYt.isDark(context)
+                    ? Colors.grey.shade300
+                    : CourseYt.text(context),
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -593,7 +606,9 @@ class _RelatedStrip extends StatelessWidget {
                 final item = items[i];
                 final title = (item['title'] ?? 'Vídeo').toString();
                 return Material(
-                  color: Colors.white,
+                  color: CourseYt.isDark(context)
+                      ? CourseYt.surfaceAlt(context)
+                      : Colors.white,
                   borderRadius: BorderRadius.circular(12),
                   clipBehavior: Clip.antiAlias,
                   child: InkWell(
@@ -620,10 +635,11 @@ class _RelatedStrip extends StatelessWidget {
                                 title,
                                 maxLines: 3,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w800,
                                   height: 1.2,
+                                  color: CourseYt.text(context),
                                 ),
                               ),
                             ),
