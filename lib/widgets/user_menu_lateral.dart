@@ -197,9 +197,13 @@ class UserMenuLateral extends StatelessWidget {
       child: Material(
         color: Colors.white.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(10),
+        // Sessão ainda sem uid (web logo após recarregar): doc('') derrubava o
+        // menu inteiro com «A document path must be a non-empty string».
         child: KeyedStreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-          streamKey: homePlanningRef(uid).path,
-          create: () => homePlanningRef(uid).snapshots(),
+          streamKey: uid.trim().isEmpty ? 'sem-uid' : homePlanningRef(uid).path,
+          create: () => uid.trim().isEmpty
+              ? const Stream<DocumentSnapshot<Map<String, dynamic>>>.empty()
+              : homePlanningRef(uid).snapshots(),
           builder: (context, snap) {
             final data = snap.data?.data() ?? <String, dynamic>{};
             final raw = data[kHomeDefaultStartModuleField];
