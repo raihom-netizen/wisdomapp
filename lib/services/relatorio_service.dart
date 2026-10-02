@@ -2202,37 +2202,151 @@ class RelatorioService {
       );
     }
 
-    final tableAgenda = _wrapRoundedPdfSurface(
-      pw.Table(
-        border: pw.TableBorder.all(color: _pdfGrey300, width: 0.65),
-        columnWidths: {
-          0: const pw.FlexColumnWidth(1.0),
-          1: const pw.FlexColumnWidth(0.95),
-          2: const pw.FlexColumnWidth(1.45),
-          3: const pw.FlexColumnWidth(1.05),
-          4: const pw.FlexColumnWidth(0.85),
-          5: const pw.FlexColumnWidth(2.7),
-        },
-        children: [
-          headerRowAgenda(),
-          ...merged.asMap().entries.map(
-                (entry) => dataRowAgenda(entry.value, alt: entry.key.isOdd),
+    // Uma tabela POR MÊS, sem moldura em volta: a tabela dentro de um
+    // Container não quebra de página — com mais de ~25 linhas (anual) o PDF
+    // falhava («não cabe na página»). Assim cada mês tem título, contagem e a
+    // tabela com zebra, que continua na página seguinte quando precisa.
+    const mesesNome = <String>[
+      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+    ];
+    final porMes = <String, List<Map<String, dynamic>>>{};
+    final mesOrdem = <String, DateTime>{};
+    for (final e in merged) {
+      final d = _agendaPdfSortDate(e);
+      final k = '${d.year}-${d.month.toString().padLeft(2, '0')}';
+      porMes.putIfAbsent(k, () => []).add(e);
+      mesOrdem[k] = DateTime(d.year, d.month);
+    }
+    final mesesKeys = porMes.keys.toList()..sort();
+    final realizados = merged.where((e) =>
+        e['agendaRowKind'] == 'reminder' && !_reminderEmAbertoPdf(e)).length;
+    final aRealizar = merged.where((e) =>
+        e['agendaRowKind'] == 'reminder' && _reminderEmAbertoPdf(e)).length;
+    final maxMes = porMes.values.fold<int>(0, (m, l) => l.length > m ? l.length : m);
+
+    pw.Widget tabelaDoMes(List<Map<String, dynamic>> rows) => pw.Table(
+          border: pw.TableBorder.all(color: _pdfGrey300, width: 0.65),
+          columnWidths: {
+            0: const pw.FlexColumnWidth(1.0),
+            1: const pw.FlexColumnWidth(0.95),
+            2: const pw.FlexColumnWidth(1.45),
+            3: const pw.FlexColumnWidth(1.05),
+            4: const pw.FlexColumnWidth(0.85),
+            5: const pw.FlexColumnWidth(2.7),
+          },
+          children: [
+            headerRowAgenda(),
+            ...rows.asMap().entries.map(
+                  (entry) => dataRowAgenda(entry.value, alt: entry.key.isOdd),
+                ),
+          ],
+        );
+
+    /// Barras simples «compromissos por mês» (só quando o período tem 2+ meses).
+    pw.Widget? graficoPorMes() {
+      if (mesesKeys.length < 2 || maxMes <= 0) return null;
+      return pw.Container(
+        padding: const pw.EdgeInsets.fromLTRB(12, 10, 12, 10),
+        decoration: pw.BoxDecoration(
+          color: _pdfGrey100,
+          borderRadius: pw.BorderRadius.circular(10),
+          border: pw.Border.all(color: _pdfGrey300, width: 0.6),
+        ),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text('Itens por mês',
+                style: pw.TextStyle(
+                    fontSize: 10.5, fontWeight: pw.FontWeight.bold, color: _pdfPrimary)),
+            pw.SizedBox(height: 8),
+            for (final k in mesesKeys)
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(bottom: 4),
+                child: pw.Row(children: [
+                  pw.SizedBox(
+                    width: 70,
+                    child: pw.Text(
+                      '${mesesNome[mesOrdem[k]!.month - 1].substring(0, 3)}/${mesOrdem[k]!.year}',
+                      style: pw.TextStyle(fontSize: 8.5, color: _pdfGrey700),
+                    ),
+                  ),
+                  pw.Expanded(
+                    flex: ((porMes[k]!.length / maxMes) * 1000).round().clamp(20, 1000),
+                    child: pw.Container(
+                      height: 7,
+                      decoration: pw.BoxDecoration(
+                        color: _pdfAccent,
+                        borderRadius: pw.BorderRadius.circular(999),
+                      ),
+                    ),
+                  ),
+                  pw.Expanded(
+                    flex: (1000 - ((porMes[k]!.length / maxMes) * 1000).round()).clamp(1, 1000),
+                    child: pw.SizedBox(height: 7),
+                  ),
+                  pw.SizedBox(width: 6),
+                  pw.SizedBox(
+                    width: 24,
+                    child: pw.Text('${porMes[k]!.length}',
+                        textAlign: pw.TextAlign.right,
+                        style: pw.TextStyle(
+                            fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: _pdfPrimary)),
+                  ),
+                ]),
               ),
-        ],
-      ),
-    );
+          ],
+        ),
+      );
+    }
+
+    final grafico = graficoPorMes();
+    final tableAgenda = <pw.Widget>[
+      for (final k in mesesKeys) ...[
+        pw.Container(
+          margin: const pw.EdgeInsets.only(top: 10, bottom: 6),
+          padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: pw.BoxDecoration(
+            color: _pdfGrey100,
+            borderRadius: pw.BorderRadius.circular(8),
+          ),
+          child: pw.Row(children: [
+            pw.Expanded(
+              child: pw.Text(
+                '${mesesNome[mesOrdem[k]!.month - 1]} de ${mesOrdem[k]!.year}',
+                style: pw.TextStyle(
+                    fontSize: 11, fontWeight: pw.FontWeight.bold, color: _pdfPrimary),
+              ),
+            ),
+            pw.Text(
+              '${porMes[k]!.length} ${porMes[k]!.length == 1 ? 'item' : 'itens'}',
+              style: pw.TextStyle(fontSize: 9, color: _pdfGrey700),
+            ),
+          ]),
+        ),
+        tabelaDoMes(porMes[k]!),
+      ],
+    ];
 
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: _kA4PageMargin,
+        // Padrão do pacote = 20 páginas: o anual estourava.
+        maxPages: 400,
         footer: _pdfFooterFinanceiroEmitido(dataGeracao),
         build: (pw.Context context) {
           return [
             pw.Container(
               padding: const pw.EdgeInsets.symmetric(vertical: 16, horizontal: 20),
               decoration: pw.BoxDecoration(
-                color: _pdfPrimary,
+                gradient: pw.LinearGradient(
+                  colors: [
+                    PdfColor.fromInt(0xFF0B1F4B),
+                    PdfColor.fromInt(0xFF2D5BFF),
+                    PdfColor.fromInt(0xFF12B5A5),
+                  ],
+                ),
                 borderRadius: pw.BorderRadius.circular(12),
               ),
               child: pw.Row(
@@ -2302,16 +2416,25 @@ class RelatorioService {
                   '$compromissosCount',
                   _pdfAccent,
                 ),
-                _buildPdfStatCard(
-                  'Receitas pendentes',
-                  '${incomeItems.length} · ${CurrencyFormats.formatBRL(totalReceitas)}',
-                  _pdfAgendaReceita,
-                ),
-                _buildPdfStatCard(
-                  'Despesas pendentes',
-                  '${expenseItems.length} · ${CurrencyFormats.formatBRL(totalDespesas)}',
-                  _pdfAgendaDespesa,
-                ),
+                if (aRealizar > 0 || realizados > 0) ...[
+                  _buildPdfStatCard('A realizar', '$aRealizar', _pdfPrimary),
+                  _buildPdfStatCard('Realizados', '$realizados', _pdfAgendaReceita),
+                ],
+                // Relatório só de compromissos: sem os cards financeiros zerados.
+                if (contentFilter != AgendaPdfContentFilter.particular ||
+                    incomeItems.isNotEmpty ||
+                    expenseItems.isNotEmpty) ...[
+                  _buildPdfStatCard(
+                    'Receitas pendentes',
+                    '${incomeItems.length} · ${CurrencyFormats.formatBRL(totalReceitas)}',
+                    _pdfAgendaReceita,
+                  ),
+                  _buildPdfStatCard(
+                    'Despesas pendentes',
+                    '${expenseItems.length} · ${CurrencyFormats.formatBRL(totalDespesas)}',
+                    _pdfAgendaDespesa,
+                  ),
+                ],
                 if (googleCount > 0)
                   _buildPdfStatCard(
                     'Google Calendar',
@@ -2342,8 +2465,12 @@ class RelatorioService {
                 ),
               ],
             ),
-            pw.SizedBox(height: 10),
-            tableAgenda,
+            if (grafico != null) ...[
+              pw.SizedBox(height: 10),
+              grafico,
+            ],
+            pw.SizedBox(height: 4),
+            ...tableAgenda,
             if (merged.isEmpty)
               pw.Padding(
                 padding: const pw.EdgeInsets.only(top: 12),

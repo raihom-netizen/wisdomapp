@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart' hide showDatePicker;
 import '../widgets/fast_text_field.dart';
 import 'package:flutter/services.dart';
@@ -33,10 +32,15 @@ import '../services/finance_accounts_service.dart';
 import '../widgets/report_finance_charts_panel.dart';
 import '../widgets/report_layout_responsive.dart';
 import '../utils/firestore_user_doc_id.dart';
-import '../utils/firestore_query_batched_collect.dart';
 import '../utils/firestore_reliable_read.dart';
 import '../utils/friendly_error.dart';
 import '../utils/pdf_financeiro_super_extrato.dart';
+import '../utils/report_period_loader.dart';
+import '../utils/finance_fora_dos_totais.dart';
+import '../services/finance_opening_balance_service.dart';
+import '../services/yearly_commitment_repeat_service.dart';
+import '../models/finance_account.dart';
+import '../widgets/finance_load_error_box.dart';
 import '../services/express_compromisso_agenda_sync.dart';
 import '../services/compromisso_reminder_service.dart';
 import '../utils/keyboard_form_scaffold.dart';
@@ -109,6 +113,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
   static const Duration _pdfCacheTtl = Duration(minutes: 5);
 
   String get _userDocId => firestoreUserDocIdForAppShell(widget.uid);
+
+  @override
+  void dispose() {
+    _reportLoadProgress.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -857,26 +867,46 @@ class _ReportsScreenState extends State<ReportsScreen> {
   String _txPeriodCacheKey() =>
       'tx_${_dateStart.millisecondsSinceEpoch}_${_dateEnd.millisecondsSinceEpoch}';
 
+  /// Progresso da leitura do relatório («Lendo mês 3 de 12…»).
+  final ValueNotifier<String?> _reportLoadProgress = ValueNotifier<String?>(null);
+
+  /// Lançamentos do período lidos MÊS A MÊS ([reportCollectByMonth]): cada mês
+  /// é uma consulta pequena com prazo e nova tentativa; o ano inteiro são 12.
+  /// Antes era uma consulta só do período inteiro, sem nova tentativa — na Web
+  /// o «Serviço temporariamente indisponível» deixava o esqueleto para sempre.
   Future<Map<String, List<Map<String, dynamic>>>> _loadTransactionsPair() async {
-    final start = DateTime(_dateStart.year, _dateStart.month, _dateStart.day);
-    final end = DateTime(_dateEnd.year, _dateEnd.month, _dateEnd.day, 23, 59, 59);
-    final snap = await firestoreQueryGetReliable(
-      _tx
-          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
-          .where('date', isLessThanOrEqualTo: Timestamp.fromDate(end))
+    final docs = await reportCollectByMonth(
+      from: _dateStart,
+      to: _dateEnd,
+      buildQuery: (s, e) => _tx
+          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(s))
+          .where('date', isLessThan: Timestamp.fromDate(e))
           .orderBy('date', descending: false),
-    ).timeout(
-          _kReportsExportFirestoreTimeout,
-          onTimeout: () => throw TimeoutException('Lista de lançamentos (período): tempo esgotado.'),
-        );
+      onProgress: (done, total) {
+        _reportLoadProgress.value =
+            total <= 1 ? null : 'Lendo lançamentos: mês $done de $total…';
+      },
+    );
+    _reportLoadProgress.value = null;
     final expenses = <Map<String, dynamic>>[];
     final incomes = <Map<String, dynamic>>[];
+    // Pagamento de fatura, transferência própria e depósito/resgate de meta
+    // (financeForaDosTotais — mesma regra do Financeiro e do Controle Total):
+    // fora das receitas/despesas do relatório; voltam só no saldo (ajuste).
+    final foraIncome = <Map<String, dynamic>>[];
+    final foraExpense = <Map<String, dynamic>>[];
     var n = 0;
-    for (final d in snap.docs) {
+    for (final d in docs) {
       final data = d.data();
       data['id'] = d.id;
       final type = (data['type'] ?? '').toString();
-      if (type == 'expense') {
+      if (financeForaDosTotais(data)) {
+        if (type == 'income') {
+          foraIncome.add(data);
+        } else if (type == 'expense') {
+          foraExpense.add(data);
+        }
+      } else if (type == 'expense') {
         expenses.add(data);
       } else if (type == 'income') {
         incomes.add(data);
@@ -889,26 +919,59 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return {
       'expense': expenses,
       'income': incomes,
+      'foraIncome': foraIncome,
+      'foraExpense': foraExpense,
     };
+  }
+
+  /// Líquido do que ficou fora dos totais, com os MESMOS filtros de status da
+  /// tela — o saldo do relatório continua o mesmo de antes.
+  double _ajusteForaDosTotais(
+      List<Map<String, dynamic>> foraIncome, List<Map<String, dynamic>> foraExpense) {
+    return _somaValores(_filterByStatus(foraIncome, _filtroReceitas)) -
+        _somaValores(_filterByStatus(foraExpense, _filtroDespesas));
+  }
+
+  static double _somaValores(List<Map<String, dynamic>> l) =>
+      l.fold<double>(0, (s, e) => s + ((e['amount'] ?? 0) as num).toDouble().abs());
+
+  /// Tira do cache um Future que falhou — o «Tentar de novo» lê de novo.
+  void _forgetFailed<T>(Future<T>? f, void Function() clear) {
+    f?.then<void>((_) {}, onError: (Object _) {
+      if (mounted) clear();
+    });
   }
 
   Future<Map<String, List<Map<String, dynamic>>>> _getTransactionsPairCached() {
     final key = _txPeriodCacheKey();
     if (_txPairKey != key || _txPairFuture == null) {
       _txPairKey = key;
-      _txPairFuture = _loadTransactionsPair();
+      final f = _txPairFuture = _loadTransactionsPair();
+      _forgetFailed(f, () {
+        if (identical(_txPairFuture, f)) {
+          _txPairFuture = null;
+          _txPairKey = '';
+        }
+      });
     }
     return _txPairFuture!;
   }
 
   Future<Map<String, dynamic>> _loadFinanceExportData() async {
     // Firestore Web: evitar duas queries pesadas em paralelo na mesma coleção (reduz INTERNAL ASSERTION / travamentos).
-    final txPair = await _getTransactionsPairCached();
-    final saldoAbertura = await _loadSaldoAbertura();
-    final accounts = await FinanceAccountsService().listOnce(_userDocId);
+    final results = await Future.wait<Object>([
+      _getTransactionsPairCached(),
+      _loadSaldoAbertura(),
+      _accountsForReport(),
+    ]);
+    final txPair = results[0] as Map<String, List<Map<String, dynamic>>>;
+    final saldoAbertura = results[1] as double;
+    final accounts = results[2] as List<FinanceAccount>;
     return {
       'expenseListRaw': txPair['expense'] ?? const <Map<String, dynamic>>[],
       'incomeListRaw': txPair['income'] ?? const <Map<String, dynamic>>[],
+      'foraIncomeRaw': txPair['foraIncome'] ?? const <Map<String, dynamic>>[],
+      'foraExpenseRaw': txPair['foraExpense'] ?? const <Map<String, dynamic>>[],
       'saldoAbertura': saldoAbertura,
       'financeAccList': accounts,
     };
@@ -918,7 +981,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final key = _financeExportCacheKey();
     if (_exportFinanceKey != key || _exportFinanceFuture == null) {
       _exportFinanceKey = key;
-      _exportFinanceFuture = _loadFinanceExportData();
+      final f = _exportFinanceFuture = _loadFinanceExportData();
+      _forgetFailed(f, () {
+        if (identical(_exportFinanceFuture, f)) {
+          _exportFinanceFuture = null;
+          _exportFinanceKey = '';
+        }
+      });
     }
     return _exportFinanceFuture!;
   }
@@ -938,15 +1007,31 @@ class _ReportsScreenState extends State<ReportsScreen> {
   /// Compromissos da Agenda no período (mesma consulta da limpeza em lote da Agenda),
   /// ordenados por dia e horário.
   Future<List<Map<String, dynamic>>> _loadCompromissosPeriodo() async {
-    final start = DateTime(_dateStart.year, _dateStart.month, _dateStart.day);
-    final docs = await CompromissoReminderService.fetchCompromissosInRange(
-      userDocId: _userDocId,
-      start: start,
-      end: _dateEnd,
-    ).timeout(
-      _kReportsExportFirestoreTimeout,
-      onTimeout: () => throw TimeoutException('Compromissos: tempo esgotado.'),
+    // Mês a mês (mesma consulta indexada type+date da Agenda), com prazo e
+    // nova tentativa por mês — o anual são 12 leituras pequenas.
+    final raw = await reportCollectByMonth(
+      from: _dateStart,
+      to: _dateEnd,
+      buildQuery: (s, e) => FirebaseFirestore.instance
+          .collection('users')
+          .doc(_userDocId)
+          .collection('reminders')
+          .where('type', isEqualTo: 'compromisso')
+          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(s))
+          .where('date', isLessThan: Timestamp.fromDate(e))
+          .orderBy('date'),
+      onProgress: (done, total) {
+        _reportLoadProgress.value =
+            total <= 1 ? null : 'Lendo compromissos: mês $done de $total…';
+      },
     );
+    _reportLoadProgress.value = null;
+    final docs = raw
+        .where((d) => YearlyCommitmentRepeatService.shouldShowInAgendaList(
+              d.data(),
+              docId: d.id,
+            ))
+        .toList();
     final items = <Map<String, dynamic>>[
       for (final d in docs) {...d.data(), 'id': d.id},
     ];
@@ -967,7 +1052,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final key = _compromissosCacheKey();
     if (_compromissosKey != key || _compromissosFuture == null) {
       _compromissosKey = key;
-      _compromissosFuture = _loadCompromissosPeriodo();
+      final f = _compromissosFuture = _loadCompromissosPeriodo();
+      _forgetFailed(f, () {
+        if (identical(_compromissosFuture, f)) {
+          _compromissosFuture = null;
+          _compromissosKey = '';
+        }
+      });
     }
     return _compromissosFuture!;
   }
@@ -990,15 +1081,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
       future: _getCompromissosCached(),
       builder: (context, snap) {
         if (snap.hasError) {
-          return _emptyCard(
-            'Erro ao carregar os compromissos. Atualize e tente novamente.\n\nDetalhe: ${friendlyMessage(snap.error!)}',
+          return _reportLoadError(
+            'Não foi possível carregar os compromissos.',
+            snap.error,
+            onRetry: () => setState(() {
+              _compromissosKey = '';
+              _compromissosFuture = null;
+              _pdfBytesCache.clear();
+              _pdfCacheTime.clear();
+            }),
           );
         }
         if (!snap.hasData) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 16),
-            child: SkeletonListLoader(itemCount: 5, itemHeight: 56),
-          );
+          return _reportLoadingSkeleton(itemCount: 5);
         }
         final items = snap.data!;
         final porDia = <DateTime, List<Map<String, dynamic>>>{};
@@ -1205,7 +1300,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
     };
   }
 
-  /// Execução de export sem banner persistente de progresso.
+  /// Gera o PDF com uma janelinha de progresso (barra + «Lendo mês 3 de 12…»).
+  /// Antes não havia nada na tela enquanto o PDF do ano era montado — parecia
+  /// travado. A janela fecha sozinha (sucesso ou erro).
   Future<T> _runWithPdfProgress<T>({
     required String message,
     required Future<T> Function() action,
@@ -1213,7 +1310,55 @@ class _ReportsScreenState extends State<ReportsScreen> {
     if (!mounted) {
       throw StateError('reports_pdf_unmounted');
     }
-    return action();
+    final nav = Navigator.of(context, rootNavigator: true);
+    var aberto = true;
+    unawaited(showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      useRootNavigator: true,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.picture_as_pdf_rounded, color: AppColors.primary),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(message,
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: const LinearProgressIndicator(minHeight: 5),
+              ),
+              const SizedBox(height: 8),
+              ValueListenableBuilder<String?>(
+                valueListenable: _reportLoadProgress,
+                builder: (context, msg, _) => Text(
+                  msg ?? 'Montando o documento…',
+                  style: TextStyle(fontSize: 12.5, color: _reportOnSurfaceVar),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ).whenComplete(() => aberto = false));
+    try {
+      // Deixa a janela pintar antes do trabalho pesado (Web = mesma thread).
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      return await action();
+    } finally {
+      _reportLoadProgress.value = null;
+      if (aberto && nav.mounted) nav.pop();
+    }
   }
 
   void _onImprimir() => _exportarOuImprimir();
@@ -1235,8 +1380,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
       final expenseList = _filterByStatus(expenseListRaw, _filtroDespesas);
       final incomeList = _filterByStatus(incomeListRaw, _filtroReceitas);
       final saldoAbertura = raw['saldoAbertura'] as double;
-      final totalDespesas = expenseList.fold<double>(0, (s, e) => s + ((e['amount'] ?? 0) as num).toDouble());
-      final totalReceitas = incomeList.fold<double>(0, (s, e) => s + ((e['amount'] ?? 0) as num).toDouble());
+      final totalDespesas = _somaValores(expenseList);
+      final totalReceitas = _somaValores(incomeList);
+      final ajusteFora = _ajusteForaDosTotais(
+        (raw['foraIncomeRaw'] as List?)?.cast<Map<String, dynamic>>() ?? const [],
+        (raw['foraExpenseRaw'] as List?)?.cast<Map<String, dynamic>>() ?? const [],
+      );
       final batchYield = _financeBatchYieldSize();
 
       String dataStr(dynamic ts) {
@@ -1263,7 +1412,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
           'titulo': tituloLinha,
           'descricao': descricao,
           'tipo': income ? 'receita' : 'despesa',
-          'valor': ((e['amount'] ?? 0) as num).toDouble(),
+          'valor': ((e['amount'] ?? 0) as num).toDouble().abs(),
+          'observacao': (e['observacao'] ?? e['notes'] ?? '').toString(),
         });
       }
 
@@ -1295,6 +1445,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         totalReceitas: totalReceitas,
         totalDespesas: totalDespesas,
         logoPngBytes: logo,
+        ajusteSaldoForaDosTotais: ajusteFora,
       );
       _putPdfInCache(pdfKey, bytes);
       return (bytes, filenameBase, false);
@@ -1531,9 +1682,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
       final expenseList = _filterByStatus(expenseListRaw, _filtroDespesas);
       final incomeList = _filterByStatus(incomeListRaw, _filtroReceitas);
       final saldoAbertura = await _loadSaldoAbertura();
-      final totalDespesas = expenseList.fold<double>(0, (s, e) => s + ((e['amount'] ?? 0) as num).toDouble());
-      final totalReceitas = incomeList.fold<double>(0, (s, e) => s + ((e['amount'] ?? 0) as num).toDouble());
-      final saldoPeriodo = totalReceitas - totalDespesas;
+      final totalDespesas = _somaValores(expenseList);
+      final totalReceitas = _somaValores(incomeList);
+      final saldoPeriodo = totalReceitas -
+          totalDespesas +
+          _ajusteForaDosTotais(
+              txPair['foraIncome'] ?? const [], txPair['foraExpense'] ?? const []);
       final saldoAcumulado = saldoAbertura + saldoPeriodo;
       text = '''
 Relatório WISDOMAPP - Despesas e Receitas
@@ -1936,23 +2090,38 @@ Usadas para folga: ${usadasFolga.fold<int>(0, (s, g) => s + (((g['ocorrencias'] 
     return FutureBuilder<Map<String, dynamic>>(
       future: _reportDataFuture,
         builder: (context, snap) {
-        if (!snap.hasData) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 16),
-            child: SkeletonListLoader(itemCount: 6, itemHeight: 56),
+        // Erro/prazo: antes o esqueleto ficava para sempre (só testava hasData).
+        if (snap.hasError) {
+          return _reportLoadError(
+            'Não foi possível carregar o relatório financeiro.',
+            snap.error,
+            onRetry: () => setState(() {
+              _reportDataKey = '';
+              _reportDataFuture = null;
+              _txPairKey = '';
+              _txPairFuture = null;
+              _exportFinanceKey = '';
+              _exportFinanceFuture = null;
+            }),
           );
+        }
+        if (!snap.hasData) {
+          return _reportLoadingSkeleton(itemCount: 6);
         }
         final data = snap.data!;
         final totalReceitas = (data['totalReceitas'] ?? 0.0) as double;
         final totalDespesas = (data['totalDespesas'] ?? 0.0) as double;
         final saldoAbertura = (data['saldoAbertura'] ?? 0.0) as double;
+        final ajusteFora = (data['ajusteSaldo'] ?? 0.0) as double;
         final expenseList = (data['expenseList'] as List<Map<String, dynamic>>?) ?? [];
         final incomeList = (data['incomeList'] as List<Map<String, dynamic>>?) ?? [];
         final horasData = data['horasData'] as Map<String, dynamic>?;
         final porConta = (data['porConta'] as List<Map<String, dynamic>>?) ?? [];
         final gastosPorCategoria = (data['gastosPorCategoria'] as List<Map<String, dynamic>>?) ?? [];
         final receitasPorCategoria = (data['receitasPorCategoria'] as List<Map<String, dynamic>>?) ?? [];
-        final saldoPeriodo = totalReceitas - totalDespesas;
+        // Pagamento de fatura / transferência / meta saem de Receitas e
+        // Despesas, mas o dinheiro mexeu na conta: volta no saldo.
+        final saldoPeriodo = totalReceitas - totalDespesas + ajusteFora;
         final saldoAcumulado = saldoAbertura + saldoPeriodo;
         final evolucao = computeReportFinanceEvolucao(
           incomeList: incomeList,
@@ -2083,60 +2252,53 @@ Usadas para folga: ${usadasFolga.fold<int>(0, (s, g) => s + (((g['ocorrencias'] 
     );
   }
 
-  /// Saldo de abertura: soma de receitas e despesas pagas com data efetiva anterior ao início do período (igual ao painel).
+  /// Saldo de abertura = a MESMA fonte do Financeiro, do Início e da ficha
+  /// da conta ([FinanceOpeningBalanceService]: somas mensais do servidor +
+  /// mês parcial, data efetiva). Antes o relatório lia TODO o histórico
+  /// anterior ao período (lento e, na Web, o que mais estourava o prazo) com
+  /// regra própria (`paidAt ?? date`, sem data efetiva).
   Future<double> _loadSaldoAbertura() async {
     final start = DateTime(_dateStart.year, _dateStart.month, _dateStart.day);
-    final allDocs = await firestoreQueryCollectDocumentsBatched(
-      _tx
-          .where('date', isLessThan: Timestamp.fromDate(start))
-          .orderBy('date', descending: false),
-    ).timeout(
-          _kReportsExportFirestoreTimeout,
-          onTimeout: () => throw TimeoutException('Saldo de abertura: tempo esgotado.'),
-        );
-    double saldo = 0;
-    var n = 0;
-    for (final doc in allDocs) {
-      final d = doc.data();
-      final ts = d['date'];
-      if (ts is! Timestamp) continue;
-      final date = ts.toDate();
-      final paidAtTs = d['paidAt'];
-      final paidAt = paidAtTs is Timestamp ? paidAtTs.toDate() : null;
-      final effectiveDate = paidAt ?? date;
-      if (effectiveDate.isBefore(start)) {
-        final isPaid = (d['status'] ?? 'paid').toString() == 'paid';
-        if (!isPaid) continue;
-        final amount = (d['amount'] ?? 0).toDouble();
-        final type = (d['type'] ?? 'expense').toString();
-        if (type == 'income') {
-          saldo += amount;
-        } else {
-          saldo -= amount.abs();
-        }
-      }
-      n++;
-      if (n % 220 == 0) {
-        await Future<void>.delayed(Duration.zero);
-      }
+    final r = await FinanceOpeningBalanceService.load(
+      uid: _userDocId,
+      periodStart: start,
+      loadAccounts: false,
+    ).timeout(const Duration(seconds: 60));
+    return r.total;
+  }
+
+  /// Contas (rótulos «por conta»): lista da sessão primeiro, com prazo; sem
+  /// resposta, segue sem rótulos em vez de travar o relatório.
+  Future<List<FinanceAccount>> _accountsForReport() async {
+    final memo = FinanceAccountsService.peekLastKnown(_userDocId);
+    if (memo != null) return memo;
+    try {
+      return await FinanceAccountsService()
+          .listOnce(_userDocId)
+          .timeout(const Duration(seconds: 20));
+    } catch (_) {
+      return const <FinanceAccount>[];
     }
-    return saldo;
   }
 
   Future<Map<String, dynamic>> _loadAllReportData() async {
-    final txPair = await _getTransactionsPairCached();
-    if (kIsWeb) {
-      await Future<void>.delayed(const Duration(milliseconds: 48));
-    }
-    final saldoAbertura = await _loadSaldoAbertura();
-    final accounts = await FinanceAccountsService().listOnce(_userDocId);
+    // Lançamentos, abertura e contas em PARALELO (cada um com prazo). Antes
+    // eram em série e a abertura relia o histórico inteiro.
+    final results = await Future.wait<Object>([
+      _getTransactionsPairCached(),
+      _loadSaldoAbertura(),
+      _accountsForReport(),
+    ]);
+    final txPair = results[0] as Map<String, List<Map<String, dynamic>>>;
+    final saldoAbertura = results[1] as double;
+    final accounts = results[2] as List<FinanceAccount>;
     final expenseListRaw = txPair['expense'] ?? const <Map<String, dynamic>>[];
     final incomeListRaw = txPair['income'] ?? const <Map<String, dynamic>>[];
     final expenseList = _filterByStatus(expenseListRaw, _filtroDespesas);
     final incomeList = _filterByStatus(incomeListRaw, _filtroReceitas);
     final accountLabels = {for (final a in accounts) a.id: a.displayName};
-    final totalReceitas = incomeList.fold<double>(0, (s, e) => s + ((e['amount'] ?? 0) as num).toDouble());
-    final totalDespesas = expenseList.fold<double>(0, (s, e) => s + ((e['amount'] ?? 0) as num).toDouble());
+    final totalReceitas = _somaValores(incomeList);
+    final totalDespesas = _somaValores(expenseList);
     final porConta = computeReportPorConta(incomeList, expenseList, accountLabels);
     final gastosPorCategoria = computeReportGastosPorCategoria(expenseList);
     final receitasPorCategoria = computeReportReceitasPorCategoria(incomeList);
@@ -2145,6 +2307,8 @@ Usadas para folga: ${usadasFolga.fold<int>(0, (s, g) => s + (((g['ocorrencias'] 
     _exportFinanceFuture = Future.value({
       'expenseListRaw': List<Map<String, dynamic>>.from(expenseListRaw),
       'incomeListRaw': List<Map<String, dynamic>>.from(incomeListRaw),
+      'foraIncomeRaw': List<Map<String, dynamic>>.from(txPair['foraIncome'] ?? const []),
+      'foraExpenseRaw': List<Map<String, dynamic>>.from(txPair['foraExpense'] ?? const []),
       'saldoAbertura': saldoAbertura,
       'financeAccList': accounts,
     });
@@ -2153,6 +2317,8 @@ Usadas para folga: ${usadasFolga.fold<int>(0, (s, g) => s + (((g['ocorrencias'] 
       'incomeList': incomeList,
       'totalReceitas': totalReceitas,
       'totalDespesas': totalDespesas,
+      'ajusteSaldo': _ajusteForaDosTotais(
+          txPair['foraIncome'] ?? const [], txPair['foraExpense'] ?? const []),
       'saldoAbertura': saldoAbertura,
       'horasData': null,
       'previsaoData': null,
@@ -2160,6 +2326,55 @@ Usadas para folga: ${usadasFolga.fold<int>(0, (s, g) => s + (((g['ocorrencias'] 
       'gastosPorCategoria': gastosPorCategoria,
       'receitasPorCategoria': receitasPorCategoria,
     };
+  }
+
+  /// Esqueleto + linha de progresso («Lendo lançamentos: mês 3 de 12…»).
+  Widget _reportLoadingSkeleton({required int itemCount}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ValueListenableBuilder<String?>(
+            valueListenable: _reportLoadProgress,
+            builder: (context, msg, _) {
+              if (msg == null) return const SizedBox(height: 4);
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: const LinearProgressIndicator(minHeight: 4),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      msg,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 12.5, color: _reportOnSurfaceVar),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          SkeletonListLoader(itemCount: itemCount, itemHeight: 56),
+        ],
+      ),
+    );
+  }
+
+  /// Erro de carga com «Tentar de novo» (nunca esqueleto eterno).
+  Widget _reportLoadError(String titulo, Object? error, {required VoidCallback onRetry}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: FinanceLoadErrorBox(
+        error: error,
+        message: '$titulo ${FinanceLoadErrorBox.mensagemPara(error)}',
+        onRetry: onRetry,
+      ),
+    );
   }
 
   Widget _sectionTitle(String title) {

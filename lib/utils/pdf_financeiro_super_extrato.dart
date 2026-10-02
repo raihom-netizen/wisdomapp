@@ -1,4 +1,7 @@
+import 'dart:isolate';
 import 'dart:typed_data';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -16,8 +19,12 @@ Future<Uint8List> gerarPdfFinanceiroSuperExtrato({
   required double totalReceitas,
   required double totalDespesas,
   Uint8List? logoPngBytes,
+  // Líquido do que ficou FORA de receitas/despesas (pagamento de fatura,
+  // transferência própria): volta só no saldo final — o saldo não muda.
+  double ajusteSaldoForaDosTotais = 0,
 }) async {
-  return _financeSuperExtratoComputeAsync(<String, dynamic>{
+  final args = <String, dynamic>{
+    'ajusteSaldoForaDosTotais': ajusteSaldoForaDosTotais,
     'transacoes': transacoes.map((m) => Map<String, dynamic>.from(m)).toList(),
     'nomeUsuario': nomeUsuario,
     'conta': conta,
@@ -26,7 +33,16 @@ Future<Uint8List> gerarPdfFinanceiroSuperExtrato({
     'totalReceitas': totalReceitas,
     'totalDespesas': totalDespesas,
     'logoPngBytes': logoPngBytes,
-  });
+  };
+  // Android/iOS: monta o PDF fora da thread da tela (ano inteiro com milhares
+  // de lançamentos travava a UI). Web não tem isolate: gera na thread (o
+  // relatório já cede a vez antes). Se o isolate falhar, gera aqui mesmo.
+  if (!kIsWeb) {
+    try {
+      return await Isolate.run(() => _financeSuperExtratoComputeAsync(args));
+    } catch (_) {}
+  }
+  return _financeSuperExtratoComputeAsync(args);
 }
 
 String _clamp(String s, [int max = 120]) {
@@ -126,7 +142,8 @@ Future<Uint8List> _financeSuperExtratoComputeAsync(Map<String, dynamic> p) async
     return sa.compareTo(sb);
   });
 
-  final saldoPeriodo = totalReceitas - totalDespesas;
+  final ajusteFora = (p['ajusteSaldoForaDosTotais'] as num?)?.toDouble() ?? 0.0;
+  final saldoPeriodo = totalReceitas - totalDespesas + ajusteFora;
   final saldoFinal = saldoAbertura + saldoPeriodo;
   final now = DateTime.now();
   final emitido =
@@ -191,7 +208,7 @@ Future<Uint8List> _financeSuperExtratoComputeAsync(Map<String, dynamic> p) async
         borderRadius: pw.BorderRadius.circular(14),
       ),
       child: pw.Row(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        crossAxisAlignment: pw.CrossAxisAlignment.center,
         children: [
           if (logoBytes != null && logoBytes.isNotEmpty)
             pw.Padding(
@@ -271,6 +288,88 @@ Future<Uint8List> _financeSuperExtratoComputeAsync(Map<String, dynamic> p) async
     );
   }
 
+  /// Para onde foi o dinheiro, com barra proporcional.
+  ///
+  /// O insight de uma linha só dizia a MAIOR categoria. Quem imprime o extrato
+  /// quer ver a divisão inteira — e a barra responde «quanto» sem precisar
+  /// comparar números de cabeça.
+  pw.Widget? blocoCategorias() {
+    if (porCat.isEmpty || maxDespCat <= 0) return null;
+    final ordenadas = porCat.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final total = ordenadas.fold<double>(0, (acc, e) => acc + e.value);
+    if (total <= 0) return null;
+    final top = ordenadas.take(8).toList();
+    final resto = ordenadas.skip(8).fold<double>(0, (acc, e) => acc + e.value);
+
+    pw.Widget linha(String nome, double valor) {
+      final fracao = (valor / total).clamp(0.0, 1.0);
+      return pw.Padding(
+        padding: const pw.EdgeInsets.only(bottom: 6),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Row(children: [
+              pw.Expanded(
+                child: pw.Text(_clamp(nome, 46),
+                    style: pw.TextStyle(fontSize: 9, color: PdfColor.fromInt(0xFF0F172A))),
+              ),
+              pw.Text(
+                '${CurrencyFormats.formatBRL(valor)}  ${(fracao * 100).round()}%',
+                style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: muted),
+              ),
+            ]),
+            pw.SizedBox(height: 2),
+            // O pacote de PDF não tem FractionallySizedBox: a proporção sai de
+            // dois Expanded com `flex` inteiro (milésimos da largura).
+            pw.Row(children: [
+              pw.Expanded(
+                flex: ((fracao <= 0.02 ? 0.02 : fracao) * 1000).round(),
+                child: pw.Container(
+                  height: 5,
+                  decoration: pw.BoxDecoration(
+                    color: red,
+                    borderRadius: pw.BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+              pw.Expanded(
+                flex: (1000 - ((fracao <= 0.02 ? 0.02 : fracao) * 1000).round())
+                    .clamp(1, 1000),
+                child: pw.Container(
+                  height: 5,
+                  decoration: pw.BoxDecoration(
+                    color: PdfColor.fromInt(0xFFE2E8F0),
+                    borderRadius: pw.BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+            ]),
+          ],
+        ),
+      );
+    }
+
+    return pw.Container(
+      padding: const pw.EdgeInsets.fromLTRB(12, 10, 12, 8),
+      decoration: pw.BoxDecoration(
+        color: PdfColor.fromInt(0xFFFAFAFA),
+        borderRadius: pw.BorderRadius.circular(12),
+        border: pw.Border.all(color: PdfColor.fromInt(0xFFE2E8F0), width: 0.8),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text('Para onde foi o dinheiro',
+              style: pw.TextStyle(fontSize: 10.5, fontWeight: pw.FontWeight.bold, color: primary)),
+          pw.SizedBox(height: 8),
+          for (final e in top) linha(e.key, e.value),
+          if (resto > 0) linha('Outras categorias', resto),
+        ],
+      ),
+    );
+  }
+
   pw.Widget? insightLinha() {
     if (insightTopDespesa == null || maxDespCat <= 0) return null;
     return pw.Container(
@@ -298,6 +397,7 @@ Future<Uint8List> _financeSuperExtratoComputeAsync(Map<String, dynamic> p) async
   pw.Widget blocoMovimento({
     required String titulo,
     required String categoria,
+    String observacao = '',
     required bool isReceita,
     required double valorAbs,
   }) {
@@ -332,6 +432,20 @@ Future<Uint8List> _financeSuperExtratoComputeAsync(Map<String, dynamic> p) async
                   pw.Text(
                     _clamp(categoria, 70),
                     style: pw.TextStyle(fontSize: 9, color: muted),
+                  ),
+                ],
+                // A observação é o «por quê» do lançamento. Num extrato que
+                // vai para o contador ou para uma prestação de contas, é
+                // justamente ela que evita a pergunta de volta.
+                if (observacao.isNotEmpty) ...[
+                  pw.SizedBox(height: 4),
+                  pw.Text(
+                    _clamp(observacao, 160),
+                    style: pw.TextStyle(
+                      fontSize: 8.5,
+                      color: muted,
+                      fontStyle: pw.FontStyle.italic,
+                    ),
                   ),
                 ],
               ],
@@ -436,6 +550,7 @@ Future<Uint8List> _financeSuperExtratoComputeAsync(Map<String, dynamic> p) async
       blocoMovimento(
         titulo: titulo,
         categoria: categoria,
+        observacao: (t['observacao'] ?? '').toString().trim(),
         isReceita: isReceita,
         valorAbs: valorAbs,
       ),
@@ -452,11 +567,16 @@ Future<Uint8List> _financeSuperExtratoComputeAsync(Map<String, dynamic> p) async
   );
 
   final insight = insightLinha();
+  final categorias = blocoCategorias();
+  final porMes = _blocoTotaisPorMes(rawList, primary: primary, green: green, red: red, muted: muted);
 
   pdf.addPage(
     pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.all(22),
+      // Padrão do pacote = 20 páginas: o extrato do ano inteiro (centenas de
+      // movimentos) falhava com «Não foi possível gerar o PDF».
+      maxPages: 1000,
       footer: footer,
       build: (pw.Context context) => [
         headerBand(),
@@ -474,6 +594,14 @@ Future<Uint8List> _financeSuperExtratoComputeAsync(Map<String, dynamic> p) async
         if (insight != null) ...[
           pw.SizedBox(height: 12),
           insight,
+        ],
+        if (categorias != null) ...[
+          pw.SizedBox(height: 12),
+          categorias,
+        ],
+        if (porMes != null) ...[
+          pw.SizedBox(height: 12),
+          porMes,
         ],
         pw.SizedBox(height: 14),
         pw.Text(
@@ -496,6 +624,98 @@ Future<Uint8List> _financeSuperExtratoComputeAsync(Map<String, dynamic> p) async
   );
 
   return Uint8List.fromList(await pdf.save());
+}
+
+/// Totais por mês (receitas, despesas, saldo) em tabela com zebra — só quando
+/// o período tem 2 meses ou mais (relatório anual, trimestral…).
+pw.Widget? _blocoTotaisPorMes(
+  List<Map<String, dynamic>> rows, {
+  required PdfColor primary,
+  required PdfColor green,
+  required PdfColor red,
+  required PdfColor muted,
+}) {
+  final rec = <int, double>{};
+  final des = <int, double>{};
+  for (final t in rows) {
+    final d = _dayFromRow(t);
+    if (d == null) continue;
+    final k = d.year * 100 + d.month;
+    final v = t['valor'];
+    final valor = v is num ? v.toDouble().abs() : double.tryParse('$v')?.abs() ?? 0.0;
+    if ((t['tipo'] ?? '').toString().toLowerCase() == 'receita') {
+      rec[k] = (rec[k] ?? 0) + valor;
+    } else {
+      des[k] = (des[k] ?? 0) + valor;
+    }
+  }
+  final meses = {...rec.keys, ...des.keys}.toList()..sort();
+  if (meses.length < 2) return null;
+
+  pw.Widget cel(String s, {PdfColor? cor, bool bold = false, pw.Alignment a = pw.Alignment.centerRight}) =>
+      pw.Container(
+        alignment: a,
+        padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        child: pw.Text(s,
+            style: pw.TextStyle(
+                fontSize: 9, color: cor, fontWeight: bold ? pw.FontWeight.bold : null)),
+      );
+
+  var tr = 0.0, td = 0.0;
+  final linhas = <pw.TableRow>[
+    pw.TableRow(
+      decoration: pw.BoxDecoration(color: primary),
+      children: [
+        cel('Mês', cor: PdfColors.white, bold: true, a: pw.Alignment.centerLeft),
+        cel('Receitas', cor: PdfColors.white, bold: true),
+        cel('Despesas', cor: PdfColors.white, bold: true),
+        cel('Saldo', cor: PdfColors.white, bold: true),
+      ],
+    ),
+  ];
+  for (var i = 0; i < meses.length; i++) {
+    final k = meses[i];
+    final r = rec[k] ?? 0, d = des[k] ?? 0;
+    tr += r;
+    td += d;
+    linhas.add(pw.TableRow(
+      decoration: pw.BoxDecoration(
+          color: i.isOdd ? PdfColor.fromInt(0xFFF8FAFC) : PdfColors.white),
+      children: [
+        cel('${_mesesAbrev[k % 100 - 1]}/${k ~/ 100}', a: pw.Alignment.centerLeft),
+        cel(CurrencyFormats.formatBRL(r), cor: green),
+        cel(CurrencyFormats.formatBRL(d), cor: red),
+        cel(CurrencyFormats.formatBRL(r - d), cor: r - d >= 0 ? green : red, bold: true),
+      ],
+    ));
+  }
+  linhas.add(pw.TableRow(
+    decoration: pw.BoxDecoration(color: PdfColor.fromInt(0xFFEEF2FF)),
+    children: [
+      cel('Total', bold: true, a: pw.Alignment.centerLeft),
+      cel(CurrencyFormats.formatBRL(tr), cor: green, bold: true),
+      cel(CurrencyFormats.formatBRL(td), cor: red, bold: true),
+      cel(CurrencyFormats.formatBRL(tr - td), cor: tr - td >= 0 ? green : red, bold: true),
+    ],
+  ));
+  return pw.Column(
+    crossAxisAlignment: pw.CrossAxisAlignment.start,
+    children: [
+      pw.Text('Totais por mês',
+          style: pw.TextStyle(fontSize: 10.5, fontWeight: pw.FontWeight.bold, color: primary)),
+      pw.SizedBox(height: 6),
+      pw.Table(
+        border: pw.TableBorder.all(color: PdfColor.fromInt(0xFFE2E8F0), width: 0.6),
+        columnWidths: const {
+          0: pw.FlexColumnWidth(1.1),
+          1: pw.FlexColumnWidth(1.3),
+          2: pw.FlexColumnWidth(1.3),
+          3: pw.FlexColumnWidth(1.3),
+        },
+        children: linhas,
+      ),
+    ],
+  );
 }
 
 pw.Widget _cardResumo({
