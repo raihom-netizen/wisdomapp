@@ -38,6 +38,15 @@ class CourseStatSummary {
         daily[e.key.toString()] = (e.value as num?)?.toInt() ?? 0;
       }
     }
+    // Legado (até 02/10/2026): `set({'daily.<dia>': inc}, merge)` gravava um
+    // campo LITERAL com ponto (no set a chave não é caminho) e o mapa `daily`
+    // ficava vazio. Soma esses campos antigos para não perder o histórico.
+    for (final e in d.entries) {
+      if (!e.key.startsWith('daily.')) continue;
+      final dia = e.key.substring('daily.'.length);
+      if (dia.isEmpty) continue;
+      daily[dia] = (daily[dia] ?? 0) + ((e.value as num?)?.toInt() ?? 0);
+    }
     DateTime? last;
     final ts = d['lastActivityAt'];
     if (ts is Timestamp) last = ts.toDate();
@@ -276,7 +285,9 @@ class CourseAnalyticsService {
         // reprodução = nova sessão do dia (evita inflar a cada timeupdate)
         if (isNewDay || isNewViewer) 'playCount': FieldValue.increment(1),
         if (isNewViewer) 'viewCount': FieldValue.increment(1),
-        if (isNewDay) 'daily.$day': FieldValue.increment(1),
+        // Mapa aninhado: no set()+merge a chave 'daily.<dia>' NÃO é caminho
+        // (virava campo literal com ponto e o gráfico por dia ficava em 0).
+        if (isNewDay) 'daily': {day: FieldValue.increment(1)},
       };
 
       await statsRef.set(updates, SetOptions(merge: true));
