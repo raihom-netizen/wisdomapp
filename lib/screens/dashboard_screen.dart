@@ -1680,8 +1680,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     SizedBox(height: _kDashHeroGap),
                     _buildEscalasSectionPeriodSelector(),
                     SizedBox(height: _kDashChartTitleGap),
-                    StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                      stream: FirebaseFirestore.instance
+                    KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                      streamKey: 'scales|$_userFsId|'
+                          '${_dateOnlyLocalDash(escalasStart).millisecondsSinceEpoch}|'
+                          '${escalasEndFirestoreExclusive.millisecondsSinceEpoch}',
+                      create: () => FirebaseFirestore.instance
                           .collection('users')
                           .doc(_userFsId)
                           .collection('scales')
@@ -1742,8 +1745,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         ? context.appTextMuted
                                         : Colors.grey.shade600)),
                             SizedBox(height: _kDashHeroGap),
-                            StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                              stream: FirebaseFirestore.instance
+                            KeyedStreamBuilder<
+                                QuerySnapshot<Map<String, dynamic>>>(
+                              streamKey: 'locations|$_userFsId',
+                              create: () => FirebaseFirestore.instance
                                   .collection('users')
                                   .doc(_userFsId)
                                   .collection('locations')
@@ -2975,8 +2980,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(queryStart))
         .where('date', isLessThanOrEqualTo: Timestamp.fromDate(queryEnd))
         .limit(500);
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: () async* {
+    return KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      // Chave por DIA: período «até agora» muda o horário a cada redesenho e
+      // reabriria a escuta toda vez.
+      streamKey: 'reminders|$_userFsId|${_diaChave(queryStart)}|'
+          '${_diaChave(queryEnd)}',
+      create: () async* {
         try {
           final cached = await boundedQuery.get(
             const GetOptions(source: Source.cache),
@@ -2984,7 +2993,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           yield cached;
         } catch (_) {}
         yield* boundedQuery.snapshots();
-      }(),
+      },
       builder: (context, snap) {
         if (snap.hasError) {
           return LayoutBuilder(
@@ -3452,8 +3461,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
     final todayEnd = DateTime(DateTime.now().year, DateTime.now().month,
         DateTime.now().day, 23, 59, 59);
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
+    return KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      streamKey: 'txHoje|$_userFsId|${today.millisecondsSinceEpoch}',
+      create: () => FirebaseFirestore.instance
           .collection('users')
           .doc(_userFsId)
           .collection('transactions')
@@ -6329,6 +6339,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return prefix + partial;
   }
 
+  /// Chave de escuta por dia (ignora hora/minuto de períodos «até agora»).
+  static String _diaChave(DateTime d) => '${d.year}-${d.month}-${d.day}';
+
   Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
       _dashboardTransactionsStream(
     DateTime rangeStart,
@@ -6349,13 +6362,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
         DateTime(rangeStart.year, rangeStart.month, rangeStart.day);
     final partialKey = FinanceLineOpening.monthKeySaoPaulo(limiteAnterior);
 
-    return StreamBuilder<List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
-      stream: _dashboardTransactionsStream(rangeStart, rangeEnd),
+    return KeyedStreamBuilder<
+        List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
+      streamKey: 'txPeriodo|$_userFsId|${_diaChave(rangeStart)}|'
+          '${_diaChave(rangeEnd)}',
+      create: () => _dashboardTransactionsStream(rangeStart, rangeEnd),
       builder: (context, txSnap) {
         final docs = txSnap.data ??
             const <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
+        return KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          streamKey: 'buckets|$_userFsId|$partialKey',
+          create: () => FirebaseFirestore.instance
               .collection('users')
               .doc(_userFsId)
               .collection('finance_month_buckets')
@@ -6871,8 +6888,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildGoalProgress() {
     return RepaintBoundary(
-      child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
+      child: KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        streamKey: 'goalsAtivos|$_userFsId',
+        create: () => FirebaseFirestore.instance
             .collection('users')
             .doc(_userFsId)
             .collection('goals')
@@ -7465,8 +7483,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           );
         }
 
-        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
+        return KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          streamKey: 'scalesMes|$_userFsId|${monthStart.millisecondsSinceEpoch}|'
+              '${monthEnd.millisecondsSinceEpoch}',
+          create: () => FirebaseFirestore.instance
               .collection('users')
               .doc(_userFsId)
               .collection('scales')
@@ -9712,8 +9732,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildProdutividadeSection() {
     final ranges = _produtividadeRanges();
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: OcorrenciasService().watch(_userFsId),
+    return KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      streamKey: 'ocorrencias|$_userFsId',
+      create: () => OcorrenciasService().watch(_userFsId),
       builder: (context, snap) {
         final docs = snap.data?.docs ?? [];
         final ocorrencias = docs.map((d) {

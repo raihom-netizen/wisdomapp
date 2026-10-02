@@ -10,6 +10,7 @@ import '../screens/payment_status_screen.dart';
 import '../theme/theme_context.dart';
 import '../utils/pwa_install_helper.dart';
 import '../utils/url_launcher_helper.dart';
+import '../utils/finance_shared_stream.dart';
 
 /// Promoção exibida no site (divulgação / landing): só aparece se o admin marcar
 /// [showOnDivulgacaoWeb] e a promoção estiver ativa, em vigência e com estoque.
@@ -122,8 +123,21 @@ class PublicDivulgacaoPromo {
     );
   }
 
+  /// Escuta ÚNICA de `promotions`, repartida entre Início, landing e
+  /// /divulgacao. Antes cada chamada (feita dentro do `build`) abria uma
+  /// escuta nova a cada redesenho — leituras extras e, na Web, o assert
+  /// «INTERNAL ASSERTION FAILED / Target ID already exists».
+  static final FinanceSharedStream<PublicDivulgacaoPromo?> _featured =
+      FinanceSharedStream<PublicDivulgacaoPromo?>(_openFeatured);
+
+  /// Última promoção recebida (pinta na hora, sem esperar a rede).
+  static PublicDivulgacaoPromo? get lastFeatured => _featured.last;
+
   /// Uma promoção pública: a mais recente por [createdAt] entre as elegíveis.
-  static Stream<PublicDivulgacaoPromo?> watchFeatured() {
+  /// Devolve SEMPRE a mesma instância de [Stream] (seguro no `build`).
+  static Stream<PublicDivulgacaoPromo?> watchFeatured() => _featured.stream;
+
+  static Stream<PublicDivulgacaoPromo?> _openFeatured() {
     try {
     return FirebaseFirestore.instance.collection('promotions').snapshots().map<PublicDivulgacaoPromo?>((snap) {
       PublicDivulgacaoPromo? best;
@@ -189,6 +203,7 @@ class DivulgacaoPublicPromoCard extends StatelessWidget {
   Widget _buildPromo(BuildContext context, LandingPublicContent lc) {
     return StreamBuilder<PublicDivulgacaoPromo?>(
       stream: PublicDivulgacaoPromo.watchFeatured(),
+      initialData: PublicDivulgacaoPromo.lastFeatured,
       builder: (context, snap) {
         if (snap.hasError) return const SizedBox.shrink();
         final promo = snap.data;
