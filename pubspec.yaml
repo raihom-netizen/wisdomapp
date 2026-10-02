@@ -37,6 +37,8 @@ dependencies:
   pdf: ^3.10.8
   image: ^4.5.4
   printing: ^5.11.1
+  # QR Code do Pix (Gerar Pix / Receber Pix) — mesmo pacote do Controle Total.
+  qr: ^3.0.2
   path_provider: ^2.1.2
   url_launcher: ^6.3.1
   fl_chart: ^0.69.2

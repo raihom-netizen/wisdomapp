@@ -76,6 +76,8 @@ import '../utils/finance_fatura_transaction_sort.dart';
 import '../widgets/finance_transaction_sort_bar.dart';
 import '../services/finance_sort_preference.dart';
 import '../widgets/finance_graficos_modernos.dart';
+import '../widgets/finance_contas_hub_card.dart';
+import '../widgets/finance_pix_sheets.dart';
 import '../theme/theme_context.dart';
 import 'finance_transactions_fullscreen_page.dart';
 import 'finance_categories_fullscreen_page.dart';
@@ -3894,6 +3896,78 @@ class _FinanceScreenState extends State<FinanceScreen>
     );
   }
 
+  /// Linha de baixo do card do cartão: o LIMITE DISPONÍVEL sempre que o
+  /// banco informa (pedido de 21/09/2026), depois fechamento/melhor dia.
+  ///
+  /// Duas linhas (separadas por «\n», cada uma encolhe para caber — nada
+  /// cortado): «Disp. R$ …» e a DATA COMPLETA da fatura atual, «Fecha 01/11 ·
+  /// Vence 09/11» (pedido de 01/10/2026; antes era só «Fecha dia 1»).
+  String? _infoDoCartao(FinanceAccount a) {
+    final linha1 = a.limiteDisponivel != null
+        ? 'Disp. ${CurrencyFormats.formatBRL(a.limiteDisponivel!)}'
+        : (a.melhorDiaCompra != null ? 'Compre dia ${a.melhorDiaCompra}' : '');
+    final linha2 = _datasDaFaturaAtual(a);
+    final linhas = [linha1, linha2].where((x) => x.isNotEmpty).toList();
+    return linhas.isEmpty ? null : linhas.join('\n');
+  }
+
+  /// «Fecha 01/11 · Vence 09/11» da fatura que importa hoje: a FECHADA ainda
+  /// no prazo (entre o fechamento e o vencimento → «Fechou … · Vence …») ou a
+  /// aberta. Compra no dia do fechamento já é da seguinte (regra do banco);
+  /// vencimento em sábado/domingo vai para a segunda.
+  static String _datasDaFaturaAtual(FinanceAccount a, {DateTime? hoje}) {
+    final fech = a.statementClosingDay;
+    if (fech == null || fech < 1 || fech > 31) return '';
+    final venc = a.cardDueDay;
+    final h = hoje ?? DateTime.now();
+    final dia = DateTime(h.year, h.month, h.day);
+    DateTime fechamentoDe(int ano, int mes) {
+      final ultimo = DateTime(ano, mes + 1, 0).day;
+      return DateTime(ano, mes, fech < ultimo ? fech : ultimo);
+    }
+
+    DateTime? vencimentoDe(DateTime f) {
+      if (venc == null || venc < 1 || venc > 31) return null;
+      var ano = f.year;
+      var mes = venc <= fech ? f.month + 1 : f.month;
+      if (mes > 12) {
+        mes = 1;
+        ano += 1;
+      }
+      final ultimo = DateTime(ano, mes + 1, 0).day;
+      var v = DateTime(ano, mes, venc < ultimo ? venc : ultimo);
+      while (v.weekday == DateTime.saturday || v.weekday == DateTime.sunday) {
+        v = v.add(const Duration(days: 1));
+      }
+      return v;
+    }
+
+    String dm(DateTime d) => '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
+    // A sincronização diz qual fatura é a do valor do card: usa ela.
+    final ref = a.faturaAtualRef;
+    if (ref != null) {
+      final p = ref.split('-');
+      final f = fechamentoDe(int.parse(p[0]), int.parse(p[1]));
+      final v = vencimentoDe(f);
+      final rotulo = dia.isBefore(f) ? 'Fecha' : 'Fechou';
+      return v == null ? '$rotulo ${dm(f)}' : '$rotulo ${dm(f)} · Vence ${dm(v)}';
+    }
+    // Fatura que fechou e ainda não venceu (a que precisa ser paga agora).
+    for (final f in [fechamentoDe(dia.year, dia.month), fechamentoDe(dia.year, dia.month - 1)]) {
+      final v = vencimentoDe(f);
+      if (v != null && !dia.isBefore(f) && !dia.isAfter(v)) {
+        // No próprio dia do fechamento a aberta já é a seguinte; mostra a que
+        // vence agora, que é a do valor do card.
+        return 'Fechou ${dm(f)} · Vence ${dm(v)}';
+      }
+    }
+    // Aberta: fecha no próximo dia de fechamento (o de hoje já passou).
+    var f = fechamentoDe(dia.year, dia.month);
+    if (!dia.isBefore(f)) f = fechamentoDe(dia.year, dia.month + 1);
+    final v = vencimentoDe(f);
+    return v == null ? 'Fecha ${dm(f)}' : 'Fecha ${dm(f)} · Vence ${dm(v)}';
+  }
+
   Widget _financeAccountMiniCard(
     BuildContext context, {
     required bool selected,
@@ -3907,123 +3981,218 @@ class _FinanceScreenState extends State<FinanceScreen>
     Widget? footer,
     String? typeBadge,
     bool creditCardStyle = false,
+    /// Valor veio do banco (Open Finance), não da soma dos lançamentos.
+    bool bankSourced = false,
+
+    /// Etiqueta embaixo do valor quando [bankSourced] (padrão «saldo do banco»).
+    String bankSourcedLabel = 'saldo do banco',
+
+    /// Lápis e lixeira no próprio card (sem entrar em «Cadastrar bancos»).
+    VoidCallback? onEditar,
+    VoidCallback? onExcluir,
+
+    /// Cartão: «Fecha dia 5 · Compre dia 6» visível no card.
+    String? infoCartao,
   }) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          onLongPress: onLongPress,
-          borderRadius: BorderRadius.circular(18),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            width: 148,
-            height: 108,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              gradient: LinearGradient(
-                  colors: gradient,
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight),
-              border: Border.all(
-                  color: selected ? Colors.white : Colors.white24,
-                  width: selected ? 2.4 : 0.8),
-              boxShadow: [
-                BoxShadow(
-                  color:
-                      gradient.first.withValues(alpha: selected ? 0.45 : 0.22),
-                  blurRadius: selected ? 12 : 7,
-                  offset: const Offset(0, 3),
-                ),
-              ],
+    Widget acao(IconData ic, String dica, VoidCallback f) => Tooltip(
+          message: dica,
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: f,
+            child: Container(
+              width: 24,
+              height: 24,
+              margin: const EdgeInsets.only(left: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.22),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white.withValues(alpha: 0.45)),
+              ),
+              child: Icon(ic, size: 14, color: Colors.white),
             ),
-            clipBehavior: Clip.antiAlias,
-            child: Stack(
-              children: [
-                if (creditCardStyle) const FinanceCreditCardPattern(),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+          ),
+        );
+    // Todos os cards com a MESMA estrutura e o MESMO tamanho (pedido de
+    // 21/09/2026): logo + ações · etiqueta · nome · valor · uma linha de
+    // informação · minigráfico. O Align impede a faixa de esticar uns e não
+    // outros (era o que deixava Caixa/Nubank menores).
+    final linhaInfo = infoCartao ?? (bankSourced ? bankSourcedLabel : '');
+    return Padding(
+      padding: const EdgeInsets.only(right: 10),
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            onLongPress: onLongPress,
+            borderRadius: BorderRadius.circular(20),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: 164,
+              height: 144,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                gradient: LinearGradient(
+                  colors: [
+                    Color.lerp(gradient.first, Colors.white, 0.10)!,
+                    gradient.first,
+                    gradient.length > 1 ? gradient.last : Color.lerp(gradient.first, Colors.black, 0.25)!,
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                border: Border.all(
+                    color: selected ? Colors.white : Colors.white.withValues(alpha: 0.18),
+                    width: selected ? 2.4 : 1),
+                boxShadow: [
+                  BoxShadow(
+                    color: gradient.first.withValues(alpha: selected ? 0.50 : 0.30),
+                    blurRadius: selected ? 16 : 10,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Stack(
+                children: [
+                  if (creditCardStyle) const FinanceCreditCardPattern(),
+                  // Brilho no canto de cima (efeito vidro, como os gráficos).
+                  Positioned(
+                    top: -40,
+                    right: -30,
+                    child: Container(
+                      width: 110,
+                      height: 110,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(colors: [
+                          Colors.white.withValues(alpha: 0.22),
+                          Colors.white.withValues(alpha: 0.0),
+                        ]),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(11, 10, 10, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(9),
+                              ),
+                              alignment: Alignment.center,
+                              child: bankPreset != null
+                                  ? FinanceBankBrandThumb(
+                                      preset: bankPreset,
+                                      size: 24,
+                                      onBrandGradient: true,
+                                      fallbackIcon: icon,
+                                    )
+                                  : Icon(icon, color: Colors.white, size: 18),
+                            ),
+                            const Spacer(),
+                            if (onEditar != null) acao(Icons.edit_rounded, 'Editar', onEditar),
+                            if (onExcluir != null) acao(Icons.delete_outline_rounded, 'Excluir', onExcluir),
+                            if (selected) ...[
+                              const SizedBox(width: 4),
+                              const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 6),
                         SizedBox(
-                          width: 26,
-                          height: 26,
-                          child: bankPreset != null
-                              ? FinanceBankBrandThumb(
-                                  preset: bankPreset,
-                                  size: 26,
-                                  onBrandGradient: true,
-                                  fallbackIcon: icon,
-                                )
-                              : Icon(icon, color: Colors.white, size: 20),
+                          height: 16,
+                          child: typeBadge == null
+                              ? null
+                              : Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: creditCardStyle
+                                          ? const Color(0xFFFBBF24).withValues(alpha: 0.25)
+                                          : Colors.white.withValues(alpha: 0.18),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      typeBadge.toUpperCase(),
+                                      style: TextStyle(
+                                        color: creditCardStyle ? const Color(0xFFFDE68A) : Colors.white,
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 8.5,
+                                        letterSpacing: 0.6,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 12),
                         ),
                         const Spacer(),
-                        if (selected)
-                          const Icon(Icons.check_circle_rounded,
-                              color: Colors.white, size: 18),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            subtitle,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 15,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ),
+                        // Até 2 linhas; cada uma ENCOLHE para caber (nunca
+                        // «…»): limite disponível e as datas da fatura.
+                        SizedBox(
+                          height: 25,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              for (final l in linhaInfo.split('\n').where((x) => x.isNotEmpty).take(2))
+                                SizedBox(
+                                  height: 12.5,
+                                  width: double.infinity,
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      l,
+                                      maxLines: 1,
+                                      style: TextStyle(
+                                        color: infoCartao != null
+                                            ? const Color(0xFFFDE68A)
+                                            : Colors.white.withValues(alpha: 0.80),
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 9.5,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        // Minigráfico sempre no mesmo lugar (vazio quando não há).
+                        SizedBox(height: 14, child: footer),
                       ],
                     ),
-                    if (typeBadge != null) ...[
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: creditCardStyle
-                              ? const Color(0xFFFBBF24).withValues(alpha: 0.22)
-                              : Colors.white.withValues(alpha: 0.16),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: creditCardStyle
-                                ? const Color(0xFFFDE68A)
-                                    .withValues(alpha: 0.45)
-                                : Colors.white.withValues(alpha: 0.28),
-                          ),
-                        ),
-                        child: Text(
-                          typeBadge.toUpperCase(),
-                          style: TextStyle(
-                            color: creditCardStyle
-                                ? const Color(0xFFFDE68A)
-                                : Colors.white,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 8.5,
-                            letterSpacing: 0.6,
-                          ),
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 3),
-                    Text(
-                      title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 11.5,
-                        height: 1.12,
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.95),
-                        fontWeight: FontWeight.w800,
-                        fontSize: 12.5,
-                      ),
-                    ),
-                    if (footer != null) ...[
-                      const SizedBox(height: 5),
-                      footer,
-                    ],
-                  ],
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -4275,61 +4444,47 @@ class _FinanceScreenState extends State<FinanceScreen>
               ),
             ],
           ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: Wrap(
-              spacing: 4,
-              runSpacing: 4,
-              alignment: WrapAlignment.end,
-              children: [
-                TextButton.icon(
-                  onPressed: widget.profile.hasActiveLicense
-                      ? () {
-                          Navigator.of(context).push<void>(
-                            MaterialPageRoute<void>(
-                              builder: (_) => FinanceAccountsScreen(
-                                  uid:
-                                      firestoreUserDocIdForAppShell(widget.uid),
-                                  profile: widget.profile),
-                            ),
-                          );
-                        }
-                      : () =>
-                          mostrarAvisoSeLicencaInativa(context, widget.profile),
-                  icon: const Icon(Icons.add_card_rounded, size: 18),
-                  label: const Text('Bancos e cartões'),
-                ),
-                TextButton.icon(
-                  onPressed: widget.profile.hasActiveLicense
-                      ? () {
-                          Navigator.of(context)
-                              .push<void>(
-                            MaterialPageRoute<void>(
-                              builder: (_) => CategoriesConfigScreen(
-                                  uid: firestoreUserDocIdForAppShell(
-                                      widget.uid)),
-                            ),
-                          )
-                              .then((_) {
-                            if (mounted) _refreshCategoryFilterOptions();
-                          });
-                        }
-                      : () =>
-                          mostrarAvisoSeLicencaInativa(context, widget.profile),
-                  icon: const Icon(Icons.category_rounded, size: 18),
-                  label: const Text('Categorias'),
-                ),
-                TextButton.icon(
-                  onPressed: widget.profile.hasActiveLicense
-                      ? () => _openBulkAssignFromStrip(context,
-                          semContaNoPainel: semContaCount)
-                      : () =>
-                          mostrarAvisoSeLicencaInativa(context, widget.profile),
-                  icon: const Icon(Icons.swap_horiz_rounded, size: 18),
-                  label: const Text('Migrar lançamentos'),
-                ),
-              ],
-            ),
+          // Card moderno (port Controle Total): cadastrar bancos, categorias,
+          // migrar lançamentos e o Pix do Financeiro (Gerar Pix / Meu Pix).
+          const SizedBox(height: 10),
+          FinanceContasHubCard(
+            onBancos: widget.profile.hasActiveLicense
+                ? () {
+                    Navigator.of(context).push<void>(
+                      MaterialPageRoute<void>(
+                        builder: (_) => FinanceAccountsScreen(
+                            uid: firestoreUserDocIdForAppShell(widget.uid),
+                            profile: widget.profile),
+                      ),
+                    );
+                  }
+                : () => mostrarAvisoSeLicencaInativa(context, widget.profile),
+            onCategorias: widget.profile.hasActiveLicense
+                ? () {
+                    Navigator.of(context)
+                        .push<void>(
+                      MaterialPageRoute<void>(
+                        builder: (_) => CategoriesConfigScreen(
+                            uid: firestoreUserDocIdForAppShell(widget.uid)),
+                      ),
+                    )
+                        .then((_) {
+                      if (mounted) _refreshCategoryFilterOptions();
+                    });
+                  }
+                : () => mostrarAvisoSeLicencaInativa(context, widget.profile),
+            onAtribuir: widget.profile.hasActiveLicense
+                ? () => _openBulkAssignFromStrip(context,
+                    semContaNoPainel: semContaCount)
+                : () => mostrarAvisoSeLicencaInativa(context, widget.profile),
+            onGerarPix: widget.profile.hasActiveLicense
+                ? () => unawaited(abrirCobrarPix(
+                    context, firestoreUserDocIdForAppShell(widget.uid)))
+                : () => mostrarAvisoSeLicencaInativa(context, widget.profile),
+            onMeuPix: widget.profile.hasActiveLicense
+                ? () => unawaited(abrirMeuPix(
+                    context, firestoreUserDocIdForAppShell(widget.uid)))
+                : () => mostrarAvisoSeLicencaInativa(context, widget.profile),
           ),
           const SizedBox(height: 6),
           Text(
@@ -4343,7 +4498,7 @@ class _FinanceScreenState extends State<FinanceScreen>
           const SizedBox(height: 14),
           if (!_financeAccountsStreamPrimed && _financeAccounts.isEmpty)
             SizedBox(
-              height: 128,
+              height: 144,
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 physics: const NeverScrollableScrollPhysics(),
@@ -4352,8 +4507,8 @@ class _FinanceScreenState extends State<FinanceScreen>
                   (i) => Padding(
                     padding: const EdgeInsets.only(right: 10),
                     child: SkeletonLoader(
-                      width: 152,
-                      height: 128,
+                      width: 164,
+                      height: 144,
                       borderRadius: BorderRadius.circular(18),
                     ),
                   ),
@@ -4399,7 +4554,7 @@ class _FinanceScreenState extends State<FinanceScreen>
             )
           else
             SizedBox(
-              height: 128,
+              height: 144,
               child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 stream: _pendingExpensesStream,
                 initialData: _lastPendingExpensesSnap,
@@ -4435,8 +4590,12 @@ class _FinanceScreenState extends State<FinanceScreen>
                       context,
                       selected: _financeAccountFilterId == null,
                       title: 'Todas as contas',
-                      subtitle:
-                          CurrencyFormats.formatBRL(saldoAcumuladoConsolidado),
+                      // Com filtro de conta ativo, este número passa a ser o
+                      // saldo da conta filtrada — «Todas as contas» com R$ 0,00
+                      // parecia dinheiro sumido. Filtrado, vira o atalho.
+                      subtitle: _financeAccountFilterId == null
+                          ? CurrencyFormats.formatBRL(saldoAcumuladoConsolidado)
+                          : 'Toque para ver tudo',
                       gradient: [AppColors.primary, AppColors.deepBlue],
                       icon: Icons.dashboard_rounded,
                       bankPreset: null,
@@ -4461,6 +4620,14 @@ class _FinanceScreenState extends State<FinanceScreen>
                       final sp = _sparklineForAccount(a.id, docs);
                       final isCard = a.isCreditCardProduct;
                       final fatura = faturaByCard[a.id] ?? 0;
+                      // Conta + cartão: DOIS cards — a conta com o saldo e o
+                      // cartão com a fatura em aberto (port Controle Total).
+                      final contaECartao =
+                          a.productType == FinanceAccount.kBankAndCard;
+                      final faturaCombo = contaECartao
+                          ? FinanceAccountBalanceUtils.faturaAbertaForCard(
+                              pendingSnap.data?.docs ?? [], a.id)
+                          : 0.0;
                       final card = _financeAccountMiniCard(
                         context,
                         selected: _financeAccountFilterId == a.id,
@@ -4471,21 +4638,69 @@ class _FinanceScreenState extends State<FinanceScreen>
                         gradient: vis.gradient,
                         icon: vis.icon,
                         bankPreset: a.preset,
-                        typeBadge: vis.badgeLabel,
-                        creditCardStyle: vis.isCreditCardStyle,
+                        typeBadge: contaECartao ? 'Conta' : vis.badgeLabel,
+                        creditCardStyle:
+                            contaECartao ? false : vis.isCreditCardStyle,
                         onTap: () => _onFinanceStripCardTap(context, a),
+                        // Editar e excluir direto no card; a lixeira avisa
+                        // quantos lançamentos saem junto.
+                        onEditar: () => abrirEditorContaFinanceira(context,
+                            uid: firestoreUserDocIdForAppShell(widget.uid),
+                            account: a),
+                        onExcluir: a.isVaultProduct
+                            ? null
+                            : () => excluirContaFinanceiraComConfirmacao(
+                                context,
+                                uid: firestoreUserDocIdForAppShell(widget.uid),
+                                account: a),
+                        // Cartão: «Compre dia …» e «Fecha dd/MM · Vence dd/MM».
+                        infoCartao: !contaECartao && a.isCardProduct
+                            ? _infoDoCartao(a)
+                            : null,
                         footer: sp.length >= 2
                             ? FinanceSparkline(
                                 values: sp,
                                 color: Colors.white.withValues(alpha: 0.92))
                             : null,
                       );
+                      final cartaoDoCombo = contaECartao
+                          ? _financeAccountMiniCard(
+                              context,
+                              selected: false,
+                              title: '${a.displayName} · Cartão',
+                              subtitle:
+                                  'Fatura ${CurrencyFormats.formatBRL(faturaCombo)}',
+                              gradient: [
+                                Color.lerp(vis.gradient.first, Colors.black,
+                                    0.35)!,
+                                vis.gradient.length > 1
+                                    ? vis.gradient[1]
+                                    : vis.gradient.first,
+                              ],
+                              icon: Icons.credit_card_rounded,
+                              bankPreset: a.preset,
+                              typeBadge: 'Cartão',
+                              creditCardStyle: true,
+                              onTap: () => _openCreditCardFaturaSheet(context, a),
+                              onEditar: () => abrirEditorContaFinanceira(
+                                  context,
+                                  uid: firestoreUserDocIdForAppShell(widget.uid),
+                                  account: a),
+                              infoCartao: _infoDoCartao(a) ??
+                                  'Fatura atual · toque para ver',
+                            )
+                          : null;
                       return ReorderableDelayedDragStartListener(
                         key: ValueKey<String>('strip_${a.id}'),
                         index: i,
                         child: Material(
                           color: Colors.transparent,
-                          child: card,
+                          child: cartaoDoCombo == null
+                              ? card
+                              : Row(mainAxisSize: MainAxisSize.min, children: [
+                                  card,
+                                  cartaoDoCombo,
+                                ]),
                         ),
                       );
                     },
@@ -4495,13 +4710,45 @@ class _FinanceScreenState extends State<FinanceScreen>
             ),
           if (_financeAccountFilterId != null) ...[
             const SizedBox(height: 10),
+            // O filtro fica salvo entre sessões: sem este aviso o usuário abre
+            // o app dias depois, vê tudo zerado e acha que perdeu lançamento.
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border:
+                    Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.filter_alt_rounded,
+                      size: 18, color: AppColors.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Mostrando só ${_selectedFinanceAccountLabel() ?? 'uma conta'} — '
+                      'os outros lançamentos continuam salvos.',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        height: 1.3,
+                        fontWeight: FontWeight.w600,
+                        color: context.appTextPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               children: [
                 ActionChip(
                   avatar: Icon(Icons.filter_alt_off_rounded,
                       size: 18, color: AppColors.primary),
-                  label: const Text('Limpar filtro de conta'),
+                  label: const Text('Ver todas as contas'),
                   onPressed: () => _applyFinanceAccountFilter(null),
                 ),
               ],
@@ -5334,6 +5581,33 @@ class _FinanceScreenState extends State<FinanceScreen>
                       backgroundColor:
                           AppColors.success.withValues(alpha: 0.15),
                       foregroundColor: AppColors.success),
+                ),
+                // «Receber via Pix» (port Controle Total): QR Code e copia e
+                // cola com a sua chave; confirmar dali já dá a baixa.
+                FilledButton.icon(
+                  onPressed: () => abrirCobrarPix(
+                    context,
+                    firestoreUserDocIdForAppShell(widget.uid),
+                    valor: amount,
+                    descricao: desc.isNotEmpty ? desc : cat,
+                    contaSugerida:
+                        (e['financeAccountId'] ?? '').toString().trim(),
+                    onConfirmarRecebimento: (c) async {
+                      final ok = await _confirmarPagamento(c, docId);
+                      if (ok) onPendingRemoved?.call(docId);
+                      return ok;
+                    },
+                  ),
+                  icon: const Icon(Icons.qr_code_2_rounded, size: 18),
+                  label: const Text('Receber via Pix',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                  style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      minimumSize: const Size(48, 48),
+                      tapTargetSize: MaterialTapTargetSize.padded,
+                      backgroundColor: const Color(0xFF0D9488),
+                      foregroundColor: Colors.white),
                 ),
                 const SizedBox(width: 8),
                 OutlinedButton.icon(

@@ -6,6 +6,7 @@ import '../constants/finance_bank_presets.dart';
 import '../theme/theme_context.dart';
 import '../utils/finance_transaction_historico.dart';
 import '../utils/firestore_user_doc_id.dart';
+import '../widgets/finance_pix_sheets.dart';
 
 const _kVerde = Color(0xFF059669);
 const _kVermelho = Color(0xFFDC2626);
@@ -153,6 +154,37 @@ class _FinanceLancamentoDetalhePageState extends State<FinanceLancamentoDetalheP
           _cabecalho(cor),
           const SizedBox(height: 12),
           _cardCampos(),
+          // Receita ainda não recebida: o Pix da cobrança sai daqui
+          // (QR Code + copia e cola); confirmar dá a baixa normal.
+          if (_receita && !_pago) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => abrirCobrarPix(
+                  context,
+                  widget.uid,
+                  valor: _valor,
+                  descricao: _txt(_d['description']).isEmpty
+                      ? _txt(_d['category'])
+                      : _txt(_d['description']),
+                  contaSugerida: _txt(_d['financeAccountId']),
+                  onConfirmarRecebimento: (c) => confirmarRecebimentoPadrao(
+                    c,
+                    uid: widget.uid,
+                    docId: widget.docId,
+                    dados: _d,
+                  ),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF0D9488),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                icon: const Icon(Icons.qr_code_2_rounded, size: 19),
+                label: const Text('Receber via Pix'),
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           _cardObservacao(),
           const SizedBox(height: 12),

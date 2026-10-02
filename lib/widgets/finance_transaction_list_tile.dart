@@ -11,6 +11,7 @@ import '../theme/theme_context.dart';
 import '../utils/anexo_viewer_helper.dart';
 import '../utils/finance_fora_dos_totais.dart';
 import '../utils/receipt_attachment_utils.dart';
+import 'finance_pix_sheets.dart';
 import '../utils/finance_line_opening.dart';
 import '../utils/premium_upgrade.dart';
 
@@ -48,7 +49,9 @@ class FinanceTransactionListTile extends StatelessWidget {
   final Future<void> Function(BuildContext context, String docId,
       Map<String, dynamic> data, String type) onEdit;
   final Future<void> Function(BuildContext context, String docId) onDelete;
-  final Future<void> Function(BuildContext context, String docId)
+  /// Confirma pagamento/recebimento. Pode devolver `true` quando confirmou
+  /// (o «Receber via Pix» fecha sozinho depois da baixa).
+  final Future<Object?> Function(BuildContext context, String docId)
       onConfirmPayment;
   final Future<void> Function(BuildContext context, String docId)
       onAttachReceipt;
@@ -368,6 +371,38 @@ class FinanceTransactionListTile extends StatelessWidget {
                             alignment: WrapAlignment.end,
                             crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
+                              // Receita pendente: «Receber via Pix» (port
+                              // Controle Total) — QR Code e copia e cola com a
+                              // sua chave; confirmar dali já dá a baixa.
+                              if (status == 'Pendente' && isIncome)
+                                OutlinedButton.icon(
+                                  onPressed: () => abrirCobrarPix(
+                                    context,
+                                    profile.uid,
+                                    valor: amount.abs(),
+                                    descricao: description.trim().isEmpty
+                                        ? (d['category'] ?? '').toString().trim()
+                                        : description.trim(),
+                                    contaSugerida:
+                                        (d['financeAccountId'] ?? '').toString().trim(),
+                                    onConfirmarRecebimento: (c) async =>
+                                        (await onConfirmPayment(c, id)) == true,
+                                  ),
+                                  icon: const Icon(Icons.qr_code_2_rounded, size: 16),
+                                  label: const Text('Receber via Pix',
+                                      style: TextStyle(
+                                          fontSize: 11, fontWeight: FontWeight.w700)),
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 6),
+                                    minimumSize: const Size(44, 44),
+                                    tapTargetSize: MaterialTapTargetSize.padded,
+                                    foregroundColor: const Color(0xFF0D9488),
+                                    side: const BorderSide(color: Color(0xFF0D9488)),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12)),
+                                  ),
+                                ),
                               if (status == 'Pendente') ...[
                                 FilledButton.icon(
                                   onPressed: () =>

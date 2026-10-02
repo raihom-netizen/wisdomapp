@@ -21,8 +21,8 @@ class FinanceAccountVisual {
     this.badgeTextColor = Colors.white,
   });
 
-  /// Cor principal (primeiro tom do gradiente) para chips, bordas e ícones.
-  Color get color => gradient.first;
+  /// Cor principal (listas / dropdowns) — primeiro tom do gradiente.
+  Color get color => gradient.isNotEmpty ? gradient.first : const Color(0xFF1E3A5F);
 }
 
 /// Cores e rótulos distintos: conta corrente/poupança (débito) vs cartão de crédito.
@@ -79,6 +79,18 @@ FinanceAccountVisual financeAccountVisualFor(FinanceAccount account) {
         badgeLabel: 'Conta + cartão',
         badgeColor: Colors.white.withValues(alpha: 0.18),
         badgeTextColor: Colors.white,
+      );
+    case FinanceAccount.kVault:
+      return FinanceAccountVisual(
+        gradient: gradientFor([
+          const Color(0xFF051937),
+          const Color(0xFF0F2744),
+          const Color(0xFF1E3A5F),
+        ]),
+        icon: Icons.lock_rounded,
+        badgeLabel: 'Cofre',
+        badgeColor: const Color(0xFFFBBF24).withValues(alpha: 0.28),
+        badgeTextColor: const Color(0xFFFDE68A),
       );
     case FinanceAccount.kChecking:
     default:

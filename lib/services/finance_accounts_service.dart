@@ -143,11 +143,21 @@ class FinanceAccountsService {
     String? nickname,
     int? statementClosingDay,
     String? cardColorId,
+    String? holderDocument,
+    String? holderName,
+    String? bankBranchCode,
+    String? bankAccountNumber,
+    String? bankOperationCode,
+    String? pixKey,
+    List<String>? pixKeys,
+    String? bankCardNumber,
+    int? cardDueDay,
+    int? bestPurchaseDay,
   }) async {
     final pt = _normalizeProductType(productType);
     final ref = _col(uid).doc();
-    final sc =
-        _normalizeStatementClosingDay(statementClosingDay, productType: pt);
+    final sc = _normalizeStatementClosingDay(statementClosingDay, productType: pt);
+    final dv = _normalizeStatementClosingDay(cardDueDay, productType: pt);
     final cc = _normalizeCardColorId(cardColorId);
     await ref.set({
       ...FinanceAccount(
@@ -157,11 +167,41 @@ class FinanceAccountsService {
         nickname: nickname,
         sortOrder: DateTime.now().millisecondsSinceEpoch % 1000000,
         statementClosingDay: sc,
+        cardDueDay: dv,
+        bestPurchaseDay: _normalizeStatementClosingDay(bestPurchaseDay, productType: pt),
         cardColorId: cc,
+        holderDocument: _normalizeHolderDocument(holderDocument),
+        holderName: _normalizeOptionalText(holderName),
+        bankBranchCode: _normalizeOptionalText(bankBranchCode),
+        bankAccountNumber: _normalizeOptionalText(bankAccountNumber),
+        bankOperationCode: _normalizeOptionalText(bankOperationCode),
+        pixKey: _normalizeOptionalText(pixKey),
+        pixKeys: _chavesPix(pixKey, pixKeys),
+        bankCardNumber: _normalizeOptionalText(bankCardNumber),
       ).toMap(),
       'createdAt': FieldValue.serverTimestamp(),
     });
     return ref.id;
+  }
+
+  static String? _normalizeHolderDocument(String? doc) {
+    final digits = (doc ?? '').replaceAll(RegExp(r'\D'), '');
+    return digits.isEmpty ? null : digits;
+  }
+
+  /// Lista de chaves sem vazias nem repetidas, a padrão primeiro.
+  static List<String> _chavesPix(String? padrao, List<String>? outras) {
+    final out = <String>[];
+    for (final k in [padrao ?? '', ...?outras]) {
+      final t = k.trim();
+      if (t.isNotEmpty && !out.contains(t)) out.add(t);
+    }
+    return out;
+  }
+
+  static String? _normalizeOptionalText(String? v) {
+    final t = v?.trim();
+    return (t == null || t.isEmpty) ? null : t;
   }
 
   static String? _normalizeCardColorId(String? id) {
@@ -170,13 +210,9 @@ class FinanceAccountsService {
     return t;
   }
 
-  static int? _normalizeStatementClosingDay(int? day,
-      {required String productType}) {
+  static int? _normalizeStatementClosingDay(int? day, {required String productType}) {
     if (day == null) return null;
-    if (productType != FinanceAccount.kCard &&
-        productType != FinanceAccount.kBankAndCard) {
-      return null;
-    }
+    if (productType != FinanceAccount.kCard && productType != FinanceAccount.kBankAndCard) return null;
     if (day < 1 || day > 31) return null;
     return day;
   }
@@ -189,11 +225,33 @@ class FinanceAccountsService {
     String? nickname,
     int? statementClosingDay,
     String? cardColorId,
+    String? holderDocument,
+    String? holderName,
+    String? bankBranchCode,
+    String? bankAccountNumber,
+    String? bankOperationCode,
+    String? pixKey,
+    List<String>? pixKeys,
+    String? bankCardNumber,
+    int? cardDueDay,
+    int? bestPurchaseDay,
+    // Conta já ligada ao Open Finance: quem manda nesses campos é a
+    // sincronização — reenviar o texto do formulário (que pode estar um
+    // passo atrás de um sync que rodou enquanto a tela estava aberta) não
+    // pode sobrescrever o dado real do banco.
+    bool touchBankManualFields = true,
   }) async {
     final pt = _normalizeProductType(productType);
-    final sc =
-        _normalizeStatementClosingDay(statementClosingDay, productType: pt);
+    final sc = _normalizeStatementClosingDay(statementClosingDay, productType: pt);
+    final dv = _normalizeStatementClosingDay(cardDueDay, productType: pt);
     final cc = _normalizeCardColorId(cardColorId);
+    final hd = _normalizeHolderDocument(holderDocument);
+    final hn = _normalizeOptionalText(holderName);
+    final agencia = _normalizeOptionalText(bankBranchCode);
+    final conta = _normalizeOptionalText(bankAccountNumber);
+    final operacao = _normalizeOptionalText(bankOperationCode);
+    final pix = _normalizeOptionalText(pixKey);
+    final numeroCartao = _normalizeOptionalText(bankCardNumber);
     final acc = FinanceAccount(
       id: accountId,
       presetId: presetId,
@@ -218,10 +276,43 @@ class FinanceAccountsService {
     } else {
       data['statementClosingDay'] = FieldValue.delete();
     }
+    if (dv != null) {
+      data['cardDueDay'] = dv;
+    } else {
+      data['cardDueDay'] = FieldValue.delete();
+    }
+    final melhor = _normalizeStatementClosingDay(bestPurchaseDay, productType: pt);
+    data['bestPurchaseDay'] = melhor ?? FieldValue.delete();
     if (cc != null) {
       data['cardColorId'] = cc;
     } else {
       data['cardColorId'] = FieldValue.delete();
+    }
+    if (hd != null) {
+      data['holderDocument'] = hd;
+    } else {
+      data['holderDocument'] = FieldValue.delete();
+    }
+    if (hn != null) {
+      data['holderName'] = hn;
+    } else {
+      data['holderName'] = FieldValue.delete();
+    }
+    if (touchBankManualFields) {
+      data['bankBranchCode'] = agencia ?? FieldValue.delete();
+      data['bankAccountNumber'] = conta ?? FieldValue.delete();
+      data['bankOperationCode'] = operacao ?? FieldValue.delete();
+      data['bankCardNumber'] = numeroCartao ?? FieldValue.delete();
+    }
+    // A chave Pix é SEMPRE do usuário, mesmo em conta conectada ao Open
+    // Finance (onde agência e conta vêm do banco e não se editam). Antes ela
+    // ficava dentro do bloco acima e não era gravada em conta conectada — o
+    // campo nem aparecia, e o «Receber via Pix» ficava sem chave.
+    data['pixKey'] = pix ?? FieldValue.delete();
+    // Nulo = quem chamou não mexe na lista (formulários antigos).
+    if (pixKeys != null) {
+      final todas = _chavesPix(pix, pixKeys);
+      data['pixKeys'] = todas.isEmpty ? FieldValue.delete() : todas;
     }
     await _col(uid).doc(accountId).update(data);
   }
@@ -336,6 +427,79 @@ class FinanceAccountsService {
     FinanceTransactionsHub.notifyMutated(
         uid: firestoreUserDocIdForAppShell(uid));
     return linkedIds.length;
+  }
+
+  /// Quantos lançamentos PENDENTES ainda estão presos a uma conta.
+  ///
+  /// Serve para perguntar, ao trocar o banco padrão, se as contas a pagar
+  /// devem migrar junto — as já pagas ficam onde estão, porque mexer nelas
+  /// reescreveria o extrato de um banco que de fato debitou o valor.
+  Future<int> countPendingTransactions(String uid, String accountId) async {
+    final id = firestoreUserDocIdForAppShell(uid);
+    if (id.isEmpty || accountId.trim().isEmpty) return 0;
+    final snap = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(id)
+        .collection('transactions')
+        .where('financeAccountId', isEqualTo: accountId)
+        .where('status', isEqualTo: 'pending')
+        .count()
+        .get();
+    return snap.count ?? 0;
+  }
+
+  /// Move os lançamentos pendentes de uma conta para outra.
+  ///
+  /// Só toca em `status == 'pending'`: quem já foi pago permanece no banco que
+  /// pagou. Devolve quantos foram movidos.
+  Future<int> movePendingTransactions({
+    required String uid,
+    required String fromAccountId,
+    required String toAccountId,
+  }) async {
+    final id = firestoreUserDocIdForAppShell(uid);
+    if (id.isEmpty || fromAccountId == toAccountId) return 0;
+    final col = FirebaseFirestore.instance
+        .collection('users')
+        .doc(id)
+        .collection('transactions');
+
+    var movidos = 0;
+    // Em blocos: a fila pode ter centenas de contas a pagar.
+    while (true) {
+      final lote = await col
+          .where('financeAccountId', isEqualTo: fromAccountId)
+          .where('status', isEqualTo: 'pending')
+          .limit(400)
+          .get();
+      if (lote.docs.isEmpty) break;
+      final batch = FirebaseFirestore.instance.batch();
+      for (final d in lote.docs) {
+        batch.set(
+          d.reference,
+          {
+            'financeAccountId': toAccountId,
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+      }
+      await batch.commit();
+      movidos += lote.docs.length;
+      if (lote.docs.length < 400) break;
+    }
+    return movidos;
+  }
+
+  /// A conta veio do Open Finance (e vai parar de sincronizar se for excluída)?
+  Future<bool> isOpenFinanceLinked(String uid, String accountId) async {
+    try {
+      final snap = await _col(uid).doc(accountId).get();
+      final d = snap.data() ?? const {};
+      return (d['externalResourceId'] ?? '').toString().trim().isNotEmpty;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Persiste a ordem exibida (campo [FinanceAccount.sortOrder]).
