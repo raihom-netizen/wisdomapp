@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui_web' as ui_web;
 
 // ignore: avoid_web_libraries_in_flutter
@@ -8,6 +9,7 @@ import 'package:flutter/material.dart';
 
 import '../../utils/youtube_url_helper.dart';
 import 'course_media_view_policy.dart';
+import 'course_video_controller.dart';
 
 /// YouTube / MP4 na Web — iframe e `<video>` nativos (sem WebView).
 class CourseVideoEmbed extends StatefulWidget {
@@ -20,6 +22,7 @@ class CourseVideoEmbed extends StatefulWidget {
     this.startAtSeconds = 0,
     this.onReady,
     this.onProgress,
+    this.controller,
   });
 
   final String? youtubeVideoId;
@@ -30,17 +33,22 @@ class CourseVideoEmbed extends StatefulWidget {
   final VoidCallback? onReady;
   final void Function(double position, double duration)? onProgress;
 
+  /// Velocidade/pausa vindas da tela (opcional).
+  final CourseVideoController? controller;
+
   @override
   State<CourseVideoEmbed> createState() => _CourseVideoEmbedState();
 }
 
-class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
+class _CourseVideoEmbedState extends State<CourseVideoEmbed>
+    implements CourseVideoCommandTarget {
   static int _viewCounter = 0;
   late final String _viewType;
   bool _registered = false;
   var _notifiedReady = false;
   Timer? _progressTimer;
   html.VideoElement? _videoEl;
+  html.IFrameElement? _ytIframe;
 
   int get _startAt =>
       widget.startAtSeconds > 8 ? widget.startAtSeconds.round() : 0;
@@ -49,18 +57,64 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
   void initState() {
     super.initState();
     _viewType = 'course-video-${++_viewCounter}';
+    widget.controller?.attach(this);
     _registerView();
   }
 
   @override
   void dispose() {
     _progressTimer?.cancel();
+    widget.controller?.detach(this);
     super.dispose();
+  }
+
+  /// Comando para o iframe do YouTube (`enablejsapi=1` já vai na URL).
+  void _ytCommand(String func, [List<Object?> args = const []]) {
+    final w = _ytIframe?.contentWindow;
+    if (w == null) return;
+    try {
+      w.postMessage(
+        jsonEncode({'event': 'command', 'func': func, 'args': args}),
+        '*',
+      );
+    } catch (_) {}
+  }
+
+  @override
+  Future<void> pause() async {
+    try {
+      _videoEl?.pause();
+    } catch (_) {}
+    _ytCommand('pauseVideo');
+  }
+
+  @override
+  Future<void> setPlaybackRate(double rate) async {
+    try {
+      _videoEl?.playbackRate = rate;
+    } catch (_) {}
+    _ytCommand('setPlaybackRate', [rate]);
+  }
+
+  /// O iframe só aceita comandos depois de carregar o player — reaplica a
+  /// velocidade escolhida algumas vezes logo após o load.
+  void _reapplyRateSoon() {
+    final ctrl = widget.controller;
+    if (ctrl == null || ctrl.playbackRate == 1.0) return;
+    for (final ms in const [600, 1800, 4000]) {
+      Timer(Duration(milliseconds: ms), () {
+        if (mounted) ctrl.reapplyTo(this);
+      });
+    }
   }
 
   @override
   void didUpdateWidget(covariant CourseVideoEmbed oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.controller, widget.controller)) {
+      oldWidget.controller?.detach(this);
+      widget.controller?.attach(this);
+    }
     // NÃO remontar só por startAtSeconds — isso resetava o vídeo ao meio da reprodução.
     if (oldWidget.youtubeVideoId != widget.youtubeVideoId ||
         oldWidget.mp4Url != widget.mp4Url ||
@@ -115,7 +169,11 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
           )
           // YouTube exige Referer/origin no embed (sem ele: erro 153).
           ..setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
-        iframe.onLoad.listen((_) => _notifyReady());
+        _ytIframe = iframe;
+        iframe.onLoad.listen((_) {
+          _notifyReady();
+          _reapplyRateSoon();
+        });
         return iframe;
       }
       if (mp4 != null && mp4.isNotEmpty) {
@@ -136,6 +194,12 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
           video.poster = poster;
         }
         _videoEl = video;
+        video.onPlay.listen((_) {
+          final r = widget.controller?.playbackRate ?? 1.0;
+          try {
+            if (video.playbackRate != r) video.playbackRate = r;
+          } catch (_) {}
+        });
         video.onContextMenu.listen((e) => e.preventDefault());
         video.onDragStart.listen((e) => e.preventDefault());
         video.onLoadedMetadata.listen((_) {
@@ -252,6 +316,7 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
         'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen',
       )
       ..setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+    _ytIframe = iframe;
 
     void startPlay() {
       posterEl.style.display = 'none';
@@ -262,7 +327,10 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
         origin: Uri.base.origin,
         startSeconds: start,
       );
-      iframe.onLoad.first.then((_) => _notifyReady());
+      iframe.onLoad.first.then((_) {
+        _notifyReady();
+        _reapplyRateSoon();
+      });
     }
 
     posterEl.onClick.listen((_) => startPlay());

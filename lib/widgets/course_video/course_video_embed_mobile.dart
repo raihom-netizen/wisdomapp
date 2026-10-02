@@ -1,10 +1,29 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../utils/youtube_url_helper.dart';
 import 'course_media_view_policy.dart';
+import 'course_video_controller.dart';
+
+/// Funções comuns aos HTMLs do player: velocidade e pausa chamadas pelo app.
+const String _kPlayerControlJs = '''
+window.__wRate=1;
+function wisdomSetRate(r){
+  window.__wRate=r;
+  try{ if(window.ytPlayer&&ytPlayer.setPlaybackRate) ytPlayer.setPlaybackRate(r); }catch(e){}
+  try{ var v=document.getElementById('v'); if(v) v.playbackRate=r; }catch(e){}
+}
+function wisdomPause(){
+  try{ if(window.ytPlayer&&ytPlayer.pauseVideo) ytPlayer.pauseVideo(); }catch(e){}
+  try{ var v=document.getElementById('v'); if(v) v.pause(); }catch(e){}
+}
+function wisdomApplyRate(p){
+  try{ if(window.__wRate&&window.__wRate!==1&&p&&p.setPlaybackRate) p.setPlaybackRate(window.__wRate); }catch(e){}
+}
+''';
 
 /// Origem HTTPS do HTML do player no Android/iOS.
 ///
@@ -24,6 +43,7 @@ class CourseVideoEmbed extends StatefulWidget {
     this.startAtSeconds = 0,
     this.onReady,
     this.onProgress,
+    this.controller,
   });
 
   final String? youtubeVideoId;
@@ -34,11 +54,16 @@ class CourseVideoEmbed extends StatefulWidget {
   final VoidCallback? onReady;
   final void Function(double position, double duration)? onProgress;
 
+  /// Velocidade/pausa vindas da tela (opcional).
+  final CourseVideoController? controller;
+
   @override
   State<CourseVideoEmbed> createState() => _CourseVideoEmbedState();
 }
 
-class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
+class _CourseVideoEmbedState extends State<CourseVideoEmbed>
+    with WidgetsBindingObserver
+    implements CourseVideoCommandTarget {
   WebViewController? _controller;
   var _ready = false;
   var _notifiedReady = false;
@@ -46,12 +71,54 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    widget.controller?.attach(this);
     _initController();
   }
 
   @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    widget.controller?.detach(this);
+    super.dispose();
+  }
+
+  /// App em segundo plano (ou tela bloqueada): a WebView continuaria tocando
+  /// o áudio — pausa o vídeo. No iOS também no `inactive` (central de
+  /// controle, ligação); no Android o `inactive` dispara à toa (cortina).
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final iosInactive = state == AppLifecycleState.inactive &&
+        defaultTargetPlatform == TargetPlatform.iOS;
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        iosInactive) {
+      pause();
+    }
+  }
+
+  Future<void> _runJs(String js) async {
+    final c = _controller;
+    if (c == null) return;
+    try {
+      await c.runJavaScript(js);
+    } catch (_) {}
+  }
+
+  @override
+  Future<void> pause() => _runJs('try{wisdomPause();}catch(e){}');
+
+  @override
+  Future<void> setPlaybackRate(double rate) =>
+      _runJs('try{wisdomSetRate($rate);}catch(e){}');
+
+  @override
   void didUpdateWidget(covariant CourseVideoEmbed oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.controller, widget.controller)) {
+      oldWidget.controller?.detach(this);
+      widget.controller?.attach(this);
+    }
     // NÃO remontar só por startAtSeconds — isso resetava o vídeo ao meio da reprodução.
     if (oldWidget.youtubeVideoId != widget.youtubeVideoId ||
         oldWidget.mp4Url != widget.mp4Url ||
@@ -68,6 +135,11 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
     if (_notifiedReady) return;
     _notifiedReady = true;
     widget.onReady?.call();
+    final ctrl = widget.controller;
+    if (ctrl != null) {
+      ctrl.attach(this);
+      ctrl.reapplyTo(this);
+    }
   }
 
   void _onProgressMessage(JavaScriptMessage msg) {
@@ -148,6 +220,7 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed> {
   #player{display:none;background:#000}
 </style>
 <script>${CourseMediaViewPolicy.videoContextMenuBlockJs}</script>
+<script>$_kPlayerControlJs</script>
 </head><body>
 <div id="wrap">
   <div id="poster" style="background-image:url('$thumb')">
@@ -175,8 +248,8 @@ function bootPlayer(){
     videoId:'$videoId',
     playerVars:{autoplay:1,rel:0,modestbranding:1,playsinline:1,fs:1,start:startAt,iv_load_policy:3,origin:'$_kYoutubeEmbedBaseUrl',widget_referrer:'$_kYoutubeEmbedBaseUrl'},
     events:{
-      onReady:function(e){ try{e.target.playVideo();}catch(x){} setInterval(postProg,4000); },
-      onStateChange:function(e){ if(e.data===1||e.data===2||e.data===0) postProg(); }
+      onReady:function(e){ wisdomApplyRate(e.target); try{e.target.playVideo();}catch(x){} setInterval(postProg,4000); },
+      onStateChange:function(e){ if(e.data===1) wisdomApplyRate(e.target); if(e.data===1||e.data===2||e.data===0) postProg(); }
     }
   });
 }
@@ -206,6 +279,7 @@ function bootPlayer(){
   html,body{width:100%;height:100%;background:#000;overflow:hidden}
   #player{width:100%;height:100%}
 </style>
+<script>$_kPlayerControlJs</script>
 </head><body>
 <div id="player"></div>
 <script src="https://www.youtube.com/iframe_api"></script>
@@ -223,8 +297,8 @@ function onYouTubeIframeAPIReady(){
     videoId:'$videoId',
     playerVars:{autoplay:${autoplay ? 1 : 0},rel:0,modestbranding:1,playsinline:1,fs:1,start:startAt,iv_load_policy:3,origin:'$_kYoutubeEmbedBaseUrl',widget_referrer:'$_kYoutubeEmbedBaseUrl'},
     events:{
-      onReady:function(e){ try{ window.flutterReady && flutterReady.postMessage('1'); }catch(x){} if($autoplay){try{e.target.playVideo();}catch(x){}} setInterval(postProg,4000); },
-      onStateChange:function(e){ if(e.data===1||e.data===2||e.data===0) postProg(); }
+      onReady:function(e){ wisdomApplyRate(e.target); try{ window.flutterReady && flutterReady.postMessage('1'); }catch(x){} if($autoplay){try{e.target.playVideo();}catch(x){}} setInterval(postProg,4000); },
+      onStateChange:function(e){ if(e.data===1) wisdomApplyRate(e.target); if(e.data===1||e.data===2||e.data===0) postProg(); }
     }
   });
 }
@@ -249,6 +323,7 @@ function onYouTubeIframeAPIReady(){
   video{width:100%;height:100%;object-fit:contain;background:#000}
 </style>
 <script>${CourseMediaViewPolicy.videoContextMenuBlockJs}</script>
+<script>$_kPlayerControlJs</script>
 </head><body>
 <video id="v" controls playsinline preload="${widget.autoplay ? 'auto' : 'metadata'}" controlslist="${CourseMediaViewPolicy.videoControlsList}" disablepictureinpicture oncontextmenu="return false;" $autoplayAttr $posterAttr src="$escaped"></video>
 <script>
@@ -269,6 +344,7 @@ function onYouTubeIframeAPIReady(){
   v.addEventListener('timeupdate', function(){
     if(!v._lastPost || (Date.now()-v._lastPost)>3500){ v._lastPost=Date.now(); post(); }
   });
+  v.addEventListener('play', function(){ try{ if(window.__wRate) v.playbackRate=window.__wRate; }catch(e){} });
   v.addEventListener('pause', post);
   v.addEventListener('ended', post);
   if(v.readyState >= 2) ready();

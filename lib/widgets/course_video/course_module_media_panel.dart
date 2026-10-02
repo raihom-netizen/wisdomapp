@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../services/course_progress_service.dart';
+import '../../utils/course_lessons.dart';
 import '../../utils/course_media_url_resolver.dart';
 import '../../utils/course_thumb_resolver.dart';
 import '../../utils/youtube_url_helper.dart';
@@ -62,6 +63,7 @@ class CourseModuleMediaPanel extends StatefulWidget {
 class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
     with AutomaticKeepAliveClientMixin {
   String? _resolvedMp4;
+  String? _resolvedStoragePath;
   var _mp4Loading = false;
   // A descrição completa já abre visível, como solicitado para o catálogo.
   var _descExpanded = true;
@@ -92,7 +94,38 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
   @override
   void dispose() {
     _progressSub?.cancel();
+    final id = _panelDocId;
+    if (id != null) unawaited(CourseProgressService.instance.flush(id));
     super.dispose();
+  }
+
+  /// Aula tocada aqui (mesma chave da tela do curso — progresso único).
+  String? get _lessonKey => CourseLessons.lessonKeyFor(
+        widget.data,
+        mp4Url: _resolvedMp4,
+        storagePath: _resolvedStoragePath,
+      );
+
+  /// Retoma de onde parou (mesma regra da tela do curso).
+  double get _resumeAt {
+    final key = _lessonKey;
+    if (key == null) return 0;
+    final lp = _progress.lesson(key);
+    return lp.canResume ? lp.positionSeconds : 0;
+  }
+
+  void _onProgress(double position, double duration) {
+    final id = _panelDocId;
+    final key = _lessonKey;
+    if (id == null || id.isEmpty || key == null) return;
+    unawaited(CourseProgressService.instance.recordLessonProgress(
+      id,
+      key,
+      positionSeconds: position,
+      durationSeconds: duration,
+      title: _title,
+      type: _isDica ? 'dica' : 'curso',
+    ));
   }
 
   @override
@@ -100,6 +133,9 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
     super.didUpdateWidget(oldWidget);
     final newId = widget.data['id']?.toString();
     if (newId != _panelDocId) {
+      final oldId = _panelDocId;
+      if (oldId != null) unawaited(CourseProgressService.instance.flush(oldId));
+      _resolvedStoragePath = null;
       _panelDocId = newId;
       _descExpanded = true;
       _progress = CourseProgressService.instance.of(newId ?? '');
@@ -124,6 +160,8 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
       if (!mounted) return;
       setState(() {
         _resolvedMp4 = entries.isNotEmpty ? entries.first.url : null;
+        _resolvedStoragePath =
+            entries.isNotEmpty ? entries.first.storagePath : null;
         _mp4Loading = false;
       });
     } catch (_) {
@@ -152,8 +190,8 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
   bool get _showGallery =>
       CourseMediaUrlResolver.hasResolvableImage(widget.data);
 
-  void _openFullscreen() {
-    showDialog<void>(
+  Future<void> _openFullscreen() async {
+    await showDialog<void>(
       context: context,
       barrierColor: Colors.black87,
       builder: (ctx) => Dialog.fullscreen(
@@ -171,7 +209,8 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
                   youtubeVideoId: _youtubeId,
                   mp4Url: _resolvedMp4,
                   courseId: widget.data['id']?.toString(),
-                  startAtSeconds: 0,
+                  startAtSeconds: _resumeAt,
+                  onProgress: _onProgress,
                   autoplay: true,
                   accent: widget.accent,
                   accent2: widget.accent2,
@@ -191,6 +230,8 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
         ),
       ),
     );
+    final id = _panelDocId;
+    if (id != null) unawaited(CourseProgressService.instance.flush(id));
   }
 
   @override
@@ -258,7 +299,8 @@ class _CourseModuleMediaPanelState extends State<CourseModuleMediaPanel>
                                     youtubeVideoId: _youtubeId,
                                     mp4Url: _resolvedMp4,
                                     courseId: widget.data['id']?.toString(),
-                                    startAtSeconds: 0,
+                                    startAtSeconds: _resumeAt,
+                                    onProgress: _onProgress,
                                     autoplay: false,
                                     accent: widget.accent,
                                     accent2: widget.accent2,

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../services/course_progress_service.dart';
+import '../../utils/course_lessons.dart';
 import '../../utils/course_media_url_resolver.dart';
 import '../../utils/course_thumb_resolver.dart';
 import '../../utils/youtube_url_helper.dart';
@@ -36,6 +37,7 @@ class CourseYoutubeFeedCard extends StatefulWidget {
 class _CourseYoutubeFeedCardState extends State<CourseYoutubeFeedCard> {
   var _descExpanded = false;
   String? _resolvedMp4;
+  String? _resolvedStoragePath;
   var _mp4Loading = false;
   StreamSubscription<String>? _progressSub;
   CourseProgress _progress = const CourseProgress();
@@ -86,9 +88,14 @@ class _CourseYoutubeFeedCardState extends State<CourseYoutubeFeedCard> {
   void didUpdateWidget(covariant CourseYoutubeFeedCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.data['id'] != widget.data['id']) {
+      final oldId = (oldWidget.data['id'] ?? '').toString();
+      if (oldId.isNotEmpty) {
+        unawaited(CourseProgressService.instance.flush(oldId));
+      }
       _descExpanded = false;
       _progress = CourseProgressService.instance.of(_courseId);
       _resolvedMp4 = null;
+      _resolvedStoragePath = null;
       _loadMp4();
     }
     if (oldWidget.uid != widget.uid) {
@@ -99,7 +106,37 @@ class _CourseYoutubeFeedCardState extends State<CourseYoutubeFeedCard> {
   @override
   void dispose() {
     _progressSub?.cancel();
+    unawaited(CourseProgressService.instance.flush(_courseId));
     super.dispose();
+  }
+
+  /// Aula tocada no card (mesma chave da tela do curso — progresso único).
+  String? get _lessonKey => CourseLessons.lessonKeyFor(
+        widget.data,
+        mp4Url: _resolvedMp4,
+        storagePath: _resolvedStoragePath,
+      );
+
+  /// Retoma de onde parou (mesma regra da tela do curso: passou de 10 s e
+  /// não terminou).
+  double get _resumeAt {
+    final key = _lessonKey;
+    if (key == null) return 0;
+    final lp = _progress.lesson(key);
+    return lp.canResume ? lp.positionSeconds : 0;
+  }
+
+  void _onProgress(double position, double duration) {
+    final key = _lessonKey;
+    if (_courseId.isEmpty || key == null) return;
+    unawaited(CourseProgressService.instance.recordLessonProgress(
+      _courseId,
+      key,
+      positionSeconds: position,
+      durationSeconds: duration,
+      title: _title,
+      type: _isDica ? 'dica' : 'curso',
+    ));
   }
 
   Future<void> _loadMp4() async {
@@ -116,6 +153,8 @@ class _CourseYoutubeFeedCardState extends State<CourseYoutubeFeedCard> {
       if (!mounted) return;
       setState(() {
         _resolvedMp4 = entries.isNotEmpty ? entries.first.url : null;
+        _resolvedStoragePath =
+            entries.isNotEmpty ? entries.first.storagePath : null;
         _mp4Loading = false;
       });
     } catch (_) {
@@ -152,7 +191,8 @@ class _CourseYoutubeFeedCardState extends State<CourseYoutubeFeedCard> {
         youtubeVideoId: _youtubeId,
         mp4Url: _resolvedMp4,
         courseId: _courseId,
-        startAtSeconds: 0,
+        startAtSeconds: _resumeAt,
+        onProgress: _onProgress,
         contentTitle: _title,
         contentType: _isDica ? 'dica' : 'curso',
         autoplay: false,

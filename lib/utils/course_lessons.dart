@@ -73,6 +73,37 @@ class CourseLessons {
   static List<String> keysOf(Map<String, dynamic> data) =>
       fromData(data).map((l) => l.key).toList();
 
+  /// Chave da aula que um player «avulso» (feed, painel do módulo, tela de
+  /// assistir) está tocando — mesma chave da tela do curso, para o progresso
+  /// ser um só. O player prefere o YouTube quando existe; senão o MP4 [mp4Url]
+  /// (ou o primeiro). [storagePath] cobre o legado descoberto no Storage.
+  static String? lessonKeyFor(
+    Map<String, dynamic> data, {
+    String? mp4Url,
+    String? storagePath,
+  }) {
+    final lessons = fromData(data);
+    if (lessons.isEmpty) {
+      final path = (storagePath ?? '').trim();
+      if (path.isNotEmpty) return 'mp4:$path';
+      return (mp4Url ?? '').trim().isNotEmpty ? 'mp4:0' : null;
+    }
+    if (lessons.first.isYoutube) return lessons.first.key;
+    final url = (mp4Url ?? '').trim();
+    if (url.isNotEmpty) {
+      for (final l in lessons) {
+        if (l.mp4Url == url) return l.key;
+      }
+    }
+    final path = (storagePath ?? '').trim();
+    if (path.isNotEmpty) {
+      for (final l in lessons) {
+        if (l.storagePath == path) return l.key;
+      }
+    }
+    return lessons.first.key;
+  }
+
   /// URL tocável do MP4 (resolve caminho do Storage quando preciso).
   static Future<String?> resolveMp4(CourseLesson lesson) async {
     if (lesson.isYoutube) return null;

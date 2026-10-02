@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../utils/course_media_url_resolver.dart';
 import '../course_media_preview.dart';
+import 'course_video_controller.dart';
 import 'course_video_embed.dart';
 
 /// Um player por vez no app inteiro.
@@ -40,6 +41,7 @@ class CourseVideoPlayerShell extends StatefulWidget {
     this.onProgress,
     this.contentTitle,
     this.contentType,
+    this.controller,
   });
 
   /// Documento Firestore (title, thumbnailUrl, id…) para resolver a capa.
@@ -55,6 +57,9 @@ class CourseVideoPlayerShell extends StatefulWidget {
   final void Function(double position, double duration)? onProgress;
   final String? contentTitle;
   final String? contentType;
+
+  /// Velocidade/pausa a partir da tela e última posição (tela cheia).
+  final CourseVideoController? controller;
 
   @override
   State<CourseVideoPlayerShell> createState() => _CourseVideoPlayerShellState();
@@ -76,8 +81,8 @@ class _CourseVideoPlayerShellState extends State<CourseVideoPlayerShell> {
       widget.youtubeVideoId != null && widget.youtubeVideoId!.trim().isNotEmpty;
 
   /// Início explícito vindo de quem abriu o player (ex.: «Continuar» na tela
-  /// do curso). Fixado na abertura da aula — o embed NÃO remonta quando muda
-  /// (ver didUpdateWidget dos embeds). Feed e tela de assistir passam 0.
+  /// do curso, feed e tela de assistir retomando a aula). Fixado na abertura
+  /// da aula — o embed NÃO remonta quando muda (ver didUpdateWidget dos embeds).
   double get _effectiveStart => widget.startAtSeconds;
 
   /// Dados da capa: o documento ou, só com o ID do YouTube, um mínimo.
@@ -205,8 +210,10 @@ class _CourseVideoPlayerShellState extends State<CourseVideoPlayerShell> {
   }
 
   void _onProgress(double position, double duration) {
+    widget.controller?.reportProgress(position, duration);
+    // Quem abriu o player (tela do curso, feed, módulo, tela de assistir)
+    // grava o progresso da aula via CourseProgressService.recordLessonProgress.
     widget.onProgress?.call(position, duration);
-    // Sem save de posição/resume — o usuário controla no player nativo.
   }
 
   @override
@@ -224,6 +231,7 @@ class _CourseVideoPlayerShellState extends State<CourseVideoPlayerShell> {
             startAtSeconds: _effectiveStart,
             onReady: _onEmbedReady,
             onProgress: _onProgress,
+            controller: widget.controller,
           ),
         if (!_showEmbed)
           Positioned.fill(
