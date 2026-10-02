@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../models/landing_public_content.dart';
+import 'keyed_stream_builder.dart';
 import 'official_social_top_buttons.dart';
 
 /// Ícones Instagram / YouTube / WhatsApp no Início (app iOS e Android).
@@ -11,8 +12,11 @@ class HomeOfficialSocialBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
+    // Escuta guardada (antes `.snapshots()` no build abria uma nova a cada
+    // rebuild do Início).
+    return KeyedStreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      streamKey: 'landing_content/main',
+      create: () => FirebaseFirestore.instance
           .collection('landing_content')
           .doc('main')
           .snapshots(),

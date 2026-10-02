@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/keyboard_form_scaffold.dart';
+import '../utils/navigator_safe_pop.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -209,7 +210,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       IconButton(
                         icon: const Icon(Icons.arrow_back_rounded,
                             color: Colors.white),
-                        onPressed: () => Navigator.of(context).pop(),
+                        // Link direto/recarga na web: sem tela anterior,
+                        // volta ao início em vez de não fazer nada.
+                        onPressed: () => popOrGoHome(context),
                       ),
                       const Expanded(
                         child: Text(

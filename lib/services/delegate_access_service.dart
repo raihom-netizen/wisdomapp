@@ -633,28 +633,45 @@ class DelegateAccessService {
   }
 
   /// Lê os e-mails autorizados direto do Firestore.
-  static Future<List<String>> loadAuthorizedEmails(String principalUid) async {
+  /// [rethrowErrors]: a tela de Configurações precisa saber que a leitura
+  /// falhou (para mostrar «Tentar de novo») em vez de receber lista vazia e
+  /// achar que ninguém está autorizado.
+  static Future<List<String>> loadAuthorizedEmails(
+    String principalUid, {
+    bool rethrowErrors = false,
+  }) async {
     final uid = principalUid.trim();
     if (uid.isEmpty) return const [];
     try {
-      final snap =
-          await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get()
+          .timeout(const Duration(seconds: 12));
       return authorizedEmailsFrom(snap.data());
     } catch (_) {
+      if (rethrowErrors) rethrow;
       return const [];
     }
   }
 
   /// Lista com a situação de cada pessoa (pendente / ativo / sem acesso).
-  static Future<List<DelegateInvite>> loadInvites(String principalUid) async {
+  static Future<List<DelegateInvite>> loadInvites(
+    String principalUid, {
+    bool rethrowErrors = false,
+  }) async {
     final uid = principalUid.trim();
-    final emails = await loadAuthorizedEmails(uid);
+    final emails =
+        await loadAuthorizedEmails(uid, rethrowErrors: rethrowErrors);
     if (emails.isEmpty) return const [];
     final db = FirebaseFirestore.instance;
     final out = await Future.wait(emails.map((email) async {
       try {
-        final snap =
-            await db.collection('delegate_email_index').doc(email).get();
+        final snap = await db
+            .collection('delegate_email_index')
+            .doc(email)
+            .get()
+            .timeout(const Duration(seconds: 8));
         final d = snap.data();
         if (!snap.exists ||
             d == null ||
@@ -705,7 +722,8 @@ class DelegateAccessService {
     try {
       final db = FirebaseFirestore.instance;
       final userRef = db.collection('users').doc(uid);
-      final userSnap = await userRef.get();
+      final userSnap =
+          await userRef.get().timeout(const Duration(seconds: 12));
       final atuais = authorizedEmailsFrom(userSnap.data());
       if (atuais.contains(clean) && clean != antigo) {
         return 'Esse e-mail já está autorizado nesta licença.';
@@ -717,7 +735,8 @@ class DelegateAccessService {
       }
 
       final indexRef = db.collection('delegate_email_index').doc(clean);
-      final existing = await indexRef.get();
+      final existing =
+          await indexRef.get().timeout(const Duration(seconds: 12));
       if (existing.exists) {
         final otherUid =
             (existing.data()?['principalUid'] as String?)?.trim() ?? '';
@@ -787,7 +806,8 @@ class DelegateAccessService {
     try {
       final db = FirebaseFirestore.instance;
       final userRef = db.collection('users').doc(uid);
-      final userSnap = await userRef.get();
+      final userSnap =
+          await userRef.get().timeout(const Duration(seconds: 12));
       final restantes =
           authorizedEmailsFrom(userSnap.data()).where((e) => e != alvo).toList();
       final delegateUid = await _delegateUidOf(alvo);
@@ -833,7 +853,8 @@ class DelegateAccessService {
       final snap = await FirebaseFirestore.instance
           .collection('delegate_email_index')
           .doc(emailDocKey(email))
-          .get();
+          .get()
+          .timeout(const Duration(seconds: 8));
       final v = (snap.data()?['delegateUid'] ?? '').toString().trim();
       return v.isEmpty ? null : v;
     } catch (_) {

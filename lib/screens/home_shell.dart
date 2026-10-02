@@ -651,7 +651,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           .doc(_userDocId)
           .collection('settings')
           .doc('planning')
-          .get(const GetOptions(source: Source.serverAndCache));
+          .get(const GetOptions(source: Source.serverAndCache))
+          // Resposta atrasada não pode trocar o módulo com o usuário já
+          // navegando: passou do prazo, fica onde está.
+          .timeout(const Duration(seconds: 8));
       final data = snap.data() ?? <String, dynamic>{};
       final raw = data[kHomeDefaultStartModuleField];
       if (raw is num && _kRemovedModuleIndices.contains(raw.toInt())) {

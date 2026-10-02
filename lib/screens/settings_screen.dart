@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../widgets/fast_text_field.dart';
@@ -130,11 +132,18 @@ class _PontuacaoParaFolgaCardState extends State<_PontuacaoParaFolgaCard> {
   void initState() {
     super.initState();
     _ctrl = TextEditingController(text: '30');
-    ProdutividadeConfigService().getPontuacaoParaFolga(widget.uid).then((v) {
+    ProdutividadeConfigService()
+        .getPontuacaoParaFolga(widget.uid)
+        .timeout(const Duration(seconds: 12))
+        .then((v) {
       if (mounted) {
         _ctrl.text = v.toString();
         setState(() => _loaded = true);
       }
+    }).catchError((Object _) {
+      // Falhou/demorou: libera o «Salvar» com o padrão (30) em vez de deixar
+      // o botão desligado para sempre.
+      if (mounted) setState(() => _loaded = true);
     });
   }
 
@@ -334,6 +343,7 @@ class _DelegateSharingCardState extends State<_DelegateSharingCard> {
   List<DelegateInvite> _invites = const [];
   bool _busy = false;
   bool _carregou = false;
+  bool _erroCarga = false;
 
   List<String> get _emails => _invites.map((e) => e.email).toList();
 
@@ -362,12 +372,24 @@ class _DelegateSharingCardState extends State<_DelegateSharingCard> {
   }
 
   Future<void> _recarregar() async {
-    final lista = await DelegateAccessService.loadInvites(widget.principalUid);
-    if (!mounted) return;
-    setState(() {
-      _invites = lista;
-      _carregou = true;
-    });
+    if (_erroCarga && mounted) setState(() => _erroCarga = false);
+    try {
+      final lista = await DelegateAccessService.loadInvites(
+        widget.principalUid,
+        rethrowErrors: true,
+      );
+      if (!mounted) return;
+      setState(() {
+        _invites = lista;
+        _carregou = true;
+        _erroCarga = false;
+      });
+    } catch (_) {
+      // Falhou/demorou: mantém o que já está na tela (não apaga a lista) e
+      // oferece «Tentar de novo» — antes o botão ficava desligado para sempre.
+      if (!mounted) return;
+      setState(() => _erroCarga = true);
+    }
   }
 
   void _snack(String msg, {bool erro = false}) {
@@ -786,6 +808,28 @@ class _DelegateSharingCardState extends State<_DelegateSharingCard> {
                   style: FilledButton.styleFrom(
                     minimumSize: const Size(double.infinity, 48),
                   ),
+                ),
+              ),
+            if (_erroCarga)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Row(
+                  children: [
+                    Icon(Icons.cloud_off_rounded,
+                        size: 18, color: Colors.orange.shade800),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Não foi possível carregar a lista de autorizados.',
+                        style: TextStyle(
+                            fontSize: 12, color: context.appTextSecondary),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _busy ? null : _recarregar,
+                      child: const Text('Tentar de novo'),
+                    ),
+                  ],
                 ),
               ),
             if (_busy)
@@ -1701,19 +1745,35 @@ class _WeeklySummarySettingsDialogState
   @override
   void initState() {
     super.initState();
-    widget.ref.get().then((snap) {
+    // Com prazo e erro tratado: antes uma falha deixava o diálogo girando.
+    widget.ref.get().timeout(const Duration(seconds: 12)).then((snap) {
       if (!mounted) return;
       setState(() {
         _enabled = snap.data()?['enabled'] == true;
         _loading = false;
       });
+    }).catchError((Object _) {
+      if (!mounted) return;
+      setState(() => _loading = false);
     });
   }
 
   Future<void> _toggle(bool v) async {
-    await widget.ref.set(
-        {'enabled': v, 'updatedAt': FieldValue.serverTimestamp()},
-        SetOptions(merge: true));
+    try {
+      await widget.ref.set(
+          {'enabled': v, 'updatedAt': FieldValue.serverTimestamp()},
+          SetOptions(merge: true)).timeout(const Duration(seconds: 12));
+    } on TimeoutException {
+      // Fica na fila do Firestore e sobe quando a conexão voltar.
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Não foi possível salvar agora. Tente de novo.')),
+        );
+      }
+      return;
+    }
     if (mounted) {
       setState(() => _enabled = v);
       if (!v) {

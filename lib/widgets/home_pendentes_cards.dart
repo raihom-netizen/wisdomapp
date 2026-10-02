@@ -182,12 +182,24 @@ class _HomePendentesSecaoState extends State<HomePendentesSecao> {
     _retry = Timer(espera, () {
       _retry = null;
       if (!mounted) return;
+      setState(() {});
       _subRec?.cancel();
       _subDesp?.cancel();
       _subPrefRec?.cancel();
       _subPrefDesp?.cancel();
       _abrirEscutas();
     });
+  }
+
+  /// Botão «Tentar de novo» (depois das 4 tentativas automáticas ou de
+  /// `permission-denied`): reabre as escutas do zero.
+  void _tentarDeNovoManual() {
+    _retry?.cancel();
+    _retry = null;
+    _tentativas = 0;
+    _fecharEscutas();
+    setState(() => _erroSemDados = null);
+    _abrirEscutas();
   }
 
   void _recalcular({bool rebuild = true}) {
@@ -275,11 +287,18 @@ class _HomePendentesSecaoState extends State<HomePendentesSecao> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '${_erroSemDados!} Tentando de novo…',
+                      _retry != null
+                          ? '${_erroSemDados!} Tentando de novo…'
+                          : _erroSemDados!,
                       style: TextStyle(
                           fontSize: 12, color: context.appTextSecondary),
                     ),
                   ),
+                  if (_retry == null)
+                    TextButton(
+                      onPressed: _tentarDeNovoManual,
+                      child: const Text('Tentar de novo'),
+                    ),
                 ]),
               ),
             ),

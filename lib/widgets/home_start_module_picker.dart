@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -95,9 +97,9 @@ Future<void> showHomeStartModulePickerSheet(
     current = initialSelected;
   } else {
     try {
-      final snap = await homePlanningRef(uid).get(
-        const GetOptions(source: Source.serverAndCache),
-      );
+      final snap = await homePlanningRef(uid)
+          .get(const GetOptions(source: Source.serverAndCache))
+          .timeout(const Duration(seconds: 8));
       final raw = snap.data()?[kHomeDefaultStartModuleField];
       current = raw is num ? normalizeHomeStartModuleIndex(raw.toInt()) : 1;
       if (!kHomeDefaultStartModuleLabels.containsKey(current)) {
@@ -255,10 +257,27 @@ Future<void> showHomeStartModulePickerSheet(
                           ),
                         ),
                         onPressed: () async {
-                          await homePlanningRef(uid).set({
-                            kHomeDefaultStartModuleField: current,
-                            'updatedAt': FieldValue.serverTimestamp(),
-                          }, SetOptions(merge: true));
+                          try {
+                            await homePlanningRef(uid).set({
+                              kHomeDefaultStartModuleField: current,
+                              'updatedAt': FieldValue.serverTimestamp(),
+                            }, SetOptions(merge: true)).timeout(
+                                const Duration(seconds: 12));
+                          } on TimeoutException {
+                            // Gravação fica na fila do Firestore e sobe
+                            // quando a conexão voltar.
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                      'Não foi possível salvar agora. Tente de novo. ($e)'),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                            return;
+                          }
                           await HomeStartModuleCache.save(uid, current);
                           if (ctx.mounted) Navigator.of(ctx).pop();
                           onSaved?.call(current);

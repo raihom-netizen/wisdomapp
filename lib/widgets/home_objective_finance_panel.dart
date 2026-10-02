@@ -81,6 +81,32 @@ class _HomeObjectiveFinancePanelState extends State<HomeObjectiveFinancePanel> {
         if (!snap.hasData && !snap.hasError) {
           return const SizedBox(height: 8);
         }
+        // Escuta caiu sem nenhum dado: avisa com «Tentar de novo» em vez de
+        // mostrar «Criar objetivo» como se o usuário não tivesse nenhum.
+        if (!snap.hasData && snap.hasError) {
+          return Container(
+            padding: const EdgeInsets.all(14),
+            decoration: context.appPanelDecoration(radius: 16),
+            child: Row(
+              children: [
+                const Icon(Icons.cloud_off_rounded, color: Color(0xFFEA580C)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Não foi possível carregar seus objetivos agora.',
+                    style: TextStyle(
+                        fontSize: 13, color: context.appTextPrimary),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () => setState(() => _goals = null),
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                  label: const Text('Tentar de novo'),
+                ),
+              ],
+            ),
+          );
+        }
         final goals = (snap.data?.docs ?? [])
             .where((d) => !_excludeGoal(d))
             .toList();

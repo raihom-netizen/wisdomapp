@@ -85,6 +85,25 @@ class _HomeFinanceOverviewPanelState extends State<HomeFinanceOverviewPanel> {
   Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>>? _docsStream;
   late Stream<List<FinanceAccount>> _contasStream;
 
+  /// Prazo da 1ª carga: passou e nada chegou → mostra «Tentar de novo» em vez
+  /// de deixar os cards girando para sempre.
+  static const _kPrazoCarga = Duration(seconds: 20);
+  Timer? _prazoTimer;
+  bool _demorou = false;
+  int _tentativa = 0;
+  Timer? _prazoContasTimer;
+  bool _contasDemorou = false;
+
+  void _armarPrazoContas() {
+    _prazoContasTimer?.cancel();
+    _contasDemorou = false;
+    if (_ultimasContas[_userFsId] != null) return;
+    _prazoContasTimer = Timer(_kPrazoCarga, () {
+      if (!mounted || _ultimasContas[_userFsId] != null) return;
+      setState(() => _contasDemorou = true);
+    });
+  }
+
   String get _userFsId => firestoreUserDocIdForAppShell(widget.uid);
 
   (DateTime, DateTime) _rangeForPeriod() {
@@ -145,6 +164,7 @@ class _HomeFinanceOverviewPanelState extends State<HomeFinanceOverviewPanel> {
       _ultimasContas[_userFsId] = l;
       return l;
     });
+    _armarPrazoContas();
     final (start, end) = _rangeForPeriod();
     _garantirStreamDocs(start, end);
     _ensureSaldoAberturaForPeriod(start);
@@ -157,6 +177,8 @@ class _HomeFinanceOverviewPanelState extends State<HomeFinanceOverviewPanel> {
   void dispose() {
     FinanceOpeningBalanceService.revision.removeListener(_onOpeningRevision);
     _openingReloadTimer?.cancel();
+    _prazoTimer?.cancel();
+    _prazoContasTimer?.cancel();
     super.dispose();
   }
 
@@ -168,14 +190,69 @@ class _HomeFinanceOverviewPanelState extends State<HomeFinanceOverviewPanel> {
     final key = _chaveDocs(start, end);
     if (key == _docsKey && _docsStream != null) return;
     _docsKey = key;
+    _demorou = false;
+    _prazoTimer?.cancel();
+    if (_ultimosDocs[key] == null) {
+      _prazoTimer = Timer(_kPrazoCarga, () {
+        if (!mounted || _docsKey != key || _ultimosDocs[key] != null) return;
+        setState(() => _demorou = true);
+      });
+    }
     _docsStream = financeTransactionsPeriodDocs(
       uid: _userFsId,
       rangeStart: start,
       rangeEnd: end,
     ).map((docs) {
       _ultimosDocs[key] = docs;
+      _prazoTimer?.cancel();
       return docs;
     });
+  }
+
+  /// «Tentar de novo»: refaz as escutas (lançamentos e contas) e a abertura.
+  void _tentarDeNovo() {
+    final (start, end) = _rangeForPeriod();
+    setState(() {
+      _tentativa++;
+      _docsKey = '';
+      _docsStream = null;
+      _contasStream =
+          FinanceAccountsService().streamAccounts(_userFsId).map((l) {
+        _ultimasContas[_userFsId] = l;
+        return l;
+      });
+      _armarPrazoContas();
+      _garantirStreamDocs(start, end);
+    });
+    _saldoAberturaKey = '';
+    _ensureSaldoAberturaForPeriod(start);
+  }
+
+  Widget _cardErroCarga(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: context.appPanelDecoration(radius: 16),
+      child: Row(
+        children: [
+          const Icon(Icons.cloud_off_rounded, color: Color(0xFFEA580C)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Não foi possível carregar o resumo financeiro agora. '
+              'Verifique a conexão.',
+              style: TextStyle(
+                  fontSize: 13, height: 1.35, color: context.appTextPrimary),
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton.icon(
+            onPressed: _tentarDeNovo,
+            icon: const Icon(Icons.refresh_rounded, size: 18),
+            label: const Text('Tentar de novo'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Saldo de abertura mudou em cache (pagamento confirmado/lançamento antes do
@@ -247,12 +324,25 @@ class _HomeFinanceOverviewPanelState extends State<HomeFinanceOverviewPanel> {
     DateTime periodStart, {
     bool keepDisplayed = false,
   }) async {
+    // Falha/demora na abertura não pode derrubar o painel: mantém o valor
+    // exibido (ou 0) e os lançamentos do período continuam aparecendo.
+    try {
+      await _loadSaldoAberturaCore(periodStart, keepDisplayed: keepDisplayed);
+    } catch (e) {
+      debugPrint('HomeFinanceOverviewPanel: abertura falhou: $e');
+    }
+  }
+
+  Future<void> _loadSaldoAberturaCore(
+    DateTime periodStart, {
+    required bool keepDisplayed,
+  }) async {
     if (!keepDisplayed || _saldoAberturaCached == null) {
       final fast = await FinanceOpeningBalanceService.load(
         uid: widget.uid,
         periodStart: periodStart,
         loadAccounts: false,
-      );
+      ).timeout(const Duration(seconds: 25));
       if (!mounted ||
           _saldoAberturaKey !=
               '${periodStart.year}-${periodStart.month}-${periodStart.day}') {
@@ -264,7 +354,7 @@ class _HomeFinanceOverviewPanelState extends State<HomeFinanceOverviewPanel> {
       uid: widget.uid,
       periodStart: periodStart,
       loadAccounts: true,
-    );
+    ).timeout(const Duration(seconds: 40));
     if (!mounted ||
         _saldoAberturaKey !=
             '${periodStart.year}-${periodStart.month}-${periodStart.day}') {
@@ -378,14 +468,18 @@ class _HomeFinanceOverviewPanelState extends State<HomeFinanceOverviewPanel> {
           initialData: _ultimasContas[_userFsId],
           builder: (context, accSnap) {
             final accounts = accSnap.data ?? const <FinanceAccount>[];
+            final contasCarregando =
+                accSnap.data == null && !accSnap.hasError && !_contasDemorou;
             return StreamBuilder<
                 List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
-              key: ValueKey(_docsKey),
+              key: ValueKey('$_docsKey#$_tentativa'),
               stream: _docsStream,
               initialData: _ultimosDocs[_docsKey],
               builder: (context, txSnap) {
                 final docs = txSnap.data ?? const [];
-                final carregando = txSnap.data == null;
+                final falhou = txSnap.data == null &&
+                    (txSnap.hasError || _demorou);
+                final carregando = txSnap.data == null && !falhou;
                 double receitas = 0, despesas = 0;
                 final despesasPagas = <Map<String, dynamic>>[];
 
@@ -470,6 +564,12 @@ class _HomeFinanceOverviewPanelState extends State<HomeFinanceOverviewPanel> {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      if (falhou ||
+                          ((accSnap.hasError || _contasDemorou) &&
+                              accSnap.data == null)) ...[
+                        _cardErroCarga(context),
+                        const SizedBox(height: 12),
+                      ],
                       _cardSaldo(
                         context,
                         periodLabel: periodLabel,
@@ -496,7 +596,18 @@ class _HomeFinanceOverviewPanelState extends State<HomeFinanceOverviewPanel> {
                               ? null
                               : 'Toque numa conta para ver'),
                       const SizedBox(height: 8),
-                      if (accounts.isEmpty)
+                      if (accounts.isEmpty && contasCarregando)
+                        const SizedBox(
+                          height: 128,
+                          child: Center(
+                            child: SizedBox(
+                              width: 26,
+                              height: 26,
+                              child: CircularProgressIndicator(strokeWidth: 2.5),
+                            ),
+                          ),
+                        )
+                      else if (accounts.isEmpty)
                         _emptyAccountsCard()
                       else
                         SizedBox(
