@@ -105,6 +105,8 @@ abstract final class ExtratoImportService {
   /// declara `CHARSET:1252`); a escolha é pelo conteúdo.
   static String decodificarTexto(Uint8List bytes) {
     final tentativa = utf8.decode(bytes, allowMalformed: true);
+    // U+FFFD = caractere de substituição: o UTF-8 falhou (não é texto
+    // corrompido no código — é o sinal para tentar latin1).
     if (!tentativa.contains('�')) return tentativa;
     return latin1.decode(bytes, allowInvalid: true);
   }
