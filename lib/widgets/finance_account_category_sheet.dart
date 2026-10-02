@@ -14,6 +14,7 @@ import '../models/user_profile.dart';
 import '../theme/app_colors.dart';
 import '../theme/theme_context.dart';
 import 'finance_bank_brand_thumb.dart';
+import '../utils/finance_account_balance_utils.dart';
 import '../utils/finance_line_opening.dart';
 import '../services/finance_opening_balance_service.dart';
 import '../utils/finance_transactions_realtime.dart';
@@ -263,7 +264,40 @@ class _FinanceAccountCategorySheetState extends State<FinanceAccountCategoryShee
                             : (openSnap.data?.byAccount[widget.account!.id] ??
                                 widget.openingBalanceHint ??
                                 0.0);
-                        final saldoAcumulado = openingAccount + net;
+                        // Mesma regra do carrossel «Saldos por conta»
+                        // (correção autorizada 02/10/2026): só o PAGO, data
+                        // efetiva, cartão fora do saldo e pagamento de fatura
+                        // debitando a conta que pagou. Antes somava
+                        // receitas − despesas da lista (com pendentes quando o
+                        // filtro era «Todos») e ignorava a fatura paga.
+                        final paidItems = (_periodDocs ?? const [])
+                            .map((doc) => doc.data())
+                            .toList();
+                        final double periodNetPaid;
+                        if (widget.account == null) {
+                          var s = 0.0;
+                          for (final d in paidItems) {
+                            if ((d['status'] ?? 'paid').toString() != 'paid') {
+                              continue;
+                            }
+                            if (!_passEffectiveDateInPeriod(d)) continue;
+                            final a = ((d['amount'] ?? 0) as num).toDouble().abs();
+                            s += d['type'] == 'income' ? a : -a;
+                          }
+                          periodNetPaid = s;
+                        } else {
+                          periodNetPaid = FinanceAccountBalanceUtils
+                                  .netPaidByAccountEffectiveFromMaps(
+                                items: paidItems,
+                                from: widget.from,
+                                to: widget.to,
+                                creditCardIds:
+                                    FinanceAccountBalanceUtils.creditCardAccountIds(
+                                        widget.financeAccounts),
+                              )[widget.account!.id] ??
+                              0.0;
+                        }
+                        final saldoAcumulado = openingAccount + periodNetPaid;
 
                         return ListView(
                           controller: scrollController,

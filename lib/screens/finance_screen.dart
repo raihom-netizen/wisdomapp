@@ -94,6 +94,7 @@ import '../widgets/light_filter_picker.dart';
 import '../widgets/finance_confirm_payment_sheet.dart';
 import '../widgets/finance_credit_card_fatura_sheet.dart';
 import '../widgets/finance_fatura_em_aberto_hub.dart';
+import '../widgets/importar_extrato_card.dart';
 import '../utils/finance_account_balance_utils.dart';
 import '../utils/pdf_financeiro_super_extrato.dart';
 
@@ -7113,6 +7114,14 @@ class _FinanceScreenState extends State<FinanceScreen>
                   const SizedBox(height: 8),
                   _buildTransferenciaButton(context,
                       dense: false),
+                  // Extrato ou fatura inteira (OFX/CSV/PDF/print), como no
+                  // Controle Total: acima do lançamento expresso (UM lançamento).
+                  ImportarExtratoCard(
+                    uid: widget.uid,
+                    onImportado: (_) {
+                      if (mounted) setState(() {});
+                    },
+                  ),
                   const SizedBox(height: 10),
                   Material(
                     color: Colors.transparent,
@@ -9413,13 +9422,28 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet>
     _txWatchSub?.cancel();
     final fsId = firestoreUserDocIdForAppShell(widget.uid);
     if (fsId.isEmpty) return;
+    // Antes: `transactions.limit(1)` — só avisava quando mudava o PRIMEIRO
+    // documento da coleção (ordem por id), então editar/criar qualquer outro
+    // lançamento (ex.: em outro aparelho) não recarregava a tela. Agora escuta
+    // o lançamento com `updatedAt` mais recente: toda gravação do app carimba
+    // `updatedAt`, então qualquer criação/edição muda esse topo (1 leitura por
+    // mudança, sem ler a coleção). Exclusões feitas no app já avisam pelo
+    // FinanceTransactionsHub. A 1ª entrega é ignorada (initState já carregou).
+    var first = true;
     _txWatchSub = FirebaseFirestore.instance
         .collection('users')
         .doc(fsId)
         .collection('transactions')
+        .orderBy('updatedAt', descending: true)
         .limit(1)
         .snapshots(includeMetadataChanges: false)
-        .listen((_) => _scheduleDocsReloadDebounced());
+        .listen((_) {
+      if (first) {
+        first = false;
+        return;
+      }
+      _scheduleDocsReloadDebounced();
+    }, onError: (_) {});
   }
 
   void _onFinanceHubRevision() {

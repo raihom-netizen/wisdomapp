@@ -162,7 +162,21 @@ class _FinanceFaturaCardPickerSheet extends StatelessWidget {
                   color: Colors.transparent,
                   child: InkWell(
                     borderRadius: BorderRadius.circular(18),
-                    onTap: () {},
+                    // Antes sem ação: abre a fatura do cartão com MAIS valor
+                    // em aberto (o que mais pesa no total).
+                    onTap: cards.isEmpty
+                        ? null
+                        : () {
+                            HapticFeedback.selectionClick();
+                            var alvo = cards.first;
+                            for (final c in cards) {
+                              if ((faturaByCardId[c.id] ?? 0) >
+                                  (faturaByCardId[alvo.id] ?? 0)) {
+                                alvo = c;
+                              }
+                            }
+                            onCardSelected(alvo);
+                          },
                     child: Ink(
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
