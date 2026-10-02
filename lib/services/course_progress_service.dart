@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'course_analytics_service.dart';
@@ -199,11 +201,16 @@ class CourseProgress {
   }
 }
 
-class CourseProgressService {
+class CourseProgressService with WidgetsBindingObserver {
   CourseProgressService._();
   static final CourseProgressService instance = CourseProgressService._();
 
-  static const _prefsKey = 'course_progress_v1';
+  /// Chave antiga (sem dono) — de antes da separação por conta. Não dá para
+  /// saber de quem era, então é DESCARTADA (o progresso real está na nuvem).
+  static const _legacyPrefsKey = 'course_progress_v1';
+
+  /// Progresso local é por conta: duas contas no mesmo aparelho não se misturam.
+  static String _prefsKeyFor(String uid) => 'course_progress_v1_$uid';
 
   final Map<String, CourseProgress> _cache = {};
   final _controller = StreamController<String>.broadcast();
@@ -213,14 +220,106 @@ class CourseProgressService {
   DateTime? _lastLessonPersist;
   String? _uid;
 
+  /// Cursos com progresso em memória ainda não gravado (gravação espaçada).
+  final Set<String> _dirty = {};
+  StreamSubscription<User?>? _authSub;
+  var _observing = false;
+
   Stream<String> get changes => _controller.stream;
 
+  /// Conta atualmente vinculada (null = ninguém logado / após logout).
+  String? get boundUid => _uid;
+
   Future<void> bindUser(String uid) async {
+    _ensureWatchers();
+    if (uid.isEmpty) return;
     if (_uid == uid && _loaded) return;
+    if (_uid != null && _uid != uid) {
+      // Troca de conta: grava o pendente da conta anterior e zera a memória.
+      await flushAll();
+      _resetMemory();
+    }
     _uid = uid;
     await _ensurePrefs();
-    await _loadLocal();
+    if (_uid != uid) return;
+    await _loadLocal(uid);
+    if (_uid != uid) return; // trocou de conta durante a leitura
     unawaited(_pullCloud());
+  }
+
+  /// Logout / troca de conta: memória zerada (nada da conta anterior aparece
+  /// nem sobe para a nuvem da próxima).
+  Future<void> unbind() async {
+    if (_uid == null) return;
+    await flushAll();
+    _resetMemory();
+  }
+
+  void _resetMemory() {
+    final ids = _cache.keys.toList();
+    _cache.clear();
+    _dirty.clear();
+    _uid = null;
+    _loaded = false;
+    _lastCloudWrite = null;
+    _lastLessonPersist = null;
+    for (final id in ids) {
+      _controller.add(id);
+    }
+  }
+
+  void _ensureWatchers() {
+    try {
+      _authSub ??= FirebaseAuth.instance.authStateChanges().listen((user) {
+        final cur = _uid;
+        if (cur == null) return;
+        if (user == null || user.uid != cur) unawaited(unbind());
+      });
+    } catch (_) {
+      // Firebase não inicializado (testes) — segue sem o vigia de logout.
+    }
+    if (!_observing) {
+      _observing = true;
+      WidgetsBinding.instance.addObserver(this);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // App indo para segundo plano / fechando: grava o que estava em memória.
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      unawaited(flushAll());
+    }
+  }
+
+  /// Grava já (local + nuvem) o progresso pendente do curso — chamar ao sair
+  /// da tela do curso/player, para não perder os últimos segundos.
+  Future<void> flush(String courseId) async {
+    if (courseId.isEmpty || !_dirty.contains(courseId)) return;
+    final uid = _uid;
+    final p = _cache[courseId];
+    _dirty.remove(courseId);
+    if (uid == null || p == null) return;
+    _lastLessonPersist = DateTime.now();
+    await _persistLocal();
+    await _pushCloud(courseId, p, ownerUid: uid);
+  }
+
+  /// Grava todos os cursos com progresso pendente.
+  Future<void> flushAll() async {
+    if (_dirty.isEmpty) return;
+    final uid = _uid;
+    final ids = _dirty.toList();
+    _dirty.clear();
+    if (uid == null) return;
+    _lastLessonPersist = DateTime.now();
+    await _persistLocal();
+    for (final id in ids) {
+      final p = _cache[id];
+      if (p != null) await _pushCloud(id, p, ownerUid: uid);
+    }
   }
 
   CourseProgress of(String courseId) {
@@ -351,6 +450,7 @@ class CourseProgressService {
     if (courseId.isEmpty) return;
     final p = CourseProgress(liked: of(courseId).liked);
     _cache[courseId] = p;
+    _dirty.remove(courseId);
     _controller.add(courseId);
     await _persistLocal();
     final uid = _uid;
@@ -382,6 +482,8 @@ class CourseProgressService {
     String? type,
   }) async {
     if (courseId.isEmpty || lessonKey.isEmpty) return;
+    final uid = _uid;
+    if (uid == null || uid.isEmpty) return;
     if (positionSeconds.isNaN || durationSeconds.isNaN) return;
     if (positionSeconds <= 0 && durationSeconds <= 0) return;
     final cur = of(courseId);
@@ -400,6 +502,7 @@ class CourseProgressService {
       lastOpenedMs: DateTime.now().millisecondsSinceEpoch,
     );
     _cache[courseId] = updated;
+    _dirty.add(courseId);
     _controller.add(courseId);
 
     final now = DateTime.now();
@@ -408,8 +511,9 @@ class CourseProgressService {
         _lastLessonPersist == null ||
         now.difference(_lastLessonPersist!) >= const Duration(seconds: 15)) {
       _lastLessonPersist = now;
+      _dirty.remove(courseId);
       await _persistLocal();
-      unawaited(_pushCloud(courseId, updated));
+      unawaited(_pushCloud(courseId, updated, ownerUid: uid));
     }
     unawaited(savePosition(
       courseId,
@@ -426,29 +530,44 @@ class CourseProgressService {
   }
 
   Future<void> _save(String courseId, CourseProgress p) async {
+    final uid = _uid;
+    // Sem conta vinculada não há onde guardar (evita misturar contas).
+    if (uid == null || uid.isEmpty) return;
     _cache[courseId] = p;
+    _dirty.remove(courseId);
     _controller.add(courseId);
     await _persistLocal();
-    unawaited(_pushCloud(courseId, p));
+    unawaited(_pushCloud(courseId, p, ownerUid: uid));
   }
 
   Future<void> _persistLocal() async {
+    final uid = _uid;
+    if (uid == null || uid.isEmpty) return;
     await _ensurePrefs();
+    // A conta pode ter mudado durante o await acima.
+    if (_uid != uid) return;
     final map = <String, dynamic>{};
     for (final e in _cache.entries) {
       map[e.key] = e.value.toJson();
     }
-    await _prefs!.setString(_prefsKey, jsonEncode(map));
+    await _prefs!.setString(_prefsKeyFor(uid), jsonEncode(map));
   }
 
   Future<void> _ensurePrefs() async {
     _prefs ??= await SharedPreferences.getInstance();
   }
 
-  Future<void> _loadLocal() async {
+  Future<void> _loadLocal(String uid) async {
     await _ensurePrefs();
-    final raw = _prefs!.getString(_prefsKey);
+    // Chave antiga sem dono: descarta (podia ser de outra conta do aparelho).
+    if (_prefs!.containsKey(_legacyPrefsKey)) {
+      try {
+        await _prefs!.remove(_legacyPrefsKey);
+      } catch (_) {}
+    }
+    final raw = _prefs!.getString(_prefsKeyFor(uid));
     _cache.clear();
+    _dirty.clear();
     if (raw != null && raw.isNotEmpty) {
       try {
         final decoded = jsonDecode(raw);
@@ -475,6 +594,8 @@ class CourseProgressService {
           .doc(uid)
           .collection('course_progress')
           .get();
+      // Trocou de conta enquanto buscava: não mistura.
+      if (_uid != uid) return;
       var changed = false;
       for (final doc in snap.docs) {
         final cloud = CourseProgress.fromJson(doc.data());
@@ -491,9 +612,20 @@ class CourseProgressService {
     } catch (_) {}
   }
 
-  Future<void> _pushCloud(String courseId, CourseProgress p) async {
+  /// Sobe o progresso de [ownerUid] — e só se essa ainda for a conta ativa
+  /// (nunca grava progresso de uma conta na nuvem de outra).
+  Future<void> _pushCloud(
+    String courseId,
+    CourseProgress p, {
+    String? ownerUid,
+  }) async {
     final uid = _uid;
     if (uid == null || uid.isEmpty) return;
+    if (ownerUid != null && ownerUid != uid) return;
+    try {
+      final authUid = FirebaseAuth.instance.currentUser?.uid;
+      if (authUid != null && authUid != uid) return;
+    } catch (_) {}
     try {
       await FirebaseFirestore.instance
           .collection('users')
