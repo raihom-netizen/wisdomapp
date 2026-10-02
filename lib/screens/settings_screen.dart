@@ -244,13 +244,20 @@ class _DelegateRevokedNoticeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final titular = (DelegateAccessService.revokedPrincipalEmail ?? '').trim();
+    // Segue o tema: no claro era um card escuro no meio da tela clara.
+    final escuro = context.isDarkMode;
+    final texto = escuro ? Colors.white : const Color(0xFF1F2937);
+    final destaque = escuro ? Colors.amber.shade200 : Colors.orange.shade900;
     return Card(
       margin: const EdgeInsets.only(bottom: 14),
       elevation: 0,
-      color: const Color(0xFF1E293B),
+      color: escuro ? const Color(0xFF1E293B) : const Color(0xFFFFF7ED),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+        side: BorderSide(
+            color: escuro
+                ? Colors.white.withValues(alpha: 0.12)
+                : Colors.orange.shade200),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
@@ -261,13 +268,14 @@ class _DelegateRevokedNoticeCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(Icons.info_outline_rounded,
-                    color: Colors.amber.shade300, size: 24),
+                    color: escuro ? Colors.amber.shade300 : Colors.orange.shade800,
+                    size: 24),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     DelegateAccessService.revokedNoticeMessage,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: texto,
                       fontSize: 13,
                       height: 1.4,
                       fontWeight: FontWeight.w600,
@@ -281,7 +289,7 @@ class _DelegateRevokedNoticeCard extends StatelessWidget {
               Text(
                 'Licença principal: $titular',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.75),
+                  color: texto.withValues(alpha: 0.75),
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
@@ -291,7 +299,7 @@ class _DelegateRevokedNoticeCard extends StatelessWidget {
             Text(
               'A partir de agora você usa sua licença própria. Para renovar ou adquirir um plano:',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.88),
+                color: texto.withValues(alpha: 0.88),
                 fontSize: 12.5,
                 height: 1.35,
               ),
@@ -307,8 +315,10 @@ class _DelegateRevokedNoticeCard extends StatelessWidget {
                   style: TextStyle(fontWeight: FontWeight.w800),
                 ),
                 style: TextButton.styleFrom(
-                  foregroundColor: Colors.amber.shade200,
-                  backgroundColor: Colors.white.withValues(alpha: 0.08),
+                  foregroundColor: destaque,
+                  backgroundColor: escuro
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : Colors.orange.withValues(alpha: 0.10),
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),

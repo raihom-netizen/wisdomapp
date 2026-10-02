@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -75,7 +77,12 @@ class _EscolhaPlanoPageState extends State<EscolhaPlanoPage> {
       _promoData = null;
     });
     try {
-      final snap = await FirebaseFirestore.instance.collection('promotions').doc(id).get();
+      final snap = await FirebaseFirestore.instance
+          .collection('promotions')
+          .doc(id)
+          .get()
+          .timeout(const Duration(seconds: 15));
+      if (!mounted) return;
       if (!snap.exists) {
         setState(() {
           _promoError = 'Promoção não encontrada.';
@@ -111,8 +118,11 @@ class _EscolhaPlanoPageState extends State<EscolhaPlanoPage> {
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _promoError = e.toString();
+        _promoError = e is TimeoutException
+            ? 'Não foi possível carregar a promoção agora. Verifique a conexão e tente de novo.'
+            : e.toString();
         _promoLoading = false;
       });
     }
@@ -164,7 +174,18 @@ class _EscolhaPlanoPageState extends State<EscolhaPlanoPage> {
           borderRadius: BorderRadius.circular(12),
           child: Padding(
             padding: const EdgeInsets.all(12),
-            child: Text(_promoError!, textAlign: TextAlign.center, style: TextStyle(color: Colors.red.shade900, fontSize: 13)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_promoError!, textAlign: TextAlign.center, style: TextStyle(color: Colors.red.shade900, fontSize: 13)),
+                TextButton.icon(
+                  onPressed: () => _loadPromo(_promoIdFromUrl!),
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                  label: const Text('Tentar de novo'),
+                  style: TextButton.styleFrom(foregroundColor: Colors.red.shade900),
+                ),
+              ],
+            ),
           ),
         ),
       );

@@ -25,6 +25,7 @@ class LicenseGate extends StatefulWidget {
 
 class _LicenseGateState extends State<LicenseGate> {
   StreamSubscription<User?>? _authSub;
+  int _tentativa = 0;
 
   @override
   void initState() {
@@ -49,12 +50,14 @@ class _LicenseGateState extends State<LicenseGate> {
       );
     }
     return StreamBuilder<UserProfile>(
+      key: ValueKey('perfil#$_tentativa'),
       stream: FirestoreService().watchProfile(fsUid),
       builder: (context, snap) {
         final profile = snap.data;
         if (profile == null) {
-          return const Scaffold(
-            body: SafeArea(child: Center(child: CircularProgressIndicator())),
+          return PerfilCarregando(
+            erro: snap.hasError,
+            onTentarDeNovo: () => setState(() => _tentativa++),
           );
         }
 
@@ -93,6 +96,8 @@ class LicencaExpiradaRoute extends StatefulWidget {
 }
 
 class _LicencaExpiradaRouteState extends State<LicencaExpiradaRoute> {
+  int _tentativa = 0;
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -113,12 +118,14 @@ class _LicencaExpiradaRouteState extends State<LicencaExpiradaRoute> {
     }
 
     return StreamBuilder<UserProfile>(
+      key: ValueKey('perfil#$_tentativa'),
       stream: FirestoreService().watchProfile(fsUid),
       builder: (context, snap) {
         final profile = snap.data;
         if (profile == null) {
-          return const Scaffold(
-            body: SafeArea(child: Center(child: CircularProgressIndicator())),
+          return PerfilCarregando(
+            erro: snap.hasError,
+            onTentarDeNovo: () => setState(() => _tentativa++),
           );
         }
 
@@ -143,6 +150,93 @@ class _LicencaExpiradaRouteState extends State<LicencaExpiradaRoute> {
           principalEmail: DelegateAccessService.principalEmail,
         );
       },
+    );
+  }
+}
+
+/// Carregando o perfil (licença): nada de girar para sempre. Com erro ou
+/// passado o prazo, mostra o aviso e «Tentar de novo» (reabre a escuta).
+class PerfilCarregando extends StatefulWidget {
+  const PerfilCarregando({
+    super.key,
+    required this.erro,
+    required this.onTentarDeNovo,
+  });
+
+  final bool erro;
+  final VoidCallback onTentarDeNovo;
+
+  @override
+  State<PerfilCarregando> createState() => _PerfilCarregandoState();
+}
+
+class _PerfilCarregandoState extends State<PerfilCarregando> {
+  Timer? _prazo;
+  bool _demorou = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _prazo = Timer(const Duration(seconds: 15), () {
+      if (mounted) setState(() => _demorou = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _prazo?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mostrarAviso = widget.erro || _demorou;
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!mostrarAviso)
+                  const CircularProgressIndicator()
+                else ...[
+                  Icon(Icons.cloud_off_rounded,
+                      size: 44, color: Theme.of(context).colorScheme.error),
+                  const SizedBox(height: 12),
+                  Text(
+                    widget.erro
+                        ? 'Não foi possível abrir seus dados agora.'
+                        : 'Está demorando mais que o normal para abrir.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Verifique a internet e toque em «Tentar de novo».',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: () {
+                      _prazo?.cancel();
+                      setState(() => _demorou = false);
+                      _prazo = Timer(const Duration(seconds: 15), () {
+                        if (mounted) setState(() => _demorou = true);
+                      });
+                      widget.onTentarDeNovo();
+                    },
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Tentar de novo'),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

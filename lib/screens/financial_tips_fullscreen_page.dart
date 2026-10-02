@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/financial_tips_catalog_service.dart';
 import '../services/financial_tips_home_sync_service.dart';
 import '../theme/theme_context.dart';
+import '../utils/navigator_safe_pop.dart';
 import '../widgets/finance_tip_modern_card.dart';
 
 /// Módulo Dicas: últimos 3 dias + botão voltar (Início ou pop).
@@ -33,9 +34,9 @@ class FinancialTipsFullscreenPage extends StatelessWidget {
         onReturn!();
         return;
       }
-      if (Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      }
+      // Sem tela anterior (link direto/recarga na web): vai ao início em vez
+      // de o botão não fazer nada.
+      popOrGoHome(context);
     }
 
     final body = ListView(

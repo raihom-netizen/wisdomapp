@@ -33,12 +33,36 @@ class _ProtectedImageViewState extends State<_ProtectedImageView> {
         ..style.setProperty('-webkit-user-select', 'none')
         ..style.pointerEvents = 'auto';
       img.onContextMenu.listen((e) => e.preventDefault());
+      // A imagem é um elemento HTML por cima do Flutter: a rodinha em cima
+      // dela não chegava à lista e a tela parecia travada. Repassa ao
+      // Scrollable VERTICAL mais próximo (a galeria é um PageView horizontal).
+      img.onWheel.listen(_repassarRodinha);
       img.onDragStart.listen((e) => e.preventDefault());
       img.onError.listen((_) {
         if (mounted) setState(() => _failed = true);
       });
       return img;
     });
+  }
+
+  void _repassarRodinha(html.WheelEvent e) {
+    if (!mounted || e.ctrlKey) return; // ctrl+rodinha = zoom do navegador
+    final scrollable = Scrollable.maybeOf(context, axis: Axis.vertical);
+    if (scrollable == null) return;
+    final pos = scrollable.position;
+    var delta = e.deltaY.toDouble();
+    if (delta == 0) return;
+    if (e.deltaMode == 1) {
+      delta *= 40; // linhas
+    } else if (e.deltaMode == 2) {
+      delta *= pos.viewportDimension; // páginas
+    }
+    final alvo = (pos.pixels + delta)
+        .clamp(pos.minScrollExtent, pos.maxScrollExtent)
+        .toDouble();
+    if (alvo == pos.pixels) return;
+    e.preventDefault();
+    pos.jumpTo(alvo);
   }
 
   String _cssObjectFit(BoxFit fit) {

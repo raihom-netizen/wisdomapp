@@ -130,6 +130,10 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
         .listen((doc) {
       _landingMainData = doc.data();
       mergeLanding();
+    }, onError: (Object e) {
+      // Sem textos do servidor a página segue com os padrões (nada de erro
+      // não tratado derrubando a escuta/console da web).
+      debugPrint('divulgacao landing_content: $e');
     });
     _mpCheckoutSub = FirebaseFirestore.instance
         .collection('app_config')
@@ -138,6 +142,8 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
         .listen((doc) {
       _mpCheckoutData = doc.data();
       mergeLanding();
+    }, onError: (Object e) {
+      debugPrint('divulgacao mp_checkout_prices: $e');
     });
   }
 
