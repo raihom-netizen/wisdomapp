@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
+import 'finance_accounts_service.dart';
 import '../utils/finance_account_balance_utils.dart';
 import '../utils/finance_transactions_realtime.dart';
 import '../utils/finance_line_opening.dart';
@@ -375,10 +376,15 @@ class FinanceOpeningBalanceService {
         statusFilter: 'paid',
         cacheTtl: cacheTtl,
       );
-      final byAcc = loadAccounts
-          ? Map<String, double>.from(server.openingByAccount)
-          : const <String, double>{};
       final total = server.openingTotal;
+      final byAcc = loadAccounts
+          ? await _reconcileByAccount(
+              fsId: fsId,
+              start: start,
+              total: total,
+              byAcc: Map<String, double>.from(server.openingByAccount),
+            )
+          : const <String, double>{};
       final newer = _newerThanLoad(fsId, key, genAtStart);
       if (newer != null) return newer;
       _cache[key] = (
@@ -483,6 +489,15 @@ class FinanceOpeningBalanceService {
     }
 
     final total = prefix + partial;
+    if (loadAccounts) {
+      final fixed = await _reconcileByAccount(
+          fsId: fsId, start: start, total: total, byAcc: byAcc);
+      if (!identical(fixed, byAcc)) {
+        byAcc
+          ..clear()
+          ..addAll(fixed);
+      }
+    }
     final newer = _newerThanLoad(fsId, key, genAtStart);
     if (newer != null) return newer;
     final result = (total: total, byAccount: byAcc);
@@ -492,6 +507,45 @@ class FinanceOpeningBalanceService {
       at: DateTime.now(),
     );
     return result;
+  }
+
+  /// Reconciliação por conta (port Controle Total, `_loadUncached`): quando a
+  /// soma das contas não bate com o total dos buckets, recalcula o saldo de
+  /// abertura de cada conta a partir dos lançamentos pagos reais (fonte da
+  /// verdade). Sem isso, com os buckets por conta vazios/defasados, o total
+  /// saía certo (ex.: R$ 996,50) e cada card de conta ficava R$ 0,00.
+  /// Regra por conta = [FinanceAccountBalanceUtils.openingPaidByAccountFromDocMaps]
+  /// (cartão fora; pagamento de fatura debita a conta que pagou).
+  static Future<Map<String, double>> _reconcileByAccount({
+    required String fsId,
+    required DateTime start,
+    required double total,
+    required Map<String, double> byAcc,
+  }) async {
+    final sumAssigned = byAcc.values.fold<double>(0, (a, b) => a + b);
+    if ((total - sumAssigned).abs() <= 0.05) return byAcc;
+    try {
+      final accounts = FinanceAccountsService.peekLastKnown(fsId) ??
+          await FinanceAccountsService()
+              .listOnce(fsId)
+              .timeout(const Duration(seconds: 6));
+      final cardIds = FinanceAccountBalanceUtils.creditCardAccountIds(accounts);
+      final beforeDocs = await financePeriodMergedDocumentsCollect(
+        uid: fsId,
+        from: DateTime(2000, 1, 1),
+        to: start.subtract(const Duration(seconds: 1)),
+        statusFilter: 'paid',
+        maxDocuments: 20000,
+      ).timeout(const Duration(seconds: 25));
+      return FinanceAccountBalanceUtils.openingPaidByAccountFromDocMaps(
+        items: beforeDocs.map((d) => d.data()),
+        periodStart: start,
+        creditCardIds: cardIds,
+      );
+    } catch (e) {
+      debugPrint('FinanceOpeningBalanceService._reconcileByAccount: $e');
+      return byAcc;
+    }
   }
 
   /// Versão esperada dos agregados (contas por mês no servidor).
