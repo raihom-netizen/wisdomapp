@@ -42,6 +42,9 @@ import '../widgets/agenda/agenda_bulk_clear_confirm_dialog.dart';
 import '../widgets/agenda/agenda_bulk_clear_period_dialog.dart';
 import '../widgets/agenda/agenda_bulk_clear_toolbar.dart';
 import '../widgets/shell_keyboard_bottom_pad.dart';
+import '../constants/commitment_symbols.dart';
+import '../utils/compromisso_share.dart';
+import '../widgets/agenda_dia_resumo_card.dart';
 
 enum _AgendaMesAba { todos, financeiro, particular }
 
@@ -3940,7 +3943,22 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     );
   }
 
-  /// Linha do resumo do dia para compromisso local, com editar/excluir (CT).
+  /// Emoji/ícone do compromisso (`commitmentSymbol`) ou o deduzido do título.
+  Widget _simboloCompromisso(
+    Map<String, dynamic> data, {
+    double size = 20,
+    Color? color,
+  }) {
+    return commitmentSymbolWidget(
+      symbol: CommitmentSymbol.fromData(data),
+      title: (data['title'] ?? '').toString(),
+      size: size,
+      color: color,
+    );
+  }
+
+  /// «Resumo do dia» — card colorido do compromisso local com as ações no
+  /// próprio card (padrão Controle Total): compartilhar, editar e excluir.
   Widget _resumoCompromissoLinha(
       QueryDocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data();
@@ -3950,207 +3968,72 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     final end = (data['endTime'] ?? '').toString();
     final notes = (data['notes'] ?? '').toString().trim();
     final horario = end.isNotEmpty ? '$time – $end' : time;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 5,
-            height: 42,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(4),
-              boxShadow: [
-                BoxShadow(
-                  color: color.withValues(alpha: 0.35),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 16,
-                    color: context.appDeepTitle,
-                  ),
-                ),
-                if (horario.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    horario,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ],
-                if (notes.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    notes,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
-                      height: 1.35,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          IconButton(
-            tooltip: 'Editar',
-            visualDensity: VisualDensity.compact,
-            onPressed: () =>
-                unawaited(_openAgendaReminderByDoc(context: context, doc: doc)),
-            icon: const Icon(
-              Icons.edit_rounded,
-              size: 20,
-              color: Color(0xFF0EA5E9),
-            ),
-          ),
-          IconButton(
-            tooltip: 'Excluir',
-            visualDensity: VisualDensity.compact,
-            onPressed: () => unawaited(_confirmRemoverCompromissoLocal(doc)),
-            icon: const Icon(
-              Icons.delete_outline_rounded,
-              size: 20,
-              color: Color(0xFFEF4444),
-            ),
-          ),
-        ],
-      ),
+    final local = (data['linkLocalizacao'] ?? '').toString().trim();
+    return AgendaDiaResumoCard(
+      cor: color,
+      simbolo: _simboloCompromisso(data, color: color),
+      titulo: title,
+      etiqueta: data['type'] == 'audiencia' ? 'Audiência' : 'Compromisso',
+      horario: horario,
+      notas: [
+        if (local.isNotEmpty && !local.startsWith('http')) '📍 $local',
+        if (notes.isNotEmpty) notes,
+      ].join('\n'),
+      onTap: () => _mostrarDetalhesCompromisso(doc),
+      acoes: [
+        AgendaDiaResumoAcao(
+          icon: Icons.share_rounded,
+          tooltip: 'Compartilhar',
+          color: const Color(0xFF22C55E),
+          onPressed: () => unawaited(shareCompromisso(context, data)),
+        ),
+        AgendaDiaResumoAcao(
+          icon: Icons.edit_rounded,
+          tooltip: 'Editar',
+          color: const Color(0xFF0EA5E9),
+          onPressed: () =>
+              unawaited(_openAgendaReminderByDoc(context: context, doc: doc)),
+        ),
+        AgendaDiaResumoAcao(
+          icon: Icons.delete_outline_rounded,
+          tooltip: 'Excluir',
+          color: const Color(0xFFEF4444),
+          onPressed: () => unawaited(_confirmRemoverCompromissoLocal(doc)),
+        ),
+      ],
     );
   }
 
   Widget _resumoGoogleEventLinha(GoogleCalendarEventItem event) {
     const color = GoogleCalendarSyncService.googleEventColor;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 5,
-            height: 42,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(4),
-              boxShadow: [
-                BoxShadow(
-                  color: color.withValues(alpha: 0.35),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        event.title,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 16,
-                          color: context.appDeepTitle,
-                        ),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Text(
-                        'GOOGLE',
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w900,
-                          color: color,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                if (event.horarioLabel.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    event.horarioLabel,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ],
-                if (event.notes.trim().isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    event.notes.trim(),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
-                      height: 1.35,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          IconButton(
-            tooltip: 'Editar (importa do Google)',
-            visualDensity: VisualDensity.compact,
-            onPressed: () => unawaited(
-                _openCompromissoForm(context: context, googleEvent: event)),
-            icon: const Icon(
-              Icons.edit_rounded,
-              size: 20,
-              color: Color(0xFF0EA5E9),
-            ),
-          ),
-          IconButton(
-            tooltip: 'Excluir',
-            visualDensity: VisualDensity.compact,
-            onPressed: () => unawaited(_confirmRemoverGoogleEvent(event)),
-            icon: const Icon(
-              Icons.delete_outline_rounded,
-              size: 20,
-              color: Color(0xFFEF4444),
-            ),
-          ),
-        ],
-      ),
+    return AgendaDiaResumoCard(
+      cor: color,
+      simbolo: const Icon(Icons.cloud_rounded),
+      titulo: event.title,
+      etiqueta: 'Google',
+      horario: event.horarioLabel,
+      notas: event.notes.trim(),
+      acoes: [
+        AgendaDiaResumoAcao(
+          icon: Icons.edit_rounded,
+          tooltip: 'Editar (importa do Google)',
+          color: const Color(0xFF0EA5E9),
+          onPressed: () => unawaited(
+              _openCompromissoForm(context: context, googleEvent: event)),
+        ),
+        AgendaDiaResumoAcao(
+          icon: Icons.delete_outline_rounded,
+          tooltip: 'Excluir',
+          color: const Color(0xFFEF4444),
+          onPressed: () => unawaited(_confirmRemoverGoogleEvent(event)),
+        ),
+      ],
     );
   }
 
   Widget _resumoFinancePendingLinha(AgendaFinancePendingItem item) {
-    const incomeGradient = [Color(0xFF0EA5E9), Color(0xFF0284C7)];
-    const expenseGradient = [Color(0xFFF97316), Color(0xFFEA580C)];
     final isIncome = item.isIncome;
-    final gradient = isIncome ? incomeGradient : expenseGradient;
+    final cor = isIncome ? const Color(0xFF0284C7) : const Color(0xFFEA580C);
     final data = item.data;
     final desc =
         (data['description'] ?? data['category'] ?? '').toString().trim();
@@ -4159,75 +4042,29 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
         : desc;
     final amount = ((data['amount'] ?? 0) as num).toDouble().abs();
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 5,
-            height: 42,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(colors: gradient),
-              borderRadius: BorderRadius.circular(4),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 16,
-                    color: context.appDeepTitle,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  isIncome ? 'Receita pendente' : 'Despesa pendente',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: gradient.last,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  CurrencyFormats.formatBRL(amount),
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w900,
-                    color: gradient.last,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            tooltip: 'Editar',
-            visualDensity: VisualDensity.compact,
-            onPressed: () => unawaited(_editFinancePending(item)),
-            icon: const Icon(
-              Icons.edit_rounded,
-              size: 20,
-              color: Color(0xFF0EA5E9),
-            ),
-          ),
-          IconButton(
-            tooltip: 'Excluir',
-            visualDensity: VisualDensity.compact,
-            onPressed: () => unawaited(_deleteFinancePending(item)),
-            icon: const Icon(
-              Icons.delete_outline_rounded,
-              size: 20,
-              color: Color(0xFFEF4444),
-            ),
-          ),
-        ],
-      ),
+    return AgendaDiaResumoCard(
+      cor: cor,
+      simbolo: Icon(isIncome
+          ? Icons.south_west_rounded
+          : Icons.north_east_rounded),
+      titulo: title,
+      etiqueta: isIncome ? 'Receita pendente' : 'Despesa pendente',
+      valor: CurrencyFormats.formatBRL(amount),
+      onTap: () => unawaited(_editFinancePending(item)),
+      acoes: [
+        AgendaDiaResumoAcao(
+          icon: Icons.edit_rounded,
+          tooltip: 'Editar',
+          color: const Color(0xFF0EA5E9),
+          onPressed: () => unawaited(_editFinancePending(item)),
+        ),
+        AgendaDiaResumoAcao(
+          icon: Icons.delete_outline_rounded,
+          tooltip: 'Excluir',
+          color: const Color(0xFFEF4444),
+          onPressed: () => unawaited(_deleteFinancePending(item)),
+        ),
+      ],
     );
   }
 
@@ -4591,8 +4428,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.event_note_rounded,
+                  child: _simboloCompromisso(
+                    data,
                     size: 18,
                     color: Colors.white,
                   ),
@@ -4898,8 +4735,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                         ),
                         borderRadius: BorderRadius.circular(14),
                       ),
-                      child: const Icon(
-                        Icons.event_note_rounded,
+                      child: _simboloCompromisso(
+                        data,
                         color: Colors.white,
                         size: 20,
                       ),
@@ -4944,9 +4781,32 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                 if (horario.isNotEmpty)
                   _detalheLinha(
                       Icons.schedule_rounded, 'Horário', horario, accent),
+                if ((data['linkLocalizacao'] ?? '').toString().trim().isNotEmpty)
+                  _detalheLinha(
+                    Icons.place_rounded,
+                    'Local',
+                    (data['linkLocalizacao'] ?? '').toString().trim(),
+                    accent,
+                  ),
                 if (notes.isNotEmpty)
                   _detalheLinha(
                       Icons.notes_rounded, 'Anotações', notes, accent),
+                const SizedBox(height: 10),
+                Builder(
+                  builder: (btnCtx) => OutlinedButton.icon(
+                    onPressed: () => unawaited(shareCompromisso(btnCtx, data)),
+                    icon: const Icon(Icons.share_rounded, size: 18),
+                    label: const Text(
+                      'Compartilhar',
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF16A34A),
+                      side: const BorderSide(color: Color(0xFF16A34A)),
+                      minimumSize: const Size(double.infinity, 46),
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 10),
                 Row(
                   children: [
