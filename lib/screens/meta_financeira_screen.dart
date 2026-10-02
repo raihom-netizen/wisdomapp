@@ -14,6 +14,7 @@ import '../utils/premium_upgrade.dart';
 import '../widgets/create_financial_goal_dialog.dart';
 import '../widgets/registrar_deposito_dialog.dart';
 import '../widgets/goal_contributions_sheet.dart';
+import '../services/goal_deposit_service.dart';
 import '../utils/date_picker_a11y.dart';
 import '../utils/firestore_user_doc_id.dart';
 import '../widgets/brl_amount_text_field.dart';
@@ -425,14 +426,73 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
       mostrarAvisoSeLicencaInativa(context, widget.profile);
       return;
     }
+    // Pergunta se apaga também os depósitos (subcoleção) e os lançamentos do
+    // Financeiro ligados à meta (goalId). Padrão: manter (comportamento antigo).
+    ({int contributions, int transactions}) links =
+        (contributions: 0, transactions: 0);
+    try {
+      links = await GoalDepositService.countGoalLinks(
+        uid: widget.uid,
+        goalRef: goalDoc.reference,
+      );
+    } catch (_) {}
+    if (!context.mounted) return;
+    var delContribs = false;
+    var delTxs = false;
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: _metaDialogTitleRow(
             icon: Icons.flag_outlined, title: 'Excluir meta'),
-        content: Text(
-          'Excluir "${(goalDoc.data()['title'] ?? 'Meta').toString()}"? Os aportes já registrados não serão removidos.',
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Excluir "${(goalDoc.data()['title'] ?? 'Meta').toString()}"?',
+              ),
+              if (links.contributions > 0)
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: delContribs,
+                  onChanged: (v) => setDlg(() => delContribs = v ?? false),
+                  title: Text(
+                    'Excluir também os ${links.contributions} depósito(s) '
+                    'registrados na meta',
+                    style: const TextStyle(fontSize: 13.5),
+                  ),
+                ),
+              if (links.transactions > 0)
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: delTxs,
+                  onChanged: (v) => setDlg(() => delTxs = v ?? false),
+                  title: Text(
+                    'Excluir também os ${links.transactions} lançamento(s) '
+                    'do Financeiro ligados a esta meta',
+                    style: const TextStyle(fontSize: 13.5),
+                  ),
+                  subtitle: const Text(
+                    'O saldo das contas volta a ficar como se a reserva não '
+                    'tivesse sido feita.',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ),
+              if (links.contributions > 0 || links.transactions > 0)
+                Text(
+                  'Desmarcado = continua guardado como está hoje.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: context.isDarkMode
+                        ? context.appTextSecondary
+                        : Colors.grey.shade700,
+                  ),
+                ),
+            ],
+          ),
         ),
         actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         actions: [
@@ -458,16 +518,22 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
           ),
         ],
       ),
+      ),
     );
     if (confirm != true) return;
     try {
-      await goalDoc.reference.delete();
-      if (mounted) {
+      await GoalDepositService.deleteGoal(
+        uid: widget.uid,
+        goalRef: goalDoc.reference,
+        deleteContributions: delContribs,
+        deleteTransactions: delTxs,
+      );
+      if (context.mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('Meta excluída.')));
       }
     } catch (e) {
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content:
                 Text('Erro ao excluir: ${e.toString().split('\n').first}')));
@@ -1083,9 +1149,12 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
         ),
       );
     }
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+    // Escuta guardada no estado (KeyedStreamBuilder): setState da tela (ordem,
+    // auth) não reabre a consulta.
+    return KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       key: ValueKey<String>('meta-goals-$id'),
-      stream: FirebaseFirestore.instance
+      streamKey: 'users/$id/goals|active',
+      create: () => FirebaseFirestore.instance
           .collection('users')
           .doc(id)
           .collection('goals')

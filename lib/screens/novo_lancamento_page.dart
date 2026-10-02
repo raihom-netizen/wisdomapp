@@ -651,7 +651,8 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
       );
 
       final goalId = (current['goalId'] ?? '').toString().trim();
-      if (goalId.isNotEmpty && _isIncome) {
+      // Depósito antigo (receita) ou reserva/resgate de meta (despesa/receita).
+      if (goalId.isNotEmpty) {
         unawaited(
           GoalDepositService.syncFromTransaction(
             uid: widget.uid,

@@ -165,7 +165,9 @@ Future<bool> showFinanceTransactionEditDialog({
   if (!context.mounted) return false;
 
   final goalIdFromTx = (current['goalId'] ?? '').toString().trim();
-  final metaEdit = type == 'income' && goalIdFromTx.isNotEmpty
+  // Depósito antigo (receita) ou reserva/resgate novo (02/10/2026): qualquer
+  // lançamento com goalId é movimento de meta.
+  final metaEdit = goalIdFromTx.isNotEmpty
       ? await _loadGoalFinanceEditContext(
           fsUid: fsUid,
           goalId: goalIdFromTx,
@@ -1147,7 +1149,7 @@ Future<bool> showFinanceTransactionEditDialog({
       failureMessage: 'Não foi possível sincronizar a edição',
     );
     final goalId = (current['goalId'] ?? '').toString().trim();
-    if (goalId.isNotEmpty && type == 'income') {
+    if (goalId.isNotEmpty) {
       unawaited(
         GoalDepositService.syncFromTransaction(
           uid: uid,

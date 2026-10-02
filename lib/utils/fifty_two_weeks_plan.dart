@@ -126,27 +126,129 @@ class FiftyTwoWeeksPlan {
     return '${months[d.month - 1]} ${d.year}';
   }
 
-  /// Semanas não pagas a marcar quando o usuário informa um valor (ordem crescente).
+  static int _cents(double v) => (v * 100).round();
+
+  /// Semanas não pagas que o valor cobre **por inteiro** (ordem crescente).
+  ///
+  /// Correção autorizada pelo dono (02/10/2026): antes a semana entrava assim
+  /// que «começava» a ser paga (R$ 50 com semanas de R$ 10/20/30 marcava 1, 2
+  /// e 3 = R$ 60) e, com valor menor que a 1ª semana, marcava a semana mesmo
+  /// assim. Agora só entra semana cuja soma cabe no valor (+ [carry], a sobra
+  /// acumulada de depósitos anteriores); o que sobra fica guardado para a
+  /// próxima semana.
   static List<int> weeksForDepositAmount({
     required double amount,
     required List<FiftyTwoWeeksWeekEntry> schedule,
     required List<int> paidWeeks,
+    double carry = 0,
   }) {
-    if (amount <= 0 || schedule.isEmpty) return const [];
+    if (schedule.isEmpty) return const [];
+    var pool = _cents(amount) + _cents(carry);
+    if (pool <= 0) return const [];
     final paid = paidWeeks.toSet();
     final unpaid = schedule.where((e) => !paid.contains(e.week)).toList()
       ..sort((a, b) => a.week.compareTo(b.week));
-    if (unpaid.isEmpty) return const [];
 
     final selected = <int>[];
-    var sum = 0.0;
     for (final e in unpaid) {
-      if (sum >= amount - 0.009) break;
+      final c = _cents(e.amount);
+      if (c > pool) break;
       selected.add(e.week);
-      sum += e.amount;
+      pool -= c;
     }
-    if (selected.isEmpty) selected.add(unpaid.first.week);
     return selected;
+  }
+
+  /// Prévia de UM depósito sobre semanas já pagas por outros depósitos — a
+  /// mesma regra de [allocateDeposits] (escolhidas primeiro, só semana
+  /// inteira). Usada ao editar o valor de um depósito.
+  static List<int> weeksForSingleDeposit({
+    required double amount,
+    required List<FiftyTwoWeeksWeekEntry> schedule,
+    required List<int> paidWeeks,
+    List<int> chosenWeeks = const [],
+  }) {
+    final others = paidWeeks.toSet();
+    final alloc = allocateDeposits(
+      schedule: schedule,
+      deposits: [
+        FiftyTwoWeeksDeposit(
+          amount: sumWeekAmounts(schedule, others),
+          chosenWeeks: others.toList(),
+        ),
+        FiftyTwoWeeksDeposit(amount: amount, chosenWeeks: chosenWeeks),
+      ],
+    );
+    return alloc.weeksByDeposit[1];
+  }
+
+  /// Distribui os depósitos (ordem cronológica) pelas semanas — usado no
+  /// recálculo da meta. Regras:
+  /// - só marca semana coberta por inteiro; a sobra acumula para a próxima;
+  /// - semanas escolhidas pelo usuário no depósito ([FiftyTwoWeeksDeposit.chosenWeeks])
+  ///   são atendidas primeiro; se alguma escolhida não coube, o dinheiro fica
+  ///   guardado (não vai para outra semana sem o usuário pedir);
+  /// - sem escolha, preenche as semanas não pagas em ordem crescente;
+  /// - depósito negativo (resgate) tira o dinheiro: se faltar, desmarca as
+  ///   últimas semanas marcadas até o saldo fechar.
+  static FiftyTwoWeeksAllocation allocateDeposits({
+    required List<FiftyTwoWeeksWeekEntry> schedule,
+    required List<FiftyTwoWeeksDeposit> deposits,
+  }) {
+    final byWeek = <int, int>{
+      for (final e in schedule) e.week: _cents(e.amount),
+    };
+    final ordered = [...schedule]..sort((a, b) => a.week.compareTo(b.week));
+    final paid = <int>{};
+    final weeksByDeposit = <List<int>>[];
+    final marked = <({int dep, int week})>[];
+    var pool = 0;
+
+    void mark(int dep, int week) {
+      paid.add(week);
+      weeksByDeposit[dep].add(week);
+      marked.add((dep: dep, week: week));
+      pool -= byWeek[week]!;
+    }
+
+    for (var i = 0; i < deposits.length; i++) {
+      final dep = deposits[i];
+      weeksByDeposit.add(<int>[]);
+      pool += _cents(dep.amount);
+      while (pool < 0 && marked.isNotEmpty) {
+        final last = marked.removeLast();
+        paid.remove(last.week);
+        weeksByDeposit[last.dep].remove(last.week);
+        pool += byWeek[last.week]!;
+      }
+      if (pool <= 0) continue;
+
+      var chosenMissing = false;
+      final chosen = dep.chosenWeeks.toSet().toList()..sort();
+      for (final w in chosen) {
+        final c = byWeek[w];
+        if (c == null || paid.contains(w)) continue;
+        if (c <= pool) {
+          mark(i, w);
+        } else {
+          chosenMissing = true;
+        }
+      }
+      if (chosenMissing) continue;
+      for (final e in ordered) {
+        if (paid.contains(e.week)) continue;
+        if (byWeek[e.week]! > pool) break;
+        mark(i, e.week);
+      }
+    }
+    for (final l in weeksByDeposit) {
+      l.sort();
+    }
+    return FiftyTwoWeeksAllocation(
+      weeksByDeposit: weeksByDeposit,
+      paidWeeks: paid.toList()..sort(),
+      leftover: pool / 100.0,
+    );
   }
 
   static double sumWeekAmounts(
@@ -160,6 +262,32 @@ class FiftyTwoWeeksPlan {
     }
     return total;
   }
+}
+
+/// Um depósito (ou resgate, valor negativo) para [FiftyTwoWeeksPlan.allocateDeposits].
+class FiftyTwoWeeksDeposit {
+  const FiftyTwoWeeksDeposit({
+    required this.amount,
+    this.chosenWeeks = const [],
+  });
+
+  final double amount;
+  final List<int> chosenWeeks;
+}
+
+class FiftyTwoWeeksAllocation {
+  const FiftyTwoWeeksAllocation({
+    required this.weeksByDeposit,
+    required this.paidWeeks,
+    required this.leftover,
+  });
+
+  /// Mesma ordem dos depósitos informados.
+  final List<List<int>> weeksByDeposit;
+  final List<int> paidWeeks;
+
+  /// Dinheiro guardado que ainda não fechou uma semana inteira.
+  final double leftover;
 }
 
 class FiftyTwoWeeksWeekEntry {

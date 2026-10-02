@@ -30,7 +30,8 @@ Future<bool> showGoalDepositEditSheet({
       : const <FiftyTwoWeeksWeekEntry>[];
 
   final amountCtrl =
-      TextEditingController(text: CurrencyFormats.formatBRLInput((d['amount'] ?? 0) as num));
+      // Resgate é gravado negativo na meta; aqui o usuário edita o valor positivo.
+      TextEditingController(text: CurrencyFormats.formatBRLInput(((d['amount'] ?? 0) as num).abs()));
   final focusNode = FocusNode();
   DateTime date = (d['date'] as Timestamp?)?.toDate() ?? DateTime.now();
   String? financeAccountId = initialAccountId.isEmpty ? null : initialAccountId;
@@ -61,15 +62,12 @@ Future<bool> showGoalDepositEditSheet({
     if (!is52) return;
     final amount = CurrencyFormats.parseBRLInput(amountCtrl.text) ?? 0;
     final oldWeeks = _weeksFromContrib(d);
-    var paid = FiftyTwoWeeksPlan.paidWeeksFromData(goalData);
-    paid.removeWhere(oldWeeks.contains);
-    previewWeeks = amount > 0
-        ? FiftyTwoWeeksPlan.weeksForDepositAmount(
-            amount: amount,
-            schedule: schedule,
-            paidWeeks: paid,
-          )
-        : const [];
+    previewWeeks = computeGoalDepositPreviewWeeks(
+      goalData: goalData,
+      schedule: schedule,
+      oldWeeks: oldWeeks,
+      amount: amount,
+    );
     setState(() {});
   }
 

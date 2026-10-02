@@ -12,6 +12,8 @@ import 'fifty_two_weeks_schedule_sheet.dart';
 import 'goal_52_weeks_summary_panel.dart';
 import 'goal_contributions_sheet.dart';
 import 'goal_deposit_ui.dart';
+import 'goal_withdraw_dialog.dart';
+import 'keyed_stream_builder.dart';
 import 'registrar_deposito_dialog.dart';
 
 /// Card padrão do Projeto 52 semanas — Início e módulo Objetivos (visual idêntico).
@@ -51,8 +53,12 @@ class Goal52WeeksObjectiveCard extends StatelessWidget {
         : null;
     final paidWeeks = FiftyTwoWeeksPlan.paidWeeksFromData(data);
 
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: goalDoc.reference.collection('contributions').snapshots(),
+    final goalAccountId = (data['financeAccountId'] ?? '').toString().trim();
+    // Escuta guardada (rebuild do Início / lista não reabre a consulta).
+    final contribRef = goalDoc.reference.collection('contributions');
+    return KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      streamKey: contribRef.path,
+      create: () => contribRef.snapshots(),
       builder: (context, contribSnap) {
         var current = 0.0;
         for (final d in contribSnap.data?.docs ?? []) {
@@ -138,6 +144,22 @@ class Goal52WeeksObjectiveCard extends StatelessWidget {
                       onSelected: (v) {
                         if (v == 'edit') onEditGoal?.call();
                         if (v == 'delete') onDeleteGoal?.call();
+                        if (v == 'withdraw') {
+                          if (!profile.hasActiveLicense) {
+                            mostrarAvisoSeLicencaInativa(context, profile);
+                            return;
+                          }
+                          showGoalWithdrawDialog(
+                            context: context,
+                            goalRef: goalDoc.reference,
+                            goalTitle: title,
+                            uid: uid,
+                            savedAmount: current,
+                            contribDocs: contribSnap.data?.docs ?? const [],
+                            initialFinanceAccountId:
+                                goalAccountId.isEmpty ? null : goalAccountId,
+                          );
+                        }
                       },
                       itemBuilder: (_) => [
                         if (onEditGoal != null)
@@ -147,6 +169,15 @@ class Goal52WeeksObjectiveCard extends StatelessWidget {
                               contentPadding: EdgeInsets.zero,
                               leading: Icon(Icons.edit_rounded, size: 20),
                               title: Text('Editar meta'),
+                            ),
+                          ),
+                        if (current > 0.004)
+                          const PopupMenuItem(
+                            value: 'withdraw',
+                            child: ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(Icons.undo_rounded, size: 20),
+                              title: Text('Resgatar / retirar da meta'),
                             ),
                           ),
                         if (onDeleteGoal != null)
@@ -392,6 +423,10 @@ class Goal52WeeksObjectiveCard extends StatelessWidget {
                                   goalTitle: title,
                                   uid: uid,
                                   profile: profile,
+                                  // Conta da meta já vem escolhida.
+                                  initialFinanceAccountId: goalAccountId.isEmpty
+                                      ? null
+                                      : goalAccountId,
                                 );
                               }
                             }

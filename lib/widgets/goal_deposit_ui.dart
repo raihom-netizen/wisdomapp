@@ -173,12 +173,15 @@ List<int> computeGoalDepositPreviewWeeks({
   if (!FiftyTwoWeeksPlan.is52WeeksGoal(goalData) || amount <= 0) {
     return const [];
   }
-  var paid = FiftyTwoWeeksPlan.paidWeeksFromData(goalData);
-  paid.removeWhere(oldWeeks.contains);
-  return FiftyTwoWeeksPlan.weeksForDepositAmount(
+  final paid = FiftyTwoWeeksPlan.paidWeeksFromData(goalData).toList()
+    ..removeWhere(oldWeeks.contains);
+  // Mesma regra do recálculo (02/10/2026): as semanas que o depósito já
+  // tinha vêm primeiro e só entra semana coberta por inteiro.
+  return FiftyTwoWeeksPlan.weeksForSingleDeposit(
     amount: amount,
     schedule: schedule,
     paidWeeks: paid,
+    chosenWeeks: oldWeeks,
   );
 }
 

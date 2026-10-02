@@ -201,14 +201,18 @@ Future<void> showGoalContributionsSheet({
                                   gradient: LinearGradient(colors: grad),
                                   borderRadius: BorderRadius.circular(14),
                                 ),
-                                child: const Icon(
-                                  Icons.savings_rounded,
+                                child: Icon(
+                                  amount < 0
+                                      ? Icons.undo_rounded
+                                      : Icons.savings_rounded,
                                   color: Colors.white,
                                   size: 24,
                                 ),
                               ),
                               title: Text(
-                                CurrencyFormats.formatBRL(amount),
+                                amount < 0
+                                    ? 'Resgate ${CurrencyFormats.formatBRL(amount.abs())}'
+                                    : CurrencyFormats.formatBRL(amount),
                                 style: TextStyle(
                                   fontWeight: FontWeight.w900,
                                   fontSize: 17,

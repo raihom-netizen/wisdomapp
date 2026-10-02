@@ -11,7 +11,9 @@ import '../theme/theme_context.dart';
 import '../utils/fifty_two_weeks_plan.dart';
 import '../utils/goal_objective_visuals.dart';
 import '../utils/premium_upgrade.dart';
+import '../widgets/goal_deposit_edit_sheet.dart';
 import '../widgets/goal_deposit_ui.dart';
+import '../widgets/keyed_stream_builder.dart';
 import '../widgets/goal_52_weeks_summary_panel.dart';
 import '../widgets/goal_finance_account_field.dart';
 import '../widgets/registrar_deposito_dialog.dart';
@@ -91,6 +93,9 @@ class _FiftyTwoWeeksScheduleBody extends StatefulWidget {
 
 class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> {
   final Set<int> _selectedWeeks = {};
+  /// Depósitos da meta (última leitura da escuta) — para achar o depósito que
+  /// pagou uma semana.
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _contribDocs = const [];
   final TextEditingController _amountCtrl = TextEditingController();
   String? _financeAccountId;
   double? _accountBalance;
@@ -176,11 +181,11 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
     }
     final paid = List<int>.from(_paidWeeks(data));
     if (paid.contains(week)) {
-      paid.remove(week);
-      await widget.goalDoc.reference.update({'weeksPaid': paid});
+      await _onPaidWeekTapped(week, paid, data);
       return;
     }
     final title = (data['title'] ?? 'Objetivo').toString();
+    final goalAccountId = (data['financeAccountId'] ?? '').toString().trim();
     await showRegistrarDepositoDialog(
       context: context,
       goalRef: widget.goalDoc.reference,
@@ -190,7 +195,122 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
       profile: widget.profile,
       initialAmount: amount,
       weekNumbers: [week],
+      initialFinanceAccountId: goalAccountId.isEmpty ? null : goalAccountId,
     );
+  }
+
+  /// Semana paga tocada: antes só tirava a semana de `weeksPaid` e o dinheiro
+  /// continuava contado (progresso incoerente). Agora a semana só sai junto
+  /// com o depósito que a pagou — o usuário escolhe editar ou excluir esse
+  /// depósito (o lançamento do Financeiro ligado acompanha) e as semanas são
+  /// recalculadas. Semana marcada sem depósito (dado antigo) pode ser
+  /// desmarcada direto.
+  Future<void> _onPaidWeekTapped(
+    int week,
+    List<int> paid,
+    Map<String, dynamic> data,
+  ) async {
+    QueryDocumentSnapshot<Map<String, dynamic>>? owner;
+    for (final c in _contribDocs) {
+      if (GoalDepositService.weeksFromContribData(c.data()).contains(week)) {
+        owner = c;
+        break;
+      }
+    }
+    if (owner == null) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('Desmarcar semana $week?'),
+          content: const Text(
+            'Nenhum depósito registrado cobre esta semana. Ela será só '
+            'desmarcada — nenhum valor muda.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Voltar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Desmarcar'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+      paid.remove(week);
+      await widget.goalDoc.reference.update({'weeksPaid': paid});
+      return;
+    }
+    final c = owner.data();
+    final amount = ((c['amount'] as num?) ?? 0).toDouble().abs();
+    final ts = c['date'];
+    final when = ts is Timestamp
+        ? DateFormat('dd/MM/yyyy', 'pt_BR').format(ts.toDate())
+        : '';
+    final weeks = GoalDepositService.weeksFromContribData(c);
+    final linked = (c['transactionId'] ?? '').toString().trim().isNotEmpty;
+    if (!mounted) return;
+    final action = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Semana $week já está paga'),
+        content: Text(
+          'Ela foi paga pelo depósito de ${CurrencyFormats.formatBRL(amount)}'
+          '${when.isEmpty ? '' : ' em $when'}'
+          '${weeks.length > 1 ? ' (semanas ${weeks.join(', ')})' : ''}.\n\n'
+          'Para desmarcar, edite o valor ou exclua esse depósito'
+          '${linked ? ' — o lançamento ligado no Financeiro acompanha' : ''}. '
+          'As semanas são recalculadas em seguida.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Voltar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'edit'),
+            child: const Text('Editar depósito'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.pop(ctx, 'delete'),
+            child: const Text('Excluir depósito'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || action == null) return;
+    try {
+      if (action == 'edit') {
+        await showGoalDepositEditSheet(
+          context: context,
+          contribDoc: owner,
+          goalDoc: widget.goalDoc,
+          uid: widget.uid,
+          goalTitle: (data['title'] ?? 'Objetivo').toString(),
+          initialAccountId: (c['financeAccountId'] ?? '').toString(),
+        );
+      } else if (action == 'delete') {
+        await GoalDepositService.deleteDeposit(
+          uid: widget.uid,
+          contribDoc: owner,
+          goalRef: widget.goalDoc.reference,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Depósito excluído e semanas recalculadas.')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro: ${e.toString().split('\n').first}')),
+        );
+      }
+    }
   }
 
   void _toggleSelection(int week, List<FiftyTwoWeeksWeekEntry> schedule, List<int> paid) {
@@ -266,12 +386,6 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
       mostrarAvisoSeLicencaInativa(context, widget.profile);
       return;
     }
-    if (_selectedWeeks.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selecione ao menos uma semana.')),
-      );
-      return;
-    }
     final amount = CurrencyFormats.parseBRLInput(_amountCtrl.text) ?? 0;
     if (amount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -279,6 +393,8 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
       );
       return;
     }
+    // Sem semana selecionada (valor menor que a próxima semana) o depósito
+    // vale mesmo assim: o dinheiro fica guardado e completa a semana depois.
     setState(() => _saving = true);
     try {
       final title = (data['title'] ?? 'Objetivo').toString();
@@ -301,8 +417,11 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Depósito de ${CurrencyFormats.formatBRL(amount)} registrado '
-            '($weekCount semana${weekCount == 1 ? '' : 's'}).',
+            weekCount == 0
+                ? 'Depósito de ${CurrencyFormats.formatBRL(amount)} guardado — '
+                    'completa a próxima semana quando somar o valor dela.'
+                : 'Depósito de ${CurrencyFormats.formatBRL(amount)} registrado '
+                    '($weekCount semana${weekCount == 1 ? '' : 's'}).',
           ),
         ),
       );
@@ -661,15 +780,21 @@ class _FiftyTwoWeeksScheduleBodyState extends State<_FiftyTwoWeeksScheduleBody> 
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: widget.goalDoc.reference.snapshots(),
+    // Escutas guardadas no estado: rebuild (digitar valor, marcar semana) não
+    // reabre a consulta no Firestore.
+    final goalRef = widget.goalDoc.reference;
+    return KeyedStreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      streamKey: goalRef.path,
+      create: () => goalRef.snapshots(),
       builder: (context, goalSnap) {
         final data = goalSnap.data?.data() ?? widget.goalDoc.data();
-        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: widget.goalDoc.reference.collection('contributions').snapshots(),
+        return KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          streamKey: '${goalRef.path}/contributions',
+          create: () => goalRef.collection('contributions').snapshots(),
           builder: (context, contribSnap) {
+            _contribDocs = contribSnap.data?.docs ?? const [];
             var deposited = 0.0;
-            for (final d in contribSnap.data?.docs ?? []) {
+            for (final d in _contribDocs) {
               deposited += (d.data()['amount'] as num?)?.toDouble() ?? 0;
             }
             return _buildScheduleContent(data, deposited);

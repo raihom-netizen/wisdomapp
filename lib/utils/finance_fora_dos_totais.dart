@@ -54,6 +54,9 @@ bool financeForaDosTotais(Map<String, dynamic> d, {bool? financePro}) {
   if (d['faturaPagamento'] == true || d['transferenciaPropria'] == true || d['isTransfer'] == true) {
     return true;
   }
+  // Reserva / resgate de meta (Objetivos, 02/10/2026): dinheiro guardado,
+  // não é receita nem despesa — só mexe no saldo da conta.
+  if (d['goalReserve'] == true) return true;
   final fp = financePro ?? FinanceProTotais.ativo;
   return fp && (d['transferPairId'] ?? '').toString().trim().isNotEmpty;
 }
@@ -79,6 +82,11 @@ double financeAjusteSaldoForaDosTotais(Iterable<Map<String, dynamic>> docs, {boo
 /// crédito do cartão, é o cartão). Nulo = lançamento comum.
 String? financeRotuloForaDosTotais(Map<String, dynamic> d, {String? contaDoLancamento, bool? financePro}) {
   if (!financeForaDosTotais(d, financePro: financePro)) return null;
+  if (d['goalReserve'] == true) {
+    return (d['type'] ?? 'expense').toString() == 'income'
+        ? 'Resgate de meta'
+        : 'Reserva para meta';
+  }
   final fatura = d['faturaPagamento'] == true ||
       (d['category'] ?? '').toString().trim().toLowerCase() == 'pagamento de fatura';
   if (!fatura) return 'Transferência entre contas';
