@@ -82,7 +82,8 @@ if (-not $SkipAnalyze) {
   Write-Host "`n=== 2/6 Preflight: flutter analyze (falha so em error) ===" -ForegroundColor Cyan
   $eap = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
-  $analyzeOut = flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1 | ForEach-Object { "$_" }
+  # So o codigo do app (lib/ e test/): a raiz tem pastas de backup (ex.: «dados para copiar do controle total app») com erros que nao entram no build.
+  $analyzeOut = flutter analyze lib test --no-fatal-infos --no-fatal-warnings 2>&1 | ForEach-Object { "$_" }
   $ErrorActionPreference = $eap
   $erros = @($analyzeOut | Where-Object { $_ -match '^\s*error\s' })
   if ($erros.Count -gt 0) {
