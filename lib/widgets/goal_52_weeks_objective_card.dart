@@ -52,6 +52,13 @@ class Goal52WeeksObjectiveCard extends StatelessWidget {
         ? FiftyTwoWeeksPlan.currentWeekEntry(target: target, planStart: planStart)
         : null;
     final paidWeeks = FiftyTwoWeeksPlan.paidWeeksFromData(data);
+    // Só exibição: as próximas 3 semanas ainda não guardadas depois da atual.
+    final proximos = is52
+        ? FiftyTwoWeeksPlan.buildSchedule(target: target, planStart: planStart)
+            .where((e) => e.week > currentWeek && !paidWeeks.contains(e.week))
+            .take(3)
+            .toList()
+        : const <FiftyTwoWeeksWeekEntry>[];
 
     final goalAccountId = (data['financeAccountId'] ?? '').toString().trim();
     // Escuta guardada (rebuild do Início / lista não reabre a consulta).
@@ -128,12 +135,34 @@ class Goal52WeeksObjectiveCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Text(
-                    '${(progress * 100).round()}%',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 20,
+                  // % grande, contando até o valor (animação leve).
+                  TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: progress),
+                    duration: const Duration(milliseconds: 700),
+                    curve: Curves.easeOutCubic,
+                    builder: (context, v, _) => Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '${(v * 100).round()}%',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 30,
+                            height: 1.0,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                        Text(
+                          'concluído',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.85),
+                            fontWeight: FontWeight.w700,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   if (onEditGoal != null || onDeleteGoal != null) ...[
@@ -206,13 +235,27 @@ class Goal52WeeksObjectiveCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
               ],
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: LinearProgressIndicator(
-                  value: progress,
-                  minHeight: 10,
-                  backgroundColor: Colors.white24,
-                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+              // Barra grossa e animada.
+              Container(
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(11),
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: progress),
+                    duration: const Duration(milliseconds: 700),
+                    curve: Curves.easeOutCubic,
+                    builder: (context, v, _) => LinearProgressIndicator(
+                      value: v,
+                      minHeight: 16,
+                      backgroundColor: Colors.white24,
+                      valueColor:
+                          const AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
@@ -291,6 +334,63 @@ class Goal52WeeksObjectiveCard extends StatelessWidget {
                         ),
                     ],
                   ),
+                ),
+              ],
+              if (is52 && proximos.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(
+                  'Próximos depósitos',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.95),
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    for (var i = 0; i < proximos.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 6),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.white24),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Sem. ${proximos[i].week} · ${DateFormat('dd/MM', 'pt_BR').format(proximos[i].dueDate)}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.85),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  CurrencyFormats.formatBRL(proximos[i].amount),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ],
               if (target > 0) ...[

@@ -285,6 +285,134 @@ class GoalFinanceAccountField extends StatelessWidget {
     );
   }
 
+  /// Contas em cards coloridos (logo + cor do banco) — toque para escolher.
+  Widget _buildAccountCards(
+    BuildContext context,
+    List<FinanceAccount> accounts,
+  ) {
+    final selected = _effectiveSelectedId(accounts);
+    return LayoutBuilder(
+      builder: (context, c) {
+        final w = c.maxWidth;
+        final cols = w >= 560 ? 3 : (w >= 300 ? 2 : 1);
+        const gap = 10.0;
+        final cardW = (w - gap * (cols - 1)) / cols;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final a in accounts)
+              SizedBox(
+                width: cardW,
+                child: _accountCard(context, a, a.id == selected),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _accountCard(BuildContext context, FinanceAccount a, bool sel) {
+    final vis = financeAccountVisualFor(a);
+    final c1 = vis.color;
+    final c2 = vis.gradient.length > 1 ? vis.gradient.last : c1;
+    final dark = context.isDarkMode;
+    final idleBg = dark ? context.appSurfaceHigh : Colors.white;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => onChanged(a.id),
+        borderRadius: BorderRadius.circular(16),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.fromLTRB(12, 12, 10, 12),
+          decoration: BoxDecoration(
+            gradient: sel
+                ? LinearGradient(
+                    colors: [c1, c2],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : null,
+            color: sel ? null : idleBg,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: sel
+                  ? Colors.transparent
+                  : c1.withValues(alpha: dark ? 0.55 : 0.35),
+              width: 1.4,
+            ),
+            boxShadow: sel
+                ? [
+                    BoxShadow(
+                      color: c1.withValues(alpha: 0.35),
+                      blurRadius: 14,
+                      offset: const Offset(0, 5),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: FinanceBankBrandThumb(preset: a.preset, size: 28),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      a.displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 13,
+                        color: sel
+                            ? Colors.white
+                            : (dark ? context.appTextPrimary : c1),
+                      ),
+                    ),
+                    Text(
+                      a.productTypeLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w600,
+                        color: sel
+                            ? Colors.white.withValues(alpha: 0.85)
+                            : context.appTextSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: sel
+                    ? const Icon(Icons.check_circle_rounded,
+                        key: ValueKey('on'), color: Colors.white, size: 20)
+                    : Icon(Icons.radio_button_unchecked_rounded,
+                        key: const ValueKey('off'),
+                        color: c1.withValues(alpha: 0.5),
+                        size: 20),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildEmptyAccountActions(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(14),
@@ -579,7 +707,7 @@ class GoalFinanceAccountField extends StatelessWidget {
               if (accounts.isEmpty)
                 _buildEmptyAccountActions(context)
               else ...[
-                _buildAccountDropdown(context, accounts),
+                _buildAccountCards(context, accounts),
                 const SizedBox(height: 10),
                 _buildAddAccountRow(context),
               ],

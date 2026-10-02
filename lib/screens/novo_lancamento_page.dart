@@ -882,146 +882,169 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
                             _applyAutoDescriptionFromContext();
                           },
                         ),
-                        SizedBox(height: 12),
-                        ListenableBuilder(
-                          listenable: Listenable.merge(
-                              [_installmentsCtrl, _installmentStartCtrl]),
-                          builder: (_, __) => Text(
-                            _amountFieldLabel(),
-                            style: TextStyle(
-                                color: context.appTextSecondary,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                        SizedBox(height: 6),
+                        SizedBox(height: 14),
+                        // Valor em destaque: cartão no gradiente do tipo
+                        // (Despesa vermelho→laranja, Receita verde→teal).
                         RepaintBoundary(
-                          child: Container(
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 280),
+                            curve: Curves.easeOutCubic,
                             width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 14),
+                            padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
-                                colors: context.isDarkMode
-                                    ? [
-                                        (_isIncome
-                                                ? const Color(0xFF14532D)
-                                                : const Color(0xFF7F1D1D))
-                                            .withValues(alpha: 0.55),
-                                        context.appSurfaceHigh,
-                                      ]
-                                    : _isIncome
-                                        ? [
-                                            const Color(0xFFE8F5E9),
-                                            const Color(0xFFF1F8E9),
-                                          ]
-                                        : [
-                                            const Color(0xFFFFEBEE),
-                                            const Color(0xFFFFF3E0),
-                                          ],
+                                colors: _typeGradient,
                               ),
-                              borderRadius: BorderRadius.circular(18),
-                              border: Border.all(
-                                color: (_isIncome
-                                        ? const Color(0xFF16A34A)
-                                        : const Color(0xFFC62828))
-                                    .withValues(
-                                        alpha:
-                                            context.isDarkMode ? 0.72 : 0.35),
-                                width: 1.5,
-                              ),
+                              borderRadius: BorderRadius.circular(24),
                               boxShadow: [
                                 BoxShadow(
-                                  color: (_isIncome ? Colors.green : Colors.red)
-                                      .withValues(
-                                          alpha:
-                                              context.isDarkMode ? 0.22 : 0.12),
-                                  blurRadius: 14,
-                                  offset: const Offset(0, 4),
+                                  color: _typeGradient.first.withValues(
+                                      alpha: context.isDarkMode ? 0.45 : 0.32),
+                                  blurRadius: 18,
+                                  offset: const Offset(0, 8),
                                 ),
                               ],
                             ),
-                            child: BrlAmountTextField(
-                              controller: _amountCtrl,
-                              focusNode: _amountFocus,
-                              textInputAction: TextInputAction.next,
-                              onSubmitted: (_) => _descFocus.requestFocus(),
-                              scrollPadding: fieldScrollPad,
-                              style: TextStyle(
-                                fontSize: amountFont,
-                                fontWeight: FontWeight.w900,
-                                height: 1.05,
-                                color: _isIncome
-                                    ? (context.isDarkMode
-                                        ? const Color(0xFF86EFAC)
-                                        : const Color(0xFF1B5E20))
-                                    : (context.isDarkMode
-                                        ? const Color(0xFFFCA5A5)
-                                        : const Color(0xFFB71C1C)),
-                              ),
-                              decoration: InputDecoration(
-                                isDense: true,
-                                contentPadding: EdgeInsets.zero,
-                                prefixText: 'R\$ ',
-                                prefixStyle: TextStyle(
-                                  fontSize: amountFont,
-                                  fontWeight: FontWeight.w900,
-                                  color: _isIncome
-                                      ? (context.isDarkMode
-                                          ? const Color(0xFF4ADE80)
-                                          : const Color(0xFF16A34A))
-                                      : (context.isDarkMode
-                                          ? const Color(0xFFF87171)
-                                          : const Color(0xFFD32F2F)),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white
+                                            .withValues(alpha: 0.22),
+                                        borderRadius:
+                                            BorderRadius.circular(10),
+                                      ),
+                                      child: Icon(
+                                        _isIncome
+                                            ? Icons.south_west_rounded
+                                            : Icons.north_east_rounded,
+                                        color: Colors.white,
+                                        size: 16,
+                                      ),
+                                    ),
+                                    SizedBox(width: 8),
+                                    Expanded(
+                                      child: ListenableBuilder(
+                                        listenable: Listenable.merge([
+                                          _installmentsCtrl,
+                                          _installmentStartCtrl
+                                        ]),
+                                        builder: (_, __) => Text(
+                                          _amountFieldLabel(),
+                                          style: TextStyle(
+                                              color: Colors.white
+                                                  .withValues(alpha: 0.92),
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w800),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                border: InputBorder.none,
-                                hintText: '0,00',
-                                hintStyle: TextStyle(
-                                  fontSize: amountFont,
-                                  fontWeight: FontWeight.bold,
-                                  color: context.appTextMuted,
+                                SizedBox(height: 8),
+                                BrlAmountTextField(
+                                  controller: _amountCtrl,
+                                  focusNode: _amountFocus,
+                                  textInputAction: TextInputAction.next,
+                                  onSubmitted: (_) =>
+                                      _descFocus.requestFocus(),
+                                  scrollPadding: fieldScrollPad,
+                                  style: TextStyle(
+                                    fontSize: amountFont + 4,
+                                    fontWeight: FontWeight.w900,
+                                    height: 1.05,
+                                    letterSpacing: -0.5,
+                                    color: Colors.white,
+                                  ),
+                                  decoration: InputDecoration(
+                                    isDense: true,
+                                    filled: false,
+                                    contentPadding: EdgeInsets.zero,
+                                    prefixText: 'R\$ ',
+                                    prefixStyle: TextStyle(
+                                      fontSize: amountFont - 6,
+                                      fontWeight: FontWeight.w800,
+                                      color:
+                                          Colors.white.withValues(alpha: 0.85),
+                                    ),
+                                    border: InputBorder.none,
+                                    enabledBorder: InputBorder.none,
+                                    focusedBorder: InputBorder.none,
+                                    hintText: '0,00',
+                                    hintStyle: TextStyle(
+                                      fontSize: amountFont + 4,
+                                      fontWeight: FontWeight.w900,
+                                      color:
+                                          Colors.white.withValues(alpha: 0.55),
+                                    ),
+                                  ),
                                 ),
-                              ),
+                              ],
                             ),
                           ),
                         ),
-                        const Divider(height: 16, thickness: 1),
-                        SizedBox(height: 6),
-                        _buildPremiumCategorySelector(),
-                        SizedBox(height: 10),
-                        _buildPremiumDescField(),
-                        SizedBox(height: 12),
-                        Text(
-                          'Conta',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: context.appTextPrimary,
-                              fontSize: 12.5),
-                        ),
-                        SizedBox(height: 6),
-                        FixedFlowFinanceAccountField(
-                          uid: widget.uid,
-                          selectedAccountId: _selectedFinanceAccountId,
-                          onChanged: (v) => setState(() {
-                            _selectedFinanceAccountId = v;
-                            _applyStatusDefaultForAccount(_accounts);
-                          }),
-                        ),
-                        SizedBox(height: 10),
-                        ListenableBuilder(
-                          listenable: Listenable.merge(
-                              [_installmentsCtrl, _installmentStartCtrl]),
-                          builder: (_, __) => _buildDateField(),
+                        SizedBox(height: 14),
+                        _formSection(
+                          title: 'Categoria e descrição',
+                          icon: Icons.category_rounded,
+                          color: const Color(0xFF6366F1),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildPremiumCategorySelector(),
+                              SizedBox(height: 10),
+                              _buildPremiumDescField(),
+                            ],
+                          ),
                         ),
                         SizedBox(height: 12),
-                        _buildStatusRecurrenceRow(),
-                        SizedBox(height: 10),
-                        ListenableBuilder(
-                          listenable: Listenable.merge(
-                              [_installmentsCtrl, _installmentStartCtrl]),
-                          builder: (_, __) => _buildInstallmentsField(),
+                        _formSection(
+                          title: 'Conta, data e hora',
+                          icon: Icons.account_balance_wallet_rounded,
+                          color: const Color(0xFF0EA5E9),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              FixedFlowFinanceAccountField(
+                                uid: widget.uid,
+                                selectedAccountId: _selectedFinanceAccountId,
+                                onChanged: (v) => setState(() {
+                                  _selectedFinanceAccountId = v;
+                                  _applyStatusDefaultForAccount(_accounts);
+                                }),
+                              ),
+                              SizedBox(height: 12),
+                              ListenableBuilder(
+                                listenable: Listenable.merge(
+                                    [_installmentsCtrl, _installmentStartCtrl]),
+                                builder: (_, __) => _buildDateField(),
+                              ),
+                            ],
+                          ),
+                        ),
+                        SizedBox(height: 12),
+                        _formSection(
+                          title: 'Situação e repetição',
+                          icon: Icons.flag_circle_rounded,
+                          color: const Color(0xFFF59E0B),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildStatusRecurrenceRow(),
+                              SizedBox(height: 10),
+                              ListenableBuilder(
+                                listenable: Listenable.merge(
+                                    [_installmentsCtrl, _installmentStartCtrl]),
+                                builder: (_, __) => _buildInstallmentsField(),
+                              ),
+                            ],
+                          ),
                         ),
                         if (_status == 'pending') ...[
                           SizedBox(height: 14),
@@ -1133,6 +1156,61 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
       ),
     );
     return scaffold;
+  }
+
+  /// Gradiente do tipo: Despesa vermelho→laranja, Receita verde→teal.
+  List<Color> get _typeGradient => _isIncome
+      ? const [Color(0xFF15803D), Color(0xFF16A34A), Color(0xFF0D9488)]
+      : const [Color(0xFFDC2626), Color(0xFFEF4444), Color(0xFFF97316)];
+
+  /// Seção do formulário em card arredondado com título e ícone colorido.
+  Widget _formSection({
+    required String title,
+    required IconData icon,
+    required Color color,
+    required Widget child,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+      decoration: context.appPanelDecoration(
+        radius: 22,
+        borderAccent: color,
+        borderAlpha: 0.22,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [color, Color.lerp(color, Colors.black, 0.18)!],
+                  ),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(icon, color: Colors.white, size: 17),
+              ),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14,
+                    color: context.appTextPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 12),
+          child,
+        ],
+      ),
+    );
   }
 
   Widget _buildTypeToggle() {
@@ -1529,152 +1607,182 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
               ],
             ),
           ),
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: _pickDate,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            decoration: context.isDarkMode
-                ? context.appPanelDecoration(
-                    radius: 16,
-                    borderAccent: const Color(0xFF14B8A6),
-                  )
-                : BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        const Color(0xFFE0F2F1),
-                        const Color(0xFFF1F8E9).withValues(alpha: 0.85),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                        color: const Color(0xFF14B8A6).withValues(alpha: 0.35)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF14B8A6).withValues(alpha: 0.1),
-                        blurRadius: 12,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-            child: Row(
+        // Data e hora em chips coloridos lado a lado (empilham no estreito).
+        LayoutBuilder(
+          builder: (context, c) {
+            final dateChip = _dateTimeChip(
+              icon: Icons.calendar_month_rounded,
+              caption: 'Data do lançamento',
+              value: dateLabel,
+              colors: const [Color(0xFF14B8A6), Color(0xFF0F766E)],
+              onTap: _pickDate,
+            );
+            final timeChip = _dateTimeChip(
+              icon: Icons.schedule_rounded,
+              caption: 'Horário',
+              value: timeLabel,
+              colors: const [Color(0xFF6366F1), Color(0xFF4338CA)],
+              onTap: _pickTime,
+            );
+            if (c.maxWidth < 300) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [dateChip, SizedBox(height: 8), timeChip],
+              );
+            }
+            return Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        const Color(0xFF14B8A6).withValues(alpha: 0.9),
-                        const Color(0xFF00695C),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF14B8A6).withValues(alpha: 0.35),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Icon(Icons.calendar_month_rounded,
-                      color: Colors.white, size: 22),
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Data do lançamento',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: context.appTextSecondary,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                      SizedBox(height: 2),
-                      Text(
-                        dateLabel,
-                        style: TextStyle(
-                          color: context.isDarkMode
-                              ? const Color(0xFF6EE7B7)
-                              : const Color(0xFF004D40),
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(Icons.chevron_right_rounded,
-                    color: context.appTextMuted, size: 28),
+                Expanded(flex: 3, child: dateChip),
+                SizedBox(width: 8),
+                Expanded(flex: 2, child: timeChip),
               ],
-            ),
-          ),
-        ),
-        SizedBox(height: 8),
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: _pickTime,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            decoration: context.appPanelDecoration(
-              radius: 16,
-              borderAccent: const Color(0xFF14B8A6),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF14B8A6).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(Icons.schedule_rounded,
-                      color: context.isDarkMode
-                          ? const Color(0xFF6EE7B7)
-                          : const Color(0xFF00695C),
-                      size: 22),
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Horário do lançamento',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: context.appTextSecondary,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                      SizedBox(height: 2),
-                      Text(
-                        timeLabel,
-                        style: TextStyle(
-                          color: context.isDarkMode
-                              ? const Color(0xFF6EE7B7)
-                              : const Color(0xFF004D40),
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                TextButton(
-                  onPressed: _pickTime,
-                  child: Text('Alterar'),
-                ),
-              ],
-            ),
-          ),
+            );
+          },
         ),
       ],
+    );
+  }
+
+  Widget _dateTimeChip({
+    required IconData icon,
+    required String caption,
+    required String value,
+    required List<Color> colors,
+    required VoidCallback onTap,
+  }) {
+    final dark = context.isDarkMode;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          decoration: BoxDecoration(
+            color: context.appAccentSurface(colors.first,
+                darkAlpha: 0.20, lightAlpha: 0.10),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+                color: colors.first.withValues(alpha: dark ? 0.55 : 0.35)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(colors: colors),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: colors.first.withValues(alpha: 0.35),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Icon(icon, color: Colors.white, size: 18),
+              ),
+              SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      caption,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        color: context.appTextSecondary,
+                      ),
+                    ),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        value,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                          color: dark
+                              ? Colors.white
+                              : Color.lerp(colors.last, Colors.black, 0.25),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.expand_more_rounded,
+                  color: colors.first.withValues(alpha: 0.8), size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Segmento Pago/Pendente colorido (grava o mesmo `_status`).
+  Widget _statusPill({
+    required String value,
+    required String label,
+    required IconData icon,
+    required List<Color> colors,
+  }) {
+    final sel = _status == value;
+    final dark = context.isDarkMode;
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => setState(() {
+          _status = value;
+          // Calendário NÃO liga sozinho (regra 01/10/2026):
+          // a pessoa ativa no switch se quiser.
+        }),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+          decoration: BoxDecoration(
+            gradient: sel ? LinearGradient(colors: colors) : null,
+            color: sel ? null : Colors.transparent,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: sel
+                ? [
+                    BoxShadow(
+                      color: colors.first.withValues(alpha: 0.35),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon,
+                  size: 20,
+                  color: sel
+                      ? Colors.white
+                      : colors.first.withValues(alpha: dark ? 0.9 : 0.75)),
+              SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14.5,
+                    color: sel ? Colors.white : context.appTextSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -1770,58 +1878,31 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
                         ],
                       ),
                     )
-                  : DropdownButtonFormField<String>(
-                      key: ValueKey<String>(_status),
-                      initialValue: _status,
-                      decoration: InputDecoration(
-                        filled: false,
-                        border: InputBorder.none,
-                        prefixIcon: Icon(
-                          _status == 'paid'
-                              ? Icons.check_circle_rounded
-                              : Icons.pending_actions_rounded,
-                          color: _status == 'paid'
-                              ? Colors.green.shade700
-                              : Colors.orange.shade800,
-                          size: 28,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 12),
+                  : Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(
+                        children: [
+                          _statusPill(
+                            value: 'paid',
+                            label: _isIncome ? 'Recebido' : 'Pago',
+                            icon: Icons.check_circle_rounded,
+                            colors: const [
+                              Color(0xFF16A34A),
+                              Color(0xFF0D9488)
+                            ],
+                          ),
+                          SizedBox(width: 6),
+                          _statusPill(
+                            value: 'pending',
+                            label: 'Pendente',
+                            icon: Icons.schedule_rounded,
+                            colors: const [
+                              Color(0xFFF59E0B),
+                              Color(0xFFEA580C)
+                            ],
+                          ),
+                        ],
                       ),
-                      isExpanded: true,
-                      items: [
-                        DropdownMenuItem<String>(
-                          value: 'paid',
-                          child: Row(
-                            children: [
-                              Icon(Icons.check_circle_rounded,
-                                  color: Colors.green.shade700, size: 22),
-                              SizedBox(width: 10),
-                              Text('Pago',
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.w700)),
-                            ],
-                          ),
-                        ),
-                        DropdownMenuItem<String>(
-                          value: 'pending',
-                          child: Row(
-                            children: [
-                              Icon(Icons.schedule_rounded,
-                                  color: Colors.orange.shade800, size: 22),
-                              SizedBox(width: 10),
-                              Text('Pendente',
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.w700)),
-                            ],
-                          ),
-                        ),
-                      ],
-                      onChanged: (v) => setState(() {
-                        _status = v ?? 'paid';
-                        // Calendário NÃO liga sozinho (regra 01/10/2026):
-                        // a pessoa ativa no switch se quiser.
-                      }),
                     ),
             ),
             if (parceladoPendente)

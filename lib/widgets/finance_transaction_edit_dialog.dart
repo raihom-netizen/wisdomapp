@@ -31,6 +31,7 @@ import '../utils/receipt_attachment_utils.dart';
 import 'brl_amount_text_field.dart';
 import 'despertar_item_card.dart';
 import 'fast_text_field.dart';
+import 'finance_bank_brand_thumb.dart';
 import 'finance_calendar_color_picker.dart';
 import 'finance_category_picker.dart';
 import 'finance_premium_ui.dart';
@@ -214,6 +215,122 @@ Future<bool> showFinanceTransactionEditDialog({
         final editAccent = type == 'income'
             ? AppColors.financeReceita
             : AppColors.financeDespesa;
+        final typeGradient = type == 'income'
+            ? const [Color(0xFF15803D), Color(0xFF16A34A), Color(0xFF0D9488)]
+            : const [Color(0xFFDC2626), Color(0xFFEF4444), Color(0xFFF97316)];
+        Widget dateChip({
+          required IconData icon,
+          required String caption,
+          required String value,
+          required List<Color> colors,
+          VoidCallback? onTap,
+        }) {
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(16),
+              child: Ink(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                decoration: BoxDecoration(
+                  color: context.appAccentSurface(colors.first,
+                      darkAlpha: 0.20, lightAlpha: 0.10),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                      color: colors.first.withValues(
+                          alpha: context.isDarkMode ? 0.55 : 0.35)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(colors: colors),
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      child: Icon(icon, color: Colors.white, size: 17),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(caption,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: context.appTextSecondary)),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(value,
+                                style: TextStyle(
+                                    fontSize: 14.5,
+                                    fontWeight: FontWeight.w900,
+                                    color: context.appTextPrimary)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        Widget statusPill(String value, String label, IconData icon,
+            List<Color> colors) {
+          final sel = status == value;
+          return Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => setState(() => status = value),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOutCubic,
+                padding:
+                    const EdgeInsets.symmetric(vertical: 11, horizontal: 8),
+                decoration: BoxDecoration(
+                  gradient: sel ? LinearGradient(colors: colors) : null,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: sel
+                      ? [
+                          BoxShadow(
+                            color: colors.first.withValues(alpha: 0.35),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(icon,
+                        size: 19,
+                        color: sel ? Colors.white : colors.first),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 14,
+                              color: sel
+                                  ? Colors.white
+                                  : context.appTextSecondary)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
 
         return Dialog(
           backgroundColor: Colors.transparent,
@@ -242,13 +359,13 @@ Future<bool> showFinanceTransactionEditDialog({
                 children: [
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.fromLTRB(18, 16, 12, 14),
+                    padding: const EdgeInsets.fromLTRB(18, 18, 12, 18),
                     decoration: BoxDecoration(
+                      // Despesa vermelho→laranja; Receita verde→teal.
                       gradient: LinearGradient(
-                        colors: [
-                          editAccent,
-                          Color.lerp(editAccent, AppColors.accent, 0.4)!
-                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: typeGradient,
                       ),
                       borderRadius:
                           const BorderRadius.vertical(top: Radius.circular(24)),
@@ -294,33 +411,66 @@ Future<bool> showFinanceTransactionEditDialog({
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          // Valor em destaque no gradiente do tipo.
                           Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 10),
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
                             decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(18),
+                              borderRadius: BorderRadius.circular(22),
                               gradient: LinearGradient(
-                                colors: [
-                                  editAccent.withValues(alpha: 0.12),
-                                  context.appSurface
-                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: typeGradient,
                               ),
-                              border: Border.all(
-                                  color: editAccent.withValues(alpha: 0.28)),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: typeGradient.first
+                                      .withValues(alpha: 0.30),
+                                  blurRadius: 14,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ],
                             ),
-                            child: BrlAmountTextField(
-                              controller: amountCtrl,
-                              onChanged: metaEdit?.is52 == true
-                                  ? (_) => recalcMetaWeeks(setState)
-                                  : null,
-                              decoration: InputDecoration(
-                                labelText: 'Valor',
-                                isDense: true,
-                                border: InputBorder.none,
-                                labelStyle: TextStyle(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Valor',
+                                  style: TextStyle(
                                     fontWeight: FontWeight.w800,
-                                    color: editAccent),
-                              ),
+                                    fontSize: 12.5,
+                                    color:
+                                        Colors.white.withValues(alpha: 0.9),
+                                  ),
+                                ),
+                                BrlAmountTextField(
+                                  controller: amountCtrl,
+                                  onChanged: metaEdit?.is52 == true
+                                      ? (_) => recalcMetaWeeks(setState)
+                                      : null,
+                                  style: const TextStyle(
+                                    fontSize: 30,
+                                    fontWeight: FontWeight.w900,
+                                    color: Colors.white,
+                                    letterSpacing: -0.5,
+                                  ),
+                                  decoration: InputDecoration(
+                                    isDense: true,
+                                    filled: false,
+                                    border: InputBorder.none,
+                                    enabledBorder: InputBorder.none,
+                                    focusedBorder: InputBorder.none,
+                                    contentPadding:
+                                        const EdgeInsets.only(top: 4),
+                                    prefixText: 'R\$ ',
+                                    prefixStyle: TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w800,
+                                      color:
+                                          Colors.white.withValues(alpha: 0.85),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                           SizedBox(height: 12),
@@ -476,110 +626,133 @@ Future<bool> showFinanceTransactionEditDialog({
                                 ),
                               )),
                           SizedBox(height: 10),
+                          Text(
+                            fromOpenFinance
+                                ? 'Data e horário (Open Finance)'
+                                : 'Data e horário do lançamento',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                              color: context.appTextPrimary,
+                            ),
+                          ),
+                          SizedBox(height: 6),
                           Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      fromOpenFinance
-                                          ? 'Data e horário (Open Finance)'
-                                          : 'Data e horário do lançamento',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 13,
-                                        color: context.appTextPrimary,
-                                      ),
-                                    ),
-                                    SizedBox(height: 4),
-                                    Text(
-                                      '${DateFormat('dd/MM/yyyy', 'pt_BR').format(date)} · ${DateFormat('HH:mm', 'pt_BR').format(date)}',
-                                      style: const TextStyle(fontSize: 14),
-                                    ),
+                                flex: 3,
+                                child: dateChip(
+                                  icon: Icons.calendar_month_rounded,
+                                  caption: fromOpenFinance
+                                      ? 'Dia'
+                                      : 'Dia · toque para alterar',
+                                  value: DateFormat('dd/MM/yyyy', 'pt_BR')
+                                      .format(date),
+                                  colors: const [
+                                    Color(0xFF14B8A6),
+                                    Color(0xFF0F766E)
                                   ],
+                                  onTap: fromOpenFinance
+                                      ? null
+                                      : () async {
+                                          final picked = await showDatePicker(
+                                            context: context,
+                                            initialDate: date,
+                                            firstDate: DateTime(2020),
+                                            lastDate: DateTime(2100),
+                                          );
+                                          if (picked != null) {
+                                            setState(() => date =
+                                                FinanceTransactionDatetime
+                                                    .mergeCalendarDayWithExistingTime(
+                                                        picked, date));
+                                          }
+                                        },
                                 ),
                               ),
-                              if (!fromOpenFinance)
-                                Wrap(
-                                  spacing: 6,
-                                  runSpacing: 4,
-                                  alignment: WrapAlignment.end,
-                                  children: [
-                                    TextButton(
-                                      onPressed: () async {
-                                        final picked = await showDatePicker(
-                                          context: context,
-                                          initialDate: date,
-                                          firstDate: DateTime(2020),
-                                          lastDate: DateTime(2100),
-                                        );
-                                        if (picked != null) {
-                                          setState(() => date =
-                                              FinanceTransactionDatetime
-                                                  .mergeCalendarDayWithExistingTime(
-                                                      picked, date));
-                                        }
-                                      },
-                                      child: Text('Alterar dia'),
-                                    ),
-                                    TextButton(
-                                      onPressed: () async {
-                                        final picked = await showTimePicker(
-                                          context: context,
-                                          initialTime: TimeOfDay(
-                                              hour: date.hour,
-                                              minute: date.minute),
-                                          helpText: 'Horário do lançamento',
-                                          hourLabelText: 'Hora',
-                                          minuteLabelText: 'Minuto',
-                                          builder: (context, child) {
-                                            return MediaQuery(
-                                              data: MediaQuery.of(context)
-                                                  .copyWith(
-                                                      alwaysUse24HourFormat:
-                                                          true),
-                                              child: child ??
-                                                  const SizedBox.shrink(),
-                                            );
-                                          },
-                                        );
-                                        if (picked != null) {
-                                          setState(() =>
-                                              date = FinanceTransactionDatetime
-                                                  .mergeCalendarDayWithTimeOfDay(
-                                                date,
-                                                picked.hour,
-                                                picked.minute,
-                                              ));
-                                        }
-                                      },
-                                      child: Text('Alterar hora'),
-                                    ),
+                              SizedBox(width: 8),
+                              Expanded(
+                                flex: 2,
+                                child: dateChip(
+                                  icon: Icons.schedule_rounded,
+                                  caption: 'Hora',
+                                  value:
+                                      DateFormat('HH:mm', 'pt_BR').format(date),
+                                  colors: const [
+                                    Color(0xFF6366F1),
+                                    Color(0xFF4338CA)
                                   ],
+                                  onTap: fromOpenFinance
+                                      ? null
+                                      : () async {
+                                          final picked = await showTimePicker(
+                                            context: context,
+                                            initialTime: TimeOfDay(
+                                                hour: date.hour,
+                                                minute: date.minute),
+                                            helpText: 'Horário do lançamento',
+                                            hourLabelText: 'Hora',
+                                            minuteLabelText: 'Minuto',
+                                            builder: (context, child) {
+                                              return MediaQuery(
+                                                data: MediaQuery.of(context)
+                                                    .copyWith(
+                                                        alwaysUse24HourFormat:
+                                                            true),
+                                                child: child ??
+                                                    const SizedBox.shrink(),
+                                              );
+                                            },
+                                          );
+                                          if (picked != null) {
+                                            setState(() => date =
+                                                FinanceTransactionDatetime
+                                                    .mergeCalendarDayWithTimeOfDay(
+                                                  date,
+                                                  picked.hour,
+                                                  picked.minute,
+                                                ));
+                                          }
+                                        },
                                 ),
+                              ),
                             ],
                           ),
-                          SizedBox(height: 10),
-                          DropdownButtonFormField<String>(
-                            key: ValueKey<String>(status),
-                            initialValue: status,
-                            decoration: financePremiumDropdownDecoration(
-                              context,
-                              label: 'Status',
-                              prefixIcon: Icons.flag_rounded,
-                              accent: editAccent,
+                          SizedBox(height: 12),
+                          Text(
+                            'Status',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                              color: context.appTextPrimary,
                             ),
-                            items: const [
-                              DropdownMenuItem(
-                                  value: 'paid', child: Text('Pago')),
-                              DropdownMenuItem(
-                                  value: 'pending', child: Text('Pendente')),
-                            ],
-                            onChanged: (v) => setState(() {
-                              status = v ?? 'paid';
-                            }),
+                          ),
+                          SizedBox(height: 6),
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: context.appChipIdleBg,
+                              borderRadius: BorderRadius.circular(18),
+                              border:
+                                  Border.all(color: context.appChipIdleBorder),
+                            ),
+                            child: Row(
+                              children: [
+                                statusPill(
+                                  'paid',
+                                  type == 'income' ? 'Recebido' : 'Pago',
+                                  Icons.check_circle_rounded,
+                                  const [Color(0xFF16A34A), Color(0xFF0D9488)],
+                                ),
+                                const SizedBox(width: 4),
+                                statusPill(
+                                  'pending',
+                                  'Pendente',
+                                  Icons.schedule_rounded,
+                                  const [Color(0xFFF59E0B), Color(0xFFEA580C)],
+                                ),
+                              ],
+                            ),
                           ),
                           if (status == 'pending') ...[
                             SizedBox(height: 12),
@@ -739,8 +912,17 @@ Future<bool> showFinanceTransactionEditDialog({
                                 ...financeAccounts.map(
                                   (a) => DropdownMenuItem<String?>(
                                     value: a.id,
-                                    child: Text(a.displayName,
-                                        overflow: TextOverflow.ellipsis),
+                                    child: Row(
+                                      children: [
+                                        FinanceBankBrandThumb(
+                                            preset: a.preset, size: 22),
+                                        const SizedBox(width: 8),
+                                        Flexible(
+                                          child: Text(a.displayName,
+                                              overflow: TextOverflow.ellipsis),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                                 if (orphan)

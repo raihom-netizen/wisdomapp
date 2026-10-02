@@ -1200,7 +1200,24 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
             }
           });
         return Column(
-          children: docs.map((doc) => _buildGoalCard(context, doc)).toList(),
+          children: [
+            for (var i = 0; i < docs.length; i++)
+              // Entrada leve (sobe + aparece), escalonada por card.
+              TweenAnimationBuilder<double>(
+                key: ValueKey('goal-anim-${docs[i].id}'),
+                tween: Tween(begin: 0, end: 1),
+                duration: Duration(milliseconds: 320 + 80 * i.clamp(0, 5)),
+                curve: Curves.easeOutCubic,
+                builder: (context, t, child) => Opacity(
+                  opacity: t,
+                  child: Transform.translate(
+                    offset: Offset(0, 18 * (1 - t)),
+                    child: child,
+                  ),
+                ),
+                child: _buildGoalCard(context, docs[i]),
+              ),
+          ],
         );
       },
     );
