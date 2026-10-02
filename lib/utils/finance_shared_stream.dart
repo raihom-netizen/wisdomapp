@@ -21,6 +21,10 @@ class FinanceSharedStream<T> {
   Timer? _closeTimer;
   T? _last;
   bool _hasLast = false;
+  // Último erro sem valor depois: quem chega depois também vê o erro (e a
+  // tela mostra «Tentar de novo») em vez de ficar esperando para sempre.
+  Object? _lastError;
+  StackTrace? _lastErrorSt;
 
   /// Último valor recebido (se houver).
   T? get last => _hasLast ? _last : null;
@@ -29,16 +33,26 @@ class FinanceSharedStream<T> {
     _closeTimer?.cancel();
     _closeTimer = null;
     _listeners.add(c);
-    if (_hasLast) c.add(_last as T);
+    if (_hasLast) {
+      c.add(_last as T);
+    } else if (_lastError != null) {
+      c.addError(_lastError!, _lastErrorSt);
+    }
     _upstream ??= _open().listen(
       (v) {
         _last = v;
         _hasLast = true;
+        _lastError = null;
+        _lastErrorSt = null;
         for (final l in List.of(_listeners)) {
           l.add(v);
         }
       },
       onError: (Object e, StackTrace st) {
+        if (!_hasLast) {
+          _lastError = e;
+          _lastErrorSt = st;
+        }
         for (final l in List.of(_listeners)) {
           l.addError(e, st);
         }
@@ -72,4 +86,8 @@ class FinanceSharedStreamCache<T> {
 
   /// Último valor da escuta desta chave (sem abrir escuta nova).
   T? peek(String key) => _byKey[key]?.last;
+
+  /// Esquece a escuta desta chave: o próximo [obter] abre uma nova («Tentar de
+  /// novo» depois de erro). Quem ainda ouve a antiga continua até sair.
+  void descartar(String key) => _byKey.remove(key);
 }

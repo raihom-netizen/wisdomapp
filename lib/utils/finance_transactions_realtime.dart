@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 
 import 'finance_line_opening.dart';
 import 'finance_shared_stream.dart';
+import 'finance_transactions_hub.dart';
 import 'firestore_query_batched_collect.dart';
 import 'firestore_user_doc_id.dart';
 
@@ -44,9 +45,35 @@ List<QueryDocumentSnapshot<Map<String, dynamic>>> _mergeTransactionSnapshots(
   return out;
 }
 
+final FinanceSharedStreamCache<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
+    _periodDocsShared =
+    FinanceSharedStreamCache<List<QueryDocumentSnapshot<Map<String, dynamic>>>>();
+
 /// Lista mesclada (date + effectiveDate no período) — evita perder lançamentos migrados.
+///
+/// Escuta **compartilhada** por usuário+período ([FinanceSharedStream]): o
+/// painel do Início, os cards de fixas e o Financeiro pedem o mesmo período e
+/// várias telas montam isto dentro do `build` — antes cada redesenho abria 3
+/// escutas novas (Android/iOS) ou 3 leituras pesadas (Web). [renovar] = true
+/// descarta a escuta atual (botão «Tentar de novo»).
 Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
     financeTransactionsPeriodDocs({
+  required String uid,
+  required DateTime rangeStart,
+  required DateTime rangeEnd,
+  bool renovar = false,
+}) {
+  final rs = DateTime(rangeStart.year, rangeStart.month, rangeStart.day);
+  final re = DateTime(rangeEnd.year, rangeEnd.month, rangeEnd.day, 23, 59, 59);
+  final key = '$uid|${rs.millisecondsSinceEpoch}|${re.millisecondsSinceEpoch}';
+  if (renovar) _periodDocsShared.descartar(key);
+  return _periodDocsShared
+      .obter(key, () => _financeTransactionsPeriodDocsRaw(uid: uid, rangeStart: rs, rangeEnd: re))
+      .stream;
+}
+
+Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
+    _financeTransactionsPeriodDocsRaw({
   required String uid,
   required DateTime rangeStart,
   required DateTime rangeEnd,
@@ -86,10 +113,20 @@ Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
   QuerySnapshot<Map<String, dynamic>>? lastA;
   QuerySnapshot<Map<String, dynamic>>? lastB;
   QuerySnapshot<Map<String, dynamic>>? lastC;
+  // Consulta que falhou (índice, permissão): conta como «vazia» para as outras
+  // poderem emitir — antes uma falha deixava a tela no spinner para sempre.
+  final falhou = <int>{};
 
   void emit() {
-    if (lastA == null || lastB == null || lastC == null) return;
-    controller.add(_mergeTransactionSnapshots([lastA!, lastB!, lastC!]));
+    final prontos = [
+      (0, lastA),
+      (1, lastB),
+      (2, lastC),
+    ];
+    if (prontos.any((p) => p.$2 == null && !falhou.contains(p.$1))) return;
+    final snaps = [for (final p in prontos) if (p.$2 != null) p.$2!];
+    if (snaps.isEmpty) return;
+    controller.add(_mergeTransactionSnapshots(snaps));
   }
 
   // As 3 escutas eram abertas no onListen e NUNCA fechadas: cada StreamBuilder
@@ -99,25 +136,33 @@ Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
   final subs = <StreamSubscription<QuerySnapshot<Map<String, dynamic>>>>[];
   // Erro numa das 3 consultas: só registra (como antes, não chega às telas —
   // elas seguem com o último valor emitido).
-  void forwardError(Object e, StackTrace st) {
+  void forwardError(int i, Object e, StackTrace st) {
     debugPrint('financeTransactionsPeriodDocs: $e');
+    falhou.add(i);
+    if (falhou.length == 3) {
+      // As 3 falharam: a tela mostra o erro («Tentar de novo»).
+      controller.addError(e, st);
+    } else {
+      emit();
+    }
   }
 
   controller = StreamController<
       List<QueryDocumentSnapshot<Map<String, dynamic>>>>.broadcast(
     onListen: () {
+      falhou.clear();
       subs.add(byDate.listen((s) {
         lastA = s;
         emit();
-      }, onError: forwardError));
+      }, onError: (Object e, StackTrace st) => forwardError(0, e, st)));
       subs.add(byEffective.listen((s) {
         lastB = s;
         emit();
-      }, onError: forwardError));
+      }, onError: (Object e, StackTrace st) => forwardError(1, e, st)));
       subs.add(byPaidAt.listen((s) {
         lastC = s;
         emit();
-      }, onError: forwardError));
+      }, onError: (Object e, StackTrace st) => forwardError(2, e, st)));
     },
     onCancel: () {
       for (final s in subs) {
@@ -136,30 +181,68 @@ Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
   required DateTime rangeStart,
   required DateTime rangeEnd,
 }) async* {
+  // Com prazo: sem ele o card ficava com o «pontinho carregando» para sempre
+  // (ex.: «Contas fixas do mês» no Início, na Web).
   Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> loadMerged() =>
       financePeriodMergedDocumentsCollect(
         uid: uid,
         from: rangeStart,
         to: rangeEnd,
-      );
+      ).timeout(const Duration(seconds: 30));
 
-  try {
-    yield await loadMerged();
-  } catch (e) {
-    debugPrint('_financeTransactionsPeriodDocsWeb initial: $e');
-    yield const [];
+  Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> loadWithRetry() async {
+    Object? last;
+    for (var i = 0; i < 3; i++) {
+      try {
+        return await loadMerged();
+      } catch (e) {
+        last = e;
+        debugPrint('_financeTransactionsPeriodDocsWeb tentativa ${i + 1}: $e');
+        if (i < 2) await Future<void>.delayed(Duration(seconds: 2 << i));
+      }
+    }
+    throw last!;
   }
 
-  final col = FirebaseFirestore.instance
+  try {
+    yield await loadWithRetry();
+  } catch (e, st) {
+    // Erro chega à tela (que mostra «Tentar de novo») em vez de lista vazia,
+    // que parecia «não há nada a pagar».
+    yield* Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>>.error(e, st);
+  }
+
+  // Recarrega quando o app grava algo (hub) ou quando a coleção muda no
+  // servidor (bot, funções). A 1ª emissão da escuta é a carga inicial (pula).
+  final gatilho = StreamController<void>();
+  void onRevisao() => gatilho.add(null);
+  FinanceTransactionsHub.revision.addListener(onRevisao);
+  var primeira = true;
+  final sub = FirebaseFirestore.instance
       .collection('users')
       .doc(uid)
-      .collection('transactions');
-  await for (final _ in col.limit(1).snapshots(includeMetadataChanges: false)) {
-    try {
-      yield await loadMerged();
-    } catch (e) {
-      debugPrint('_financeTransactionsPeriodDocsWeb reload: $e');
+      .collection('transactions')
+      .limit(1)
+      .snapshots(includeMetadataChanges: false)
+      .listen((_) {
+    if (primeira) {
+      primeira = false;
+      return;
     }
+    gatilho.add(null);
+  }, onError: (Object e) => debugPrint('_financeTransactionsPeriodDocsWeb escuta: $e'));
+  try {
+    await for (final _ in gatilho.stream) {
+      try {
+        yield await loadMerged();
+      } catch (e) {
+        debugPrint('_financeTransactionsPeriodDocsWeb reload: $e');
+      }
+    }
+  } finally {
+    FinanceTransactionsHub.revision.removeListener(onRevisao);
+    await sub.cancel();
+    await gatilho.close();
   }
 }
 

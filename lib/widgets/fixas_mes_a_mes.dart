@@ -84,6 +84,7 @@ class _FixasPorMesCardState extends State<FixasPorMesCard> {
       financeTransactionsPeriodDocs(uid: widget.uid, rangeStart: _r.de, rangeEnd: _r.ate);
 
   Color get _cor => _corDe(widget.receita);
+  bool _erro = false;
 
   void _abrir(FixasPeriodo p) {
     Navigator.of(context).push(MaterialPageRoute<void>(
@@ -100,6 +101,9 @@ class _FixasPorMesCardState extends State<FixasPorMesCard> {
         builder: (context, snap) {
           double? totalMes;
           double pago = 0, aberto = 0, media = 0;
+          // Erro sem dado: sai do spinner eterno (o toque abre o relatório,
+          // que tem a própria mensagem de erro).
+          _erro = snap.hasError && !snap.hasData;
           if (snap.hasData) {
             final linhas = _linhasDe(snap.data!, widget.receita, _r.de, _r.ate);
             final meses = fixasPorMes(linhas, _r.de, _r.ate);
@@ -188,13 +192,20 @@ class _FixasPorMesCardState extends State<FixasPorMesCard> {
                   SizedBox(
                     height: 40,
                     child: totalMes == null
-                        ? const Align(
+                        ? Align(
                             alignment: Alignment.centerLeft,
-                            child: SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                            ),
+                            child: _erro
+                                ? const Text(
+                                    'Não carregou — toque para abrir',
+                                    style: TextStyle(
+                                        color: Colors.white, fontWeight: FontWeight.w700),
+                                  )
+                                : const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2, color: Colors.white),
+                                  ),
                           )
                         : FittedBox(
                             fit: BoxFit.scaleDown,

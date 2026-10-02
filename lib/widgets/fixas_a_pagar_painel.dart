@@ -11,6 +11,7 @@ import '../utils/finance_transactions_hub.dart';
 import '../utils/finance_transactions_realtime.dart';
 import '../utils/firestore_user_doc_id.dart';
 import 'finance_confirm_payment_sheet.dart';
+import 'finance_load_error_box.dart';
 
 const _kVermelho = Color(0xFFDC2626);
 const _kLaranja = Color(0xFFEA580C);
@@ -65,8 +66,15 @@ class FixasAPagarPainel extends StatefulWidget {
 }
 
 class _FixasAPagarPainelState extends State<FixasAPagarPainel> {
-  late final Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>> _docs;
+  late Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>> _docs;
   late final Stream<List<FinanceAccount>> _contas;
+  late final DateTime _rangeStart;
+  late final DateTime _rangeEnd;
+
+  /// Passou do prazo sem resposta: mostra «Tentar de novo» (antes era só o
+  /// pontinho carregando para sempre).
+  bool _demorou = false;
+  Timer? _prazo;
   late final DateTime _hoje;
   late final DateTime _fimMes;
   bool _verPagas = false;
@@ -84,12 +92,41 @@ class _FixasAPagarPainelState extends State<FixasAPagarPainel> {
     final seteDias = _hoje.add(const Duration(days: 7, hours: 23, minutes: 59));
     // Dois meses para trás: conta do mês passado que ficou sem pagar ainda é
     // «vencida» — sumir com ela só porque virou o mês esconderia a dívida.
+    _rangeStart = DateTime(n.year, n.month - 2, 1);
+    _rangeEnd = seteDias.isAfter(_fimMes) ? seteDias : _fimMes;
     _docs = financeTransactionsPeriodDocs(
       uid: widget.uid,
-      rangeStart: DateTime(n.year, n.month - 2, 1),
-      rangeEnd: seteDias.isAfter(_fimMes) ? seteDias : _fimMes,
+      rangeStart: _rangeStart,
+      rangeEnd: _rangeEnd,
     );
     _contas = FinanceAccountsService().streamAccounts(widget.uid);
+    _armarPrazo();
+  }
+
+  void _armarPrazo() {
+    _prazo?.cancel();
+    _demorou = false;
+    _prazo = Timer(const Duration(seconds: 20), () {
+      if (mounted) setState(() => _demorou = true);
+    });
+  }
+
+  void _tentarDeNovo() {
+    setState(() {
+      _docs = financeTransactionsPeriodDocs(
+        uid: widget.uid,
+        rangeStart: _rangeStart,
+        rangeEnd: _rangeEnd,
+        renovar: true,
+      );
+      _armarPrazo();
+    });
+  }
+
+  @override
+  void dispose() {
+    _prazo?.cancel();
+    super.dispose();
   }
 
   List<_FixaItem> _itens(
@@ -130,6 +167,19 @@ class _FixasAPagarPainelState extends State<FixasAPagarPainel> {
         return StreamBuilder<List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
           stream: _docs,
           builder: (context, snap) {
+            if (snap.hasData) _prazo?.cancel();
+            if (!snap.hasData && (snap.hasError || _demorou)) {
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: FinanceLoadErrorBox(
+                  error: snap.error,
+                  message: snap.hasError
+                      ? null
+                      : 'As contas fixas estão demorando para carregar.',
+                  onRetry: _tentarDeNovo,
+                ),
+              );
+            }
             if (!snap.hasData) {
               return const SizedBox(
                 height: 90,

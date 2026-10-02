@@ -16,7 +16,7 @@ import '../utils/finance_transactions_realtime.dart';
 import '../utils/home_painel_resumo.dart';
 import '../utils/premium_upgrade.dart';
 import 'finance_confirm_payment_sheet.dart';
-import 'fixas_a_pagar_painel.dart';
+import 'fixas_contas_page.dart';
 import 'fixas_visao_geral.dart';
 
 const _kAzulRec = Color(0xFF0EA5E9);
@@ -561,42 +561,14 @@ class _HomePendentesSecaoState extends State<HomePendentesSecao> {
 
   // ── Folhas ──────────────────────────────────────────────────────────────
 
+  // Tela cheia «Contas fixas — <mês>» (abas Despesas/Receitas fixas) no lugar
+  // do bottom sheet que, na Web, ficava só carregando (02/10/2026).
   void _abrirFixasAPagar({required bool receita}) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.75,
-        minChildSize: 0.35,
-        maxChildSize: 0.95,
-        expand: false,
-        builder: (ctx, scroll) => DecoratedBox(
-          decoration:
-              ctx.appSheetDecoration(tint: receita ? _kVerde : _kVermelho),
-          child: ListView(
-            controller: scroll,
-            padding: const EdgeInsets.only(bottom: 24),
-            children: [
-              const _AlcaFolha(),
-              FixasAPagarPainel(uid: _uid, receita: receita),
-              if (widget.onAbrirFinanceiro != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      widget.onAbrirFinanceiro!();
-                    },
-                    icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                    label: const Text('Abrir Financeiro'),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
+    FixasContasPage.abrir(
+      context,
+      uid: _uid,
+      receita: receita,
+      onAbrirFinanceiro: widget.onAbrirFinanceiro,
     );
   }
 
