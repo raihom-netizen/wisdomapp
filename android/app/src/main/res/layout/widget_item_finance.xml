@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="#22FF8A50"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingHorizontal="8dp"
+    android:paddingVertical="5dp">
+
+    <TextView
+        android:id="@+id/witem_finance_bar"
+        android:layout_width="3dp"
+        android:layout_height="28dp"
+        android:background="#FFFF5252" />
+
+    <TextView
+        android:id="@+id/witem_finance_symbol"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="6dp"
+        android:text="💳"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/witem_finance_text"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="5dp"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:text="FINANCEIRO PENDENTE"
+        android:textAllCaps="true"
+        android:textColor="#FFFFCCBC"
+        android:textSize="10sp"
+        android:textStyle="bold" />
+</LinearLayout>
