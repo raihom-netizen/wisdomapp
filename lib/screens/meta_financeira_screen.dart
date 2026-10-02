@@ -597,29 +597,9 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (_userDocId.isNotEmpty)
-                              KeyedStreamBuilder<
-                                  DocumentSnapshot<Map<String, dynamic>>>(
-                                key: ValueKey<String>(
-                                    'meta-planning-$_userDocId'),
-                                streamKey: _planningRef.path,
-                                create: () => _planningRef.snapshots(),
-                                builder: (context, snap) {
-                                  final enabled =
-                                      (snap.data?.data()?['dailyTipsEnabled'] ??
-                                          false) as bool;
-                                  if (!enabled) return const SizedBox.shrink();
-                                  return Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      _buildDicaCard(context),
-                                      const SizedBox(height: 24),
-                                    ],
-                                  );
-                                },
-                              ),
+                            // Dica do dia aqui saiu junto com a opção «Dicas financeiras
+                            // diárias» das Configurações (02/10/2026): as dicas já
+                            // aparecem para todos no Início e no Financeiro.
                             if (isCompact)
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,

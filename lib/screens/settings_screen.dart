@@ -1050,11 +1050,8 @@ class SettingsScreen extends StatelessWidget {
                     ),
                   if (!kIsWeb && (showAndroidStoreUi || showIosStoreUi))
                     const SizedBox(height: 12),
-                  _PlanningFinanceTipsTile(
-                    uid: _docUid,
-                    blocked: _blocked,
-                    planningRef: _planningRef,
-                  ),
+                  // «Dicas financeiras diárias» removido (pedido do dono 02/10/2026):
+                  // as dicas já aparecem para todos no Início e no Financeiro.
                   _tile(
                     context,
                     icon: Icons.info_outline_rounded,
