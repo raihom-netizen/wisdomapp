@@ -536,6 +536,8 @@ class _DaySectionHeader extends StatelessWidget {
   }
 }
 
+const bool _kMostrarEscalasNaFila = false;
+
 class _ChannelSelector extends StatelessWidget {
   const _ChannelSelector({
     required this.selected,
@@ -567,8 +569,9 @@ class _ChannelSelector extends StatelessWidget {
               onTap: onSelected,
             ),
           ),
-          const SizedBox(width: 6),
-          Expanded(
+          // WisdomApp não tem Plantões/Escalas: chip escondido (código mantido).
+          if (_kMostrarEscalasNaFila) const SizedBox(width: 6),
+          if (_kMostrarEscalasNaFila) Expanded(
             child: _ChannelChip(
               label: 'Escalas',
               icon: Icons.work_history_rounded,

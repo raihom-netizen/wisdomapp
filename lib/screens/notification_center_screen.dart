@@ -1,91 +1,74 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../constants/commitment_symbols.dart';
 import '../models/notification_center_entry.dart';
-import '../services/agenda_alerts_queue_service.dart';
+import '../services/fcm_local_notification_presenter.dart';
 import '../services/notification_center_service.dart';
 import '../services/notification_center_store.dart';
+import '../services/user_profile_startup_cache.dart';
 import '../theme/app_colors.dart';
 import '../theme/theme_context.dart';
-import '../utils/agenda_alerts_archive_policy.dart';
+import '../utils/finance_transactions_hub.dart';
 import '../utils/firestore_user_doc_id.dart';
 import '../widgets/compromisso_contact_chips.dart';
+import '../widgets/finance_transaction_edit_dialog.dart';
 
+/// Abas legadas (deep link de push). A UI moderna usa só Todos / Financeiro /
+/// Compromissos — o WisdomApp não tem Plantões nem Audiências.
 enum NotificationCenterTab {
   escalas,
   compromissos,
-  audiencias, // legado — redirecionado para compromissos na UI
+  audiencias, // legado — vira Compromissos
   contas,
 }
 
-/// Abas visíveis na central (sem audiências — o app só tem compromissos).
+/// Mantido por compatibilidade (contagens/atalhos antigos).
 const List<NotificationCenterTab> kNotificationCenterVisibleTabs = [
-  NotificationCenterTab.escalas,
   NotificationCenterTab.compromissos,
   NotificationCenterTab.contas,
 ];
 
-/// Paleta WISDOMAPP por aba da central.
-class _NotificationCenterTabPalette {
-  const _NotificationCenterTabPalette({
-    required this.shortLabel,
-    required this.icon,
-    required this.gradient,
-    required this.accent,
-  });
+enum _Filtro { todos, financeiro, compromissos }
 
-  final String shortLabel;
-  final IconData icon;
-  final List<Color> gradient;
-  final Color accent;
+class _Visual {
+  const _Visual(this.cor, this.cor2, this.icone, this.rotulo);
+  final Color cor;
+  final Color cor2;
+  final IconData icone;
+  final String rotulo;
+}
 
-  static _NotificationCenterTabPalette of(NotificationCenterTab tab) {
-    return switch (tab) {
-      NotificationCenterTab.escalas => const _NotificationCenterTabPalette(
-          shortLabel: 'Agenda',
-          icon: Icons.calendar_month_rounded,
-          gradient: [Color(0xFF059669), Color(0xFF10B981)],
-          accent: Color(0xFF059669),
-        ),
-      NotificationCenterTab.compromissos => const _NotificationCenterTabPalette(
-          shortLabel: 'Compromissos',
-          icon: Icons.event_rounded,
-          gradient: [Color(0xFF2563EB), Color(0xFF6366F1)],
-          accent: Color(0xFF2563EB),
-        ),
-      NotificationCenterTab.audiencias => const _NotificationCenterTabPalette(
-          shortLabel: 'Compromissos',
-          icon: Icons.event_rounded,
-          gradient: [Color(0xFF2563EB), Color(0xFF6366F1)],
-          accent: Color(0xFF2563EB),
-        ),
-      NotificationCenterTab.contas => const _NotificationCenterTabPalette(
-          shortLabel: 'Contas',
-          icon: Icons.payments_outlined,
-          gradient: [Color(0xFFDC2626), Color(0xFFF97316)],
-          accent: Color(0xFFDC2626),
-        ),
-    };
+const _vCompromisso = _Visual(
+    Color(0xFF2563EB), Color(0xFF6366F1), Icons.event_rounded, 'Compromisso');
+const _vPagar = _Visual(Color(0xFFDC2626), Color(0xFFF97316),
+    Icons.arrow_upward_rounded, 'A pagar');
+const _vReceber = _Visual(Color(0xFF059669), Color(0xFF10B981),
+    Icons.arrow_downward_rounded, 'A receber');
+const _vOutros = _Visual(
+    Color(0xFF7C3AED), Color(0xFFA855F7), Icons.campaign_rounded, 'Aviso');
+
+_Visual _visualDe(NotificationCenterEntry e) {
+  switch (e.kind) {
+    case NotificationCenterKind.financeiro:
+      return e.financeType == 'income' ? _vReceber : _vPagar;
+    case NotificationCenterKind.compromisso:
+    case NotificationCenterKind.audiencia:
+      return _vCompromisso;
+    default:
+      return _vOutros;
   }
 }
 
-enum NotificationCenterStatusFilter {
-  todos,
-  pendentes,
-  notificados,
-}
-
-/// Central de notificações — abas por tipo, ordem cronológica, visual WISDOMAPP.
-/// Swipe-to-dismiss, pull-to-refresh, animações de entrada e navegação
-/// direta para abas específicas via deep link de push/local.
+/// Central de avisos — visual do Controle Total: cards coloridos por tipo,
+/// agrupados em Atrasados / Hoje / Amanhã / Próximos, ações rápidas e
+/// remoção automática 24 h depois do evento.
 class NotificationCenterScreen extends StatefulWidget {
-  const NotificationCenterScreen({
-    super.key,
-    this.initialTab,
-  });
+  const NotificationCenterScreen({super.key, this.initialTab});
 
   /// Aba inicial (deep link a partir de push/local notification tap).
   final NotificationCenterTab? initialTab;
@@ -95,13 +78,11 @@ class NotificationCenterScreen extends StatefulWidget {
       _NotificationCenterScreenState();
 }
 
-class _NotificationCenterScreenState extends State<NotificationCenterScreen>
-    with SingleTickerProviderStateMixin {
-  bool _selectionMode = false;
-  final Set<String> _selected = {};
-  late TabController _tabController;
-  NotificationCenterStatusFilter _statusFilter =
-      NotificationCenterStatusFilter.todos;
+class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
+  late _Filtro _filtro;
+  Stream<NotificationCenterSnapshot>? _stream;
+  String? _streamUid;
+  final Set<String> _ocupados = {};
 
   String get _uid => firestoreUserDocIdForAppShell(
         FirebaseAuth.instance.currentUser?.uid ?? '',
@@ -110,160 +91,261 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
   @override
   void initState() {
     super.initState();
-    var initialTab = widget.initialTab;
-    if (initialTab == NotificationCenterTab.audiencias) {
-      initialTab = NotificationCenterTab.compromissos;
+    _filtro = switch (widget.initialTab) {
+      NotificationCenterTab.contas => _Filtro.financeiro,
+      NotificationCenterTab.compromissos ||
+      NotificationCenterTab.audiencias =>
+        _Filtro.compromissos,
+      _ => _Filtro.todos,
+    };
+    unawaited(FcmLocalNotificationPresenter.limparBandejaAntiga());
+  }
+
+  Stream<NotificationCenterSnapshot> _streamFor(String uid) {
+    if (_stream == null || _streamUid != uid) {
+      _streamUid = uid;
+      _stream = NotificationCenterService.watch(uid);
     }
-    final initialIndex = initialTab != null
-        ? kNotificationCenterVisibleTabs.indexOf(initialTab)
-        : 0;
-    _tabController = TabController(
-      length: kNotificationCenterVisibleTabs.length,
-      vsync: this,
-      initialIndex: initialIndex.clamp(
-        0,
-        kNotificationCenterVisibleTabs.length - 1,
+    return _stream!;
+  }
+
+  bool _passaFiltro(NotificationCenterEntry e) => switch (_filtro) {
+        _Filtro.todos => true,
+        _Filtro.financeiro => e.kind == NotificationCenterKind.financeiro,
+        _Filtro.compromissos => e.kind == NotificationCenterKind.compromisso ||
+            e.kind == NotificationCenterKind.audiencia,
+      };
+
+  // ── Ações ────────────────────────────────────────────────────────────────
+
+  Future<void> _dispensar(NotificationCenterEntry e) async {
+    await NotificationCenterStore.instance.dismiss([e.id]);
+  }
+
+  Future<void> _marcarTodosComoLidos(List<NotificationCenterEntry> itens) async {
+    if (itens.isEmpty) return;
+    await NotificationCenterStore.instance.dismissAll(itens.map((e) => e.id));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(itens.length == 1
+            ? '1 aviso marcado como lido.'
+            : '${itens.length} avisos marcados como lidos.'),
+        behavior: SnackBarBehavior.floating,
       ),
     );
-    _tabController.addListener(() {
-      if (!_tabController.indexIsChanging) setState(() {});
-    });
   }
 
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
+  void _snack(String msg, {bool erro = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: erro ? AppColors.error : null,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
-  void _toggleSelection(String id) {
-    setState(() {
-      if (_selected.contains(id)) {
-        _selected.remove(id);
-        if (_selected.isEmpty) _selectionMode = false;
-      } else {
-        _selected.add(id);
+  /// Concluir compromisso: marca o compromisso como realizado (não apaga) e
+  /// tira o aviso da central.
+  Future<void> _concluir(NotificationCenterEntry e) async {
+    if (e.sourceType != 'reminder' || e.sourceId.isEmpty || _uid.isEmpty) {
+      await _dispensar(e);
+      return;
+    }
+    setState(() => _ocupados.add(e.id));
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_uid)
+          .collection('reminders')
+          .doc(e.sourceId)
+          .set({
+        'done': true,
+        'status': 'REALIZADO',
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true)).timeout(const Duration(seconds: 15));
+      await _dispensar(e);
+      _snack('Compromisso concluído.');
+    } catch (err) {
+      _snack('Não foi possível concluir: ${err.toString().split('\n').first}',
+          erro: true);
+    } finally {
+      if (mounted) setState(() => _ocupados.remove(e.id));
+    }
+  }
+
+  /// Pagar/Receber: abre o mesmo editor do Financeiro já com o lançamento.
+  Future<void> _pagarOuReceber(NotificationCenterEntry e) async {
+    final authUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final profile = UserProfileStartupCache.getSync(authUid);
+    if (e.sourceId.isEmpty || _uid.isEmpty || profile == null) {
+      _snack('Abra o Financeiro para dar baixa neste lançamento.');
+      return;
+    }
+    setState(() => _ocupados.add(e.id));
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_uid)
+          .collection('transactions')
+          .doc(e.sourceId)
+          .get()
+          .timeout(const Duration(seconds: 15));
+      final data = snap.data();
+      if (!mounted) return;
+      if (data == null) {
+        await _dispensar(e);
+        _snack('Este lançamento não existe mais.');
+        return;
       }
-    });
-  }
-
-  void _enterSelection(String id) {
-    setState(() {
-      _selectionMode = true;
-      _selected.add(id);
-    });
-  }
-
-  void _exitSelection() {
-    setState(() {
-      _selectionMode = false;
-      _selected.clear();
-    });
-  }
-
-  Future<void> _dismissSelected() async {
-    if (_selected.isEmpty) return;
-    await NotificationCenterStore.instance.dismissAll(_selected);
-    if (mounted) _exitSelection();
-  }
-
-  Future<void> _dismissOne(String id) async {
-    await NotificationCenterStore.instance.dismiss([id]);
-    if (mounted && _selected.contains(id)) {
-      setState(() => _selected.remove(id));
+      final saved = await showFinanceTransactionEditDialog(
+        context: context,
+        uid: authUid,
+        profile: profile,
+        docId: e.sourceId,
+        current: data,
+        type: (data['type'] ?? e.financeType).toString(),
+        logModulo: 'Avisos',
+      );
+      if (saved) FinanceTransactionsHub.notifyMutated(uid: _uid);
+    } catch (err) {
+      _snack(
+          'Não foi possível abrir o lançamento: '
+          '${err.toString().split('\n').first}',
+          erro: true);
+    } finally {
+      if (mounted) setState(() => _ocupados.remove(e.id));
     }
   }
 
-  static NotificationCenterKind _kindForTab(NotificationCenterTab tab) {
-    return switch (tab) {
-      NotificationCenterTab.escalas => NotificationCenterKind.escala,
-      NotificationCenterTab.compromissos => NotificationCenterKind.compromisso,
-      NotificationCenterTab.audiencias => NotificationCenterKind.audiencia,
-      NotificationCenterTab.contas => NotificationCenterKind.financeiro,
-    };
+  Future<void> _ver(NotificationCenterEntry e) async {
+    final v = _visualDe(e);
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: context.appSurface,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  _Bolha(entry: e, visual: v, size: 48),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      e.title,
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                        color: ctx.appTextPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _Pill(texto: _quando(e), cor: v.cor),
+              if (e.body.trim().isNotEmpty && e.body.trim() != e.title.trim())
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(
+                    e.body,
+                    style: TextStyle(
+                      fontSize: 14.5,
+                      height: 1.4,
+                      color: ctx.appTextSecondary,
+                    ),
+                  ),
+                ),
+              if (e.linkLocalizacao.isNotEmpty || e.contatoWhatsApp.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: CompromissoContactChips(
+                    linkLocalizacao: e.linkLocalizacao,
+                    contatoWhatsApp: e.contatoWhatsApp,
+                  ),
+                ),
+              const SizedBox(height: 16),
+              Text(
+                'Este aviso sai sozinho da central 24 h depois do horário.',
+                style: TextStyle(fontSize: 12, color: ctx.appTextMuted),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
-  static List<NotificationCenterEntry> _filterEntries(
-    List<NotificationCenterEntry> all, {
-    required NotificationCenterTab tab,
-    required NotificationCenterStatusFilter status,
-  }) {
-    return all.where((e) {
-      final matchKind = tab == NotificationCenterTab.compromissos
-          ? (e.kind == NotificationCenterKind.compromisso ||
-              e.kind == NotificationCenterKind.audiencia)
-          : e.kind == _kindForTab(tab);
-      if (!matchKind) return false;
-      return switch (status) {
-        NotificationCenterStatusFilter.pendentes => e.isPending,
-        NotificationCenterStatusFilter.notificados => !e.isPending,
-        NotificationCenterStatusFilter.todos => true,
-      };
-    }).toList();
-  }
+  // ── Datas ────────────────────────────────────────────────────────────────
 
-  static int _countForTab(
-    List<NotificationCenterEntry> all,
-    NotificationCenterTab tab,
-  ) {
-    if (tab == NotificationCenterTab.compromissos) {
-      return all
-          .where((e) =>
-              e.kind == NotificationCenterKind.compromisso ||
-              e.kind == NotificationCenterKind.audiencia)
-          .length;
-    }
-    return all.where((e) => e.kind == _kindForTab(tab)).length;
-  }
+  static DateTime _dia(DateTime d) => DateTime(d.year, d.month, d.day);
 
-  static List<({DateTime day, List<NotificationCenterEntry> items})>
-      _groupByDay(List<NotificationCenterEntry> entries) {
-    final sorted = List<NotificationCenterEntry>.from(entries)
-      ..sort((a, b) {
-        final cmp = _sortKey(a).compareTo(_sortKey(b));
-        if (cmp != 0) return cmp;
-        return a.title.compareTo(b.title);
-      });
-
-    final groups = <({DateTime day, List<NotificationCenterEntry> items})>[];
-    DateTime? currentDay;
-    List<NotificationCenterEntry>? bucket;
-
-    for (final entry in sorted) {
-      final key = _sortKey(entry);
-      final day = DateTime(key.year, key.month, key.day);
-      if (currentDay == null ||
-          day.year != currentDay.year ||
-          day.month != currentDay.month ||
-          day.day != currentDay.day) {
-        if (bucket != null && currentDay != null) {
-          groups.add((day: currentDay, items: bucket));
-        }
-        currentDay = day;
-        bucket = [entry];
-      } else {
-        bucket!.add(entry);
+  static String _quando(NotificationCenterEntry e) {
+    final ref = e.eventAt ?? e.notifiedAt;
+    if (ref == null) return 'Sem data';
+    final agora = DateTime.now();
+    final hoje = _dia(agora);
+    final d = _dia(ref);
+    final temHora = ref.hour != 0 || ref.minute != 0;
+    final hora = temHora ? ' · ${DateFormat('HH:mm').format(ref)}' : '';
+    final diff = ref.difference(agora);
+    var relativo = '';
+    if (temHora) {
+      if (diff.inMinutes.abs() < 1) {
+        relativo = ' · agora';
+      } else if (diff.isNegative && diff.inMinutes > -60) {
+        relativo = ' · há ${-diff.inMinutes} min';
+      } else if (diff.isNegative && diff.inHours > -24) {
+        relativo = ' · há ${-diff.inHours} h';
+      } else if (!diff.isNegative && diff.inMinutes < 60) {
+        relativo = ' · em ${diff.inMinutes} min';
+      } else if (!diff.isNegative && diff.inHours < 12) {
+        relativo = ' · em ${diff.inHours} h';
       }
     }
-    if (bucket != null && currentDay != null) {
-      groups.add((day: currentDay, items: bucket));
+    if (d == hoje) return 'Hoje$hora$relativo';
+    if (d == hoje.add(const Duration(days: 1))) return 'Amanhã$hora$relativo';
+    if (d == hoje.subtract(const Duration(days: 1))) {
+      return 'Ontem$hora$relativo';
     }
-    return groups;
+    final semana = DateFormat('EEE, dd/MM', 'pt_BR').format(ref);
+    return '${semana[0].toUpperCase()}${semana.substring(1)}$hora';
   }
 
-  static DateTime _sortKey(NotificationCenterEntry e) =>
-      e.eventAt ?? e.notifiedAt ?? DateTime(2100);
+  static int _grupo(NotificationCenterEntry e) {
+    final ref = e.eventAt ?? e.notifiedAt;
+    if (ref == null) return 3;
+    final hoje = _dia(DateTime.now());
+    final d = _dia(ref);
+    if (d.isBefore(hoje)) return 0; // atrasados (ainda dentro das 24 h)
+    if (d == hoje) return 1;
+    if (d == hoje.add(const Duration(days: 1))) return 2;
+    return 3;
+  }
+
+  static const _titulosGrupo = ['Atrasados', 'Hoje', 'Amanhã', 'Próximos'];
+  static const _iconesGrupo = [
+    Icons.history_rounded,
+    Icons.today_rounded,
+    Icons.event_rounded,
+    Icons.date_range_rounded,
+  ];
+
+  // ── UI ───────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final title = _selectionMode
-        ? '${_selected.length} selecionada${_selected.length == 1 ? '' : 's'}'
-        : 'Central de notificações';
-
+    final dark = context.isDarkMode;
+    final uid = _uid;
     return Scaffold(
-      backgroundColor:
-          isDark ? context.appScaffold : const Color(0xFFF8FAFC),
+      backgroundColor: dark ? context.appScaffold : const Color(0xFFF4F6FB),
       appBar: AppBar(
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -278,717 +360,527 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
             ),
           ),
         ),
-        title: Text(
-          title,
-          style:
-              const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.2),
-        ),
         leading: IconButton(
           tooltip: 'Voltar',
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => Navigator.of(context).maybePop(),
-          style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
         ),
-        actions: [
-          if (_selectionMode)
-            IconButton(
-              tooltip: 'Limpar selecionadas',
-              icon: const Icon(Icons.delete_outline_rounded),
-              onPressed: _selected.isEmpty ? null : _dismissSelected,
+        title: const Text('Avisos',
+            style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.2)),
+      ),
+      body: uid.isEmpty
+          ? Center(
+              child: Text('Entre na sua conta para ver os avisos.',
+                  style: TextStyle(color: context.appTextMuted)),
             )
-          else
-            IconButton(
-              tooltip: 'Selecionar',
-              icon: const Icon(Icons.checklist_rounded),
-              onPressed: () => setState(() => _selectionMode = true),
-            ),
-          if (_selectionMode)
-            TextButton(
-              onPressed: _exitSelection,
-              child: const Text('Cancelar',
-                  style: TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.w700)),
-            ),
-        ],
-      ),
-      body: StreamBuilder<NotificationCenterSnapshot>(
-        stream: NotificationCenterService.watch(_uid),
-        initialData: NotificationCenterService.peek(_uid) ??
-            NotificationCenterSnapshot.empty,
-        builder: (context, snap) {
-          final hasCached = (snap.data?.entries.isNotEmpty ?? false);
-          // A escuta é compartilhada (broadcast): se já estava ativa e a
-          // central está vazia, não chega evento novo — o peek já vale como
-          // «carregado» (antes girava para sempre para quem não tinha avisos).
-          if (snap.connectionState == ConnectionState.waiting &&
-              !hasCached &&
-              NotificationCenterService.peek(_uid) == null) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final allEntries = snap.data?.entries ?? const [];
-          final tabCounts = kNotificationCenterVisibleTabs
-              .map((t) => _countForTab(allEntries, t))
-              .toList();
-          final activeTab =
-              kNotificationCenterVisibleTabs[_tabController.index];
-          final activePalette = _NotificationCenterTabPalette.of(activeTab);
+          : StreamBuilder<NotificationCenterSnapshot>(
+              stream: _streamFor(uid),
+              initialData: NotificationCenterService.peek(uid) ??
+                  NotificationCenterSnapshot.empty,
+              builder: (context, snap) {
+                final todos = (snap.data?.entries ?? const [])
+                    .where((e) => e.tipoVisivel && !e.expirado())
+                    .toList();
+                final carregando =
+                    snap.connectionState == ConnectionState.waiting &&
+                        todos.isEmpty &&
+                        NotificationCenterService.peek(uid) == null;
+                if (carregando) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final nFin = todos
+                    .where((e) => e.kind == NotificationCenterKind.financeiro)
+                    .length;
+                final nComp = todos
+                    .where((e) =>
+                        e.kind == NotificationCenterKind.compromisso ||
+                        e.kind == NotificationCenterKind.audiencia)
+                    .length;
+                final visiveis = todos.where(_passaFiltro).toList()
+                  ..sort((a, b) {
+                    final ra = a.eventAt ?? a.notifiedAt ?? DateTime(2100);
+                    final rb = b.eventAt ?? b.notifiedAt ?? DateTime(2100);
+                    return ra.compareTo(rb);
+                  });
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Info strip
-              Material(
-                color: isDark
-                    ? AppColors.primary.withValues(alpha: 0.12)
-                    : const Color(0xFFE8F4FD),
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.info_outline_rounded,
-                        size: 20,
-                        color: AppColors.primary.withValues(alpha: 0.85),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Ordem: data menor → maior. Compromissos somem no dia seguinte '
-                          '(banco e central). Notificados: ${AgendaAlertsArchivePolicy.daysUntilArchiveTab} dias após o envio.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            height: 1.35,
-                            fontWeight: FontWeight.w600,
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.7)
-                                : const Color(0xFF64748B),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              // Tab pills
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                child: _buildTabPills(tabCounts),
-              ),
-              // Status filter
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
-                child: _buildStatusFilter(activePalette),
-              ),
-              // Selection mode bar
-              if (_selectionMode)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-                  child: Row(
-                    children: [
-                      TextButton(
-                        onPressed: () {
-                          final tab = kNotificationCenterVisibleTabs[
-                              _tabController.index];
-                          final filtered = _filterEntries(
-                            allEntries,
-                            tab: tab,
-                            status: _statusFilter,
-                          );
-                          setState(() {
-                            _selected
-                              ..clear()
-                              ..addAll(filtered.map((e) => e.id));
-                          });
-                        },
-                        child: const Text('Marcar aba'),
-                      ),
-                      const Spacer(),
-                      FilledButton.icon(
-                        onPressed: _selected.isEmpty ? null : _dismissSelected,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.error,
-                        ),
-                        icon: const Icon(Icons.delete_sweep_rounded, size: 18),
-                        label: const Text('Limpar'),
-                      ),
-                    ],
-                  ),
-                ),
-              // Tab content
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: kNotificationCenterVisibleTabs.map((tab) {
-                    final filtered = _filterEntries(
-                      allEntries,
-                      tab: tab,
-                      status: _statusFilter,
-                    );
-                    if (filtered.isEmpty) {
-                      return _buildEmptyTab(tab);
-                    }
-                    final groups = _groupByDay(filtered);
-                    return RefreshIndicator(
-                      color: _NotificationCenterTabPalette.of(tab).accent,
-                      onRefresh: () async {
-                        NotificationCenterService.silentResyncAfterReconnect(
-                            _uid);
-                        await Future<void>.delayed(
-                            const Duration(milliseconds: 400));
-                      },
-                      child: ListView.builder(
-                        key: PageStorageKey<String>('nc_${tab.name}'),
-                        physics: const AlwaysScrollableScrollPhysics(
-                          parent: BouncingScrollPhysics(),
-                        ),
-                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
-                        itemCount: groups.length,
-                        itemBuilder: (context, gi) {
-                          final group = groups[gi];
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
-                                child: Text(
-                                  AgendaAlertsQueueService.formatDayHeader(
-                                      group.day),
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w900,
-                                    color: isDark
-                                        ? Colors.white.withValues(alpha: 0.9)
-                                        : const Color(0xFF334155),
-                                  ),
-                                ),
-                              ),
-                              ...group.items.asMap().entries.map(
-                                (mapEntry) {
-                                  final idx = mapEntry.key;
-                                  final entry = mapEntry.value;
-                                  return _AnimatedNotificationCard(
-                                    delay: Duration(
-                                        milliseconds: (idx * 40).clamp(0, 300)),
-                                    child: Dismissible(
-                                      key: ValueKey('nc_dismiss_${entry.id}'),
-                                      direction: DismissDirection.endToStart,
-                                      background: Container(
-                                        alignment: Alignment.centerRight,
-                                        padding:
-                                            const EdgeInsets.only(right: 20),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFDC2626)
-                                              .withValues(alpha: 0.9),
-                                          borderRadius:
-                                              BorderRadius.circular(16),
-                                        ),
-                                        child: const Icon(
-                                            Icons.delete_outline_rounded,
-                                            color: Colors.white,
-                                            size: 22),
-                                      ),
-                                      onDismissed: (_) => _dismissOne(entry.id),
-                                      child: Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 10),
-                                        child: _NotificationCard(
-                                          entry: entry,
-                                          selected:
-                                              _selected.contains(entry.id),
-                                          selectionMode: _selectionMode,
-                                          onTap: () {
-                                            if (_selectionMode) {
-                                              _toggleSelection(entry.id);
-                                            }
-                                          },
-                                          onLongPress: () =>
-                                              _enterSelection(entry.id),
-                                          onDismiss: () =>
-                                              _dismissOne(entry.id),
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
+                final grupos =
+                    List.generate(4, (_) => <NotificationCenterEntry>[]);
+                for (final e in visiveis) {
+                  grupos[_grupo(e)].add(e);
+                }
 
-  Widget _buildTabPills(List<int> tabCounts) {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: context.isDarkMode ? context.appSurface : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: context.appChipIdleBorder),
-        boxShadow: [
-          BoxShadow(
-              color: const Color(0xFF0F172A).withValues(alpha: 0.04),
-              blurRadius: 10,
-              offset: const Offset(0, 3)),
-        ],
-      ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: List.generate(kNotificationCenterVisibleTabs.length, (i) {
-            final tab = kNotificationCenterVisibleTabs[i];
-            final palette = _NotificationCenterTabPalette.of(tab);
-            final selected = _tabController.index == i;
-            return Padding(
-              padding: EdgeInsets.only(
-                right: i == kNotificationCenterVisibleTabs.length - 1 ? 0 : 6,
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () {
-                    _tabController.animateTo(i);
-                    setState(() {});
+                return RefreshIndicator(
+                  onRefresh: () async {
+                    NotificationCenterService.silentResyncAfterReconnect(uid);
+                    await Future<void>.delayed(
+                        const Duration(milliseconds: 600));
                   },
-                  borderRadius: BorderRadius.circular(12),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      gradient: selected
-                          ? LinearGradient(colors: palette.gradient)
-                          : null,
-                      color: selected ? null : context.appInputFill,
-                      boxShadow: selected
-                          ? [
-                              BoxShadow(
-                                color: palette.accent.withValues(alpha: 0.25),
-                                blurRadius: 10,
-                                offset: const Offset(0, 3),
-                              ),
-                            ]
-                          : null,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          palette.icon,
-                          size: 16,
-                          color: selected ? Colors.white : palette.accent,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          '${palette.shortLabel} (${tabCounts[i]})',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w900,
-                            color: selected
-                                ? Colors.white
-                                : (context.isDarkMode
-                                    ? context.appChipIdleLabel
-                                    : const Color(0xFF334155)),
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                    children: [
+                      _resumo(todos.length, nFin, nComp),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Somem sozinhos 24 h depois do horário.',
+                              style: TextStyle(
+                                  fontSize: 12, color: context.appTextMuted),
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
+                          TextButton.icon(
+                            onPressed: visiveis.isEmpty
+                                ? null
+                                : () => _marcarTodosComoLidos(visiveis),
+                            icon: const Icon(Icons.done_all_rounded, size: 18),
+                            label: const Text('Marcar todos como lidos'),
+                          ),
+                        ],
+                      ),
+                      if (visiveis.isEmpty) _vazio(),
+                      for (var g = 0; g < 4; g++)
+                        if (grupos[g].isNotEmpty) ...[
+                          _cabecalhoGrupo(g, grupos[g].length),
+                          for (final e in grupos[g]) _card(e),
+                        ],
+                    ],
                   ),
-                ),
-              ),
-            );
-          }),
-        ),
-      ),
+                );
+              },
+            ),
     );
   }
 
-  Widget _buildStatusFilter(_NotificationCenterTabPalette activePalette) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: NotificationCenterStatusFilter.values.map((f) {
-        final selected = _statusFilter == f;
-        final label = switch (f) {
-          NotificationCenterStatusFilter.todos => 'Todos',
-          NotificationCenterStatusFilter.pendentes => 'Pendentes',
-          NotificationCenterStatusFilter.notificados => 'Notificados',
-        };
-        return Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () => setState(() => _statusFilter = f),
-            borderRadius: BorderRadius.circular(14),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                gradient: selected
-                    ? LinearGradient(colors: activePalette.gradient)
-                    : null,
-                color: selected
-                    ? null
-                    : (context.isDarkMode ? context.appSurface : Colors.white),
-                border: Border.all(
-                  color: selected
-                      ? Colors.transparent
-                      : activePalette.accent.withValues(alpha: 0.22),
-                ),
-                boxShadow: selected
-                    ? [
-                        BoxShadow(
-                          color: activePalette.accent.withValues(alpha: 0.2),
-                          blurRadius: 8,
-                          offset: const Offset(0, 3),
-                        ),
-                      ]
-                    : null,
+  Widget _resumo(int total, int nFin, int nComp) {
+    Widget card(_Filtro f, String rotulo, int n, IconData ic, List<Color> g) {
+      final ativo = _filtro == f;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => setState(() => _filtro = f),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              gradient: ativo
+                  ? LinearGradient(
+                      colors: g,
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight)
+                  : null,
+              color: ativo
+                  ? null
+                  : (context.isDarkMode ? context.appSurface : Colors.white),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color:
+                    ativo ? Colors.transparent : g.first.withValues(alpha: 0.3),
               ),
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w800,
-                  color: selected ? Colors.white : context.appTextMuted,
+              boxShadow: ativo
+                  ? [
+                      BoxShadow(
+                        color: g.first.withValues(alpha: 0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(ic,
+                    size: 20,
+                    color: ativo
+                        ? Colors.white
+                        : (context.isDarkMode
+                            ? Color.lerp(g.first, Colors.white, 0.3)
+                            : g.first)),
+                const SizedBox(height: 6),
+                Text(
+                  '$n',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    color: ativo ? Colors.white : context.appTextPrimary,
+                  ),
                 ),
-              ),
+                Text(
+                  rotulo,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: ativo
+                        ? Colors.white.withValues(alpha: 0.9)
+                        : context.appTextSecondary,
+                  ),
+                ),
+              ],
             ),
           ),
-        );
-      }).toList(),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        card(_Filtro.todos, 'Todos', total, Icons.notifications_active_rounded,
+            const [Color(0xFF0B1B4B), Color(0xFF334155)]),
+        const SizedBox(width: 10),
+        card(_Filtro.financeiro, 'Financeiro', nFin,
+            Icons.account_balance_wallet_rounded,
+            const [Color(0xFFDC2626), Color(0xFFF97316)]),
+        const SizedBox(width: 10),
+        card(_Filtro.compromissos, 'Compromissos', nComp, Icons.event_rounded,
+            const [Color(0xFF2563EB), Color(0xFF6366F1)]),
+      ],
     );
   }
 
-  Widget _buildEmptyTab(NotificationCenterTab tab) {
-    final palette = _NotificationCenterTabPalette.of(tab);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
+  Widget _cabecalhoGrupo(int g, int n) {
+    final cor = g == 0 ? const Color(0xFFDC2626) : context.appTextPrimary;
+    return Padding(
+      padding: const EdgeInsets.only(top: 14, bottom: 8),
+      child: Row(
+        children: [
+          Icon(_iconesGrupo[g], size: 18, color: cor),
+          const SizedBox(width: 6),
+          Text(
+            _titulosGrupo[g],
+            style: TextStyle(
+                fontSize: 14.5, fontWeight: FontWeight.w900, color: cor),
+          ),
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: cor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text('$n',
+                style: TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.w900, color: cor)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _vazio() => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 56),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              palette.icon,
-              size: 52,
-              color: palette.accent.withValues(alpha: 0.45),
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: const Color(0xFF059669).withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.notifications_none_rounded,
+                  size: 40, color: Color(0xFF059669)),
             ),
             const SizedBox(height: 14),
-            Text(
-              'Nenhum aviso de ${palette.shortLabel.toLowerCase()}',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: context.appTextPrimary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Itens futuros aparecem aqui por ordem de data.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: context.appTextMuted),
+            Text('Tudo em dia!',
+                style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                    color: context.appTextPrimary)),
+            const SizedBox(height: 4),
+            Text('Nenhum aviso por aqui.',
+                style: TextStyle(color: context.appTextMuted)),
+          ],
+        ),
+      );
+
+  Widget _card(NotificationCenterEntry e) {
+    final v = _visualDe(e);
+    final dark = context.isDarkMode;
+    final fin = e.kind == NotificationCenterKind.financeiro;
+    final comp = e.kind == NotificationCenterKind.compromisso ||
+        e.kind == NotificationCenterKind.audiencia;
+    final ocupado = _ocupados.contains(e.id);
+    final atrasado = _grupo(e) == 0;
+    final corpo = e.body.trim();
+
+    return Dismissible(
+      key: ValueKey('nc-${e.id}'),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.only(right: 22),
+        decoration: BoxDecoration(
+          color: const Color(0xFF64748B),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: const Icon(Icons.done_rounded, color: Colors.white),
+      ),
+      onDismissed: (_) => _dispensar(e),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        decoration: BoxDecoration(
+          color: dark ? context.appSurface : Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border:
+              Border.all(color: v.cor.withValues(alpha: dark ? 0.45 : 0.25)),
+          boxShadow: [
+            BoxShadow(
+              color:
+                  const Color(0xFF0F172A).withValues(alpha: dark ? 0.2 : 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _NotificationCard extends StatelessWidget {
-  const _NotificationCard({
-    required this.entry,
-    required this.selected,
-    required this.selectionMode,
-    required this.onTap,
-    required this.onLongPress,
-    required this.onDismiss,
-  });
-
-  final NotificationCenterEntry entry;
-  final bool selected;
-  final bool selectionMode;
-  final VoidCallback onTap;
-  final VoidCallback onLongPress;
-  final VoidCallback onDismiss;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = _themeFor(entry.kind);
-    final timeLabel = _timeLabel(entry);
-    final statusLabel = entry.isPending ? 'Pendente' : 'Notificado';
-    final statusColor =
-        entry.isPending ? const Color(0xFFF59E0B) : const Color(0xFF16A34A);
-
-    return Material(
-      color: selected
-          ? theme.color.withValues(alpha: 0.08)
-          : (context.isDarkMode ? context.appSurface : Colors.white),
-      elevation: 0,
-      shadowColor: Colors.black26,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onTap,
-        onLongPress: onLongPress,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color:
-                  selected ? theme.color : theme.color.withValues(alpha: 0.28),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF0F172A).withValues(alpha: 0.04),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (selectionMode)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8, top: 2),
-                  child: Icon(
-                    selected
-                        ? Icons.check_circle_rounded
-                        : Icons.radio_button_unchecked_rounded,
-                    color: selected ? theme.color : const Color(0xFF94A3B8),
-                    size: 22,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  width: 5,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [v.cor, v.cor2],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
                   ),
                 ),
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: theme.color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(theme.icon, color: theme.color, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            entry.title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w800,
-                              color: context.appTextPrimary,
+                Expanded(
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => _ver(e),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _Bolha(entry: e, visual: v, size: 44),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        e.title,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w900,
+                                          color: context.appTextPrimary,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Wrap(
+                                        spacing: 6,
+                                        runSpacing: 4,
+                                        children: [
+                                          _Pill(
+                                            texto: _quando(e),
+                                            cor: atrasado
+                                                ? const Color(0xFFDC2626)
+                                                : v.cor,
+                                          ),
+                                          _Pill(texto: v.rotulo, cor: v.cor2),
+                                        ],
+                                      ),
+                                      if (!fin &&
+                                          corpo.isNotEmpty &&
+                                          corpo != e.title.trim())
+                                        Padding(
+                                          padding:
+                                              const EdgeInsets.only(top: 6),
+                                          child: Text(
+                                            corpo,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              height: 1.3,
+                                              color: context.appTextSecondary,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                if (fin && corpo.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(left: 8),
+                                    child: Text(
+                                      corpo,
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w900,
+                                        color: dark
+                                            ? Color.lerp(
+                                                v.cor, Colors.white, 0.3)
+                                            : v.cor,
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
-                          ),
-                        ),
-                        if (!selectionMode)
-                          IconButton(
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(
-                              minWidth: 44,
-                              minHeight: 44,
-                            ),
-                            tooltip: 'Remover da central',
-                            icon: Icon(
-                              Icons.close_rounded,
-                              size: 18,
-                              color: const Color(0xFF94A3B8),
-                            ),
-                            onPressed: onDismiss,
-                          ),
-                      ],
-                    ),
-                    if (entry.body.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        entry.body,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          color: context.appTextMuted,
+                            const SizedBox(height: 8),
+                            if (ocupado)
+                              const LinearProgressIndicator(minHeight: 2)
+                            else
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 4,
+                                children: [
+                                  _Acao(
+                                    icone: Icons.visibility_rounded,
+                                    rotulo: 'Ver',
+                                    cor: context.appTextSecondary,
+                                    onTap: () => _ver(e),
+                                  ),
+                                  if (fin && e.sourceId.isNotEmpty)
+                                    _Acao(
+                                      icone: e.financeType == 'income'
+                                          ? Icons.call_received_rounded
+                                          : Icons.payments_rounded,
+                                      rotulo: e.financeType == 'income'
+                                          ? 'Receber'
+                                          : 'Pagar',
+                                      cor: v.cor,
+                                      destaque: true,
+                                      onTap: () => _pagarOuReceber(e),
+                                    ),
+                                  if (comp && e.sourceType == 'reminder')
+                                    _Acao(
+                                      icone: Icons.check_circle_rounded,
+                                      rotulo: 'Concluir',
+                                      cor: const Color(0xFF059669),
+                                      destaque: true,
+                                      onTap: () => _concluir(e),
+                                    ),
+                                  _Acao(
+                                    icone: Icons.close_rounded,
+                                    rotulo: 'Dispensar',
+                                    cor: context.appTextMuted,
+                                    onTap: () => _dispensar(e),
+                                  ),
+                                ],
+                              ),
+                          ],
                         ),
                       ),
-                    ],
-                    if (entry.kind == NotificationCenterKind.compromisso &&
-                        (entry.linkLocalizacao.isNotEmpty ||
-                            entry.contatoWhatsApp.isNotEmpty))
-                      CompromissoContactChips(
-                        linkLocalizacao: entry.linkLocalizacao,
-                        contatoWhatsApp: entry.contatoWhatsApp,
-                        compact: true,
-                      ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        _Chip(label: theme.label, color: theme.color),
-                        _Chip(label: statusLabel, color: statusColor),
-                        if (timeLabel.isNotEmpty)
-                          Text(
-                            timeLabel,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF94A3B8),
-                            ),
-                          ),
-                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
-
-  static _CardTheme _themeFor(NotificationCenterKind kind) {
-    return switch (kind) {
-      NotificationCenterKind.audiencia => _CardTheme(
-          label: 'Compromisso',
-          icon: Icons.event_rounded,
-          color: const Color(0xFF2563EB),
-        ),
-      NotificationCenterKind.compromisso => _CardTheme(
-          label: 'Compromisso',
-          icon: Icons.event_rounded,
-          color: const Color(0xFF2563EB),
-        ),
-      NotificationCenterKind.escala => _CardTheme(
-          label: 'Escala',
-          icon: Icons.calendar_month_rounded,
-          color: const Color(0xFF059669),
-        ),
-      NotificationCenterKind.financeiro => _CardTheme(
-          label: 'Conta a pagar',
-          icon: Icons.payments_outlined,
-          color: const Color(0xFFDC2626),
-        ),
-      NotificationCenterKind.outros => _CardTheme(
-          label: 'Aviso',
-          icon: Icons.notifications_rounded,
-          color: AppColors.primary,
-        ),
-    };
-  }
-
-  static String _timeLabel(NotificationCenterEntry entry) {
-    final fmt = DateFormat('dd/MM · HH:mm', 'pt_BR');
-    if (entry.eventAt != null) {
-      return fmt.format(entry.eventAt!);
-    }
-    if (entry.notifiedAt != null) {
-      return 'Enviado ${fmt.format(entry.notifiedAt!)}';
-    }
-    return '';
-  }
 }
 
-class _CardTheme {
-  const _CardTheme({
-    required this.label,
-    required this.icon,
-    required this.color,
-  });
-
-  final String label;
-  final IconData icon;
-  final Color color;
-}
-
-class _Chip extends StatelessWidget {
-  const _Chip({required this.label, required this.color});
-
-  final String label;
-  final Color color;
+class _Bolha extends StatelessWidget {
+  const _Bolha({required this.entry, required this.visual, required this.size});
+  final NotificationCenterEntry entry;
+  final _Visual visual;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
+    final comp = entry.kind == NotificationCenterKind.compromisso ||
+        entry.kind == NotificationCenterKind.audiencia;
+    final emoji = comp ? suggestCommitmentEmoji(entry.title) : null;
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            visual.cor.withValues(alpha: 0.18),
+            visual.cor2.withValues(alpha: 0.10),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(size * 0.32),
+      ),
+      child: emoji != null
+          ? Text(emoji, style: TextStyle(fontSize: size * 0.5, height: 1))
+          : Icon(visual.icone,
+              color: context.isDarkMode
+                  ? Color.lerp(visual.cor, Colors.white, 0.3)
+                  : visual.cor,
+              size: size * 0.5),
+    );
+  }
+}
+
+class _Pill extends StatelessWidget {
+  const _Pill({required this.texto, required this.cor});
+  final String texto;
+  final Color cor;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = context.isDarkMode;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: cor.withValues(alpha: dark ? 0.22 : 0.10),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
-        label,
+        texto,
         style: TextStyle(
-          fontSize: 10.5,
-          fontWeight: FontWeight.w700,
-          color: color,
+          fontSize: 11.5,
+          fontWeight: FontWeight.w800,
+          color: dark ? Color.lerp(cor, Colors.white, 0.35) : cor,
         ),
       ),
     );
   }
 }
 
-/// Animação de entrada slide+fade para os cartões da central.
-class _AnimatedNotificationCard extends StatefulWidget {
-  const _AnimatedNotificationCard({
-    required this.child,
-    this.delay = Duration.zero,
+class _Acao extends StatelessWidget {
+  const _Acao({
+    required this.icone,
+    required this.rotulo,
+    required this.cor,
+    required this.onTap,
+    this.destaque = false,
   });
-
-  final Widget child;
-  final Duration delay;
-
-  @override
-  State<_AnimatedNotificationCard> createState() =>
-      _AnimatedNotificationCardState();
-}
-
-class _AnimatedNotificationCardState extends State<_AnimatedNotificationCard> {
-  bool _visible = false;
-
-  @override
-  void initState() {
-    super.initState();
-    Future<void>.delayed(widget.delay, () {
-      if (mounted) setState(() => _visible = true);
-    });
-  }
+  final IconData icone;
+  final String rotulo;
+  final Color cor;
+  final VoidCallback onTap;
+  final bool destaque;
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedSlide(
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOutCubic,
-      offset: _visible ? Offset.zero : const Offset(0, 0.08),
-      child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 280),
-        curve: Curves.easeOut,
-        opacity: _visible ? 1.0 : 0.0,
-        child: widget.child,
+    return TextButton.icon(
+      onPressed: onTap,
+      style: TextButton.styleFrom(
+        foregroundColor: destaque ? Colors.white : cor,
+        backgroundColor: destaque ? cor : cor.withValues(alpha: 0.08),
+        minimumSize: const Size(0, 36),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        textStyle:
+            const TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5),
       ),
+      icon: Icon(icone, size: 16),
+      label: Text(rotulo),
     );
   }
 }

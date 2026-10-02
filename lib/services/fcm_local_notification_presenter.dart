@@ -65,6 +65,35 @@ class FcmLocalNotificationPresenter {
     _canaisProntos = true;
   }
 
+  /// Android: tira da bandeja os avisos desenhados pelo app há mais de 24 h
+  /// (mesma regra da central). Os que o próprio sistema mostrou (push com
+  /// `notification`) não trazem data — ficam até o usuário limpar.
+  static Future<int> limparBandejaAntiga() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return 0;
+    if (!localNotificationsPluginReady) return 0;
+    var n = 0;
+    try {
+      final ativos = await localNotificationsPlugin.getActiveNotifications();
+      final corte = DateTime.now().subtract(const Duration(hours: 24));
+      for (final a in ativos) {
+        final id = a.id;
+        final raw = a.payload;
+        if (id == null || raw == null || raw.isEmpty) continue;
+        DateTime? quando;
+        try {
+          final m = jsonDecode(raw);
+          if (m is Map) {
+            quando = DateTime.tryParse((m['mostradoEm'] ?? '').toString());
+          }
+        } catch (_) {}
+        if (quando == null || quando.isAfter(corte)) continue;
+        await localNotificationsPlugin.cancel(id: id, tag: a.tag);
+        n++;
+      }
+    } catch (_) {}
+    return n;
+  }
+
   /// Mostra alerta nativo a partir de [RemoteMessage] (data e/ou notification).
   static Future<void> showRemoteMessage(RemoteMessage message) async {
     if (!_isNativeMobile) return;
@@ -90,6 +119,8 @@ class FcmLocalNotificationPresenter {
       ...d.map((k, v) => MapEntry(k, v.toString())),
       'click_action': 'FLUTTER_NOTIFICATION_CLICK',
       'channelKind': channelKind,
+      // Para tirar da bandeja o que ficou mais de 24 h ([limparBandejaAntiga]).
+      'mostradoEm': DateTime.now().toIso8601String(),
     };
     final link = (d['url'] ?? d['link'] ?? '').toString().trim();
     if (link.isNotEmpty) payloadMap['url'] = link;

@@ -35,6 +35,7 @@ class _SharedWatch {
 
   List<AgendaAlertQueueItem> _agenda = const [];
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _finance = const [];
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _financeIncome = const [];
   List<NotificationCenterEntry> _pushInbox = const [];
   Set<String> _dismissed = {};
 
@@ -69,6 +70,18 @@ class _SharedWatch {
       }, onError: (_) {}),
     );
 
+    // Contas a receber também entram (ação rápida «Receber»).
+    _subs.add(
+      financeTransactionsPendingSnapshots(
+        uid: uid,
+        type: 'income',
+        limit: NotificationCenterService._financeLimit,
+      ).listen((snap) {
+        _financeIncome = snap.docs;
+        _scheduleRebuild();
+      }, onError: (_) {}),
+    );
+
     unawaited(_primeFromLocalCache());
     _scheduleRebuild();
   }
@@ -83,7 +96,7 @@ class _SharedWatch {
     }
     final peek = NotificationCenterService._compose(
       _agenda,
-      _finance,
+      [..._finance, ..._financeIncome],
       _pushInbox,
       _dismissed,
     );
@@ -132,7 +145,7 @@ class _SharedWatch {
     if (_controller.isClosed) return;
     final snap = NotificationCenterService._compose(
       _agenda,
-      _finance,
+      [..._finance, ..._financeIncome],
       _pushInbox,
       _dismissed,
     );
@@ -225,7 +238,11 @@ class NotificationCenterService {
       }
     }
 
-    final entries = map.values.toList()
+    // Só Financeiro e Compromissos (o app não tem Plantões/Audiências) e
+    // nada com evento há mais de 24 h — some sozinho da central e do sino.
+    final entries = map.values
+        .where((e) => e.tipoVisivel && !e.expirado(now))
+        .toList()
       ..sort((a, b) {
         final aAt = a.eventAt ?? a.notifiedAt ?? DateTime(2100);
         final bAt = b.eventAt ?? b.notifiedAt ?? DateTime(2100);

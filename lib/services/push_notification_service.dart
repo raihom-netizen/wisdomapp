@@ -260,6 +260,8 @@ class PushNotificationService {
       if (_isNativeMobile()) {
         // Canais Android + permissão local antes do token FCM.
         await ScaleNotificationsService().init();
+        // Bandeja: some com avisos desenhados pelo app há mais de 24 h.
+        unawaited(FcmLocalNotificationPresenter.limparBandejaAntiga());
         if (defaultTargetPlatform == TargetPlatform.iOS) {
           await _fcm.setForegroundNotificationPresentationOptions(
             alert: true,

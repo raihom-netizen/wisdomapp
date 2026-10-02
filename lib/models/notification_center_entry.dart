@@ -34,6 +34,9 @@ class NotificationCenterEntry {
     this.leadMin,
     this.linkLocalizacao = '',
     this.contatoWhatsApp = '',
+    this.sourceType = '',
+    this.sourceId = '',
+    this.financeType = '',
   });
 
   /// Chave estável para dismiss local (`agenda:…`, `finance:…`, `push:…`).
@@ -48,6 +51,40 @@ class NotificationCenterEntry {
   final int? leadMin;
   final String linkLocalizacao;
   final String contatoWhatsApp;
+
+  /// Origem na fila (`reminder`, `transaction`…) e id do documento de origem
+  /// — usados pelas ações rápidas (Concluir / Pagar).
+  final String sourceType;
+  final String sourceId;
+
+  /// `expense` ou `income` (só financeiro).
+  final String financeType;
+
+  /// Aviso de financeiro/compromisso some da central 24 h após o evento.
+  static const Duration expiraAposEvento = Duration(hours: 24);
+
+  /// Data que vale para expirar: o evento; sem evento, quando foi notificado.
+  /// Data só (00:00, ex.: vencimento) vale até o fim do dia.
+  DateTime? get referenciaExpiracao {
+    final ref = eventAt ?? notifiedAt;
+    if (ref == null) return null;
+    if (ref.hour == 0 && ref.minute == 0 && ref.second == 0) {
+      return DateTime(ref.year, ref.month, ref.day, 23, 59, 59);
+    }
+    return ref;
+  }
+
+  bool expirado([DateTime? agora]) {
+    final ref = referenciaExpiracao;
+    if (ref == null) return false;
+    return (agora ?? DateTime.now()).difference(ref) > expiraAposEvento;
+  }
+
+  /// Tipos que existem no WisdomApp (Financeiro e Compromissos particulares).
+  bool get tipoVisivel =>
+      kind == NotificationCenterKind.financeiro ||
+      kind == NotificationCenterKind.compromisso ||
+      kind == NotificationCenterKind.outros;
 
   static NotificationCenterKind kindFromChannel(String? raw) {
     switch ((raw ?? '').toLowerCase().trim()) {
@@ -80,6 +117,8 @@ class NotificationCenterEntry {
         leadMin: item.leadMin,
         linkLocalizacao: item.linkLocalizacao,
         contatoWhatsApp: item.contatoWhatsApp,
+        sourceType: item.sourceType,
+        sourceId: item.sourceId,
       );
     }
     if (!item.isSent) return null;
@@ -97,6 +136,8 @@ class NotificationCenterEntry {
       leadMin: item.leadMin,
       linkLocalizacao: item.linkLocalizacao,
       contatoWhatsApp: item.contatoWhatsApp,
+      sourceType: item.sourceType,
+      sourceId: item.sourceId,
     );
   }
 
@@ -107,8 +148,10 @@ class NotificationCenterEntry {
     final status = (d['status'] ?? '').toString();
     if (status != 'pending') return null;
     final type = (d['type'] ?? 'expense').toString();
-    if (type != 'expense') return null;
-    final desc = (d['description'] ?? d['title'] ?? 'Conta a pagar').toString();
+    if (type != 'expense' && type != 'income') return null;
+    final receita = type == 'income';
+    final padrao = receita ? 'Conta a receber' : 'Conta a pagar';
+    final desc = (d['description'] ?? d['title'] ?? padrao).toString();
     final amount = d['amount'];
     String amountStr = '';
     if (amount is num) {
@@ -118,16 +161,21 @@ class NotificationCenterEntry {
     final dateTs = d['date'];
     DateTime? due;
     if (dateTs is Timestamp) due = dateTs.toDate();
-    final body = amountStr.isEmpty ? 'Pendente de pagamento' : amountStr;
+    final body = amountStr.isEmpty
+        ? (receita ? 'Pendente de recebimento' : 'Pendente de pagamento')
+        : amountStr;
     return NotificationCenterEntry(
       id: 'finance:${doc.id}',
       kind: NotificationCenterKind.financeiro,
       source: NotificationCenterSource.financePending,
-      title: desc.trim().isEmpty ? 'Conta a pagar' : desc.trim(),
+      title: desc.trim().isEmpty ? padrao : desc.trim(),
       body: body,
       eventAt: due,
       notifiedAt: null,
       isPending: true,
+      sourceType: 'transaction',
+      sourceId: doc.id,
+      financeType: type,
     );
   }
 

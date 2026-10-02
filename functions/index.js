@@ -27,6 +27,7 @@ const agendaDelivery = require("./agenda_delivery_prefs");
 const agendaSoneca = require("./agenda_soneca");
 const agendaDespertador = require("./agenda_despertador");
 const agendaDespertarItem = require("./agenda_despertar_item");
+const agendaAvisosExpirados = require("./agenda_avisos_expirados");
 const agendaPeriodSnapshot = require("./agendaPeriodSnapshot");
 const googleCalendarOAuth = require("./googleCalendarOAuth");
 // Permissões do Painel Admin (02/10/2026): master = só e-mail de dono
@@ -2909,6 +2910,8 @@ exports.ctFinancePeriodTotals = onCall(
 );
 
 exports.ctAgendaRemindersForRange = agendaPeriodSnapshot.ctAgendaRemindersForRange;
+/** Avisos da agenda com evento há mais de 24 h saem sozinhos (só o aviso). */
+exports.ctExpirarAvisosAgenda = agendaAvisosExpirados.ctExpirarAvisosAgenda;
 
 exports.ctGoogleCalendarExchangeCode = googleCalendarOAuth.ctGoogleCalendarExchangeCode;
 exports.ctGoogleCalendarRefreshAccessToken =
