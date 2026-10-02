@@ -516,9 +516,11 @@ class DelegateAccessService {
     try {
       final authEmail =
           FirebaseAuth.instance.currentUser?.email?.trim().toLowerCase() ?? '';
+      // Sem 'plan': é campo protegido do perfil (só admin/servidor muda —
+      // firestore.rules camposProtegidosPerfil); com ele a gravação inteira
+      // era recusada.
       final patch = <String, dynamic>{
         'accountType': 'delegate',
-        'plan': 'delegate',
         'linkedPrincipalUid': principalUid,
         'updatedAt': FieldValue.serverTimestamp(),
       };

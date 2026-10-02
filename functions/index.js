@@ -1758,13 +1758,20 @@ function decodeAdminFirestoreValue(v) {
   return v;
 }
 
-/** Admin/gestor/master — conteúdo público (cursos/dicas). */
-async function requireCourseContentEditor(uid) {
+/**
+ * Admin/gestor/master — conteúdo público (cursos/dicas).
+ * `editor_conteudo` (02/10/2026: só vídeos dos Cursos + Dicas financeiras)
+ * entra apenas quando `aceitaEditorConteudo` — gravar/excluir vídeos. Os
+ * textos do módulo Cursos (ctAdminSaveWisdomCoursesModuleConfig) continuam
+ * só admin/master/gestor.
+ */
+async function requireCourseContentEditor(uid, { aceitaEditorConteudo = false } = {}) {
   const userSnap = await admin.firestore().doc(`users/${uid}`).get();
   const data = userSnap.data() || {};
   const role = (data.role || "").toString().toLowerCase();
   const email = (reqEmail(data) || "").toLowerCase();
   if (role === "admin" || role === "master" || role === "gestor") return;
+  if (aceitaEditorConteudo && role === "editor_conteudo") return;
   if (email === "raihom@gmail.com") return;
   throw new functions.https.HttpsError(
     "permission-denied",
@@ -1781,7 +1788,7 @@ exports.ctAdminUpsertCourseVideo = onCall(async (req) => {
   if (!req.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
   }
-  await requireCourseContentEditor(req.auth.uid);
+  await requireCourseContentEditor(req.auth.uid, { aceitaEditorConteudo: true });
 
   const docId = (req.data?.docId || "").toString().trim();
   const create = req.data?.create === true;
@@ -1814,7 +1821,7 @@ exports.ctAdminDeleteCourseVideos = onCall(async (req) => {
   if (!req.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
   }
-  await requireCourseContentEditor(req.auth.uid);
+  await requireCourseContentEditor(req.auth.uid, { aceitaEditorConteudo: true });
 
   const ids = Array.isArray(req.data?.docIds) ? req.data.docIds : [];
   const docIds = ids.map((x) => (x || "").toString().trim()).filter(Boolean);
@@ -10123,6 +10130,9 @@ exports.financialTipsInsightPushScheduled = financialTipsInsightPushScheduled;
 const { courseVideosExpiryCleanupScheduled } = require("./courseVideosExpiryCleanup");
 exports.courseVideosExpiryCleanupScheduled = courseVideosExpiryCleanupScheduled;
 
+// Painel admin «Uso dos módulos» (porte do Controle Total, 02/10/2026).
+exports.ctAdminModulosUso = require("./admin_modulos_uso").ctAdminModulosUso;
+
 const { generateFinancialTipWithAI } = require("./generateFinancialTipAI");
 exports.ctGenerateFinancialTipWithAI = onCall(
   { region: "us-central1", memory: "256MiB" },
@@ -10134,7 +10144,8 @@ exports.ctGenerateFinancialTipWithAI = onCall(
     const userSnap = await admin.firestore().doc(`users/${uid}`).get();
     const role = ((userSnap.data() || {}).role || "").toString();
     const email = (req.auth.token?.email || "").toString();
-    if (role !== "admin" && email !== "raihom@gmail.com") {
+    // editor_conteudo (só Cursos + Dicas) também cria dicas com a IA.
+    if (role !== "admin" && role !== "editor_conteudo" && email !== "raihom@gmail.com") {
       throw new functions.https.HttpsError("permission-denied", "Somente admin.");
     }
     const data = req.data && typeof req.data === "object" ? req.data : {};

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 import '../constants/team_role_config.dart';
 import '../theme/app_colors.dart';
@@ -40,10 +41,23 @@ class _CreateAdminUserScreenState extends State<CreateAdminUserScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
+      // Cria a conta numa instância SECUNDÁRIA do Firebase: o admin continua
+      // logado e é ele quem grava o perfil com o papel (role/adminLevel são
+      // campos protegidos — a conta nova não pode gravá-los no próprio perfil).
+      final secundario = await Firebase.initializeApp(
+        name: 'criarMembro_${DateTime.now().millisecondsSinceEpoch}',
+        options: Firebase.app().options,
       );
+      final UserCredential userCredential;
+      try {
+        userCredential = await FirebaseAuth.instanceFor(app: secundario)
+            .createUserWithEmailAndPassword(
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim(),
+        );
+      } finally {
+        await secundario.delete();
+      }
 
       final payload = <String, dynamic>{
         'name': _nameController.text.trim(),

@@ -46,6 +46,16 @@ service firebase.storage {
 
 
 
+    // Editor de conteudo (role editor_conteudo, 02/10/2026): so envia/apaga
+    // MP4 e capas dos Cursos. Nao entra em canEditPublicContent (pasta /admin).
+    function isContentEditor() {
+
+      return isSignedIn() && userDoc().role == 'editor_conteudo';
+
+    }
+
+
+
     function isSystemManager() {
 
       return isSignedIn() && request.auth.token.email == 'raihom@gmail.com';
@@ -262,7 +272,7 @@ service firebase.storage {
 
       allow read: if isSignedIn();
 
-      allow write: if canEditPublicContent() && underVideoLimit();
+      allow write: if (canEditPublicContent() || isContentEditor()) && underVideoLimit();
 
     }
 

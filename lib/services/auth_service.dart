@@ -78,6 +78,43 @@ class AuthService {
     }
   }
 
+  /// Campos do perfil que só admin/servidor alteram (espelho de
+  /// `camposProtegidosPerfil()` no firestore.rules). O app só os grava ao
+  /// CRIAR o perfil; num doc que já existe, gravá-los derruba a gravação
+  /// inteira com permission-denied.
+  static const Set<String> _camposProtegidosPerfil = {
+    'role', 'adminLevel', 'adminCapability', 'isAdmin',
+    'plan', 'plano', 'planCode', 'planStatus', 'statusAssinatura', 'status',
+    'licenseExpiresAt', 'dataExpiracao', 'licenseValidUntilIncludingGrace',
+    'licenseStartedAt', 'createdAt',
+    'lastPaymentDate', 'lastPaymentId', 'lastIosIapProductId',
+    'lastIosIapVerifiedAt', 'partnershipId', 'partnershipName',
+    'partnershipGrantedAt', 'assegoMember', 'assegoGrantedAt',
+    'premiumPro', 'isPremiumPro', 'premiumProIncludedBankConnections',
+    'removedByAdminAt',
+  };
+
+  /// Cria o perfil com [dados] completos; se o doc JÁ existe (ex.: outro
+  /// fluxo do login criou um instante antes), grava só os campos livres —
+  /// nunca papel/plano/licença (a regra recusaria a gravação toda).
+  Future<void> _criarPerfilOuCompletar(
+    DocumentReference<Map<String, dynamic>> ref,
+    Map<String, dynamic> dados,
+  ) async {
+    await _db.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      if (!snap.exists) {
+        tx.set(ref, dados);
+        return;
+      }
+      final livres = <String, dynamic>{
+        for (final e in dados.entries)
+          if (!_camposProtegidosPerfil.contains(e.key)) e.key: e.value,
+      };
+      if (livres.isNotEmpty) tx.set(ref, livres, SetOptions(merge: true));
+    });
+  }
+
   Future<void> _runFirestoreWriteWithRetry(
     Future<void> Function() action, {
     User? user,
@@ -181,7 +218,7 @@ class AuthService {
     final trialEnd =
         DateTime.now().add(Duration(days: UserProfile.newUserTrialDays));
     await _runFirestoreWriteWithRetry(() async {
-      await _db.collection('users').doc(uid).set({
+      await _criarPerfilOuCompletar(_db.collection('users').doc(uid), {
         'cpf': cpfDigits,
         'cpfMasked': maskCpf(cpfDigits),
         'email': emailTrim,
@@ -192,7 +229,7 @@ class AuthService {
         'licenseExpiresAt': Timestamp.fromDate(trialEnd),
         'createdAt': now,
         'updatedAt': now,
-      }, SetOptions(merge: true));
+      });
 
       await _db.collection('cpf_index').doc(cpfDigits).set({
         'uid': uid,
@@ -512,16 +549,15 @@ class AuthService {
         if (principalUid.isNotEmpty && principalUid != u.uid) {
           await _refreshWriteSession(u);
           await _runFirestoreWriteWithRetry(() {
+            // Doc já existe: papel/plano/status são campos protegidos (só
+            // admin/servidor) — gravá-los derrubava a gravação inteira.
             return ref.set({
               'email': delegateKey,
               'name': u.displayName?.trim().isNotEmpty == true
                   ? u.displayName!.trim()
                   : delegateKey.split('@').first,
-              'role': 'user',
               'accountType': 'delegate',
-              'plan': 'delegate',
               'linkedPrincipalUid': principalUid,
-              'planStatus': 'active',
               'updatedAt': FieldValue.serverTimestamp(),
             }, SetOptions(merge: true));
           }, user: u);
@@ -644,7 +680,7 @@ class AuthService {
             if (principalUid.isNotEmpty && principalUid != u.uid) {
               await _refreshWriteSession(u);
               await _runFirestoreWriteWithRetry(() {
-                return ref.set({
+                return _criarPerfilOuCompletar(ref, {
                   'email': email,
                   'name': u.displayName?.trim() ?? email.split('@').first,
                   'role': 'user',
@@ -655,7 +691,7 @@ class AuthService {
                   'profileComplete': true,
                   'createdAt': FieldValue.serverTimestamp(),
                   'updatedAt': FieldValue.serverTimestamp(),
-                }, SetOptions(merge: true));
+                });
               }, user: u);
               return;
             }
@@ -669,7 +705,7 @@ class AuthService {
         DateTime.now().add(Duration(days: UserProfile.newUserTrialDays));
     await _refreshWriteSession(u);
     await _runFirestoreWriteWithRetry(() {
-      return ref.set({
+      return _criarPerfilOuCompletar(ref, {
         'email': email,
         'name': u.displayName?.trim() ?? email.split('@').first,
         'role': 'user',
@@ -678,7 +714,7 @@ class AuthService {
         'licenseExpiresAt': Timestamp.fromDate(trialEnd),
         'createdAt': now,
         'updatedAt': now,
-      }, SetOptions(merge: true));
+      });
     }, user: u);
   }
 
@@ -715,7 +751,7 @@ class AuthService {
     final trialEnd =
         DateTime.now().add(Duration(days: UserProfile.newUserTrialDays));
     await _runFirestoreWriteWithRetry(() async {
-      await _db.collection('users').doc(uid).set({
+      await _criarPerfilOuCompletar(_db.collection('users').doc(uid), {
         'name': nameTrim,
         'email': emailTrim,
         'role': 'user',
@@ -725,7 +761,7 @@ class AuthService {
         'licenseExpiresAt': Timestamp.fromDate(trialEnd),
         'createdAt': now,
         'updatedAt': now,
-      }, SetOptions(merge: true));
+      });
 
       await _db
           .collection('users')

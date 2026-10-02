@@ -33,6 +33,13 @@ service cloud.firestore {
     function isSystemManager() {
       return isSignedIn() && request.auth.token.email == 'raihom@gmail.com';
     }
+    // Editor de conteúdo (02/10/2026): só Cursos (vídeos, via callable +
+    // Storage) e Dicas financeiras. Não lê usuários, pagamentos, logs nem
+    // métricas — NÃO entra em isAdminPanelReader nem em canEditPublicContent.
+    function isContentEditor() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'editor_conteudo';
+    }
     function canEditPublicContent() {
       return isAdmin() || isGestor() || isSystemManager()
         || (isSignedIn() &&
@@ -40,6 +47,103 @@ service cloud.firestore {
     }
     function isOwner(userId) {
       return request.auth.uid == userId;
+    }
+
+    // Donos do sistema (e-mail verificado): acesso total, mesmo sem role.
+    function isDonoPorEmail() {
+      return isSignedIn()
+        && request.auth.token.get('email_verified', false) == true
+        && request.auth.token.get('email', '') in ['raihom@gmail.com', 'isabelle.krdoso@gmail.com'];
+    }
+
+    // ============================================================
+    // Perfil users/{uid}: campos de PERMISSÃO e ASSINATURA. O próprio usuário
+    // não cria com valor privilegiado nem altera depois — só admin (role
+    // admin conferido no doc dele, ou dono por e-mail) e as Cloud Functions
+    // (Admin SDK, que não passam por regra). 02/10/2026: antes a regra
+    // `users/{userId}/{allPaths=**}` casava também o doc raiz e deixava o
+    // dono gravar role/plan/licença (virava admin ou premium sozinho).
+    // ============================================================
+    function camposProtegidosPerfil() {
+      return [
+        // papel / permissões do painel
+        'role', 'adminLevel', 'adminCapability', 'isAdmin',
+        // plano e assinatura (inclui nomes antigos que o app ainda lê)
+        'plan', 'plano', 'planCode', 'planStatus', 'statusAssinatura', 'status',
+        'licenseExpiresAt', 'dataExpiracao', 'licenseValidUntilIncludingGrace',
+        'licenseStartedAt', 'createdAt',
+        // pagamentos / lojas
+        'lastPaymentDate', 'lastPaymentId', 'lastIosIapProductId', 'lastIosIapVerifiedAt',
+        // convênio e extras pagos
+        'partnershipId', 'partnershipName', 'partnershipGrantedAt',
+        'assegoMember', 'assegoGrantedAt',
+        'premiumPro', 'isPremiumPro', 'premiumProIncludedBankConnections',
+        'removedByAdminAt'
+      ];
+    }
+
+    // Índice de compartilhamento ativo para o e-mail de quem está logado
+    // (sub-login de outro titular) — libera criar o perfil como 'delegate'.
+    function delegateIndexAtivoParaMim() {
+      let e = request.auth.token.get('email', '');
+      let k = e is string ? e.lower() : '';
+      let idx = /databases/$(database)/documents/delegate_email_index/$(k);
+      return k != ''
+        && request.auth.token.get('email_verified', false) == true
+        && exists(idx)
+        && get(idx).data.get('active', false) == true
+        && get(idx).data.get('principalUid', '') != request.auth.uid;
+    }
+
+    // Plano/licença aceitos no cadastro feito pelo app: grátis, teste de 30
+    // dias (+1 de folga) ou sub-login com compartilhamento ativo.
+    function planoDeCadastroValido(d) {
+      let plano = d.get('plan', 'free');
+      return plano == 'free'
+        || (plano == 'premium'
+            && d.get('licenseExpiresAt', null) is timestamp
+            && d.licenseExpiresAt <= request.time + duration.value(31, 'd'))
+        || (plano == 'delegate' && delegateIndexAtivoParaMim());
+    }
+
+    // Corrida no cadastro: dois fluxos do app (cadastro + bootstrap do login)
+    // criam o perfil quase juntos e a 2ª gravação chega como «update» com os
+    // mesmos campos de cadastro (teste de 30 dias com outro horário). Só nos
+    // 2 primeiros minutos do perfil, só os campos de cadastro e só com os
+    // mesmos limites do create — nada de admin, pagamento ou convênio.
+    function reescritaDoCadastro() {
+      let antes = resource.data;
+      let depois = request.resource.data;
+      return antes.get('createdAt', null) is timestamp
+        && request.time < antes.createdAt + duration.value(2, 'm')
+        && depois.diff(antes).affectedKeys()
+             .intersection(camposProtegidosPerfil().toSet())
+             .hasOnly(['role', 'plan', 'planStatus', 'licenseExpiresAt', 'createdAt'])
+        && depois.get('role', 'user') == 'user'
+        && depois.get('planStatus', 'active') == 'active'
+        && (depois.get('createdAt', null) == antes.createdAt
+            || depois.get('createdAt', null) == request.time)
+        && planoDeCadastroValido(depois);
+    }
+
+    // Perfil novo criado pelo próprio app: papel 'user', sem campos de
+    // admin/pagamento, e no máximo o teste grátis de 30 dias (+1 de folga).
+    function perfilNovoValido(d) {
+      let protegidosNoCadastro = [
+        'adminLevel', 'adminCapability', 'isAdmin', 'plano', 'planCode',
+        'statusAssinatura', 'status', 'dataExpiracao',
+        'licenseValidUntilIncludingGrace', 'licenseStartedAt',
+        'lastPaymentDate', 'lastPaymentId', 'lastIosIapProductId', 'lastIosIapVerifiedAt',
+        'partnershipId', 'partnershipName', 'partnershipGrantedAt',
+        'assegoMember', 'assegoGrantedAt',
+        'premiumPro', 'isPremiumPro', 'premiumProIncludedBankConnections',
+        'removedByAdminAt'
+      ];
+      return d.get('role', 'user') == 'user'
+        && !d.keys().hasAny(protegidosNoCadastro)
+        && d.get('planStatus', 'active') == 'active'
+        && (!('createdAt' in d) || d.createdAt == request.time)
+        && planoDeCadastroValido(d);
     }
 
     // ============================================================
@@ -158,7 +262,7 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdminOrMaster() || isSystemManager()
         || (isGestor() && docId == 'wisdom_courses_module')
-        || (canEditPublicContent() && docId == 'financial_tips_home');
+        || ((canEditPublicContent() || isContentEditor()) && docId == 'financial_tips_home');
     }
     // Configuração pública do projeto MP (não sensível): pode ser lida pelo app/site.
     match /mp_project_config/{docId} {
@@ -208,7 +312,7 @@ service cloud.firestore {
     // Dicas financeiras (Início + insights): leitura para usuários autenticados; CRUD gestor/admin.
     match /financial_tips/{tipId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if canEditPublicContent();
+      allow create, update, delete: if canEditPublicContent() || isContentEditor();
     }
     match /admin_audit_log/{docId} {
       allow read, create: if isAdminOrMaster() || isSystemManager();
@@ -216,25 +320,30 @@ service cloud.firestore {
     match /mp_payments/{docId} {
       allow read: if isAdminPanelReader();
     }
+    // Sugestões: admin/master respondem, mudam status e excluem (o painel
+    // tinha «Excluir» mas a regra não deixava — permission-denied calado).
     match /user_feedback/{docId} {
       allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
-      allow read: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
-      allow update: if isAdmin();
+      allow read: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdminOrMaster() || isSystemManager());
+      allow update, delete: if isAdminOrMaster() || isSystemManager();
     }
     match /users/{userId} {
       // Sub-login autorizado lê o perfil do titular (licença, plano, nome) para
       // abrir o painel com os dados dele. Gravar o perfil continua só do dono.
       allow read: if isSignedIn() && (canAccessUserData(userId) || isAdminPanelReader());
-      allow create: if isSignedIn() && isOwner(userId)
-        && validDelegateList(request.resource.data);
-      allow update: if isAdmin()
+      allow create: if isAdmin() || isDonoPorEmail()
+        || (isSignedIn() && isOwner(userId)
+            && validDelegateList(request.resource.data)
+            && perfilNovoValido(request.resource.data));
+      // Dono do perfil muda nome, e-mail, preferências, telemetria, lista de
+      // autorizados… mas NUNCA os campos de camposProtegidosPerfil().
+      allow update: if isAdmin() || isDonoPorEmail()
         || (isOwner(userId)
-            && request.resource.data.get('role', null) == resource.data.get('role', null)
-            && request.resource.data.get('plan', null) == resource.data.get('plan', null)
-            && request.resource.data.get('licenseExpiresAt', null) == resource.data.get('licenseExpiresAt', null)
-            && request.resource.data.get('planStatus', null) == resource.data.get('planStatus', null)
+            && (!request.resource.data.diff(resource.data).affectedKeys()
+                   .hasAny(camposProtegidosPerfil())
+                || reescritaDoCadastro())
             && validDelegateList(request.resource.data));
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() || isDonoPorEmail();
     }
     // Escalas e configurações (Horas extras, etc.): dono ou e-mail autorizado. Bloqueio de licença é no app.
     match /users/{userId}/scales/{scaleId} {
@@ -255,8 +364,16 @@ service cloud.firestore {
     match /users/{userId}/private/{docId} {
       allow read, write: if false;
     }
-    match /users/{userId}/{allPaths=**} {
-      allow read, write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+    // Subcoleções do próprio usuário (financeiro, agenda, objetivos…): dono e
+    // admin. `{sub}` exige ao menos uma subcoleção — o doc users/{uid} em si
+    // fica SÓ com a regra do perfil acima (antes `{allPaths=**}` casava também
+    // o doc raiz e liberava role/plan/licença ao dono). As pastas só do
+    // servidor seguem fechadas ao dono (as regras específicas acima valem).
+    match /users/{userId}/{sub}/{rest=**} {
+      allow read, write: if isSignedIn() && (
+        (request.auth.uid == userId
+          && !(sub in ['private', 'entitlement_payments', 'bank_connection_entitlements']))
+        || isAdmin());
     }
     // Sub-login (e-mail autorizado pelo titular): demais dados do titular —
     // financeiro, agenda, objetivos, metas, tokens de push… `{sub}` exige ao
