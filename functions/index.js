@@ -5712,8 +5712,18 @@ async function getUserFcmTokens(db, uid, userData) {
       tokens.push(t);
     }
   };
+  // Compartilhamento de dados: o aparelho do sub-login grava o token na pasta
+  // do titular (authUid = uid do sub-login). Então o push do titular já chega
+  // nos dois — mas só enquanto o e-mail continuar autorizado. Token de quem
+  // foi removido fica de fora (e é apagado), para o aviso não vazar.
+  const permitidos = await getActiveDelegateUids(db, uid);
   const addDoc = (d) => {
     const data = d.data() || {};
+    const authUid = (data.authUid || "").toString().trim();
+    if (permitidos && authUid && authUid !== uid && !permitidos.has(authUid)) {
+      d.ref.delete().catch(() => {});
+      return;
+    }
     addToken(data.token || d.id);
   };
   const userRef = db.collection("users").doc(uid);
@@ -5723,6 +5733,48 @@ async function getUserFcmTokens(db, uid, userData) {
   fcmSnap.docs.forEach(addDoc);
   addToken(userData?.fcmToken);
   return tokens;
+}
+
+/**
+ * UIDs dos sub-logins ATIVOS do titular (índice `delegate_email_index` com
+ * principalUid = titular, active = true e delegateUid gravado pelo app quando
+ * a pessoa entra). Em caso de falha devolve null — aí não filtra nada (melhor
+ * avisar a mais do que apagar token de quem ainda tem acesso).
+ */
+async function getActiveDelegateUids(db, principalUid) {
+  const out = new Set();
+  try {
+    const snap = await db
+      .collection("delegate_email_index")
+      .where("principalUid", "==", principalUid)
+      .limit(10)
+      .get();
+    const emailsAtivos = new Set();
+    snap.docs.forEach((d) => {
+      const data = d.data() || {};
+      if (data.active !== true) return;
+      emailsAtivos.add(d.id);
+      const du = (data.delegateUid || "").toString().trim();
+      if (du) out.add(du);
+    });
+    // Versões antigas do app não gravam delegateUid no índice: vale também o
+    // perfil do sub-login (linkedPrincipalUid = titular) cujo e-mail segue ativo.
+    if (emailsAtivos.size > 0) {
+      const subs = await db
+        .collection("users")
+        .where("linkedPrincipalUid", "==", principalUid)
+        .limit(20)
+        .get();
+      subs.docs.forEach((d) => {
+        const em = (d.data()?.email || "").toString().trim().toLowerCase();
+        if (em && emailsAtivos.has(em)) out.add(d.id);
+      });
+    }
+  } catch (e) {
+    console.warn("[push] sub-logins do titular:", e && e.message);
+    return null;
+  }
+  return out;
 }
 
 function fcmTokenDocId(token) {
