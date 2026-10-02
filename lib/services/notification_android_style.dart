@@ -67,6 +67,8 @@ class NotificationAndroidStyle {
     bool enableVibration = true,
     String? channelIdOverride,
     String? channelNameOverride,
+    List<AndroidNotificationAction>? actions,
+    bool despertador = false,
   }) async {
     final theme = NotificationModuleTheme.forKind(channelKind);
     final channelId = channelIdOverride ?? theme.channelId;
@@ -80,8 +82,18 @@ class NotificationAndroidStyle {
       channelId,
       channelName,
       channelDescription: theme.channelDescription,
-      importance: importance,
-      priority: priority,
+      importance: despertador ? Importance.max : importance,
+      priority: despertador ? Priority.max : priority,
+      // Despertador: FLAG_INSISTENT (4) — o som (ou a vibração, no «só
+      // vibrar») repete até a notificação sair da bandeja: «Encerrar» /
+      // «Adiar» (cancelNotification) ou toque no corpo. `ongoing` impede que
+      // um deslize sem querer cale o alarme. Áudio de alarme no Android < 8
+      // (do 8 em diante vale o do canal `ct_desp1_*`).
+      additionalFlags: despertador ? Int32List.fromList(const [4]) : null,
+      ongoing: despertador,
+      audioAttributesUsage: despertador
+          ? AudioAttributesUsage.alarm
+          : AudioAttributesUsage.notification,
       playSound: playSound,
       enableVibration: enableVibration,
       color: Color(theme.colorArgb),
@@ -90,7 +102,12 @@ class NotificationAndroidStyle {
       subText: '$moduleSubtitle · $kNotificationBrandApp',
       ticker: title,
       visibility: NotificationVisibility.public,
-      category: AndroidNotificationCategory.reminder,
+      // Despertador (soneca): categoria de alarme fura o «não perturbe» dos
+      // aparelhos que respeitam e os botões Adiar/Encerrar ficam visíveis.
+      category: despertador
+          ? AndroidNotificationCategory.alarm
+          : AndroidNotificationCategory.reminder,
+      actions: actions,
       groupKey: theme.threadId,
       styleInformation: await buildStyle(
         theme: theme,
@@ -101,9 +118,12 @@ class NotificationAndroidStyle {
     );
   }
 
+  /// Cria/atualiza os canais de notificação do Android.
+  ///
+  /// Todos os canais em importância máxima (padrão do Controle Total):
+  /// aviso com hora marcada tem que abrir sobre a tela, não só na gaveta.
   static Future<void> ensureAndroidChannels(
     AndroidFlutterLocalNotificationsPlugin androidImpl, {
-    Importance importance = Importance.high,
     bool playSound = true,
     bool enableVibration = true,
   }) async {
@@ -117,7 +137,7 @@ class NotificationAndroidStyle {
           theme.channelId,
           theme.channelName,
           description: theme.channelDescription,
-          importance: importance,
+          importance: Importance.max,
           playSound: playSound,
           enableVibration: enableVibration,
           showBadge: true,

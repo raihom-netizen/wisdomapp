@@ -15,7 +15,9 @@ import 'notification_audio_player.dart';
 import 'notification_android_style.dart';
 import 'notification_message_builder.dart';
 import 'notification_module_theme.dart';
+import 'local_notifications_plugin_holder.dart';
 import 'notification_sound_preferences.dart';
+import 'notification_soneca_service.dart';
 
 /// Categoria do canal Android (controla qual som tocar e qual chave de
 /// preferência usar).
@@ -115,11 +117,23 @@ class ScaleNotificationsService {
       await _plugin.initialize(
         settings: settings,
         onDidReceiveNotificationResponse: _handleResponse,
+        // Botões do despertador (Adiar/Encerrar) com o app em segundo
+        // plano ou fechado.
+        onDidReceiveBackgroundNotificationResponse:
+            notificacaoSonecaEmSegundoPlano,
       );
+      // Instância única do plugin: o apresentador do FCM não reinicializa
+      // (senão trocaria o callback do toque).
+      localNotificationsPluginReady = true;
       if (Platform.isAndroid) {
         await _ensureAndroidChannels();
         final androidImpl = _plugin.resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>();
+        if (androidImpl != null) {
+          // Canais por toque do catálogo (ct_som_<id>), «só vibrar» e
+          // «silencioso» — o servidor manda o push direto para eles.
+          await NotificationSonecaService.garantirCanaisDeSom(androidImpl);
+        }
         await androidImpl?.requestNotificationsPermission();
       }
       if (Platform.isIOS) {
@@ -130,6 +144,9 @@ class ScaleNotificationsService {
           badge: true,
           sound: true,
         );
+        // Toques do catálogo em Library/Sounds: é de lá que o iOS toca o
+        // `aps.sound` do push com o app fechado.
+        unawaited(NotificationSonecaService.instalarSonsIos());
       }
       _startAgendaImminentTimer();
       _initialized = true;
@@ -343,6 +360,13 @@ class ScaleNotificationsService {
   ///    [NotificationAudioPlayer].
   static Future<void> _handleResponse(NotificationResponse resp) async {
     try {
+      // Despertador: botão (Adiar/Encerrar) resolve aqui e não toca nada;
+      // toque no corpo encerra as repetições em paralelo e segue.
+      if ((resp.actionId ?? '').isNotEmpty) {
+        if (await NotificationSonecaService.tratarResposta(resp)) return;
+      } else {
+        unawaited(NotificationSonecaService.tratarResposta(resp));
+      }
       final payload = resp.payload ?? '';
       final mode = _deliveryModeFromPayload(payload);
       // Modo "Só vibrar" e "Só push": app não toca nenhum áudio.

@@ -69,6 +69,10 @@ dependencies:
   # Escala/Compromisso/Audiência/Financeiro). Veja `notification_sound_preferences.dart`.
   audioplayers: ^6.1.0
   flutter_native_contact_picker: ^0.0.12
+  # Despertador: converte o MP3/voz próprio em toque nativo (WAV ≤ 29 s) para
+  # tocar com o app fechado — mesma lib e versão travada do Controle Total (2.4.0).
+  # Veja `lib/services/notification_som_proprio_io.dart`.
+  ffmpeg_kit_flutter_new_min_gpl: 2.4.0
 
 dev_dependencies:
   flutter_test:

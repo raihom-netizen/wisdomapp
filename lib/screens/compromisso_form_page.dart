@@ -7,10 +7,14 @@ import 'package:intl/intl.dart';
 
 import '../constants/color_palette.dart';
 import '../constants/commitment_presets.dart';
+import '../constants/compromisso_despertador.dart';
+import '../models/despertar_item.dart';
 import '../models/user_profile.dart';
 import '../services/agenda_scale_mirror_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/gemini_theme.dart';
+import '../theme/theme_context.dart';
+import '../widgets/despertar_item_card.dart';
 import '../services/google_calendar_sync_service.dart';
 import '../services/yearly_commitment_repeat_service.dart';
 import '../widgets/agenda_form_footer_actions.dart';
@@ -40,11 +44,24 @@ class CompromissoFormResult {
     this.repeatYearly = false,
     this.yearlyRepeatWeekdays,
     List<DateTime>? targetDates,
+    bool despertador = false,
+    this.despertar = DespertarItem.desligado,
   })  : linkLocalizacao = linkLocalizacao.trim(),
         contatoWhatsApp = contatoWhatsApp.trim(),
+        // Série anual não tem «Despertar no horário».
+        despertador = despertador && !repeatYearly,
         targetDates = CompromissoScheduleDates.uniqueSorted(
           targetDates ?? [date],
         );
+
+  /// «⏰ Despertar no horário»: toca como despertador NA HORA (campos em
+  /// `compromisso_despertador.dart`). Não vale para a série anual.
+  final bool despertador;
+
+  /// «Despertar» POR ITEM (liga/desliga + som ou só vibrar) — gravado em
+  /// `despertar` no reminder. Nasce desligado. Vale também para a série
+  /// anual (todas as ocorrências). Ver [DespertarItem].
+  final DespertarItem despertar;
 
   final String title;
   final String notes;
@@ -132,6 +149,12 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
   bool _repeatYearly = false;
   late List<DateTime> _selectedDates;
 
+  /// «⏰ Despertar no horário» (toca como despertador na hora).
+  bool _despertador = false;
+
+  /// «Despertar» por item — nasce desligado no cadastro novo.
+  DespertarItem _despertar = DespertarItem.desligado;
+
   static TimeOfDay _addOneHour(TimeOfDay t) {
     final m = t.hour * 60 + t.minute + 60;
     final h = (m ~/ 60) % 24;
@@ -175,6 +198,8 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
       _repeatYearly = data['repeatYearly'] == true ||
           data['isYearlyRepeatTemplate'] == true ||
           (data['yearlyRepeatTemplateId'] ?? '').toString().trim().isNotEmpty;
+      _despertador = compromissoTemDespertador(data);
+      _despertar = DespertarItem.doDocumento(data);
       _selectedDates = [
         DateTime(_date.year, _date.month, _date.day),
       ];
@@ -605,6 +630,39 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
         repeatYearly: _repeatYearly,
         yearlyRepeatWeekdays: null,
         targetDates: _selectedDates,
+        despertador: _despertador,
+        despertar: _despertar,
+      ),
+    );
+  }
+
+  /// Interruptor «⏰ Despertar no horário» — some na série anual.
+  Widget _despertadorTile() {
+    return Material(
+      color: context.appInputFill,
+      borderRadius: BorderRadius.circular(GeminiTheme.inputRadius),
+      child: SwitchListTile.adaptive(
+        value: _despertador,
+        onChanged: (v) => setState(() => _despertador = v),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(GeminiTheme.inputRadius),
+        ),
+        secondary: Icon(Icons.alarm_rounded,
+            color: _despertador ? AppColors.primary : context.appTextSecondary),
+        title: Text(
+          '⏰ Despertar no horário',
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 14,
+            color: context.appTextPrimary,
+          ),
+        ),
+        subtitle: Text(
+          'Toca como despertador na hora (Adiar / Encerrar). '
+          'Encerrar marca como concluído; passou o horário, desliga sozinho.',
+          style: TextStyle(fontSize: 11.5, color: context.appTextSecondary),
+        ),
       ),
     );
   }
@@ -834,6 +892,16 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
                         ),
                       ),
                     ),
+                ],
+                const SizedBox(height: 10),
+                DespertarItemCard(
+                  value: _despertar,
+                  descricaoItem: 'este compromisso',
+                  onChanged: (v) => setState(() => _despertar = v),
+                ),
+                if (!_repeatYearly) ...[
+                  const SizedBox(height: 10),
+                  _despertadorTile(),
                 ],
                 const SizedBox(height: 10),
                 _buildColorCard(pickedFill, onPicked),

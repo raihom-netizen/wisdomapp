@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../models/despertar_item.dart';
 import '../utils/agenda_delivery_reset.dart';
 
 import 'agenda_notification_reschedule_helper.dart';
@@ -459,6 +460,7 @@ class YearlyCommitmentRepeatService {
     String? notificationSoundId,
     String? notificationDeliveryMode,
     List<int>? yearlyRepeatWeekdays,
+    Map<String, dynamic>? despertar,
   }) async {
     final ref = _reminders(userDocId).doc();
 
@@ -490,6 +492,8 @@ class YearlyCommitmentRepeatService {
       instanceYear: null,
       yearlyRepeatWeekdays: yearlyRepeatWeekdays,
     );
+    // «Despertar» por item: o da série vale para todas as ocorrências.
+    if (despertar != null) template[DespertarItem.campo] = despertar;
 
     await ref.set(template);
 
@@ -568,6 +572,7 @@ class YearlyCommitmentRepeatService {
     String? notificationSoundId,
     String? notificationDeliveryMode,
     List<int>? yearlyRepeatWeekdays,
+    Map<String, dynamic>? despertar,
   }) async {
     Map<String, dynamic>? templateBefore;
 
@@ -623,6 +628,8 @@ class YearlyCommitmentRepeatService {
     template['reminderLeads'] = FieldValue.delete();
     template['notificationSoundId'] = FieldValue.delete();
     template['notificationDeliveryMode'] = FieldValue.delete();
+    // «Despertar» por item: o da série vale para todas as ocorrências.
+    if (despertar != null) template[DespertarItem.campo] = despertar;
 
     if (planChanged) {
       await _clearAllInstancesFromCalendar(
@@ -986,6 +993,11 @@ class YearlyCommitmentRepeatService {
     payload['reminderLeads'] = FieldValue.delete();
     payload['notificationSoundId'] = FieldValue.delete();
     payload['notificationDeliveryMode'] = FieldValue.delete();
+    // «Despertar» da série vale para cada ocorrência.
+    final despertarSerie = DespertarItem.fromData(templateData);
+    if (despertarSerie != null) {
+      payload[DespertarItem.campo] = despertarSerie.toMap();
+    }
 
     final instAfterPlan = instBefore != null
         ? (Map<String, dynamic>.from(instBefore)..addAll(payload))

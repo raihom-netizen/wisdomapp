@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:audioplayers/audioplayers.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show ValueNotifier, kIsWeb;
+import 'package:flutter/widgets.dart'
+    show AppLifecycleState, WidgetsBinding, WidgetsBindingObserver;
 
 import 'notification_sound_catalog.dart';
 import 'notification_sound_preferences.dart';
@@ -18,13 +20,51 @@ import 'notification_sound_preferences.dart';
 ///  - `bundled://<id>` — toque embutido no app (catálogo offline).
 ///  - `web://<nome>` — placeholder web (demonstração).
 ///  - caminho absoluto em disco — arquivo escolhido / gravado.
-class NotificationAudioPlayer {
+///
+/// **Nunca toca sem parar:** um player só (tocar outro para o anterior), sem
+/// repetição (`ReleaseMode.stop`), teto de [tetoDaPrevia] por toque e parada
+/// automática quando o app sai da frente. As telas chamam [stop] no dispose.
+class NotificationAudioPlayer with WidgetsBindingObserver {
   NotificationAudioPlayer._();
 
   static final NotificationAudioPlayer instance = NotificationAudioPlayer._();
 
   final AudioPlayer _player = AudioPlayer(playerId: 'controletotal_notif');
   bool _playbackConfigured = false;
+  bool _observando = false;
+  Timer? _teto;
+  StreamSubscription<void>? _fim;
+
+  /// Maior duração de uma prévia (o MP3 próprio pode ter minutos).
+  static const Duration tetoDaPrevia = Duration(seconds: 15);
+
+  /// O que está tocando agora (`id` do catálogo ou caminho) — a UI mostra o
+  /// botão ▶/■ certo. `null` = parado.
+  final ValueNotifier<String?> tocando = ValueNotifier<String?>(null);
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) unawaited(stop());
+  }
+
+  void _antesDeTocar(String chave) {
+    if (!_observando) {
+      try {
+        WidgetsBinding.instance.addObserver(this);
+        _observando = true;
+      } catch (_) {}
+    }
+    _fim ??= _player.onPlayerComplete.listen((_) => _limparEstado());
+    _teto?.cancel();
+    _teto = Timer(tetoDaPrevia, () => unawaited(stop()));
+    tocando.value = chave;
+  }
+
+  void _limparEstado() {
+    _teto?.cancel();
+    _teto = null;
+    tocando.value = null;
+  }
 
   /// Android/iOS: contexto de áudio adequado a **efeitos curtos** (preview /
   /// notificação com app aberto) — evita volume zero / rota errada em alguns
@@ -36,7 +76,10 @@ class NotificationAudioPlayer {
       return;
     }
     try {
-      await _player.setPlayerMode(PlayerMode.lowLatency);
+      // mediaPlayer (não lowLatency): o SoundPool corta arquivo longo e não
+      // avisa quando termina — o botão ■ ficaria preso.
+      await _player.setPlayerMode(PlayerMode.mediaPlayer);
+      await _player.setReleaseMode(ReleaseMode.stop);
     } catch (_) {}
     try {
       final ctx = AudioContext(
@@ -78,6 +121,7 @@ class NotificationAudioPlayer {
     try {
       await _ensurePlaybackReady();
       await _player.stop();
+      _antesDeTocar(catalogId);
       await _player.play(AssetSource(_assetSourcePath(item.assetPath)));
     } catch (_) {}
   }
@@ -98,17 +142,20 @@ class NotificationAudioPlayer {
       }
       if (kIsWeb) {
         await _player.stop();
+        _antesDeTocar(path);
         await _player.play(UrlSource(path));
         return;
       }
       final f = File(path);
       if (!f.existsSync()) return;
       await _player.stop();
+      _antesDeTocar(path);
       await _player.play(DeviceFileSource(path));
     } catch (_) {}
   }
 
   Future<void> stop() async {
+    _limparEstado();
     try {
       await _player.stop();
     } catch (_) {}

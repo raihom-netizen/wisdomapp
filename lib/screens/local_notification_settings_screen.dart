@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_colors.dart';
+import 'notification_despertador_screen.dart';
 import '../services/agenda_notifications_refresher.dart';
 import '../services/local_notification_preferences.dart';
 import '../services/scale_notifications_service.dart';
@@ -654,6 +655,77 @@ class _LocalNotificationSettingsScreenState extends State<LocalNotificationSetti
     );
   }
 
+  /// Entrada do despertador: soneca, som × vibração, toques longos e MP3.
+  Widget _cardDespertador() {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const NotificationDespertadorScreen()),
+        ),
+        child: Ink(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFFF97316), Color(0xFFDB2777), Color(0xFF7C3AED)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFDB2777).withValues(alpha: 0.3),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Text('⏰', style: TextStyle(fontSize: 24)),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Despertador e sons',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 15.5,
+                      ),
+                    ),
+                    SizedBox(height: 3),
+                    Text(
+                      'Repetir 3 ou 5 vezes com Adiar/Encerrar · som ou só vibrar · '
+                      'toques longos e seu MP3 — por módulo',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        height: 1.3,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: Colors.white),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -759,6 +831,8 @@ class _LocalNotificationSettingsScreenState extends State<LocalNotificationSetti
                 ],
               ),
             ),
+            const SizedBox(height: 20),
+            _cardDespertador(),
             const SizedBox(height: 16),
             Text(
               'Preferências salvas neste aparelho e na sua conta.',

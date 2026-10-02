@@ -20,6 +20,7 @@ import 'notification_message_builder.dart';
 import 'notification_module_theme.dart';
 import 'notification_navigator.dart';
 import 'notification_sound_preferences.dart';
+import 'notification_soneca_service.dart';
 import 'scale_notifications_service.dart';
 
 /// VAPID KEY para Push Web (PWA no celular ou navegador).
@@ -109,7 +110,13 @@ class PushNotificationService {
     if ((d['type'] ?? '').toString() != 'agenda_reminder') return;
     try {
       final soundId = (d['soundId'] ?? '').toString().trim();
+      final modo = (d['modoAviso'] ?? '').toString();
+      // «Só vibrar»/«silencioso» escolhido no módulo: o app não toca nada.
+      if (modo == 'vibrar' || modo == 'silencio') return;
       if (soundId.isNotEmpty) {
+        // No celular o toque vem pelo canal nativo (Android) / aps.sound
+        // (iOS) — tocar aqui também dobraria o som.
+        if (_isNativeMobile()) return;
         await NotificationAudioPlayer.instance.playBundledById(soundId);
         return;
       }
@@ -370,6 +377,8 @@ class PushNotificationService {
 
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       unawaited(NotificationCenterStore.instance.recordPush(message));
+      // Abriu pelo aviso do despertador = viu: encerra as repetições.
+      NotificationSonecaService.encerrarAoAbrir(message.data);
       // Navega para a aba correspondente na Central de Notificações.
       final d = message.data;
       final kind = (d['category'] ?? d['channelKind'] ?? '').toString();
@@ -438,6 +447,7 @@ class PushNotificationService {
       final initial = await FirebaseMessaging.instance.getInitialMessage();
       if (initial != null) {
         unawaited(NotificationCenterStore.instance.recordPush(initial));
+        NotificationSonecaService.encerrarAoAbrir(initial.data);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           final link = linkFromRemoteMessage(initial);
           // Android/iOS: ao tocar na notificação com app encerrado,

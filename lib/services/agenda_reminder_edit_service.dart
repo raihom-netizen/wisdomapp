@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../constants/compromisso_despertador.dart';
 import '../constants/field_text_limits.dart';
 import '../screens/audiencia_form_page.dart';
 import '../screens/compromisso_form_page.dart';
@@ -56,6 +57,7 @@ class AgendaReminderEditService {
         endHHmm: endTimeStrSave,
         colorHex: result.colorHex,
         yearlyRepeatWeekdays: result.yearlyRepeatWeekdays,
+        despertar: result.despertar.toMap(),
       );
       return 'Compromisso anual atualizado — calendário limpo nas datas antigas, anos futuros recriados e notificações reprogramadas automaticamente.';
     }
@@ -101,6 +103,8 @@ class AgendaReminderEditService {
       'reminderLeads': FieldValue.delete(),
       'notificationSoundId': FieldValue.delete(),
       'notificationDeliveryMode': FieldValue.delete(),
+      // «Despertar» por item (liga/desliga + som ou só vibrar).
+      ...result.despertar.campos,
     };
     final afterPlan = Map<String, dynamic>.from(beforeEdit)..addAll(payload);
     final deliveryReset = scheduleChanged ||
@@ -119,6 +123,11 @@ class AgendaReminderEditService {
                 .collection('reminders')
                 .doc()
             : doc.reference);
+    // «⏰ Despertar no horário»: doc novo só leva quando ligado; edição
+    // grava ou apaga os campos.
+    payload.addAll((wasYearly || detachedYearlyInstance)
+        ? camposDespertadorNovo(result.despertador)
+        : camposDespertadorEdicao(result.despertador));
     if (wasYearly || detachedYearlyInstance) {
       payload['type'] = 'compromisso';
       payload['status'] = 'EM_ABERTO';

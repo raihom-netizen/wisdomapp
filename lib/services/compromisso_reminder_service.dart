@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../models/user_profile.dart';
+import '../constants/compromisso_despertador.dart';
 import '../screens/compromisso_form_page.dart';
 import 'agenda_notification_reschedule_helper.dart';
 import 'agenda_notifications_refresher.dart';
@@ -48,6 +49,7 @@ class CompromissoReminderService {
         endHHmm: endTimeStr,
         colorHex: result.colorHex,
         yearlyRepeatWeekdays: result.yearlyRepeatWeekdays,
+        despertar: result.despertar.toMap(),
       );
       return (docId: id, googleSynced: false, created: 1);
     }
@@ -66,6 +68,9 @@ class CompromissoReminderService {
       'done': false,
       'createdAt': FieldValue.serverTimestamp(),
       'agendaLoginDaySyncAt': FieldValue.serverTimestamp(),
+      // «Despertar» por item (nasce desligado) e «⏰ Despertar no horário».
+      ...camposDespertadorNovo(result.despertador),
+      ...result.despertar.campos,
     });
 
     await AgendaScaleMirrorService.upsert(
@@ -160,6 +165,9 @@ class CompromissoReminderService {
           'done': false,
           'createdAt': FieldValue.serverTimestamp(),
           'agendaLoginDaySyncAt': FieldValue.serverTimestamp(),
+          // «Despertar» por item (nasce desligado) e «⏰ Despertar no horário».
+          ...camposDespertadorNovo(result.despertador),
+          ...result.despertar.campos,
           'batchGroupTitle': result.title,
         });
         createdRefs.add((ref: ref, day: day));
@@ -268,6 +276,9 @@ class CompromissoReminderService {
       'googleSyncedAt': FieldValue.serverTimestamp(),
       'createdAt': FieldValue.serverTimestamp(),
       'agendaLoginDaySyncAt': FieldValue.serverTimestamp(),
+      // «Despertar» por item (nasce desligado) e «⏰ Despertar no horário».
+      ...camposDespertadorNovo(result.despertador),
+      ...result.despertar.campos,
     });
 
     await AgendaScaleMirrorService.upsert(

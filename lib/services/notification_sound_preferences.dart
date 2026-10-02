@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'notification_soneca_service.dart';
+
 /// Categorias de notificação para as quais o usuário pode escolher um som
 /// próprio. "all" é um atalho — quando o usuário escolhe um som em "all", ele é
 /// aplicado às 4 categorias específicas (a menos que cada uma tenha seu som
@@ -158,6 +160,16 @@ class NotificationSoundPreferences {
     return _readRaw(NotificationSoundCategory.all);
   }
 
+  /// Só a escolha da própria categoria (sem herdar de «Todas»).
+  Future<NotificationSoundPreference> readOwn(
+          NotificationSoundCategory category) =>
+      _readRaw(category);
+
+  /// O servidor precisa saber o toque do catálogo para tocar com o app fechado.
+  void _sincronizar() {
+    unawaited(NotificationSonecaService.sincronizarSonsNoServidor());
+  }
+
   Future<NotificationSoundPreference> _readRaw(
       NotificationSoundCategory category) async {
     final p = await _prefs;
@@ -189,6 +201,7 @@ class NotificationSoundPreferences {
       await p.remove('${category.storageKey}$_labelSuffix');
       await p.remove('${category.storageKey}$_sourceSuffix');
     }
+    _sincronizar();
   }
 
   /// Persiste o caminho/rótulo de um áudio customizado para a categoria.
@@ -212,6 +225,16 @@ class NotificationSoundPreferences {
         NotificationCustomAudioSource.pickedFile => 'picked',
       },
     );
+    _sincronizar();
+    // MP3/voz próprio: converte e registra como toque nativo para tocar
+    // também com o app fechado (termina sincronizando de novo).
+    if (!kIsWeb && source != NotificationCustomAudioSource.bundledAsset) {
+      unawaited(NotificationSonecaService.prepararSomProprio(
+        category,
+        caminho: absolutePath,
+        rotulo: label,
+      ));
+    }
   }
 
   /// Atalho: define um tom embutido (catálogo) para a categoria.
@@ -274,5 +297,6 @@ class NotificationSoundPreferences {
     await p.remove('${category.storageKey}$_sourceSuffix');
     await p.setString(
         '${category.storageKey}$_modeSuffix', NotificationSoundMode.systemDefault.value);
+    _sincronizar();
   }
 }
