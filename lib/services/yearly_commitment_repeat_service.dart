@@ -152,9 +152,7 @@ class YearlyCommitmentRepeatService {
     if (t == 'aniversário do casamento' || t == 'aniversario do casamento') {
       return true;
     }
-    return t.contains('anivers') &&
-        t.contains('casamento') &&
-        t != 'casamento';
+    return t.contains('anivers') && t.contains('casamento') && t != 'casamento';
   }
 
   /// Outro título na mesma data que parece cópia automática do que o usuário escreveu.
@@ -169,7 +167,12 @@ class YearlyCommitmentRepeatService {
       return true;
     }
 
-    for (final prefix in ['aniversário de ', 'aniversario de ', 'aniversário do ', 'aniversario do ']) {
+    for (final prefix in [
+      'aniversário de ',
+      'aniversario de ',
+      'aniversário do ',
+      'aniversario do '
+    ]) {
       if (!other.startsWith(prefix)) continue;
       final base = other.substring(prefix.length).trim();
       if (base.isEmpty) continue;
@@ -193,8 +196,61 @@ class YearlyCommitmentRepeatService {
     return m == anchorMonth && d == anchorDay;
   }
 
-  /// Mantém só a série que o usuário acabou de salvar — remove duplicatas/similares
-  /// automáticos na mesma data (ex.: «Aniversário de Casamento» + «Casamento»).
+  /// O doc pertence à MESMA série (modelo `keepTemplateId`)?
+  ///
+  /// Só pelo vínculo explícito: campo `yearlyRepeatTemplateId` ou ID de ocorrência
+  /// `{templateId}_y…`. Título NUNCA decide sozinho.
+  static bool belongsToSeries({
+    required String docId,
+    required Map<String, dynamic> data,
+    required String templateId,
+  }) {
+    if (templateId.isEmpty) return false;
+    if (docId == templateId) return true;
+    final tid = (data['yearlyRepeatTemplateId'] ?? '').toString().trim();
+    if (tid.isNotEmpty) return tid == templateId;
+    return isYearlyInstanceDocId(docId) && docId.startsWith('${templateId}_y');
+  }
+
+  /// Decide se um doc é «mestre fantasma» legado da série que está sendo mantida.
+  ///
+  /// Regras (correção de perda de dados — antes apagava compromissos comuns e
+  /// outras séries anuais com título parecido):
+  /// - nunca toca em item não-anual (`repeatYearly` ausente/false);
+  /// - nunca toca em outro modelo anual (cada modelo é uma série independente);
+  /// - nunca toca em ocorrência `_yAAAA` (ocorrências são podadas pelo próprio modelo);
+  /// - vínculo `yearlyRepeatTemplateId` de OUTRA série → nunca;
+  /// - vínculo com a própria série → pode limpar (cópia fantasma do 1.º ano);
+  /// - sem vínculo (legado): só com título EXATAMENTE igual, mesma data âncora.
+  static bool isGhostOfSeries({
+    required String docId,
+    required Map<String, dynamic> data,
+    required String keepTemplateId,
+    required String keepTitle,
+    required int anchorMonth,
+    required int anchorDay,
+  }) {
+    if (keepTemplateId.isEmpty || docId == keepTemplateId) return false;
+    if (data['repeatYearly'] != true) return false;
+    if (data['isYearlyRepeatTemplate'] == true) return false;
+    if ((data['source'] ?? '').toString() == 'yearly_repeat_template') {
+      return false;
+    }
+    if (isYearlyInstanceDocId(docId)) return false;
+    final tid = (data['yearlyRepeatTemplateId'] ?? '').toString().trim();
+    if (tid.isNotEmpty) return tid == keepTemplateId;
+    if (!_sameYearlyAnchor(data, anchorMonth, anchorDay)) return false;
+    final keepNorm = _normTitle(keepTitle);
+    if (keepNorm.isEmpty) return false;
+    return _normTitle((data['title'] ?? '').toString()) == keepNorm;
+  }
+
+  /// Limpa só restos da PRÓPRIA série (mestre fantasma legado) na mesma data.
+  ///
+  /// Antes apagava compromissos comuns e outras séries anuais com título parecido
+  /// (ex.: «Aniversário de João» × «João») e duas séries com o mesmo título se
+  /// apagavam entre si ao abrir Escalas — perda de dados. Agora só o vínculo da
+  /// série decide (ver [isGhostOfSeries]).
   static Future<void> _purgeForeignYearlyOnSameAnchor({
     required String userDocId,
     required String keepTemplateId,
@@ -203,88 +259,28 @@ class YearlyCommitmentRepeatService {
     required int anchorDay,
   }) async {
     if (userDocId.isEmpty || keepTemplateId.isEmpty) return;
-    final keepNorm = _normTitle(keepTitle);
-
-    bool shouldRemoveOther(String otherTitle) {
-      if (otherTitle.trim().isEmpty) return false;
-      return isLikelyAutoSimilarTitle(keepTitle, otherTitle);
-    }
 
     try {
-      final templates = await _reminders(userDocId)
-          .where('isYearlyRepeatTemplate', isEqualTo: true)
-          .get();
-      for (final doc in templates.docs) {
-        if (doc.id == keepTemplateId) continue;
-        final data = doc.data();
-        if (!_sameYearlyAnchor(data, anchorMonth, anchorDay)) continue;
-        final t = (data['title'] ?? '').toString();
-        if (!shouldRemoveOther(t)) continue;
-        await deleteYearlySeries(userDocId: userDocId, templateId: doc.id);
-      }
-    } catch (_) {}
-
-    try {
-      final linked = await _reminders(userDocId)
-          .where('yearlyRepeatTemplateId', isEqualTo: keepTemplateId)
-          .get();
-      final keepIds = {keepTemplateId, ...linked.docs.map((d) => d.id)};
-
       final snap = await _reminders(userDocId)
           .where('repeatYearly', isEqualTo: true)
           .get();
       for (final doc in snap.docs) {
-        if (keepIds.contains(doc.id)) continue;
-        final data = doc.data();
-        if (data['isYearlyRepeatTemplate'] == true) continue;
-        if (!_sameYearlyAnchor(data, anchorMonth, anchorDay)) continue;
-        final t = (data['title'] ?? '').toString();
-        if (!shouldRemoveOther(t)) continue;
-        await _deleteYearlyOccurrenceAndMirror(
-          userDocId: userDocId,
-          reminderId: doc.id,
-        );
-      }
-
-      final y = DateTime.now().year;
-      final day = anchorDate(y, anchorMonth, anchorDay);
-      final dayStart = DateTime(day.year, day.month, day.day);
-      final dayEnd = dayStart.add(const Duration(days: 1));
-      final daySnap = await _reminders(userDocId)
-          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(dayStart))
-          .where('date', isLessThan: Timestamp.fromDate(dayEnd))
-          .get();
-      for (final doc in daySnap.docs) {
-        if (keepIds.contains(doc.id)) continue;
-        final data = doc.data();
-        if (data['isYearlyRepeatTemplate'] == true) continue;
-        if (isYearlyRepeatEntry(data) && !isYearlyInstanceDocId(doc.id)) {
+        if (!isGhostOfSeries(
+          docId: doc.id,
+          data: doc.data(),
+          keepTemplateId: keepTemplateId,
+          keepTitle: keepTitle,
+          anchorMonth: anchorMonth,
+          anchorDay: anchorDay,
+        )) {
           continue;
         }
-        final t = (data['title'] ?? '').toString();
-        if (!shouldRemoveOther(t)) continue;
         await _deleteYearlyOccurrenceAndMirror(
           userDocId: userDocId,
           reminderId: doc.id,
         );
       }
     } catch (_) {}
-
-    // Série duplicada com o mesmo título exato na mesma data — ficar só com a atual.
-    if (keepNorm.isNotEmpty) {
-      try {
-        final templates = await _reminders(userDocId)
-            .where('isYearlyRepeatTemplate', isEqualTo: true)
-            .get();
-        for (final doc in templates.docs) {
-          if (doc.id == keepTemplateId) continue;
-          final data = doc.data();
-          if (!_sameYearlyAnchor(data, anchorMonth, anchorDay)) continue;
-          if (_normTitle((data['title'] ?? '').toString()) != keepNorm) continue;
-          await deleteYearlySeries(userDocId: userDocId, templateId: doc.id);
-        }
-      } catch (_) {}
-    }
   }
 
   static CollectionReference<Map<String, dynamic>> _reminders(String uid) =>
@@ -1089,15 +1085,10 @@ class YearlyCommitmentRepeatService {
 
         final tid = (data['yearlyRepeatTemplateId'] ?? '').toString().trim();
 
-        final m = (data['yearlyRepeatMonth'] as num?)?.toInt() ??
-            (data['date'] as Timestamp?)?.toDate().month;
-
-        final d = (data['yearlyRepeatDay'] as num?)?.toInt() ??
-            (data['date'] as Timestamp?)?.toDate().day;
-
-        final sameAnchor = m == anchorMonth && d == anchorDay;
-
-        final isGhostMaster = tid == templateId || (tid.isEmpty && sameAnchor);
+        // Só a PRÓPRIA série (vínculo explícito). Legado sem vínculo é tratado em
+        // [_purgeForeignYearlyOnSameAnchor] e exige título exatamente igual — antes
+        // `tid.isEmpty && mesma data` apagava outra série anual do mesmo dia.
+        final isGhostMaster = tid == templateId;
 
         if (!isGhostMaster) continue;
 
