@@ -9,7 +9,10 @@ const functions = require("firebase-functions");
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { onCall } = require("firebase-functions/v2/https");
 
-const OPENING_BUCKETS_VERSION = 2;
+// 3 (02/10/2026): bumpAccountMonthNet gravava `netByAccount.<id>` com set() —
+// virava um campo literal com ponto e o mapa netByAccount ficava vazio. A versão
+// nova força um rebuild por usuário (o app chama ctFinanceRebuildOpeningBuckets).
+const OPENING_BUCKETS_VERSION = 3;
 
 function monthKeyBr(ts) {
   if (!ts || typeof ts.toDate !== "function") return "1970-01";
@@ -102,7 +105,9 @@ async function bumpAccountMonthNet(userId, monthKey, accountId, delta) {
   const field = safeAccountFieldId(accountId);
   await db.doc(`users/${userId}/finance_account_month_buckets/${monthKey}`).set(
     {
-      [`netByAccount.${field}`]: inc(delta),
+      // Mapa aninhado: com set()+merge, a chave `netByAccount.x` NÃO é caminho —
+      // criava um campo literal com ponto e o app lia o mapa vazio.
+      netByAccount: { [field]: inc(delta) },
       updatedAt: ts,
     },
     { merge: true },

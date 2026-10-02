@@ -17,7 +17,7 @@ import '../utils/firestore_user_doc_id.dart';
 class FinanceOpeningBalanceService {
   FinanceOpeningBalanceService._();
 
-  static const int _openingBucketsVersionExpected = 2;
+  static const int _openingBucketsVersionExpected = 3;
 
   static final Map<String, ({double total, Map<String, double> byAccount, DateTime at})>
       _cache = {};
