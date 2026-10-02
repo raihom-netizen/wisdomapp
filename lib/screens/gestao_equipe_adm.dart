@@ -4,9 +4,10 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../constants/admin_master_config.dart';
 import '../constants/team_role_config.dart';
 import '../services/admin_permissions_service.dart';
-import '../services/logs_service.dart';
+import '../services/admin_team_role_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/theme_context.dart';
 import '../utils/admin_load_guard.dart';
@@ -43,11 +44,23 @@ class GestaoEquipeAdm extends StatefulWidget {
 enum _FiltroPapel { todos, admins, gestores, socios, editores }
 
 class _Membro {
-  _Membro(this.id, this.data)
-      : role = TeamRoleConfig.fromFirestore(
-          role: (data['role'] ?? '').toString(),
-          adminLevel: (data['adminLevel'] ?? '').toString(),
-        );
+  _Membro(this.id, this.data) : role = _papelReal(data);
+
+  /// `role: master` sem ser e-mail de dono vale como Administrador
+  /// (master é SÓ o e-mail dos donos — 02/10/2026).
+  static TeamRole _papelReal(Map<String, dynamic> data) {
+    final r = TeamRoleConfig.fromFirestore(
+      role: (data['role'] ?? '').toString(),
+      adminLevel: (data['adminLevel'] ?? '').toString(),
+    );
+    if (r == TeamRole.master &&
+        !AdminMasterConfig.isMasterEmail((data['email'] ?? '').toString())) {
+      return TeamRole.admin;
+    }
+    return r;
+  }
+
+  bool get isDono => AdminMasterConfig.isMasterEmail(email);
 
   final String id;
   final Map<String, dynamic> data;
@@ -177,7 +190,8 @@ class _GestaoEquipeAdmState extends State<GestaoEquipeAdm> {
   bool _podeEditar(_Membro m) {
     if (!widget.canManageTeam) return false;
     if (m.id == FirebaseAuth.instance.currentUser?.uid) return false;
-    return m.role != TeamRole.master;
+    // Donos (master por e-mail) não são editados pelo painel.
+    return !m.isDono;
   }
 
   void _snack(String msg, {bool erro = false}) {
@@ -315,15 +329,7 @@ class _GestaoEquipeAdmState extends State<GestaoEquipeAdm> {
     );
   }
 
-  Map<String, dynamic> _payloadPapel(TeamRole r) {
-    final payload = <String, dynamic>{
-      'role': TeamRoleConfig.firestoreRoleFor(r),
-      'updatedAt': FieldValue.serverTimestamp(),
-    };
-    final lvl = TeamRoleConfig.adminLevelFor(r);
-    payload['adminLevel'] = lvl ?? FieldValue.delete();
-    return payload;
-  }
+  static const _papeis = AdminTeamRoleService();
 
   Future<void> _editar(_Membro m) async {
     final nomeCtrl = TextEditingController(text: m.nome);
@@ -337,17 +343,12 @@ class _GestaoEquipeAdmState extends State<GestaoEquipeAdm> {
     nomeCtrl.dispose();
     if (papel == null || !mounted) return;
     try {
-      await AdminLoadGuard.comPrazo(
-        FirebaseFirestore.instance
-            .collection('users')
-            .doc(m.id)
-            .update({..._payloadPapel(papel), 'name': nome}),
-        oQue: 'a alteração',
-      );
-      await LogsService().saveLog(
-        modulo: 'Admin',
-        acao: 'Editou membro da equipe',
-        detalhes: '${nome.isEmpty ? m.email : nome} → ${TeamRoleConfig.label(papel)}',
+      // Servidor (`ctAdminSetUserRole`) confere o master e grava o log.
+      await _papeis.definirPapel(
+        uid: m.id,
+        role: papel,
+        nome: nome,
+        emailAlvo: m.email,
       );
       _snack('Membro atualizado.');
       _carregar();
@@ -363,7 +364,8 @@ class _GestaoEquipeAdmState extends State<GestaoEquipeAdm> {
         title: const Text('Remover da equipe?'),
         content: Text(
           '${m.nome.isEmpty ? m.email : '${m.nome} (${m.email})'} perde o acesso '
-          'ao Painel Admin e volta a ser usuário comum (plano Free).',
+          'ao Painel Admin e volta a ser usuário comum. O plano e a licença '
+          'dele continuam como estão.',
         ),
         actions: [
           TextButton(
@@ -380,20 +382,8 @@ class _GestaoEquipeAdmState extends State<GestaoEquipeAdm> {
     );
     if (ok != true || !mounted) return;
     try {
-      await AdminLoadGuard.comPrazo(
-        FirebaseFirestore.instance.collection('users').doc(m.id).update({
-          'role': 'user',
-          'plan': 'free',
-          'adminLevel': FieldValue.delete(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        }),
-        oQue: 'a remoção',
-      );
-      await LogsService().saveLog(
-        modulo: 'Admin',
-        acao: 'Removeu membro da equipe',
-        detalhes: m.nome.isEmpty ? m.email : '${m.nome} (${m.email})',
-      );
+      // 02/10/2026: só zera o papel (role/adminLevel) — NÃO mexe no plano.
+      await _papeis.definirPapel(uid: m.id, role: null, emailAlvo: m.email);
       _snack('Membro removido.');
       _carregar();
     } catch (e) {
@@ -427,11 +417,14 @@ class _GestaoEquipeAdmState extends State<GestaoEquipeAdm> {
             'vez, ou use «Novo membro» para criar a conta.');
         return;
       }
-      await snap.docs.first.reference.update(_payloadPapel(papel));
-      await LogsService().saveLog(
-        modulo: 'Admin',
-        acao: 'Promoveu usuário à equipe',
-        detalhes: '$email → ${TeamRoleConfig.label(papel)}',
+      if (AdminMasterConfig.isMasterEmail(email)) {
+        _snack('$email já é master (dono) — não precisa de papel.');
+        return;
+      }
+      await _papeis.definirPapel(
+        uid: snap.docs.first.id,
+        role: papel,
+        emailAlvo: email,
       );
       _snack('${TeamRoleConfig.label(papel)} ativado para $email.');
       _carregar();
@@ -732,8 +725,10 @@ class _MatrizPermissoes extends StatelessWidget {
   Widget build(BuildContext context) {
     const svc = AdminPermissionsService();
     final linhas = <(TeamRole, AdminCapability, String)>[
-      (TeamRole.master, AdminCapability.superAdmin, 'Tudo, inclusive equipe, exclusão definitiva e forçar versão.'),
-      (TeamRole.admin, AdminCapability.support, 'Painel completo; editar licenças. Sem gerir a equipe.'),
+      (TeamRole.master, AdminCapability.superAdmin, 'Só os e-mails dos donos. Tudo, inclusive equipe, backups, lojas, Mercado Pago e exclusão definitiva.'),
+      (TeamRole.admin, AdminCapability.admin, 'Painel completo menos o que é só do master. Sem gerir a equipe.'),
+      (TeamRole.suporte, AdminCapability.support, 'Usuários e licenças; sem financeiro, Mercado Pago nem backups.'),
+      (TeamRole.editor, AdminCapability.editor, 'Divulgação, conteúdo e escalas; sem usuários nem financeiro.'),
       (TeamRole.gestor, AdminCapability.contentGestor, 'Conteúdo, relatórios e recebimentos; usuários só leitura.'),
       (TeamRole.partner, AdminCapability.partner, 'Resumo da própria parte, usuários e recebimentos — leitura.'),
       (TeamRole.editorConteudo, AdminCapability.contentEditor, 'Só Cursos (vídeos) e Dicas financeiras. Bloqueado no servidor.'),

@@ -45,6 +45,13 @@ class UserProfile {
   /// Sobrenome exibido no painel (editável pelo sheet de nome).
   final String lastName;
 
+  /// Nível do papel `admin` na equipe (`suporte` | `editor` | null = admin
+  /// completo). Só o master grava (regras + `ctAdminSetUserRole`).
+  final String? adminLevel;
+
+  /// Override antigo de capacidade (`finance`, `readonly`…). Nunca dá master.
+  final String? adminCapability;
+
   const UserProfile({
     required this.uid,
     required this.cpf,
@@ -64,6 +71,8 @@ class UserProfile {
     this.authorizedDelegateEmail,
     this.firstName = '',
     this.lastName = '',
+    this.adminLevel,
+    this.adminCapability,
   });
 
   /// Normaliza o campo vindo do Firestore para [planStatus] interno: `active` | `canceled` | `past_due`.
@@ -169,6 +178,8 @@ class UserProfile {
       authorizedDelegateEmail: authorizedDelegateEmail,
       firstName: (d['displayFirstName'] ?? '') as String,
       lastName: (d['displayLastName'] ?? '') as String,
+      adminLevel: _optStr(d['adminLevel']),
+      adminCapability: _optStr(d['adminCapability']),
     );
   }
 
@@ -438,7 +449,14 @@ class UserProfile {
       'authorizedDelegateEmail': authorizedDelegateEmail,
       'displayFirstName': firstName,
       'displayLastName': lastName,
+      'adminLevel': adminLevel,
+      'adminCapability': adminCapability,
     };
+  }
+
+  static String? _optStr(Object? v) {
+    final t = (v ?? '').toString().trim();
+    return t.isEmpty ? null : t;
   }
 
   static DateTime? _dateFromStartupCache(Object? v) {
@@ -483,6 +501,8 @@ class UserProfile {
       authorizedDelegateEmail: authorizedDelegateEmail,
       firstName: (d['displayFirstName'] ?? '') as String,
       lastName: (d['displayLastName'] ?? '') as String,
+      adminLevel: _optStr(d['adminLevel']),
+      adminCapability: _optStr(d['adminCapability']),
     );
   }
 

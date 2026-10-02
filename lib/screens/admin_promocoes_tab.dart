@@ -9,6 +9,7 @@ import '../constants/promo_site_urls.dart';
 import '../services/functions_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/theme_context.dart';
+import '../utils/admin_users_pager.dart';
 import '../utils/debounced_text_controller.dart';
 import '../utils/user_export_csv_save.dart';
 import '../widgets/brl_amount_text_field.dart';
@@ -419,6 +420,8 @@ class _PromoUserPickerDialogState extends State<_PromoUserPickerDialog> {
     }
   }
 
+  /// 02/10/2026: busca por PREFIXO no servidor (e-mail exato, prefixo de
+  /// e-mail/nome, CPF, UID) — saiu a varredura de até 6×500 usuários.
   Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> _searchUsersServer(String raw) async {
     final trimmed = raw.trim();
     if (trimmed.length < 2) return [];
@@ -445,45 +448,11 @@ class _PromoUserPickerDialogState extends State<_PromoUserPickerDialog> {
     if (trimmed != qLower) await addEqEmail(qLower);
 
     try {
-      final pref = await FirebaseFirestore.instance
-          .collection('users')
-          .orderBy('email')
-          .startAt([qLower])
-          .endAt(['$qLower\uf8ff'])
-          .limit(45)
-          .get();
-      for (final d in pref.docs) {
+      for (final d in await adminSearchUsersServer(trimmed, limit: 30)) {
         out[d.id] = d;
       }
     } catch (e) {
       errors.add(e.toString().split('\n').first);
-    }
-
-    if (out.length < 60) {
-      try {
-        QueryDocumentSnapshot<Map<String, dynamic>>? cursor;
-        for (var page = 0; page < 6 && out.length < 60; page++) {
-          Query<Map<String, dynamic>> qb =
-              FirebaseFirestore.instance.collection('users').orderBy(FieldPath.documentId).limit(500);
-          if (cursor != null) {
-            qb = qb.startAfterDocument(cursor);
-          }
-          final bulk = await qb.get();
-          if (bulk.docs.isEmpty) break;
-          for (final d in bulk.docs) {
-            final m = d.data();
-            final name = (m['name'] ?? '').toString().toLowerCase();
-            final em = (m['email'] ?? '').toString().toLowerCase();
-            if (name.contains(qLower) || em.contains(qLower)) {
-              out[d.id] = d;
-              if (out.length >= 60) break;
-            }
-          }
-          cursor = bulk.docs.last;
-        }
-      } catch (e) {
-        errors.add(e.toString().split('\n').first);
-      }
     }
 
     if (out.isEmpty && errors.isNotEmpty) {

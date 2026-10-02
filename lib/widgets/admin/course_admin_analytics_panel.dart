@@ -17,14 +17,11 @@ class CourseAdminAnalyticsPanel extends StatelessWidget {
   final Map<String, String> courseTitles;
   final void Function(String courseId, String title)? onOpenViewers;
 
-  int get _totalViews =>
-      stats.fold<int>(0, (s, e) => s + e.viewCount);
+  int get _totalViews => stats.fold<int>(0, (s, e) => s + e.viewCount);
 
-  int get _totalLikes =>
-      stats.fold<int>(0, (s, e) => s + e.likeCount);
+  int get _totalLikes => stats.fold<int>(0, (s, e) => s + e.likeCount);
 
-  int get _totalPlays =>
-      stats.fold<int>(0, (s, e) => s + e.playCount);
+  int get _totalPlays => stats.fold<int>(0, (s, e) => s + e.playCount);
 
   List<CourseStatSummary> get _topByViews {
     final list = List<CourseStatSummary>.from(stats)
@@ -36,8 +33,8 @@ class CourseAdminAnalyticsPanel extends StatelessWidget {
     final out = <String, int>{};
     final now = DateTime.now();
     for (var i = 6; i >= 0; i--) {
-      final d = DateTime(now.year, now.month, now.day)
-          .subtract(Duration(days: i));
+      final d =
+          DateTime(now.year, now.month, now.day).subtract(Duration(days: i));
       final key = DateFormat('yyyy-MM-dd').format(d);
       out[key] = 0;
     }
@@ -234,8 +231,7 @@ class CourseAdminAnalyticsPanel extends StatelessWidget {
                                 child: Text(
                                   label.substring(0, 1).toUpperCase(),
                                   style: TextStyle(
-                                    color:
-                                        Colors.white.withValues(alpha: 0.45),
+                                    color: Colors.white.withValues(alpha: 0.45),
                                     fontSize: 10,
                                     fontWeight: FontWeight.w800,
                                   ),
@@ -292,7 +288,8 @@ class CourseAdminAnalyticsPanel extends StatelessWidget {
           SizedBox(
             height: 180,
             child: top.isEmpty || top.every((e) => e.viewCount == 0)
-                ? _emptyChart('Publique e compartilhe cursos para ver o ranking.')
+                ? _emptyChart(
+                    'Publique e compartilhe cursos para ver o ranking.')
                 : BarChart(
                     BarChartData(
                       maxY: maxViews * 1.2,
@@ -332,8 +329,7 @@ class CourseAdminAnalyticsPanel extends StatelessWidget {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    color:
-                                        Colors.white.withValues(alpha: 0.5),
+                                    color: Colors.white.withValues(alpha: 0.5),
                                     fontSize: 9,
                                     fontWeight: FontWeight.w700,
                                   ),
@@ -382,8 +378,7 @@ class CourseAdminAnalyticsPanel extends StatelessWidget {
                             top[i].courseId,
                             top[i].title.isNotEmpty
                                 ? top[i].title
-                                : (courseTitles[top[i].courseId] ??
-                                    'Conteúdo'),
+                                : (courseTitles[top[i].courseId] ?? 'Conteúdo'),
                           );
                         },
                       ),
@@ -546,118 +541,175 @@ Future<void> showCourseViewersSheet(
               ),
             ),
             Expanded(
-              child: StreamBuilder<List<CourseViewerRow>>(
-                stream: CourseAnalyticsService.instance.watchViewers(courseId),
-                builder: (context, snap) {
-                  final rows = snap.data ?? const [];
-                  if (snap.connectionState == ConnectionState.waiting &&
-                      rows.isEmpty) {
-                    return const Center(
-                      child: CircularProgressIndicator(color: Colors.white54),
-                    );
-                  }
-                  if (rows.isEmpty) {
-                    return Center(
-                      child: Text(
-                        'Ninguém assistiu este conteúdo ainda.',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.5),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    );
-                  }
-                  return ListView.separated(
-                    controller: scroll,
-                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
-                    itemCount: rows.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (context, i) {
-                      final r = rows[i];
-                      final when = r.lastWatchedAt == null
-                          ? ''
-                          : DateFormat('dd/MM HH:mm')
-                              .format(r.lastWatchedAt!);
-                      return Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1A1A1A),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.06),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              backgroundColor: r.liked
-                                  ? const Color(0xFFFF0000)
-                                      .withValues(alpha: 0.2)
-                                  : Colors.white12,
-                              child: Icon(
-                                r.liked
-                                    ? Icons.thumb_up_alt_rounded
-                                    : Icons.person_rounded,
-                                color: r.liked
-                                    ? const Color(0xFFFF0000)
-                                    : Colors.white70,
-                                size: 18,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    r.name.isEmpty ? r.uid : r.name,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    [
-                                      if (r.liked) 'Curtiu',
-                                      if (r.watchCount > 0)
-                                        '${r.watchCount}x assistiu',
-                                      if (when.isNotEmpty) when,
-                                    ].join(' · '),
-                                    style: TextStyle(
-                                      color: Colors.white
-                                          .withValues(alpha: 0.45),
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  if (r.progressFraction > 0.02) ...[
-                                    const SizedBox(height: 6),
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(99),
-                                      child: LinearProgressIndicator(
-                                        value: r.progressFraction,
-                                        minHeight: 4,
-                                        backgroundColor: Colors.white12,
-                                        color: const Color(0xFF3B82F6),
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
+              child: _CourseViewersList(courseId: courseId, scroll: scroll),
             ),
           ],
         ),
       ),
     ),
   );
+}
+
+/// Lista de quem assistiu: escuta criada UMA vez no State (antes era
+/// recriada a cada rebuild do DraggableScrollableSheet) e erro visível com
+/// «Tentar de novo» (antes a falha virava «Ninguém assistiu» — 02/10/2026).
+class _CourseViewersList extends StatefulWidget {
+  const _CourseViewersList({required this.courseId, required this.scroll});
+
+  final String courseId;
+  final ScrollController scroll;
+
+  @override
+  State<_CourseViewersList> createState() => _CourseViewersListState();
+}
+
+class _CourseViewersListState extends State<_CourseViewersList> {
+  late Stream<List<CourseViewerRow>> _stream;
+
+  @override
+  void initState() {
+    super.initState();
+    _stream = CourseAnalyticsService.instance.watchViewers(widget.courseId);
+  }
+
+  void _tentarDeNovo() {
+    setState(() {
+      _stream = CourseAnalyticsService.instance.watchViewers(widget.courseId);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scroll = widget.scroll;
+    return StreamBuilder<List<CourseViewerRow>>(
+      stream: _stream,
+      builder: (context, snap) {
+        if (snap.hasError && !snap.hasData) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.error_outline_rounded,
+                      color: Colors.orangeAccent, size: 36),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Não deu para carregar quem assistiu.\n${snap.error}',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.7),
+                      fontSize: 12.5,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: _tentarDeNovo,
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    label: const Text('Tentar de novo'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+        final rows = snap.data ?? const [];
+        if (snap.connectionState == ConnectionState.waiting && rows.isEmpty) {
+          return const Center(
+            child: CircularProgressIndicator(color: Colors.white54),
+          );
+        }
+        if (rows.isEmpty) {
+          return Center(
+            child: Text(
+              'Ninguém assistiu este conteúdo ainda.',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.5),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          );
+        }
+        return ListView.separated(
+          controller: scroll,
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+          itemCount: rows.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 8),
+          itemBuilder: (context, i) {
+            final r = rows[i];
+            final when = r.lastWatchedAt == null
+                ? ''
+                : DateFormat('dd/MM HH:mm').format(r.lastWatchedAt!);
+            return Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A1A1A),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.06),
+                ),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: r.liked
+                        ? const Color(0xFFFF0000).withValues(alpha: 0.2)
+                        : Colors.white12,
+                    child: Icon(
+                      r.liked
+                          ? Icons.thumb_up_alt_rounded
+                          : Icons.person_rounded,
+                      color: r.liked ? const Color(0xFFFF0000) : Colors.white70,
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          r.name.isEmpty ? r.uid : r.name,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          [
+                            if (r.liked) 'Curtiu',
+                            if (r.watchCount > 0) '${r.watchCount}x assistiu',
+                            if (when.isNotEmpty) when,
+                          ].join(' · '),
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.45),
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        if (r.progressFraction > 0.02) ...[
+                          const SizedBox(height: 6),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(99),
+                            child: LinearProgressIndicator(
+                              value: r.progressFraction,
+                              minHeight: 4,
+                              backgroundColor: Colors.white12,
+                              color: const Color(0xFF3B82F6),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 }

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../constants/admin_master_config.dart';
 import '../models/user_profile.dart';
 import '../services/app_session_cache.dart';
 import '../services/firestore_service.dart';
@@ -59,11 +60,24 @@ class _AdminScreenHost extends StatefulWidget {
 }
 
 class _AdminScreenHostState extends State<_AdminScreenHost> {
+  /// Escuta do perfil guardada no State (Firestore Web: nunca `.snapshots()`
+  /// criado no build — cada rebuild abria outra escuta).
+  late Stream<UserProfile> _profileStream;
+
   @override
   void initState() {
     super.initState();
+    _profileStream = FirestoreService().watchProfile(widget.uid);
     unawaited(UserProfileStartupCache.prefetch(widget.uid));
     unawaited(AppSessionCache.markShellReady(widget.uid));
+  }
+
+  @override
+  void didUpdateWidget(covariant _AdminScreenHost oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.uid != widget.uid) {
+      _profileStream = FirestoreService().watchProfile(widget.uid);
+    }
   }
 
   @override
@@ -72,7 +86,7 @@ class _AdminScreenHostState extends State<_AdminScreenHost> {
     final cached = UserProfileStartupCache.getSync(uid);
 
     return StreamBuilder<UserProfile>(
-      stream: FirestoreService().watchProfile(uid),
+      stream: _profileStream,
       builder: (context, snap) {
         if (snap.hasError && cached == null) {
           return Scaffold(
@@ -103,7 +117,8 @@ class _AdminScreenHostState extends State<_AdminScreenHost> {
           unawaited(UserProfileStartupCache.save(uid, snap.data!));
         }
 
-        if (!profile.canAccessAdminPanel) {
+        if (!profile.canAccessAdminPanel &&
+            !AdminMasterConfig.currentUserIsMaster()) {
           return AdminGuard.restrictedAccess(context);
         }
 

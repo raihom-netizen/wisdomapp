@@ -36,6 +36,8 @@ import '../services/admin_audit_service.dart';
 import 'package:share_plus/share_plus.dart';
 import '../widgets/skeleton_loader.dart';
 import 'gestao_equipe_adm.dart';
+import '../constants/team_role_config.dart';
+import '../services/admin_team_role_service.dart';
 import 'logs_atividade_page.dart';
 import 'acessos_dominio_tab.dart';
 import 'admin_usuarios_inteligencia_tab.dart';
@@ -47,6 +49,13 @@ import 'admin_notification_templates_tab.dart';
 import 'admin_sugestoes_tab.dart';
 import 'admin_painel_geral_tab.dart';
 import 'admin_uso_modulos_tab.dart';
+import 'admin/admin_resultado_tab.dart';
+import 'admin/admin_previsao_receita_tab.dart';
+import 'admin/admin_usuarios_ativos_tab.dart';
+import 'admin/admin_usuarios_painel_tab.dart';
+import 'admin/emails_com_problema_page.dart';
+import 'admin/admin_notificacoes_tab.dart';
+import 'admin/admin_promover_admin_tab.dart';
 import '../utils/admin_load_guard.dart';
 import '../widgets/admin/admin_ui_kit.dart';
 import '../services/functions_service.dart';
@@ -56,6 +65,7 @@ import '../constants/app_business_rules.dart';
 import '../utils/keyboard_form_scaffold.dart';
 import '../widgets/light_filter_picker.dart';
 import '../utils/admin_user_search.dart';
+import '../utils/admin_users_pager.dart';
 import '../utils/debounced_text_controller.dart';
 import '../utils/user_export_csv_save.dart';
 import '../constants/promo_site_urls.dart';
@@ -105,18 +115,31 @@ Color _dkFill(BuildContext c, Color light) =>
 Color _dkBorder(BuildContext c, Color light) =>
     c.isDarkMode ? c.appChipIdleBorder : light;
 
-/// Quando [useUnifiedPanel] é true, exibe seletor Gestão Yahweh | CASER | Gestão Frotas e filtra usuários por [app].
+/// Falha ao carregar uma configuração do painel: aviso com «Tentar de novo»
+/// (antes era `catch (_) {}` e a tela abria vazia como se não houvesse dado).
+void _adminAvisarFalhaCarga(
+  BuildContext context,
+  String oQue,
+  Object erro,
+  Future<void> Function() tentarDeNovo,
+) {
+  ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+    duration: const Duration(seconds: 8),
+    content: Text('Não deu para carregar $oQue: ${AdminLoadGuard.mensagem(erro)}'),
+    action: SnackBarAction(
+      label: 'Tentar de novo',
+      onPressed: () => unawaited(tentarDeNovo()),
+    ),
+  ));
+}
+
+/// Painel Admin do WISDOMAPP. (02/10/2026: saiu o seletor herdado
+/// Gestão Yahweh | CASER | Frotas — código morto, nunca ligado aqui.)
 class AdminScreen extends StatefulWidget {
   final String uid;
   final UserProfile profile;
 
-  /// Painel unificado: seletor de sistemas e filtro por app (gestao_yahweh, caser, gestao_frotas).
-  final bool useUnifiedPanel;
-  const AdminScreen(
-      {super.key,
-      required this.uid,
-      required this.profile,
-      this.useUnifiedPanel = false});
+  const AdminScreen({super.key, required this.uid, required this.profile});
 
   @override
   State<AdminScreen> createState() => _AdminScreenState();
@@ -135,6 +158,7 @@ class _AdminScreenState extends State<AdminScreen> {
   /// Escutas guardadas (Firestore Web: nunca `.snapshots()` dentro do build).
   Stream<QuerySnapshot<Map<String, dynamic>>>? _downloadsStream;
   Stream<DocumentSnapshot<Map<String, dynamic>>>? _landingStream;
+  Stream<ScaleRates>? _globalRatesStream;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final GlobalKey<AdminMercadoPagoTabState> _mpAdminTabKey =
       GlobalKey<AdminMercadoPagoTabState>();
@@ -166,12 +190,13 @@ class _AdminScreenState extends State<AdminScreen> {
   DateTime? _userFilterCadastroFim;
   final _userSearchCtrl = TextEditingController();
   Timer? _userSearchDebounce;
-  // Painel unificado: sistema selecionado (gestao_yahweh | caser | gestao_frotas)
-  String _selectedApp = 'gestao_yahweh';
-  // Cache do stream da lista de usuários: evita recriar consulta Firestore
-  // durante rebuilds (ex.: quando o teclado é aberto, muda MediaQuery).
-  Stream<QuerySnapshot<Map<String, dynamic>>>? _usersListStream;
+  // Lista de usuários em PÁGINAS (`.get()` + cursor, «Carregar mais») —
+  // 02/10/2026: antes era uma escuta em tempo real de até 2000 docs.
+  final AdminUsersPager _usersPager = AdminUsersPager();
   bool _usersListStreamBound = false;
+  String _usersServerSearchFor = '';
+  bool _usersServerSearching = false;
+  Object? _usersServerSearchError;
   bool _partnershipsBound = false;
   bool _adminHeavyWorkScheduled = false;
   bool _partnershipMetricsScheduled = false;
@@ -201,10 +226,20 @@ class _AdminScreenState extends State<AdminScreen> {
   String? _compareUidA;
   final _adminPermissions = const AdminPermissionsService();
 
-  AdminCapability get _adminCapability => _adminPermissions.capabilityFor(
-        role: widget.profile.role,
-        email: widget.profile.email,
-      );
+  /// Master só pelo e-mail do LOGIN verificado (não pelo campo do perfil);
+  /// `role: admin` respeita `adminLevel` (Suporte/Editor) — 02/10/2026.
+  AdminCapability get _adminCapability {
+    final u = FirebaseAuth.instance.currentUser;
+    return _adminPermissions.capabilityFor(
+      role: widget.profile.role,
+      email: u?.email ?? widget.profile.email,
+      emailVerified: u?.emailVerified ?? false,
+      adminLevel: widget.profile.adminLevel,
+      adminCapabilityOverride: widget.profile.adminCapability,
+    );
+  }
+
+  bool get _isMaster => _adminPermissions.isMaster(_adminCapability);
 
   bool get _isContentGestor =>
       _adminPermissions.isContentGestor(_adminCapability);
@@ -302,9 +337,34 @@ class _AdminScreenState extends State<AdminScreen> {
   void _ensureUsersListStream() {
     if (_usersListStreamBound) return;
     _usersListStreamBound = true;
+    _usersPager.addListener(_onUsersPagerChanged);
+    unawaited(_usersPager.reload());
+  }
+
+  void _onUsersPagerChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// Busca no servidor por prefixo (e-mail/nome/CPF/UID) e junta à lista —
+  /// acha quem ainda não está nas páginas carregadas.
+  Future<void> _runUsersServerSearch() async {
+    final q = _userSearchCtrl.text.trim();
+    if (q.length < 2 || q == _usersServerSearchFor) return;
+    _usersServerSearchFor = q;
     setState(() {
-      _usersListStream = _createUsersListStream();
+      _usersServerSearching = true;
+      _usersServerSearchError = null;
     });
+    try {
+      final achados = await adminSearchUsersServer(q);
+      if (!mounted) return;
+      _usersPager.merge(achados);
+    } catch (e) {
+      _usersServerSearchFor = '';
+      if (mounted) setState(() => _usersServerSearchError = e);
+    } finally {
+      if (mounted) setState(() => _usersServerSearching = false);
+    }
   }
 
   void _ensurePartnershipsCatalog() {
@@ -318,6 +378,17 @@ class _AdminScreenState extends State<AdminScreen> {
       setState(() {
         _partnershipPlansCatalog = parsePartnershipPlansSnapshot(snap);
       });
+    }, onError: (Object e) {
+      // Sem onError a falha some e o seletor de convênios fica vazio calado.
+      _partnershipsBound = false;
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Convênios não carregaram: ${AdminLoadGuard.mensagem(e)}'),
+        action: SnackBarAction(
+          label: 'Tentar de novo',
+          onPressed: _ensurePartnershipsCatalog,
+        ),
+      ));
     });
   }
 
@@ -355,11 +426,7 @@ class _AdminScreenState extends State<AdminScreen> {
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
 
-  int get _usersListLimit => _adminPreferLightStatsIO ? 400 : 2000;
-
   int get _kAdminTxMaxDetailDocs => _adminPreferLightStatsIO ? 400 : 2500;
-
-  int get _kAdminUsersFallbackLimit => _adminPreferLightStatsIO ? 800 : 5000;
 
   int get _kAdminUsersSizeSample => _adminPreferLightStatsIO ? 60 : 300;
 
@@ -548,7 +615,9 @@ class _AdminScreenState extends State<AdminScreen> {
           try {
             await BillingService().prorrogarPrazo(uid, 30);
             ok++;
-          } catch (_) {}
+          } catch (e) {
+            debugPrint('Lote prorrogar $uid: $e');
+          }
         }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -644,7 +713,9 @@ class _AdminScreenState extends State<AdminScreen> {
           targetUserId: uid,
         );
         success++;
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Lote remover $uid: $e');
+      }
     }
     if (!mounted) return;
     setState(_bulkSelectedUids.clear);
@@ -796,7 +867,9 @@ class _AdminScreenState extends State<AdminScreen> {
           'createdAt': FieldValue.serverTimestamp(),
         });
         sent++;
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Lote notificação $uid: $e');
+      }
     }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -884,22 +957,6 @@ class _AdminScreenState extends State<AdminScreen> {
     _scheduleAdminHeavyWork();
   }
 
-  Stream<QuerySnapshot<Map<String, dynamic>>> _createUsersListStream() {
-    Query<Map<String, dynamic>> q = adminUsersWithEmailQuery(
-        FirebaseFirestore.instance.collection('users'));
-    if (widget.useUnifiedPanel) {
-      q = q.where('app', isEqualTo: _selectedApp);
-    }
-    // Prazo para o 1º dado: com o faturamento desligado (01-02/10/2026) ou o
-    // Firestore Web travado a escuta nunca respondia e a lista ficava no
-    // esqueleto para sempre. Agora vira erro com «Tentar novamente».
-    return AdminLoadGuard.primeiroDadoComPrazo(
-      q.limit(_usersListLimit).snapshots(),
-      prazo: AdminLoadGuard.longo,
-      oQue: 'os usuários',
-    );
-  }
-
   final _heroTitleCtrl = TextEditingController();
   final _heroSubtitleCtrl = TextEditingController();
   final _heroTealCtrl = TextEditingController();
@@ -963,6 +1020,8 @@ class _AdminScreenState extends State<AdminScreen> {
 
   @override
   void dispose() {
+    _usersPager.removeListener(_onUsersPagerChanged);
+    _usersPager.dispose();
     _partnershipsPlansSub?.cancel();
     _userSearchDebounce?.cancel();
     _contentFocusNode.dispose();
@@ -1288,13 +1347,20 @@ class _AdminScreenState extends State<AdminScreen> {
     );
   }
 
+  /// Partes do Resumo que falharam na última carga (antes viravam «0»
+  /// calado). O Resumo mostra um aviso com «Tentar de novo».
+  final List<String> _statsFalhas = [];
+
+  void _statsFalhou(String parte, Object e) {
+    debugPrint('Resumo admin — $parte: $e');
+    _statsFalhas.add('$parte: ${AdminLoadGuard.mensagem(e)}');
+  }
+
   Future<_AdminStats> _loadStatsCore({int periodDays = 30}) async {
+    _statsFalhas.clear();
     final now = DateTime.now();
     Query<Map<String, dynamic>> usersQuery = adminUsersWithEmailQuery(
         FirebaseFirestore.instance.collection('users'));
-    if (widget.useUnifiedPanel) {
-      usersQuery = usersQuery.where('app', isEqualTo: _selectedApp);
-    }
     int admins = 0;
     int premiums = 0;
     int totalUsers = 0;
@@ -1324,59 +1390,24 @@ class _AdminScreenState extends State<AdminScreen> {
       admins = (uCounts[1].count ?? 0) + (uCounts[2].count ?? 0);
       premiums = uCounts[3].count ?? 0;
       try {
-        final pw = await usersQuery
-            .where('partnershipId', isNotEqualTo: '')
+        // `count()` com desigualdade num campo só (sem ler documentos). Antes
+        // o fallback lia até 5000 usuários para contar convênios.
+        final pw = await FirebaseFirestore.instance
+            .collection('users')
+            .where('partnershipId', isGreaterThan: '')
             .count()
             .get();
         usersWithPartnership = pw.count ?? 0;
-      } catch (_) {
-        // Fallback: conta partnershipId preenchido na amostra de documentos
-        usersWithPartnership = 0;
-        try {
-          final pSnap = await firestoreQueryGetReliable(
-            usersQuery.limit(_kAdminUsersFallbackLimit),
-          );
-          for (final doc in pSnap.docs) {
-            final pid = (doc.data()['partnershipId'] ?? '').toString().trim();
-            if (pid.isNotEmpty) usersWithPartnership++;
-          }
-        } catch (_) {
-          // Se também falhar, mantém 0
-        }
+      } catch (e) {
+        _statsFalhou('usuários com convênio', e);
       }
       final sampleSnap = await firestoreQueryGetReliable(usersQuery.limit(6));
       usersSample = sampleSnap.docs.map((d) => d.data()).toList();
       docsForLicenses = [];
-    } catch (_) {
-      final usersSnap = await firestoreQueryGetReliable(
-        usersQuery.limit(_kAdminUsersFallbackLimit),
-      );
-      usersSample = usersSnap.docs
-          .where((d) => adminUserHasCompleteEmail(d.data()))
-          .take(6)
-          .map((d) => d.data())
-          .toList();
-      docsForLicenses = usersSnap.docs
-          .where((d) => adminUserHasCompleteEmail(d.data()))
-          .toList();
-      totalUsers = 0;
-      for (final doc in docsForLicenses) {
-        totalUsers++;
-        final data = doc.data();
-        final role = (data['role'] ?? 'user').toString();
-        final plan = (data['plan'] ?? 'free').toString().toLowerCase();
-        if (role == 'admin' || role == 'master') admins += 1;
-        if (plan == 'premium' ||
-            plan == 'premium_assego' ||
-            plan == 'premium_pro' ||
-            plan == 'premium_monthly' ||
-            plan == 'premium_annual') {
-          premiums += 1;
-        }
-        if ((data['partnershipId'] ?? '').toString().trim().isNotEmpty) {
-          usersWithPartnership++;
-        }
-      }
+    } catch (e) {
+      // 02/10/2026: sem o fallback que baixava até 5000 usuários — a falha
+      // aparece no aviso do Resumo com «Tentar de novo».
+      _statsFalhou('contagem de usuários', e);
     }
 
     if (!_adminPreferLightStatsIO) {
@@ -1508,7 +1539,9 @@ class _AdminScreenState extends State<AdminScreen> {
       allForLast.sort((a, b) => (b['dateApproved'] as DateTime)
           .compareTo(a['dateApproved'] as DateTime));
       lastPaymentsList.addAll(allForLast.take(5));
-    } catch (_) {}
+    } catch (e) {
+      _statsFalhou('recebimentos do Mercado Pago', e);
+    }
 
     final since = now.subtract(Duration(days: periodDays));
     final sinceDayTx = DateTime(since.year, since.month, since.day);
@@ -1554,7 +1587,9 @@ class _AdminScreenState extends State<AdminScreen> {
         final ts = data['createdAt'];
         if (ts is Timestamp) latestUserCreatedAt = ts.toDate();
       }
-    } catch (_) {}
+    } catch (e) {
+      _statsFalhou('tamanho da base / último cadastro', e);
+    }
 
     try {
       final baseTx = FirebaseFirestore.instance
@@ -1611,9 +1646,10 @@ class _AdminScreenState extends State<AdminScreen> {
           txEstimatedMb = (avgTx * txCount30d) / (1024 * 1024);
         }
       }
-    } catch (_) {
+    } catch (e) {
       txCount30d = 0;
       totalValue = 0;
+      _statsFalhou('lançamentos do período', e);
     }
 
     if (lastPaymentsList.isNotEmpty) {
@@ -1659,9 +1695,6 @@ class _AdminScreenState extends State<AdminScreen> {
 
     Query<Map<String, dynamic>> licQ = adminUsersWithEmailQuery(
         FirebaseFirestore.instance.collection('users'));
-    if (widget.useUnifiedPanel) {
-      licQ = licQ.where('app', isEqualTo: _selectedApp);
-    }
 
     try {
       final licAggs = await Future.wait<AggregateQuerySnapshot>([
@@ -1695,7 +1728,8 @@ class _AdminScreenState extends State<AdminScreen> {
           if (expRaw is! Timestamp) continue;
           bucketLicenseExpiry(expRaw.toDate());
         }
-      } catch (_) {
+      } catch (e) {
+        _statsFalhou('vencimentos dos próximos dias', e);
         licenseExpiryHorizonCounts = List<int>.filled(nLicBuckets, 0);
         for (final doc in docsForLicenses) {
           final d = doc.data();
@@ -1706,18 +1740,9 @@ class _AdminScreenState extends State<AdminScreen> {
           bucketLicenseExpiry(exp);
         }
       }
-    } catch (_) {
-      // Fallback: busca documentos para contagem manual de licenças
-      try {
-        final licFallbackSnap = await firestoreQueryGetReliable(
-          licQ.limit(_kAdminUsersFallbackLimit),
-        );
-        docsForLicenses = licFallbackSnap.docs
-            .where((d) => adminUserHasCompleteEmail(d.data()))
-            .toList();
-      } catch (_) {
-        // mantém lista vazia
-      }
+    } catch (e) {
+      // 02/10/2026: sem o fallback que lia até 5000 usuários — vira aviso.
+      _statsFalhou('licenças vencidas / vencendo', e);
       for (final doc in docsForLicenses) {
         final d = doc.data();
         final exp = d['licenseExpiresAt'] is Timestamp
@@ -1979,7 +2004,7 @@ class _AdminScreenState extends State<AdminScreen> {
                 isCollapsed: false,
                 asDrawer: true,
                 onCloseDrawer: () => _scaffoldKey.currentState?.closeDrawer(),
-                allowedItems: _isRestrictedPanel ? _allowedMenuItems : null,
+                allowedItems: _allowedMenuItems,
                 accountEmail: widget.profile.email,
                 accountSubtitle: _isContentEditor
                     ? '${widget.profile.email} · editor · cursos · dicas'
@@ -2013,8 +2038,7 @@ class _AdminScreenState extends State<AdminScreen> {
                         if (mounted) _onAdminMenuSelected(item);
                       },
                       isCollapsed: _menuCollapsed,
-                      allowedItems:
-                          _isRestrictedPanel ? _allowedMenuItems : null,
+                      allowedItems: _allowedMenuItems,
                       accountEmail: widget.profile.email,
                       accountSubtitle: _isContentEditor
                           ? '${widget.profile.email} · editor · cursos · dicas'
@@ -2097,6 +2121,14 @@ class _AdminScreenState extends State<AdminScreen> {
         return 'E-mail';
       case AdminMenuItem.manutencao:
         return 'Manutenção';
+      case AdminMenuItem.receitasDespesas:
+      case AdminMenuItem.previsaoPlanos:
+      case AdminMenuItem.usuariosAtivos:
+      case AdminMenuItem.usuariosPainel:
+      case AdminMenuItem.emailsProblema:
+      case AdminMenuItem.notificacoes:
+      case AdminMenuItem.promoverAdmin:
+        return adminMenuItemTitulo(item);
       case AdminMenuItem.voltar:
         return '';
     }
@@ -2120,92 +2152,6 @@ class _AdminScreenState extends State<AdminScreen> {
     );
   }
 
-  static const Map<String, String> _sistemasUnificados = {
-    'gestao_yahweh': 'Gestão Yahweh Igrejas',
-    'caser': 'CASER',
-    'gestao_frotas': 'Gestão Frotas',
-  };
-
-  Widget _buildSeletorSistema() {
-    final mobile = _isAdminMobile(context);
-    final pad = AdminResponsive.horizontalPadding(context);
-    final dropdown = DropdownButtonHideUnderline(
-      child: DropdownButton<String>(
-        value: _selectedApp,
-        isExpanded: true,
-        dropdownColor: const Color(0xFF1D1E33),
-        style: const TextStyle(
-            color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
-        items: _sistemasUnificados.entries
-            .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
-            .toList(),
-        onChanged: (v) {
-          if (v != null) {
-            setState(() {
-              _selectedApp = v;
-              _usersListStreamBound = false;
-              _usersListStream = null;
-              _statsFuture = null;
-            });
-            _ensureUsersListStream();
-            _ensureStatsFuture();
-          }
-        },
-      ),
-    );
-    return Container(
-      margin: EdgeInsets.fromLTRB(pad, 8, pad, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-            colors: [const Color(0xFF122B6B), AppColors.primary],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight),
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-              color: AppColors.primary.withOpacity(0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 4))
-        ],
-      ),
-      child: mobile
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.swap_horiz_rounded,
-                        color: Colors.white.withOpacity(0.9), size: 22),
-                    const SizedBox(width: 10),
-                    Text('Sistema:',
-                        style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white.withOpacity(0.95))),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                dropdown,
-              ],
-            )
-          : Row(
-              children: [
-                Icon(Icons.swap_horiz_rounded,
-                    color: Colors.white.withOpacity(0.9), size: 22),
-                const SizedBox(width: 12),
-                Text('Sistema:',
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white.withOpacity(0.95))),
-                const SizedBox(width: 12),
-                Expanded(child: dropdown),
-              ],
-            ),
-    );
-  }
-
   Widget _buildContent(Color brandBlue, Color brandTeal) {
     final label = _breadcrumbLabel(_selectedItem);
     if (label.isEmpty) return const SizedBox.shrink();
@@ -2214,7 +2160,6 @@ class _AdminScreenState extends State<AdminScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (widget.useUnifiedPanel) _buildSeletorSistema(),
         if (isMobile)
           Padding(
             padding: EdgeInsets.fromLTRB(horizontalPad, 8, horizontalPad, 0),
@@ -2279,7 +2224,36 @@ class _AdminScreenState extends State<AdminScreen> {
     );
   }
 
+  /// Módulo fora do nível do usuário (atalho, alerta ou link interno que
+  /// mudou `_selectedItem` direto): mostra aviso em vez do conteúdo.
+  Widget _semPermissaoModulo() {
+    return ListView(
+      padding: _adminListPadding(context),
+      children: [
+        AdminVazio(
+          texto: 'Seu nível na equipe '
+              '(${_adminPermissions.label(_adminCapability)}) não acessa '
+              '«${_breadcrumbLabel(_selectedItem)}».',
+          icone: Icons.lock_person_rounded,
+        ),
+        const SizedBox(height: 12),
+        Center(
+          child: FilledButton.icon(
+            onPressed: () =>
+                setState(() => _selectedItem = _adminHomeMenuItem),
+            icon: const Icon(Icons.home_rounded, size: 18),
+            label: const Text('Voltar ao início do painel'),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildContentBody(Color brandBlue, Color brandTeal) {
+    if (_selectedItem != AdminMenuItem.voltar &&
+        !_adminPermissions.canAccessMenuItem(_adminCapability, _selectedItem)) {
+      return _semPermissaoModulo();
+    }
     switch (_selectedItem) {
       case AdminMenuItem.resumo:
         return _buildResumoTab(brandBlue, brandTeal);
@@ -2302,7 +2276,7 @@ class _AdminScreenState extends State<AdminScreen> {
         );
       case AdminMenuItem.logs:
         return LogsAtividadePage(
-          isMaster: widget.profile.role == 'master',
+          isMaster: _isMaster,
           embeddedInAdmin: true,
         );
       case AdminMenuItem.relatorios:
@@ -2345,6 +2319,23 @@ class _AdminScreenState extends State<AdminScreen> {
         return _buildEmailConfigTab(brandBlue, brandTeal);
       case AdminMenuItem.manutencao:
         return _buildManutencaoTab(brandBlue, brandTeal);
+      case AdminMenuItem.receitasDespesas:
+        return const AdminResultadoTab();
+      case AdminMenuItem.previsaoPlanos:
+        return const AdminPrevisaoReceitaTab();
+      case AdminMenuItem.usuariosAtivos:
+        return const AdminUsuariosAtivosTab();
+      case AdminMenuItem.usuariosPainel:
+        return const AdminUsuariosPainelTab();
+      case AdminMenuItem.emailsProblema:
+        return const EmailsComProblemaTab();
+      case AdminMenuItem.notificacoes:
+        return AdminNotificacoesTab(
+          podeTestar:
+              _adminPermissions.canSendTestNotifications(_adminCapability),
+        );
+      case AdminMenuItem.promoverAdmin:
+        return const AdminPromoverAdminTab();
       case AdminMenuItem.voltar:
         return const SizedBox.shrink();
     }
@@ -2513,8 +2504,6 @@ class _AdminScreenState extends State<AdminScreen> {
         Expanded(
           child: _usuariosTabIndex == 1
               ? AdminUsuariosInteligenciaTab(
-                  useUnifiedPanel: widget.useUnifiedPanel,
-                  unifiedApp: _selectedApp,
                   adminCanEdit: canEdit,
                 )
               : _buildUsuariosListTab(
@@ -2542,7 +2531,7 @@ class _AdminScreenState extends State<AdminScreen> {
       });
     }
     return RefreshIndicator(
-      onRefresh: () async => setState(() {}),
+      onRefresh: () => _usersPager.reload(),
       child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(
           parent: BouncingScrollPhysics(),
@@ -2666,6 +2655,7 @@ class _AdminScreenState extends State<AdminScreen> {
                                 onSubmitted: (_) {
                                   _userSearchDebounce?.cancel();
                                   if (mounted) setState(() {});
+                                  unawaited(_runUsersServerSearch());
                                   FocusManager.instance.primaryFocus?.unfocus();
                                 },
                                 onChanged: (_) {
@@ -2676,6 +2666,7 @@ class _AdminScreenState extends State<AdminScreen> {
                                             AppBusinessRules.searchDebounceMs),
                                     () {
                                       if (mounted) setState(() {});
+                                      unawaited(_runUsersServerSearch());
                                     },
                                   );
                                 },
@@ -2946,71 +2937,27 @@ class _AdminScreenState extends State<AdminScreen> {
               ),
             ),
           ),
-          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: _usersListStream,
-            builder: (context, snap) {
-              if (_usersListStream == null) {
+          Builder(
+            builder: (context) {
+              final pager = _usersPager;
+              if (!pager.loadedOnce && pager.error == null) {
                 return _usersListStateSliver(
                   child: const SkeletonListLoader(itemCount: 5, itemHeight: 72),
                 );
               }
-              if (snap.hasError) {
+              if (pager.error != null && pager.docs.isEmpty) {
                 return _usersListStateSliver(
-                  child: Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: AdminUi.cardOf(context),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.red.shade200),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.error_outline_rounded,
-                            size: 40, color: Colors.red.shade700),
-                        const SizedBox(height: 10),
-                        Text(
-                          'Erro ao carregar usuários: ${AdminLoadGuard.mensagem(snap.error)}',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                              fontSize: 13,
-                              color: _dkText(context, Colors.grey.shade800)),
-                        ),
-                        const SizedBox(height: 12),
-                        FilledButton.icon(
-                          onPressed: () => setState(() {
-                            _usersListStreamBound = false;
-                            _usersListStream = null;
-                            _ensureUsersListStream();
-                          }),
-                          icon: const Icon(Icons.refresh_rounded, size: 18),
-                          label: const Text('Tentar novamente'),
-                        ),
-                      ],
-                    ),
+                  child: AdminErroCard(
+                    erro: pager.error,
+                    titulo: 'Erro ao carregar usuários',
+                    onTentar: () => unawaited(_usersPager.reload()),
                   ),
                 );
               }
-              if (snap.connectionState == ConnectionState.waiting &&
-                  !snap.hasData) {
-                return _usersListStateSliver(
-                  child: const SkeletonListLoader(itemCount: 5, itemHeight: 72),
-                );
-              }
-              if (!snap.hasData) {
-                return _usersListStateSliver(
-                  child: const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(24),
-                      child: CircularProgressIndicator(),
-                    ),
-                  ),
-                );
-              }
-              final docs = snap.data!.docs;
+              final docs = pager.docs;
               final filtered = _filterUserDocs(docs);
               _visibleFilteredUids = filtered.map((d) => d.id).toList();
-              final atLimit = docs.length >= _usersListLimit;
+              final rodape = _usersPagerFooter();
               if (filtered.isEmpty) {
                 return SliverToBoxAdapter(
                   child: Padding(
@@ -3054,6 +3001,8 @@ class _AdminScreenState extends State<AdminScreen> {
                                 onPressed: _clearUserFilters,
                               ),
                             ],
+                            const SizedBox(height: 8),
+                            rodape,
                           ],
                         ),
                       ),
@@ -3072,24 +3021,48 @@ class _AdminScreenState extends State<AdminScreen> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              'Exibindo ${filtered.length} usuário(s)',
+                              'Exibindo ${filtered.length} usuário(s) · '
+                              '${docs.length} carregado(s)'
+                              '${pager.total == null ? '' : ' de ${pager.total}'}',
                               style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
                                   color: _dkSub(context, Colors.grey.shade700)),
                             ),
-                            if (atLimit)
+                            if (pager.hasMore)
                               Padding(
                                 padding: const EdgeInsets.only(top: 8),
                                 child: Text(
-                                  'Mostrando até $_usersListLimit usuários. Use os filtros ou Exportar CSV para ver todos.',
+                                  'Os filtros valem para os usuários já carregados. '
+                                  'A busca por nome/e-mail/CPF também procura no servidor. '
+                                  'Use «Carregar mais» ou Exportar CSV para ver todos.',
                                   style: TextStyle(
                                       fontSize: 12,
                                       color: AdminUi.apoioOf(context)),
                                 ),
                               ),
+                            if (_usersServerSearching)
+                              const Padding(
+                                padding: EdgeInsets.only(top: 8),
+                                child: LinearProgressIndicator(minHeight: 2),
+                              ),
+                            if (_usersServerSearchError != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: AdminErroCard(
+                                  erro: _usersServerSearchError,
+                                  titulo: 'A busca no servidor falhou',
+                                  onTentar: () => unawaited(_runUsersServerSearch()),
+                                ),
+                              ),
                           ],
                         ),
+                      );
+                    }
+                    if (index == filtered.length + 1) {
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: rodape,
                       );
                     }
                     final doc = filtered[index - 1];
@@ -3106,7 +3079,7 @@ class _AdminScreenState extends State<AdminScreen> {
                       ),
                     );
                   },
-                  childCount: 1 + filtered.length,
+                  childCount: 2 + filtered.length,
                   addAutomaticKeepAlives: false,
                   addRepaintBoundaries: false,
                 ),
@@ -3114,6 +3087,41 @@ class _AdminScreenState extends State<AdminScreen> {
             },
           ),
         ],
+      ),
+    );
+  }
+
+  /// Rodapé da lista paginada: «Carregar mais» / erro da página seguinte.
+  Widget _usersPagerFooter() {
+    final pager = _usersPager;
+    if (pager.error != null && pager.docs.isNotEmpty) {
+      return AdminErroCard(
+        erro: pager.error,
+        titulo: 'Não deu para carregar mais usuários',
+        onTentar: () => unawaited(_usersPager.loadMore()),
+      );
+    }
+    if (pager.loading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(12),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+    if (!pager.hasMore) {
+      return Center(
+        child: Text(
+          'Fim da lista (${pager.docs.length} usuário(s)).',
+          style: TextStyle(fontSize: 12, color: AdminUi.apoioOf(context)),
+        ),
+      );
+    }
+    return Center(
+      child: OutlinedButton.icon(
+        onPressed: () => unawaited(_usersPager.loadMore()),
+        icon: const Icon(Icons.expand_more_rounded, size: 18),
+        label: Text('Carregar mais (+${pager.pageSize})'),
       ),
     );
   }
@@ -3326,7 +3334,6 @@ class _AdminScreenState extends State<AdminScreen> {
       } else {
         Query<Map<String, dynamic>> q =
             FirebaseFirestore.instance.collection('users');
-        if (widget.useUnifiedPanel) q = q.where('app', isEqualTo: _selectedApp);
         const csvLimit = 5000;
         final snap = await q.limit(csvLimit).get();
         docs = snap.docs;
@@ -3564,6 +3571,7 @@ class _AdminScreenState extends State<AdminScreen> {
       newPlan: newPlan,
       conveniosCatalog: _partnershipPlansCatalog,
     );
+    unawaited(_usersPager.refreshOne(uid));
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -3756,12 +3764,32 @@ class _AdminScreenState extends State<AdminScreen> {
     final narrow = _isAdminMobile(context);
     final isSelf = uid == widget.uid;
 
+    // Papel (role) — SÓ o master muda, e ninguém vira master (02/10/2026).
     Future<void> alterarPerfil(String newRole) async {
       if (newRole == role) return;
+      if (!_isMaster || newRole == 'master') {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Só o master altera o papel. Master é só o '
+                'e-mail dos donos.')));
+        return;
+      }
       final beforeMap = <String, dynamic>{'role': role};
       final afterMap = <String, dynamic>{'role': newRole};
-      await doc.reference
-          .update({'role': newRole, 'updatedAt': FieldValue.serverTimestamp()});
+      try {
+        await const AdminTeamRoleService().definirPapel(
+          uid: uid,
+          role: newRole == 'admin' ? TeamRole.admin : null,
+          emailAlvo: email.isNotEmpty ? email : null,
+        );
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(AdminLoadGuard.mensagem(e)),
+              backgroundColor: AppColors.error));
+        }
+        return;
+      }
+      unawaited(_usersPager.refreshOne(uid));
       await AdminAuditService().logAdminAction(
           action: 'alterar_perfil',
           targetUserId: uid,
@@ -3803,6 +3831,7 @@ class _AdminScreenState extends State<AdminScreen> {
         'licenseValidUntilIncludingGrace': Timestamp.fromDate(graceEnd),
         'updatedAt': FieldValue.serverTimestamp(),
       });
+      unawaited(_usersPager.refreshOne(uid));
       await AdminAuditService().logAdminAction(
         action: alterarVencimento,
         targetUserId: uid,
@@ -4072,6 +4101,7 @@ class _AdminScreenState extends State<AdminScreen> {
                                   }
                                 : <String, dynamic>{};
                             await BillingService().prorrogarPrazo(uid, 15);
+                            unawaited(_usersPager.refreshOne(uid));
                             await AdminAuditService().logAdminAction(
                                 action: prorrogarPrazo,
                                 targetUserId: uid,
@@ -4091,10 +4121,11 @@ class _AdminScreenState extends State<AdminScreen> {
                           },
                         ),
                       if (!isRemoved) ...[
+                        if (_isMaster && !isSelf)
                         DropdownButton<String>(
-                          value: role == 'admin'
+                          value: role == 'admin' || role == 'master'
                               ? 'admin'
-                              : (role == 'master' ? 'master' : 'user'),
+                              : 'user',
                           isExpanded: false,
                           hint: const Text('Perfil',
                               style: TextStyle(fontSize: 11)),
@@ -4103,8 +4134,6 @@ class _AdminScreenState extends State<AdminScreen> {
                                 value: 'user', child: Text('Usuário')),
                             DropdownMenuItem(
                                 value: 'admin', child: Text('Admin')),
-                            DropdownMenuItem(
-                                value: 'master', child: Text('Master')),
                           ],
                           onChanged: (String? newRole) async {
                             if (newRole == null) return;
@@ -4156,6 +4185,7 @@ class _AdminScreenState extends State<AdminScreen> {
                           label: const Text('Reativar'),
                           onPressed: () async {
                             await BillingService().reativarUsuario(uid);
+                            unawaited(_usersPager.refreshOne(uid));
                             await AdminAuditService().logAdminAction(
                                 action: reativarUsuario,
                                 targetUserId: uid,
@@ -4348,6 +4378,7 @@ class _AdminScreenState extends State<AdminScreen> {
                                 }
                               : <String, dynamic>{};
                           await BillingService().prorrogarPrazo(uid, 15);
+                            unawaited(_usersPager.refreshOne(uid));
                           await AdminAuditService().logAdminAction(
                               action: prorrogarPrazo,
                               targetUserId: uid,
@@ -4367,17 +4398,16 @@ class _AdminScreenState extends State<AdminScreen> {
                       ),
                     ),
                   if (!isRemoved) ...[
+                    if (_isMaster && !isSelf)
                     DropdownButton<String>(
-                      value: role == 'admin'
+                      value: role == 'admin' || role == 'master'
                           ? 'admin'
-                          : (role == 'master' ? 'master' : 'user'),
+                          : 'user',
                       hint:
                           const Text('Perfil', style: TextStyle(fontSize: 11)),
                       items: const [
                         DropdownMenuItem(value: 'user', child: Text('Usuário')),
                         DropdownMenuItem(value: 'admin', child: Text('Admin')),
-                        DropdownMenuItem(
-                            value: 'master', child: Text('Master')),
                       ],
                       onChanged: (String? newRole) async {
                         if (newRole == null) return;
@@ -4428,6 +4458,7 @@ class _AdminScreenState extends State<AdminScreen> {
                       label: const Text('Reativar'),
                       onPressed: () async {
                         await BillingService().reativarUsuario(uid);
+                            unawaited(_usersPager.refreshOne(uid));
                         await AdminAuditService().logAdminAction(
                             action: reativarUsuario,
                             targetUserId: uid,
@@ -5192,6 +5223,15 @@ class _AdminScreenState extends State<AdminScreen> {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (_statsFalhas.isNotEmpty) ...[
+                      AdminErroCard(
+                        erro: _statsFalhas.join('\n'),
+                        titulo: 'Parte do Resumo não carregou '
+                            '(os números abaixo podem estar incompletos)',
+                        onTentar: _reloadResumoStats,
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     if (stats.licensesExpiring7d > 0 ||
                         stats.licensesExpired > 0) ...[
                       LayoutBuilder(
@@ -5445,8 +5485,6 @@ class _AdminScreenState extends State<AdminScreen> {
                     ),
                     const SizedBox(height: 24),
                     _AdminInactiveUsersPanel(
-                      useUnifiedPanel: widget.useUnifiedPanel,
-                      selectedApp: _selectedApp,
                       onDeleteUsersPermanent: (users) =>
                           _deleteUsersPermanentBulk(context, users),
                     ),
@@ -5857,7 +5895,11 @@ class _AdminScreenState extends State<AdminScreen> {
         });
       }
       rows.sort((a, b) => (b['date'] as String).compareTo(a['date'] as String));
-    } catch (_) {}
+    } catch (e) {
+      // 02/10/2026: antes virava «R$ 0,00» calado — agora o Relatórios
+      // mostra o erro com «Tentar de novo».
+      rethrow;
+    }
     return {
       'total30': total30,
       'total90': total90,
@@ -6579,8 +6621,18 @@ class _AdminScreenState extends State<AdminScreen> {
         ),
         const SizedBox(height: 12),
         StreamBuilder<ScaleRates>(
-          stream: ScaleRatesService().watchGlobalRates(),
+          // Escuta guardada no State (nunca criada no build) — 02/10/2026.
+          stream: _globalRatesStream ??= AdminLoadGuard.primeiroDadoComPrazo(
+            ScaleRatesService().watchGlobalRates(),
+            oQue: 'as taxas da escala',
+          ),
           builder: (context, snap) {
+            if (snap.hasError && !snap.hasData) {
+              return AdminErroCard(
+                erro: snap.error,
+                onTentar: () => setState(() => _globalRatesStream = null),
+              );
+            }
             if (!snap.hasData) {
               return const Card(
                   child: Padding(
@@ -9595,7 +9647,13 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
           }
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      // Antes: falha calada e a tela abria com os campos vazios/padrão.
+      if (mounted) {
+        _adminAvisarFalhaCarga(context, 'a configuração de manutenção', e,
+            _loadConfigOnce);
+      }
+    }
     if (mounted) setState(() => _loaded = true);
   }
 
@@ -10799,7 +10857,12 @@ class _EmailConfigTabContentState extends State<_EmailConfigTabContent> {
         if (user.isNotEmpty) _userCtrl.text = user;
         // Senha de app não é reexibida por segurança; campo fica vazio
       }
-    } catch (_) {}
+    } catch (e) {
+      if (mounted) {
+        _adminAvisarFalhaCarga(
+            context, 'a configuração de e-mail', e, _loadConfig);
+      }
+    }
     if (mounted) setState(() => _loaded = true);
   }
 
@@ -12142,14 +12205,10 @@ class _InactiveUsersSnapshot {
 }
 
 class _AdminInactiveUsersPanel extends StatefulWidget {
-  final bool useUnifiedPanel;
-  final String selectedApp;
   final Future<void> Function(List<Map<String, dynamic>> users)
       onDeleteUsersPermanent;
 
   const _AdminInactiveUsersPanel({
-    required this.useUnifiedPanel,
-    required this.selectedApp,
     required this.onDeleteUsersPermanent,
   });
 
@@ -12167,15 +12226,6 @@ class _AdminInactiveUsersPanelState extends State<_AdminInactiveUsersPanel> {
     _future = _loadInactiveUsers();
   }
 
-  @override
-  void didUpdateWidget(covariant _AdminInactiveUsersPanel oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.selectedApp != widget.selectedApp ||
-        oldWidget.useUnifiedPanel != widget.useUnifiedPanel) {
-      _future = _loadInactiveUsers();
-    }
-  }
-
   Future<_InactiveUsersSnapshot> _loadInactiveUsers() async {
     final callable = FirebaseFunctions.instance.httpsCallable(
       'ctAdminListInactiveUsers',
@@ -12190,7 +12240,6 @@ class _AdminInactiveUsersPanelState extends State<_AdminInactiveUsersPanel> {
       final payload = <String, dynamic>{
         'pageSize': 250,
         if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
-        if (widget.useUnifiedPanel) 'app': widget.selectedApp,
       };
       final res = await callable.call<Map<String, dynamic>>(payload);
       final data = (res.data);

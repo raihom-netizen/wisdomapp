@@ -18,18 +18,15 @@ import '../widgets/admin/admin_page_shell.dart';
 import '../widgets/admin_delegate_email_section.dart';
 import '../widgets/admin/admin_user_360_extras.dart';
 import '../utils/admin_load_guard.dart';
+import '../utils/admin_users_pager.dart';
 import '../widgets/admin/admin_ui_kit.dart';
 
 /// Painel admin WISDOMAPP: visão 360° por utilizador (uso, versão do cliente, convênio, MP, mensagem push).
 class AdminUsuariosInteligenciaTab extends StatefulWidget {
-  final bool useUnifiedPanel;
-  final String unifiedApp;
   final bool adminCanEdit;
 
   const AdminUsuariosInteligenciaTab({
     super.key,
-    required this.useUnifiedPanel,
-    required this.unifiedApp,
     this.adminCanEdit = true,
   });
 
@@ -44,17 +41,42 @@ class _AdminUsuariosInteligenciaTabState
   String? _selectedUid;
   String _filter = '';
   Timer? _filterDebounce;
-  // Stream cacheado: evita recriar a subscrição (e resetar a lista para o spinner)
-  // a cada tecla digitada na busca — era isso que fazia a busca "não funcionar".
-  Stream<QuerySnapshot<Map<String, dynamic>>>? _usersStreamCached;
-  String? _usersStreamApp;
+  // 02/10/2026: lista em PÁGINAS (`.get()` + cursor, «Carregar mais») e
+  // busca por prefixo no servidor — antes escutava até 2000 docs ao vivo.
+  final AdminUsersPager _pager = AdminUsersPager();
+  String _buscaServidorPara = '';
+  bool _buscandoServidor = false;
+  Object? _erroBuscaServidor;
 
-  static int get _usersStreamLimit {
-    if (kIsWeb) return 2000;
-    return (defaultTargetPlatform == TargetPlatform.android ||
-            defaultTargetPlatform == TargetPlatform.iOS)
-        ? 400
-        : 1200;
+  @override
+  void initState() {
+    super.initState();
+    _pager.addListener(_onPager);
+    unawaited(_pager.reload());
+  }
+
+  void _onPager() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _buscarNoServidor() async {
+    final q = _filter.trim();
+    if (q.length < 2 || q == _buscaServidorPara) return;
+    _buscaServidorPara = q;
+    setState(() {
+      _buscandoServidor = true;
+      _erroBuscaServidor = null;
+    });
+    try {
+      final achados = await adminSearchUsersServer(q);
+      if (!mounted) return;
+      _pager.merge(achados);
+    } catch (e) {
+      _buscaServidorPara = '';
+      if (mounted) setState(() => _erroBuscaServidor = e);
+    } finally {
+      if (mounted) setState(() => _buscandoServidor = false);
+    }
   }
 
   void _onSearchChanged(String v) {
@@ -62,49 +84,23 @@ class _AdminUsuariosInteligenciaTabState
     _filterDebounce = Timer(const Duration(milliseconds: 280), () {
       if (!mounted) return;
       setState(() => _filter = v);
+      unawaited(_buscarNoServidor());
     });
   }
 
   void _applySearchNow() {
     _filterDebounce?.cancel();
     setState(() => _filter = _searchCtrl.text);
-  }
-
-  @override
-  void didUpdateWidget(covariant AdminUsuariosInteligenciaTab oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.useUnifiedPanel &&
-        oldWidget.unifiedApp != widget.unifiedApp) {
-      setState(() => _selectedUid = null);
-    }
+    unawaited(_buscarNoServidor());
   }
 
   @override
   void dispose() {
+    _pager.removeListener(_onPager);
+    _pager.dispose();
     _filterDebounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
-  }
-
-  Stream<QuerySnapshot<Map<String, dynamic>>> _usersStream() {
-    final appKey = widget.useUnifiedPanel ? widget.unifiedApp : '';
-    // Recria só quando o app selecionado muda; caso contrário reusa o mesmo
-    // stream para a busca filtrar localmente sem perder os dados já carregados.
-    if (_usersStreamCached == null || _usersStreamApp != appKey) {
-      Query<Map<String, dynamic>> q =
-          adminUsersWithEmailQuery(FirebaseFirestore.instance.collection('users'));
-      if (widget.useUnifiedPanel) {
-        q = q.where('app', isEqualTo: widget.unifiedApp);
-      }
-      // Prazo para o 1º dado (nunca spinner eterno) — ver AdminLoadGuard.
-      _usersStreamCached = AdminLoadGuard.primeiroDadoComPrazo(
-        q.limit(_usersStreamLimit).snapshots(),
-        prazo: AdminLoadGuard.longo,
-        oQue: 'os usuários',
-      );
-      _usersStreamApp = appKey;
-    }
-    return _usersStreamCached!;
   }
 
   String _userLabel(Map<String, dynamic> d, String id) {
@@ -223,25 +219,24 @@ class _AdminUsuariosInteligenciaTabState
             SizedBox(height: narrow ? 8 : 12),
           ],
           Expanded(
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: _usersStream(),
-              builder: (context, snap) {
-                if (snap.hasError && !snap.hasData) {
+            child: Builder(
+              builder: (context) {
+                if (_pager.error != null && _pager.docs.isEmpty) {
                   return ListView(
                     children: [
                       AdminErroCard(
-                        erro: snap.error,
-                        onTentar: () => setState(() => _usersStreamCached = null),
+                        erro: _pager.error,
+                        onTentar: () => unawaited(_pager.reload()),
                       ),
                     ],
                   );
                 }
-                if (!snap.hasData) {
+                if (!_pager.loadedOnce) {
                   return const Center(
                     child: AdminCarregando(texto: 'Carregando os usuários…'),
                   );
                 }
-                final filtered = _filterDocs(snap.data!.docs);
+                final filtered = _filterDocs(_pager.docs);
                 if (narrow) {
                   if (_selectedUid == null) {
                     return _buildUserList(filtered, narrow: true);
@@ -321,16 +316,67 @@ class _AdminUsuariosInteligenciaTabState
     );
   }
 
+  /// Fim da lista: busca no servidor, erro da página e «Carregar mais».
+  Widget _rodapeLista() {
+    final itens = <Widget>[];
+    if (_buscandoServidor) {
+      itens.add(const LinearProgressIndicator(minHeight: 2));
+    }
+    if (_erroBuscaServidor != null) {
+      itens.add(AdminErroCard(
+        erro: _erroBuscaServidor,
+        titulo: 'A busca no servidor falhou',
+        onTentar: () => unawaited(_buscarNoServidor()),
+      ));
+    }
+    if (_pager.error != null && _pager.docs.isNotEmpty) {
+      itens.add(AdminErroCard(
+        erro: _pager.error,
+        titulo: 'Não deu para carregar mais',
+        onTentar: () => unawaited(_pager.loadMore()),
+      ));
+    } else if (_pager.loading) {
+      itens.add(const Padding(
+        padding: EdgeInsets.all(12),
+        child: Center(child: CircularProgressIndicator()),
+      ));
+    } else if (_pager.hasMore) {
+      itens.add(Center(
+        child: TextButton.icon(
+          onPressed: () => unawaited(_pager.loadMore()),
+          icon: const Icon(Icons.expand_more_rounded, size: 18),
+          label: Text('Carregar mais (${_pager.docs.length}'
+              '${_pager.total == null ? '' : ' de ${_pager.total}'})'),
+        ),
+      ));
+    } else {
+      itens.add(Center(
+        child: Text('${_pager.docs.length} usuário(s) carregado(s).',
+            style: TextStyle(fontSize: 12, color: AdminUi.apoioOf(context))),
+      ));
+    }
+    return Padding(
+      padding: const EdgeInsets.all(10),
+      child: Column(mainAxisSize: MainAxisSize.min, children: itens),
+    );
+  }
+
   Widget _buildUserList(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> docs, {
     required bool narrow,
   }) {
     if (docs.isEmpty) {
-      return Center(
-        child: Text(
-          'Nenhum utilizador neste filtro.',
-          style: TextStyle(color: AdminUi.apoioOf(context)),
-        ),
+      return ListView(
+        children: [
+          const SizedBox(height: 24),
+          Center(
+            child: Text(
+              'Nenhum utilizador neste filtro.',
+              style: TextStyle(color: AdminUi.apoioOf(context)),
+            ),
+          ),
+          _rodapeLista(),
+        ],
       );
     }
     return Container(
@@ -341,9 +387,10 @@ class _AdminUsuariosInteligenciaTabState
       ),
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        itemCount: docs.length,
+        itemCount: docs.length + 1,
         separatorBuilder: (_, __) => Divider(height: 1, color: context.isDarkMode ? context.appBorderSubtle : Colors.grey.shade100),
         itemBuilder: (context, i) {
+          if (i == docs.length) return _rodapeLista();
           final doc = docs[i];
           final d = doc.data();
           final sel = _selectedUid == doc.id;

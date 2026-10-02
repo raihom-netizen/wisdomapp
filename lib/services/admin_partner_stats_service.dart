@@ -16,6 +16,9 @@ class AdminPartnerStats {
   final List<String> bucketLabels;
   final double partnerSharePercent;
 
+  /// Partes que falharam ao carregar (antes viravam «0» calado — 02/10/2026).
+  final List<String> falhas;
+
   const AdminPartnerStats({
     required this.totalUsers,
     required this.totalPremiums,
@@ -28,6 +31,7 @@ class AdminPartnerStats {
     this.partnerGrossByBucket = const [],
     this.bucketLabels = const [],
     this.partnerSharePercent = 50,
+    this.falhas = const [],
   });
 }
 
@@ -82,6 +86,7 @@ class AdminPartnerStatsService {
     const taxaPix = 0.0099;
     const taxaCartao = 0.0499;
 
+    final falhas = <String>[];
     int totalUsers = 0;
     int totalPremiums = 0;
     int licensesExpired = 0;
@@ -117,7 +122,9 @@ class AdminPartnerStatsService {
       totalPremiums = counts[1].count ?? 0;
       licensesExpired = counts[2].count ?? 0;
       licensesExpiring7d = counts[3].count ?? 0;
-    } catch (_) {}
+    } catch (e) {
+      falhas.add('contagem de usuários e licenças: $e'.split('\n').first);
+    }
 
     final partnerSharePercent = await _loadPartnerSharePercent();
 
@@ -209,7 +216,9 @@ class AdminPartnerStatsService {
           }
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      falhas.add('recebimentos do Mercado Pago: $e'.split('\n').first);
+    }
 
     return AdminPartnerStats(
       totalUsers: totalUsers,
@@ -223,6 +232,7 @@ class AdminPartnerStatsService {
       partnerGrossByBucket: partnerGrossByBucket,
       bucketLabels: bucketLabels,
       partnerSharePercent: partnerSharePercent,
+      falhas: falhas,
     );
   }
 }

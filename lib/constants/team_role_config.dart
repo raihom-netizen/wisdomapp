@@ -93,18 +93,23 @@ class TeamRoleConfig {
   static String description(TeamRole role) {
     switch (role) {
       case TeamRole.master:
-        return 'Acesso total, faturamento, equipe e exclusão de outros ADMs.';
+        return 'Só os e-mails dos donos. Acesso total: equipe, backups, lojas, '
+            'Mercado Pago e exclusão.';
       case TeamRole.admin:
-        return 'Painel completo: usuários, licenças, Mercado Pago, deploy e configurações.';
+        return 'Painel completo (usuários, licenças, relatórios, conteúdo), menos o que é '
+            'só do master: backups, restaurar, migração, manutenção, lojas, '
+            'Mercado Pago, excluir usuário e equipe.';
       case TeamRole.gestor:
         return 'Dicas, vídeos dos cursos, relatórios e recebimentos. '
             'Usuários somente leitura — sem editar licenças.';
       case TeamRole.partner:
         return 'Resumo financeiro da própria parte, usuários e recebimentos — somente leitura.';
       case TeamRole.suporte:
-        return 'Usuários e licenças; sem chaves do Mercado Pago.';
+        return 'Usuários, licenças, convênios, promoções e sugestões; '
+            'sem financeiro, Mercado Pago, backups nem equipe.';
       case TeamRole.editor:
-        return 'Divulgação e escalas; sem backups nem financeiro.';
+        return 'Divulgação, cursos, dicas, downloads e escalas; '
+            'sem usuários, financeiro nem backups.';
       case TeamRole.editorConteudo:
         return 'Só Cursos (gravar, editar e excluir vídeos) e Dicas financeiras. '
             'Não vê usuários, financeiro, equipe, logs nem configurações.';

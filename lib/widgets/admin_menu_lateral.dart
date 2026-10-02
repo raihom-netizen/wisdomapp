@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
-enum AdminMenuItem { resumo, painelGeral, usuarios, usuarios360, usoModulos, equipe, logs, relatorios, sugestoes, dicasFinanceiras, downloads, landing, acessosDominio, escala, drive, mercadopago, cursos, pluggy, openFinanceExtras, premiumProMonitor, promocoes, convenios, lojas, migracaoEmail, email, manutencao, voltar }
+enum AdminMenuItem {
+  resumo, painelGeral, usuarios, usuarios360, usoModulos, equipe, logs, relatorios, sugestoes, dicasFinanceiras, downloads, landing, acessosDominio, escala, drive, mercadopago, cursos, pluggy, openFinanceExtras, premiumProMonitor, promocoes, convenios, lojas, migracaoEmail, email, manutencao,
+  // 02/10/2026 — portados do Controle Total + «Promover a admin» (só master).
+  receitasDespesas, previsaoPlanos, usuariosAtivos, usuariosPainel, emailsProblema, notificacoes, promoverAdmin,
+  voltar,
+}
 
 /// Título de cada item (menu, breadcrumb e matriz de permissões da Equipe).
 String adminMenuItemTitulo(AdminMenuItem item) {
@@ -58,6 +63,20 @@ String adminMenuItemTitulo(AdminMenuItem item) {
       return 'E-mail';
     case AdminMenuItem.manutencao:
       return 'Manutenção';
+    case AdminMenuItem.receitasDespesas:
+      return 'Receitas & Despesas';
+    case AdminMenuItem.previsaoPlanos:
+      return 'Previsão & planos';
+    case AdminMenuItem.usuariosAtivos:
+      return 'Usuários ativos';
+    case AdminMenuItem.usuariosPainel:
+      return 'Usuários · Painel';
+    case AdminMenuItem.emailsProblema:
+      return 'E-mails com problema';
+    case AdminMenuItem.notificacoes:
+      return 'Notificações (diagnóstico)';
+    case AdminMenuItem.promoverAdmin:
+      return 'Promover a admin';
     case AdminMenuItem.voltar:
       return 'Voltar ao aplicativo';
   }
@@ -112,6 +131,20 @@ Color adminMenuAccentColor(AdminMenuItem item) {
       return const Color(0xFF0D9488);
     case AdminMenuItem.manutencao:
       return const Color(0xFFDC2626);
+    case AdminMenuItem.receitasDespesas:
+      return const Color(0xFF059669);
+    case AdminMenuItem.previsaoPlanos:
+      return const Color(0xFFD97706);
+    case AdminMenuItem.usuariosAtivos:
+      return const Color(0xFF16A34A);
+    case AdminMenuItem.usuariosPainel:
+      return const Color(0xFF0EA5E9);
+    case AdminMenuItem.emailsProblema:
+      return const Color(0xFFE11D48);
+    case AdminMenuItem.notificacoes:
+      return const Color(0xFF7C3AED);
+    case AdminMenuItem.promoverAdmin:
+      return const Color(0xFFD97706);
     case AdminMenuItem.voltar:
       return const Color(0xFF94A3B8);
     default:
@@ -178,6 +211,8 @@ class AdminMenuLateral extends StatelessWidget {
         itens: [
           (item: AdminMenuItem.painelGeral, title: 'Painel geral', icon: Icons.space_dashboard_rounded),
           (item: AdminMenuItem.resumo, title: 'Resumo', icon: Icons.dashboard_rounded),
+          (item: AdminMenuItem.receitasDespesas, title: 'Receitas & Despesas', icon: Icons.account_balance_wallet_rounded),
+          (item: AdminMenuItem.previsaoPlanos, title: 'Previsão & planos', icon: Icons.trending_up_rounded),
           (item: AdminMenuItem.relatorios, title: 'Relatórios', icon: Icons.bar_chart_rounded),
           (item: AdminMenuItem.logs, title: 'Logs', icon: Icons.history_rounded),
         ],
@@ -190,7 +225,11 @@ class AdminMenuLateral extends StatelessWidget {
           (item: AdminMenuItem.usuarios360, title: 'WISDOMAPP 360°', icon: Icons.hub_rounded),
           // Quem usa cada módulo (financeiro, agenda, cursos…) + ativos 30 dias.
           (item: AdminMenuItem.usoModulos, title: 'Uso dos módulos', icon: Icons.dashboard_customize_rounded),
+          (item: AdminMenuItem.usuariosAtivos, title: 'Usuários ativos', icon: Icons.insights_rounded),
+          (item: AdminMenuItem.usuariosPainel, title: 'Usuários · Painel', icon: Icons.analytics_outlined),
           (item: AdminMenuItem.equipe, title: 'Equipe', icon: Icons.groups_rounded),
+          // Só o master vê (o menu filtra pela capacidade).
+          (item: AdminMenuItem.promoverAdmin, title: 'Promover a admin', icon: Icons.admin_panel_settings_rounded),
           (item: AdminMenuItem.sugestoes, title: 'Sugestões', icon: Icons.feedback_rounded),
         ],
       ),
@@ -226,6 +265,8 @@ class AdminMenuLateral extends StatelessWidget {
         cor: rosa,
         itens: [
           (item: AdminMenuItem.email, title: 'E-mail', icon: Icons.email_rounded),
+          (item: AdminMenuItem.emailsProblema, title: 'E-mails com problema', icon: Icons.mark_email_unread_rounded),
+          (item: AdminMenuItem.notificacoes, title: 'Notificações', icon: Icons.notifications_active_rounded),
           (item: AdminMenuItem.migracaoEmail, title: 'Migração e-mail', icon: Icons.swap_horiz_rounded),
         ],
       ),

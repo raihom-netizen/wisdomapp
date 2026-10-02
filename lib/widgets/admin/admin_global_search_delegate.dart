@@ -1,7 +1,7 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../utils/admin_user_search.dart';
+import '../../utils/admin_users_pager.dart';
 import 'admin_ui_kit.dart';
 typedef AdminGlobalSearchSelect = void Function(
   String uid,
@@ -14,7 +14,6 @@ class AdminGlobalSearchDelegate extends SearchDelegate<String?> {
   AdminGlobalSearchDelegate({required this.onSelect});
 
   final AdminGlobalSearchSelect onSelect;
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   @override
   String? get searchFieldLabel => 'Nome, e-mail ou ID';
@@ -54,22 +53,58 @@ class AdminGlobalSearchDelegate extends SearchDelegate<String?> {
     return _buildList(context);
   }
 
+  /// Future guardado por texto (o build do SearchDelegate roda a cada
+  /// tecla/frame — sem isto cada rebuild disparava as consultas de novo).
+  String? _futuroPara;
+  Future<List<_AdminSearchHit>>? _futuro;
+
+  Future<List<_AdminSearchHit>> _futuroDe(String q) {
+    if (_futuro == null || _futuroPara != q) {
+      _futuroPara = q;
+      _futuro = _search(q);
+    }
+    return _futuro!;
+  }
+
   Widget _buildList(BuildContext context) {
-    final q = query.trim().toLowerCase();
+    final q = query.trim();
     if (q.length < 2) return const SizedBox.shrink();
 
     return FutureBuilder<List<_AdminSearchHit>>(
-      future: _search(q),
+      future: _futuroDe(q),
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
         if (snap.hasError) {
-          return Center(child: Text('Erro: ${snap.error}'));
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              AdminErroCard(
+                erro: snap.error,
+                titulo: 'A busca falhou',
+                onTentar: () {
+                  _futuro = null;
+                  showSuggestions(context);
+                },
+              ),
+            ],
+          );
         }
         final hits = snap.data ?? [];
         if (hits.isEmpty) {
-          return const Center(child: Text('Nenhum utilizador encontrado.'));
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'Nenhum utilizador encontrado.\n'
+                'A busca procura o INÍCIO do e-mail ou do nome '
+                '(ex.: «joao@», «Maria Sil»), CPF completo ou UID.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AdminUi.apoioOf(context)),
+              ),
+            ),
+          );
         }
         return ListView.builder(
           itemCount: hits.length,
@@ -95,76 +130,24 @@ class AdminGlobalSearchDelegate extends SearchDelegate<String?> {
     );
   }
 
+  /// 02/10/2026: busca por PREFIXO no servidor (e-mail, nome, CPF, UID) com
+  /// limite por consulta — sem o antigo «lê 2000 usuários» e sem engolir
+  /// erro (a tela mostra «Tentar de novo»).
   Future<List<_AdminSearchHit>> _search(String q) async {
+    final docs = await adminSearchUsersServer(q, limit: 15);
     final results = <String, _AdminSearchHit>{};
-
-    void addDoc(QueryDocumentSnapshot<Map<String, dynamic>> d) {
+    for (final d in docs) {
       final data = d.data();
-      if (!adminUserHasCompleteEmail(data)) return;
+      if (!adminUserHasCompleteEmail(data)) continue;
       results[d.id] = _AdminSearchHit(
         uid: d.id,
         name: adminUserDisplayName(data),
         email: (data['email'] ?? '').toString(),
       );
     }
-
-    Future<void> byField(String field) async {
-      final snap = await _db
-          .collection('users')
-          .orderBy(field)
-          .startAt([q])
-          .endAt(['$q\uf8ff'])
-          .limit(12)
-          .get();
-      for (final d in snap.docs) {
-        addDoc(d);
-      }
-    }
-
-    try {
-      await byField('email');
-    } catch (_) {}
-    try {
-      await byField('name');
-    } catch (_) {}
-    try {
-      await byField('displayName');
-    } catch (_) {}
-
-    // Fallback: prefixo no Firestore pode falhar (índice/campo vazio) — filtra em memória.
-    if (results.length < 8) {
-      try {
-        final snap = await _db.collection('users').limit(2000).get();
-        for (final d in snap.docs) {
-          if (adminUserMatchesSearch(d.data(), d.id, q)) {
-            addDoc(d);
-          }
-          if (results.length >= 20) break;
-        }
-      } catch (_) {}
-    }
-
-    if (q.length >= 20) {
-      final direct = await _db.collection('users').doc(q).get();
-      if (direct.exists) {
-        final data = direct.data() ?? {};
-        if (adminUserHasCompleteEmail(data)) {
-          results[direct.id] = _AdminSearchHit(
-            uid: direct.id,
-            name: adminUserDisplayName(data),
-            email: (data['email'] ?? '').toString(),
-          );
-        }
-      }
-    }
-
     final list = results.values.toList();
-    list.sort((a, b) {
-      final na = a.name.toLowerCase();
-      final nb = b.name.toLowerCase();
-      return na.compareTo(nb);
-    });
-    return list.take(20).toList();
+    list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return list.take(30).toList();
   }
 }
 

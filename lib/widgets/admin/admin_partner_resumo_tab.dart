@@ -120,6 +120,15 @@ class _AdminPartnerResumoTabState extends State<AdminPartnerResumoTab> {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (stats.falhas.isNotEmpty) ...[
+                    AdminErroCard(
+                      erro: stats.falhas.join('\n'),
+                      titulo: 'Parte do resumo não carregou '
+                          '(números abaixo podem estar incompletos)',
+                      onTentar: _reload,
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   if (stats.licensesExpired > 0 ||
                       stats.licensesExpiring7d > 0) ...[
                     AdminAlertCenterPanel(
@@ -446,7 +455,7 @@ class _PartnerMetricCard extends StatelessWidget {
   }
 }
 
-class _PartnerForecastPanel extends StatelessWidget {
+class _PartnerForecastPanel extends StatefulWidget {
   final int totalPremiums;
   final double partnerGrossRealized;
   final double partnerSharePercent;
@@ -458,9 +467,22 @@ class _PartnerForecastPanel extends StatelessWidget {
   });
 
   @override
+  State<_PartnerForecastPanel> createState() => _PartnerForecastPanelState();
+}
+
+class _PartnerForecastPanelState extends State<_PartnerForecastPanel> {
+  /// Escuta guardada no State (antes criada a cada build — 02/10/2026).
+  late final Stream<MpCheckoutPricingSnapshot> _precos =
+      MpCheckoutPricingService.watch();
+
+  int get totalPremiums => widget.totalPremiums;
+  double get partnerGrossRealized => widget.partnerGrossRealized;
+  double get partnerSharePercent => widget.partnerSharePercent;
+
+  @override
   Widget build(BuildContext context) {
     return StreamBuilder<MpCheckoutPricingSnapshot>(
-      stream: MpCheckoutPricingService.watch(),
+      stream: _precos,
       builder: (context, priceSnap) {
         final monthly = priceSnap.data?.premiumMonthly ??
             MpCheckoutPricingSnapshot.defaults().premiumMonthly;

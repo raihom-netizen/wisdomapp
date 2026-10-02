@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../constants/admin_content_editor_config.dart';
+import '../constants/admin_master_config.dart';
 import '../constants/admin_partner_config.dart';
 import '../models/user_profile.dart';
 import '../theme/theme_context.dart';
@@ -54,6 +55,10 @@ class AdminGuard extends StatelessWidget {
         ),
       );
     }
+
+    // Master = SÓ e-mail de dono verificado no login (02/10/2026): entra
+    // mesmo que o doc não tenha `role` de admin.
+    if (AdminMasterConfig.currentUserIsMaster()) return child;
 
     final trusted = trustedProfile;
     if (trusted != null) {
