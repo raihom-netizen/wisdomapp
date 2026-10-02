@@ -389,7 +389,11 @@ service cloud.firestore {
       allow create, update: if isSignedIn();
       allow delete: if canEditPublicContent();
       match /viewers/{viewerId} {
-        allow read: if isAdminPanelReader() || isSystemManager();
+        // O próprio usuário precisa LER o seu doc: reportWatch/reportLike
+        // leem antes de gravar e, sem isto, dava permission-denied calado e
+        // «Assistiram/Reproduções» ficavam em 0 (só contava admin).
+        allow read: if isAdminPanelReader() || isSystemManager()
+          || (isSignedIn() && request.auth.uid == viewerId);
         allow create, update: if isSignedIn() && request.auth.uid == viewerId;
         allow delete: if canEditPublicContent()
           || (isSignedIn() && request.auth.uid == viewerId);

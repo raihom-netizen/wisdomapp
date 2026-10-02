@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
 /// Estatísticas agregadas de um curso/dica (painel admin).
@@ -289,7 +290,11 @@ class CourseAnalyticsService {
         'watchCount': FieldValue.increment(1),
         if (!exists) 'firstWatchedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
-    } catch (_) {}
+    } catch (e) {
+      // Antes era calado: a regra negava a leitura do próprio viewer e o
+      // painel ficava em 0 sem ninguém saber (02/10/2026).
+      debugPrint('CourseAnalytics.reportWatch falhou ($courseId): $e');
+    }
   }
 
   /// Garante metadados do conteúdo no doc de stats (título/tipo).

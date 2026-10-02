@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../services/course_analytics_service.dart';
+import '../../theme/theme_context.dart';
 
 /// Painel moderno de métricas — visualizações, curtidas e gráfico de engajamento.
 class CourseAdminAnalyticsPanel extends StatelessWidget {
@@ -11,9 +12,14 @@ class CourseAdminAnalyticsPanel extends StatelessWidget {
     required this.stats,
     required this.courseTitles,
     this.onOpenViewers,
+    this.error,
   });
 
   final List<CourseStatSummary> stats;
+
+  /// Falha ao ler `course_stats` (regra/rede) — mostrada no painel em vez de
+  /// deixar os contadores em 0 como se não houvesse audiência.
+  final Object? error;
   final Map<String, String> courseTitles;
   final void Function(String courseId, String title)? onOpenViewers;
 
@@ -73,18 +79,42 @@ class CourseAdminAnalyticsPanel extends StatelessWidget {
             .reduce((a, b) => a > b ? a : b)
             .clamp(1.0, double.infinity);
 
+    // Claro no modo claro, grafite só no escuro (antes era preto fixo).
+    final dark = context.isDarkMode;
+    final fg = dark ? Colors.white : context.appTextPrimary;
+    Color fgA(double a) => dark
+        ? Colors.white.withValues(alpha: a)
+        : context.appTextPrimary.withValues(alpha: (a + 0.25).clamp(0.0, 1.0));
+    final gridLine = dark
+        ? Colors.white.withValues(alpha: 0.06)
+        : context.appChipIdleBorder;
+
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF141414), Color(0xFF1C1C28), Color(0xFF0F0F0F)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+        gradient: dark
+            ? const LinearGradient(
+                colors: [
+                  Color(0xFF141414),
+                  Color(0xFF1C1C28),
+                  Color(0xFF0F0F0F),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              )
+            : const LinearGradient(
+                colors: [Colors.white, Color(0xFFF8FAFC), Color(0xFFF1F5F9)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+        border: Border.all(
+          color: dark
+              ? Colors.white.withValues(alpha: 0.08)
+              : context.appChipIdleBorder,
         ),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.35),
+            color: Colors.black.withValues(alpha: dark ? 0.35 : 0.06),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -109,23 +139,23 @@ class CourseAdminAnalyticsPanel extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'Controle de audiência',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: fg,
                         fontWeight: FontWeight.w900,
                         fontSize: 16,
                       ),
                     ),
-                    SizedBox(height: 2),
+                    const SizedBox(height: 2),
                     Text(
                       'Quem assistiu, curtiu e a evolução dos últimos 7 dias',
                       style: TextStyle(
-                        color: Colors.white54,
+                        color: dark ? Colors.white54 : context.appTextSecondary,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
@@ -135,6 +165,33 @@ class CourseAdminAnalyticsPanel extends StatelessWidget {
               ),
             ],
           ),
+          if (error != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration:
+                  context.appInfoBannerDecoration(const Color(0xFFDC2626)),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.error_outline_rounded,
+                      color: Color(0xFFDC2626), size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Não deu para ler a audiência — os números abaixo podem '
+                      'estar zerados por isso.\n$error',
+                      style: TextStyle(
+                        color: fg,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
           Row(
             children: [
@@ -167,10 +224,10 @@ class CourseAdminAnalyticsPanel extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 18),
-          const Text(
+          Text(
             'Atividade · 7 dias',
             style: TextStyle(
-              color: Colors.white,
+              color: fg,
               fontWeight: FontWeight.w800,
               fontSize: 13,
             ),
@@ -180,6 +237,7 @@ class CourseAdminAnalyticsPanel extends StatelessWidget {
             height: 160,
             child: dayValues.every((v) => v == 0)
                 ? _emptyChart(
+                    context,
                     'Ainda sem visualizações registradas.\nQuando usuários assistirem, o gráfico aparece aqui.',
                   )
                 : LineChart(
@@ -190,7 +248,7 @@ class CourseAdminAnalyticsPanel extends StatelessWidget {
                         show: true,
                         drawVerticalLine: false,
                         getDrawingHorizontalLine: (v) => FlLine(
-                          color: Colors.white.withValues(alpha: 0.06),
+                          color: gridLine,
                           strokeWidth: 1,
                         ),
                       ),
@@ -209,7 +267,7 @@ class CourseAdminAnalyticsPanel extends StatelessWidget {
                             getTitlesWidget: (v, _) => Text(
                               v.toInt().toString(),
                               style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.35),
+                                color: fgA(0.35),
                                 fontSize: 10,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -231,7 +289,7 @@ class CourseAdminAnalyticsPanel extends StatelessWidget {
                                 child: Text(
                                   label.substring(0, 1).toUpperCase(),
                                   style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.45),
+                                    color: fgA(0.45),
                                     fontSize: 10,
                                     fontWeight: FontWeight.w800,
                                   ),
@@ -276,10 +334,10 @@ class CourseAdminAnalyticsPanel extends StatelessWidget {
                   ),
           ),
           const SizedBox(height: 18),
-          const Text(
+          Text(
             'Top conteúdos por quem assistiu',
             style: TextStyle(
-              color: Colors.white,
+              color: fg,
               fontWeight: FontWeight.w800,
               fontSize: 13,
             ),
@@ -289,6 +347,7 @@ class CourseAdminAnalyticsPanel extends StatelessWidget {
             height: 180,
             child: top.isEmpty || top.every((e) => e.viewCount == 0)
                 ? _emptyChart(
+                    context,
                     'Publique e compartilhe cursos para ver o ranking.')
                 : BarChart(
                     BarChartData(
@@ -298,7 +357,7 @@ class CourseAdminAnalyticsPanel extends StatelessWidget {
                         show: true,
                         drawVerticalLine: false,
                         getDrawingHorizontalLine: (v) => FlLine(
-                          color: Colors.white.withValues(alpha: 0.05),
+                          color: gridLine,
                           strokeWidth: 1,
                         ),
                       ),
@@ -329,7 +388,7 @@ class CourseAdminAnalyticsPanel extends StatelessWidget {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.5),
+                                    color: fgA(0.5),
                                     fontSize: 9,
                                     fontWeight: FontWeight.w700,
                                   ),
@@ -391,7 +450,7 @@ class CourseAdminAnalyticsPanel extends StatelessWidget {
               'Toque numa barra para ver quem assistiu / curtiu',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.4),
+                color: fgA(0.4),
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
               ),
@@ -402,20 +461,29 @@ class CourseAdminAnalyticsPanel extends StatelessWidget {
     );
   }
 
-  Widget _emptyChart(String msg) {
+  Widget _emptyChart(BuildContext context, String msg) {
+    final dark = context.isDarkMode;
     return Container(
       alignment: Alignment.center,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
+        color: dark
+            ? Colors.white.withValues(alpha: 0.03)
+            : context.appChipIdleBg,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        border: Border.all(
+          color: dark
+              ? Colors.white.withValues(alpha: 0.06)
+              : context.appChipIdleBorder,
+        ),
       ),
       child: Text(
         msg,
         textAlign: TextAlign.center,
         style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.45),
+          color: dark
+              ? Colors.white.withValues(alpha: 0.45)
+              : context.appTextSecondary,
           fontWeight: FontWeight.w600,
           height: 1.35,
           fontSize: 12.5,
@@ -440,10 +508,14 @@ class _MetricTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = context.isDarkMode;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        // No claro: tom claro da própria cor (azul/vermelho/âmbar) sobre branco.
+        color: dark
+            ? color.withValues(alpha: 0.1)
+            : context.appAccentSurface(color, lightAlpha: 0.08),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: color.withValues(alpha: 0.28)),
       ),
@@ -454,8 +526,8 @@ class _MetricTile extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             value,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: context.appTextPrimary,
               fontWeight: FontWeight.w900,
               fontSize: 20,
             ),
@@ -464,7 +536,9 @@ class _MetricTile extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.55),
+              color: dark
+                  ? Colors.white.withValues(alpha: 0.55)
+                  : context.appTextSecondary,
               fontWeight: FontWeight.w700,
               fontSize: 11,
             ),
@@ -489,10 +563,10 @@ Future<void> showCourseViewersSheet(
       initialChildSize: 0.72,
       minChildSize: 0.4,
       maxChildSize: 0.94,
-      builder: (_, scroll) => Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF121212),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      builder: (sheetCtx, scroll) => Container(
+        decoration: BoxDecoration(
+          color: sheetCtx.isDarkMode ? const Color(0xFF121212) : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
         ),
         child: Column(
           children: [
@@ -501,7 +575,9 @@ Future<void> showCourseViewersSheet(
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.white24,
+                color: sheetCtx.isDarkMode
+                    ? Colors.white24
+                    : sheetCtx.appChipIdleBorder,
                 borderRadius: BorderRadius.circular(99),
               ),
             ),
@@ -520,16 +596,16 @@ Future<void> showCourseViewersSheet(
                           title,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: sheetCtx.appTextPrimary,
                             fontWeight: FontWeight.w900,
                             fontSize: 16,
                           ),
                         ),
-                        const Text(
+                        Text(
                           'Usuários que assistiram / curtiram',
                           style: TextStyle(
-                            color: Colors.white54,
+                            color: sheetCtx.appTextSecondary,
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),
@@ -581,6 +657,10 @@ class _CourseViewersListState extends State<_CourseViewersList> {
   @override
   Widget build(BuildContext context) {
     final scroll = widget.scroll;
+    final dark = context.isDarkMode;
+    Color fgA(double a) => dark
+        ? Colors.white.withValues(alpha: a)
+        : context.appTextPrimary.withValues(alpha: (a + 0.25).clamp(0.0, 1.0));
     return StreamBuilder<List<CourseViewerRow>>(
       stream: _stream,
       builder: (context, snap) {
@@ -598,7 +678,7 @@ class _CourseViewersListState extends State<_CourseViewersList> {
                     'Não deu para carregar quem assistiu.\n${snap.error}',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.7),
+                      color: fgA(0.7),
                       fontSize: 12.5,
                     ),
                   ),
@@ -615,8 +695,10 @@ class _CourseViewersListState extends State<_CourseViewersList> {
         }
         final rows = snap.data ?? const [];
         if (snap.connectionState == ConnectionState.waiting && rows.isEmpty) {
-          return const Center(
-            child: CircularProgressIndicator(color: Colors.white54),
+          return Center(
+            child: CircularProgressIndicator(
+              color: dark ? Colors.white54 : context.appTextMuted,
+            ),
           );
         }
         if (rows.isEmpty) {
@@ -624,7 +706,7 @@ class _CourseViewersListState extends State<_CourseViewersList> {
             child: Text(
               'Ninguém assistiu este conteúdo ainda.',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
+                color: fgA(0.5),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -643,10 +725,12 @@ class _CourseViewersListState extends State<_CourseViewersList> {
             return Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFF1A1A1A),
+                color: dark ? const Color(0xFF1A1A1A) : context.appChipIdleBg,
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.06),
+                  color: dark
+                      ? Colors.white.withValues(alpha: 0.06)
+                      : context.appChipIdleBorder,
                 ),
               ),
               child: Row(
@@ -654,12 +738,14 @@ class _CourseViewersListState extends State<_CourseViewersList> {
                   CircleAvatar(
                     backgroundColor: r.liked
                         ? const Color(0xFFFF0000).withValues(alpha: 0.2)
-                        : Colors.white12,
+                        : (dark ? Colors.white12 : context.appChipIdleBorder),
                     child: Icon(
                       r.liked
                           ? Icons.thumb_up_alt_rounded
                           : Icons.person_rounded,
-                      color: r.liked ? const Color(0xFFFF0000) : Colors.white70,
+                      color: r.liked
+                          ? const Color(0xFFFF0000)
+                          : (dark ? Colors.white70 : context.appTextSecondary),
                       size: 18,
                     ),
                   ),
@@ -670,8 +756,8 @@ class _CourseViewersListState extends State<_CourseViewersList> {
                       children: [
                         Text(
                           r.name.isEmpty ? r.uid : r.name,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: context.appTextPrimary,
                             fontWeight: FontWeight.w800,
                             fontSize: 14,
                           ),
@@ -684,7 +770,7 @@ class _CourseViewersListState extends State<_CourseViewersList> {
                             if (when.isNotEmpty) when,
                           ].join(' · '),
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.45),
+                            color: fgA(0.45),
                             fontSize: 11.5,
                             fontWeight: FontWeight.w600,
                           ),
@@ -696,7 +782,9 @@ class _CourseViewersListState extends State<_CourseViewersList> {
                             child: LinearProgressIndicator(
                               value: r.progressFraction,
                               minHeight: 4,
-                              backgroundColor: Colors.white12,
+                              backgroundColor: dark
+                                  ? Colors.white12
+                                  : context.appChipIdleBorder,
                               color: const Color(0xFF3B82F6),
                             ),
                           ),
