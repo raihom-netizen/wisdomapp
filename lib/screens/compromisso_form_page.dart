@@ -882,13 +882,19 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
                   suffixIcon: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      IconButton(
-                        tooltip: 'Escolher da agenda',
-                        icon: const Icon(Icons.contacts_rounded, size: 19),
-                        color: AppColors.primary,
-                        splashRadius: 22,
-                        onPressed: _pickWhatsAppContact,
-                      ),
+                      // Seletor de contatos do sistema (Android ACTION_PICK /
+                      // iOS CNContactPicker): não pede READ_CONTACTS. Fora do
+                      // celular (web/desktop) o botão some — digita ou cola.
+                      if (!kIsWeb &&
+                          (defaultTargetPlatform == TargetPlatform.android ||
+                              defaultTargetPlatform == TargetPlatform.iOS))
+                        IconButton(
+                          tooltip: 'Escolher da agenda',
+                          icon: const Icon(Icons.contacts_rounded, size: 19),
+                          color: AppColors.primary,
+                          splashRadius: 22,
+                          onPressed: _pickWhatsAppContact,
+                        ),
                       IconButton(
                         tooltip: 'Colar',
                         icon: const Icon(Icons.content_paste_rounded, size: 18),
