@@ -841,7 +841,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       final hasYoutube = youtubeRaw.isNotEmpty;
       final hasMp4 = _pickedVideos.isNotEmpty;
       if (!hasMp4 && !hasYoutube) {
-        _snack('Anexe um vídeo MP4 ou informe link YouTube (opcional).');
+        _snack('Envie pelo menos um vídeo ou cole um link do YouTube.');
         return false;
       }
       if (hasYoutube && !YoutubeUrlHelper.isValidYoutubeUrl(youtubeRaw)) {
@@ -1577,11 +1577,11 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                               Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF0F0F0F),
+                                  color: _Yt.bg(ctx),
                                   borderRadius: BorderRadius.circular(14),
                                   border: Border.all(
                                       color:
-                                          Colors.white.withValues(alpha: 0.08)),
+                                          _Yt.line(ctx)),
                                 ),
                                 child: Column(
                                   crossAxisAlignment:
@@ -1607,7 +1607,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                                           child: Text(
                                             'Vídeos do curso',
                                             style: TextStyle(
-                                              color: Colors.white,
+                                              color: _Yt.fg(ctx),
                                               fontWeight: FontWeight.w900,
                                               fontSize: 13,
                                             ),
@@ -1625,23 +1625,22 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                                           child: Container(
                                             padding: const EdgeInsets.all(8),
                                             decoration: BoxDecoration(
-                                              color: const Color(0xFF1A1A1A),
+                                              color: _Yt.card(ctx),
                                               borderRadius:
                                                   BorderRadius.circular(10),
                                             ),
                                             child: Row(
                                               children: [
                                                 Icon(Icons.videocam_rounded,
-                                                    color: Colors.white
-                                                        .withValues(alpha: 0.5),
+                                                    color: _Yt.fgA(ctx, 0.5),
                                                     size: 18),
                                                 const SizedBox(width: 8),
                                                 Expanded(
                                                   child: Text(
                                                     v.label ??
                                                         'Vídeo publicado',
-                                                    style: const TextStyle(
-                                                        color: Colors.white70,
+                                                    style: TextStyle(
+                                                        color: _Yt.fgA(ctx, 0.7),
                                                         fontSize: 12,
                                                         fontWeight:
                                                             FontWeight.w600),
@@ -1659,7 +1658,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                                         child: Container(
                                           padding: const EdgeInsets.all(8),
                                           decoration: BoxDecoration(
-                                            color: const Color(0xFF1A1A1A),
+                                            color: _Yt.card(ctx),
                                             borderRadius:
                                                 BorderRadius.circular(10),
                                           ),
@@ -1677,8 +1676,8 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                                                   maxLines: 1,
                                                   overflow:
                                                       TextOverflow.ellipsis,
-                                                  style: const TextStyle(
-                                                      color: Colors.white,
+                                                  style: TextStyle(
+                                                      color: _Yt.fg(ctx),
                                                       fontSize: 12,
                                                       fontWeight:
                                                           FontWeight.w700),
@@ -1687,11 +1686,11 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                                               InkWell(
                                                 onTap: () => setLocal(() =>
                                                     editVideos.removeAt(i)),
-                                                child: const Padding(
+                                                child: Padding(
                                                   padding: EdgeInsets.all(4),
                                                   child: Icon(
                                                       Icons.close_rounded,
-                                                      color: Colors.white54,
+                                                      color: _Yt.fgA(ctx, 0.54),
                                                       size: 16),
                                                 ),
                                               ),
@@ -1709,7 +1708,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                                               : null,
                                           minHeight: 6,
                                           color: const Color(0xFFEF4444),
-                                          backgroundColor: Colors.white12,
+                                          backgroundColor: _Yt.line(ctx),
                                         ),
                                       ),
                                       const SizedBox(height: 6),
@@ -2178,8 +2177,8 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
           minChildSize: 0.45,
           maxChildSize: 0.96,
           builder: (_, scroll) => Container(
-            decoration: const BoxDecoration(
-              color: Color(0xFF0F0F0F),
+            decoration: BoxDecoration(
+              color: _Yt.bg(ctx),
               borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
             ),
             child: ListView(
@@ -2191,7 +2190,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                     width: 40,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: Colors.white24,
+                      color: _Yt.line(ctx),
                       borderRadius: BorderRadius.circular(99),
                     ),
                   ),
@@ -2216,10 +2215,10 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                 const SizedBox(height: 10),
                 Text(
                   (data['title'] ?? '').toString(),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w900,
                     fontSize: 20,
-                    color: Colors.white,
+                    color: _Yt.fg(ctx),
                   ),
                 ),
                 if (CourseMediaUrlResolver.hasResolvableImage(data)) ...[
@@ -2239,10 +2238,10 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1A1A1A),
+                      color: _Yt.card(ctx),
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.08),
+                        color: _Yt.line(ctx),
                       ),
                     ),
                     child: Text(
@@ -2250,7 +2249,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                       style: TextStyle(
                         fontSize: 14.5,
                         height: 1.5,
-                        color: Colors.grey.shade300,
+                        color: _Yt.fgA(ctx, 0.8),
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -2323,6 +2322,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
               CourseAdminAnalyticsPanel(
                 stats: stats,
                 courseTitles: titleMap,
+                error: statsSnap.hasError ? statsSnap.error : null,
                 onOpenViewers: (id, title) => showCourseViewersSheet(
                   context,
                   courseId: id,
@@ -2339,9 +2339,9 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
             const SizedBox(height: 12),
             Container(
               decoration: BoxDecoration(
-                color: const Color(0xFF0F0F0F),
+                color: _Yt.bg(context),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                border: Border.all(color: _Yt.line(context)),
               ),
               padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
               child: Column(
@@ -2355,10 +2355,10 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                       Expanded(
                         child: Text(
                           'Biblioteca YouTube (${docs.length}${docs.length != allCount ? ' / $allCount' : ''})',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.w900,
                             fontSize: 16,
-                            color: Colors.white,
+                            color: _Yt.fg(context),
                           ),
                         ),
                       ),
@@ -2389,15 +2389,15 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                                 : 'Todos',
                           ),
                           style: TextButton.styleFrom(
-                              foregroundColor: Colors.white70),
+                              foregroundColor: _Yt.fgA(context, 0.7)),
                         ),
                         TextButton(
                           onPressed: () => setState(() {
                             _selectionMode = false;
                             _selectedIds.clear();
                           }),
-                          child: const Text('Cancelar',
-                              style: TextStyle(color: Colors.white70)),
+                          child: Text('Cancelar',
+                              style: TextStyle(color: _Yt.fgA(context, 0.7))),
                         ),
                       ] else ...[
                         IconButton(
@@ -2410,15 +2410,15 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                             _compactList
                                 ? Icons.view_agenda_rounded
                                 : Icons.view_list_rounded,
-                            color: Colors.white70,
+                            color: _Yt.fgA(context, 0.7),
                           ),
                         ),
                         IconButton(
                           tooltip: 'Seleção em lote',
                           onPressed: () =>
                               setState(() => _selectionMode = true),
-                          icon: const Icon(Icons.checklist_rounded,
-                              color: Colors.white70),
+                          icon: Icon(Icons.checklist_rounded,
+                              color: _Yt.fgA(context, 0.7)),
                         ),
                       ],
                     ],
@@ -2429,7 +2429,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                       child: LinearProgressIndicator(
                         minHeight: 2,
                         color: Colors.red.shade400,
-                        backgroundColor: Colors.white12,
+                        backgroundColor: _Yt.line(context),
                       ),
                     ),
                   const SizedBox(height: 12),
@@ -2446,9 +2446,9 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                         children: [
                           Text(
                             '${_selectedIds.length} selecionado(s)',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.w800,
-                              color: Colors.white,
+                              color: _Yt.fg(context),
                             ),
                           ),
                           const Spacer(),
@@ -2546,20 +2546,20 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
       decoration: BoxDecoration(
-        color: const Color(0xFF212121),
+        color: _Yt.card(context),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white12),
+        border: Border.all(color: _Yt.line(context)),
       ),
       child: Column(
         children: [
           Icon(Icons.video_library_outlined,
-              size: 48, color: Colors.grey.shade500),
+              size: 48, color: _Yt.fgA(context, 0.5)),
           const SizedBox(height: 12),
           Text(
             syncing ? 'A carregar…' : 'Nenhum vídeo na biblioteca.',
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: Colors.grey.shade400,
+              color: _Yt.fgA(context, 0.6),
               fontWeight: FontWeight.w600,
               height: 1.4,
             ),
@@ -2907,7 +2907,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        isDica ? 'Publicar dica rápida' : 'Enviar vídeo rápido',
+                        isDica ? 'Publicar dica rápida' : 'Publicar curso',
                         style: TextStyle(
                           fontWeight: FontWeight.w900,
                           fontSize: 16,
@@ -2917,7 +2917,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                       Text(
                         isDica
                             ? 'Título, texto e (se quiser) link ou imagem'
-                            : 'Cole o link do YouTube — título e capa vêm sozinhos',
+                            : 'Envie os vídeos, a capa e a descrição — link do YouTube é opcional',
                         style: TextStyle(
                           fontSize: 12,
                           color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
@@ -2927,7 +2927,10 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                   ),
                 ),
                 if (!saving &&
-                    (link.isNotEmpty || _titleCtrl.text.trim().isNotEmpty))
+                    (link.isNotEmpty ||
+                        _titleCtrl.text.trim().isNotEmpty ||
+                        _pickedVideos.isNotEmpty ||
+                        _pickedImages.isNotEmpty))
                   IconButton(
                     tooltip: 'Limpar',
                     onPressed: _clearQuickForm,
@@ -2946,6 +2949,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                   onChanged: saving ? (_) {} : (v) => setState(() => _type = v),
                 ),
                 const SizedBox(height: 12),
+                if (isDica) ...[
                 // 1) Link
                 TextField(
                   controller: _youtubeCtrl,
@@ -3054,6 +3058,81 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                       style: TextStyle(fontSize: 11, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600),
                     ),
                   ),
+                ] else ...[
+                  // 1) Vídeos em destaque (o curso nasce dos vídeos enviados)
+                  _buildQuickUploadCard(accent, saving),
+                  const SizedBox(height: 14),
+                  // 2) Título
+                  FastTextField(
+                    controller: _titleCtrl,
+                    decoration: _fieldDeco('Título do curso', accent: accent),
+                  ),
+                  const SizedBox(height: 10),
+                  // 3) Descrição moderna (maior, com contador)
+                  FastTextField(
+                    controller: _descriptionCtrl,
+                    decoration: _fieldDeco(
+                      'Descrição do curso',
+                      hint: 'Explique o conteúdo, para quem é e o que o aluno '
+                          'vai aprender.',
+                      accent: accent,
+                    ).copyWith(
+                      alignLabelWithHint: true,
+                      prefixIcon: Padding(
+                        padding: const EdgeInsets.only(bottom: 60),
+                        child: Icon(Icons.notes_rounded, color: accent),
+                      ),
+                    ),
+                    kind: FastTextFieldKind.multiline,
+                    minLines: 5,
+                    maxLines: 10,
+                    maxLength: 2000,
+                  ),
+                  const SizedBox(height: 6),
+                  // 4) Capa com prévia grande (inteira, sem cortar)
+                  _buildQuickCoverCard(accent, saving),
+                  const SizedBox(height: 14),
+                  // 5) Link do YouTube — opcional, secundário
+                  TextField(
+                    controller: _youtubeCtrl,
+                    enabled: !saving,
+                    keyboardType: TextInputType.url,
+                    autocorrect: false,
+                    decoration: InputDecoration(
+                      labelText: 'Link do YouTube (opcional)',
+                      hintText: 'https://youtu.be/… ou youtube.com/watch?v=…',
+                      helperText: _pickedVideos.isEmpty
+                          ? 'Sem vídeo enviado? Cole aqui um link do YouTube.'
+                          : 'Opcional — os vídeos enviados já bastam.',
+                      prefixIcon: Icon(Icons.smart_display_rounded,
+                          color: _Yt.fgA(context, 0.5)),
+                      suffixIcon: link.isEmpty
+                          ? IconButton(
+                              tooltip: 'Colar',
+                              onPressed: saving ? null : _pasteLink,
+                              icon: const Icon(Icons.content_paste_rounded),
+                            )
+                          : IconButton(
+                              tooltip: 'Apagar link',
+                              onPressed:
+                                  saving ? null : () => _youtubeCtrl.clear(),
+                              icon: const Icon(Icons.close_rounded),
+                            ),
+                      errorText: linkError,
+                      errorMaxLines: 3,
+                      isDense: true,
+                      filled: true,
+                      fillColor: context.appChipIdleBg,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+                  if (_quickVideoId != null) ...[
+                    const SizedBox(height: 10),
+                    _buildQuickPreview(accent),
+                  ],
+                ],
                 const SizedBox(height: 6),
                 // 5) Mais opções (recolhido)
                 Theme(
@@ -3077,42 +3156,6 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                       style: TextStyle(fontSize: 11.5, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600),
                     ),
                     children: [
-                      if (!isDica) ...[
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: OutlinedButton.icon(
-                            onPressed: saving ? null : () => _addVideoWithChoice(),
-                            icon: const Icon(Icons.video_file_rounded, size: 18),
-                            label: const Text('Enviar vídeo MP4 / MOV / WebM'),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4, bottom: 6),
-                          child: Text(
-                            'Até ${CourseMediaUrlResolver.maxCourseVideos} vídeos, '
-                            '250 MB cada. Cada vídeo vira uma aula.',
-                            style: TextStyle(
-                                fontSize: 11, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600),
-                          ),
-                        ),
-                        for (var i = 0; i < _pickedVideos.length; i++)
-                          ListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            leading: const Icon(Icons.movie_rounded),
-                            title: Text(
-                              _pickedVideos[i].name ?? 'Vídeo ${i + 1}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            subtitle: Text(_mb(_pickedVideos[i].effectiveSize)),
-                            trailing: IconButton(
-                              tooltip: 'Remover',
-                              onPressed: saving ? null : () => _removePickedVideo(i),
-                              icon: const Icon(Icons.close_rounded),
-                            ),
-                          ),
-                      ],
                       _buildValiditySection(
                         permanent: _validityPermanent,
                         expiresAt: _expiresAtDate,
@@ -3227,6 +3270,343 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
     );
   }
 
+  /// Área de envio dos vídeos do curso — em destaque no topo do formulário
+  /// (antes ficava escondida em «Mais opções»). Cada vídeo vira uma aula.
+  Widget _buildQuickUploadCard(Color accent, bool saving) {
+    final n = _pickedVideos.length;
+    final max = CourseMediaUrlResolver.maxCourseVideos;
+    final pct = (_uploadProgress * 100).clamp(0, 100).round();
+    final atual = n == 0 ? 0 : ((_uploadProgress * n).floor() + 1).clamp(1, n);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: context.appAccentSurface(accent, lightAlpha: 0.05),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: accent.withValues(alpha: 0.35), width: 1.4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  color: accent,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.video_library_rounded,
+                    color: Colors.white, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Vídeos do curso',
+                      style: TextStyle(
+                        color: _Yt.fg(context),
+                        fontWeight: FontWeight.w900,
+                        fontSize: 15.5,
+                      ),
+                    ),
+                    Text(
+                      'Até $max vídeos · 250 MB cada · cada vídeo vira uma aula',
+                      style: TextStyle(
+                        color: _Yt.fgA(context, 0.55),
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(99),
+                ),
+                child: Text(
+                  '$n/$max',
+                  style: TextStyle(
+                    color: accent,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (n < max && !saving)
+            Material(
+              color: _Yt.bg(context),
+              borderRadius: BorderRadius.circular(14),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: () => kIsWeb ? _pickMp4Videos() : _addVideoWithChoice(),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      vertical: 22, horizontal: 12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: accent.withValues(alpha: 0.45),
+                      width: 1.4,
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(Icons.cloud_upload_rounded, color: accent, size: 38),
+                      const SizedBox(height: 8),
+                      Text(
+                        n == 0 ? 'Escolher vídeos' : 'Adicionar mais vídeos',
+                        style: TextStyle(
+                          color: _Yt.fg(context),
+                          fontWeight: FontWeight.w900,
+                          fontSize: 14.5,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        kIsWeb
+                            ? 'MP4, MOV ou WebM do computador'
+                            : 'Galeria (MP4, MOV, WebM) ou gravar com a câmera',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: _Yt.fgA(context, 0.55),
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          if (n > 0) ...[
+            const SizedBox(height: 10),
+            for (var i = 0; i < n; i++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _buildYouTubeStyleCard(i, accent),
+              ),
+          ],
+          if (saving && n > 0) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(99),
+              child: LinearProgressIndicator(
+                value: _uploadProgress > 0 ? _uploadProgress : null,
+                minHeight: 6,
+                color: accent,
+                backgroundColor: accent.withValues(alpha: 0.12),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              _uploadProgress > 0
+                  ? 'Enviando vídeo $atual de $n… $pct%'
+                  : 'Preparando o envio…',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: accent,
+                fontWeight: FontWeight.w800,
+                fontSize: 12,
+              ),
+            ),
+          ],
+          if (!saving && n > 0)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => _clearPickedVideos(),
+                icon: const Icon(Icons.delete_sweep_rounded, size: 18),
+                label: const Text('Limpar vídeos'),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Troca a capa (1ª foto) sem perder as outras fotos; se cancelar, mantém.
+  Future<void> _replaceCover() async {
+    final old = List<_PickedMedia>.from(_pickedImages);
+    setState(() => _pickedImages.clear());
+    await _pickCoverImages();
+    if (!mounted) return;
+    setState(() {
+      if (_pickedImages.isEmpty) {
+        _pickedImages.addAll(old);
+        return;
+      }
+      for (final o in old.skip(1)) {
+        if (_pickedImages.length >= CourseMediaUrlResolver.maxGalleryPhotos) {
+          break;
+        }
+        _pickedImages.add(o);
+      }
+    });
+  }
+
+  /// Capa com prévia grande, enquadrada inteira (BoxFit.contain, sem cortar).
+  Widget _buildQuickCoverCard(Color accent, bool saving) {
+    final temCapa = _pickedImages.isNotEmpty;
+    final ytCover = _quickVideoId == null
+        ? null
+        : (_quickInfo?.coverUrl ??
+            YoutubeUrlHelper.safeThumbnailUrl(_quickVideoId!));
+    Widget preview;
+    if (temCapa) {
+      preview = Image.memory(_pickedImages.first.bytes!, fit: BoxFit.contain);
+    } else if (ytCover != null) {
+      preview = Image.network(
+        ytCover,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+      );
+    } else {
+      preview = Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.add_photo_alternate_rounded,
+              size: 40, color: _Yt.fgA(context, 0.45)),
+          const SizedBox(height: 6),
+          Text(
+            'Adicionar capa (opcional)',
+            style: TextStyle(
+              color: _Yt.fgA(context, 0.7),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'JPG, PNG ou WebP · até 3840x2160 (12 MB)',
+            style: TextStyle(color: _Yt.fgA(context, 0.5), fontSize: 11),
+          ),
+        ],
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _Yt.card(context),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _Yt.line(context)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.image_rounded, color: accent, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  temCapa
+                      ? 'Capa do curso'
+                      : (ytCover != null
+                          ? 'Capa do YouTube (automática)'
+                          : 'Capa do curso'),
+                  style: TextStyle(
+                    color: _Yt.fg(context),
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              if (temCapa)
+                Text(
+                  [
+                    if (_pickedImages.first.width != null)
+                      '${_pickedImages.first.width}x${_pickedImages.first.height}',
+                    _mb(_pickedImages.first.effectiveSize),
+                  ].join(' · '),
+                  style:
+                      TextStyle(color: _Yt.fgA(context, 0.5), fontSize: 11),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: AspectRatio(
+              aspectRatio: 16 / 9,
+              child: Material(
+                color: _Yt.thumb(context),
+                child: InkWell(
+                  onTap: saving
+                      ? null
+                      : (temCapa ? _replaceCover : _pickCoverImages),
+                  child: Center(child: preview),
+                ),
+              ),
+            ),
+          ),
+          if (_pickedImages.length > 1) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (var i = 1; i < _pickedImages.length; i++)
+                  InputChip(
+                    avatar: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: Image.memory(
+                        _pickedImages[i].bytes!,
+                        width: 28,
+                        height: 28,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    label: Text('Foto ${i + 1}',
+                        style: const TextStyle(fontSize: 12)),
+                    onDeleted: saving ? null : () => _removePickedImage(i),
+                  ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: saving
+                    ? null
+                    : (temCapa ? _replaceCover : _pickCoverImages),
+                icon: Icon(
+                    temCapa
+                        ? Icons.swap_horiz_rounded
+                        : Icons.add_photo_alternate_rounded,
+                    size: 18),
+                label: Text(temCapa ? 'Trocar capa' : 'Escolher capa'),
+              ),
+              if (temCapa)
+                OutlinedButton.icon(
+                  onPressed: saving ? null : () => _removePickedImage(0),
+                  icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                  label: const Text('Remover'),
+                ),
+              if (temCapa &&
+                  _pickedImages.length <
+                      CourseMediaUrlResolver.maxGalleryPhotos)
+                TextButton.icon(
+                  onPressed: saving ? null : _pickCoverImages,
+                  icon: const Icon(Icons.collections_rounded, size: 18),
+                  label: const Text('Mais fotos'),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildQuickPreview(Color accent) {
     final info = _quickInfo;
     final id = _quickVideoId!;
@@ -3234,7 +3614,8 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F0F0F),
+        color: _Yt.card(context),
+        border: Border.all(color: _Yt.line(context)),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
@@ -3277,8 +3658,8 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                           : 'Vídeo encontrado'),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: _Yt.fg(context),
                     fontWeight: FontWeight.w800,
                     fontSize: 13.5,
                   ),
@@ -3291,24 +3672,24 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                   ].join(' · '),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 11.5),
+                  style: TextStyle(color: _Yt.fgA(context, 0.6), fontSize: 11.5),
                 ),
                 if (!_quickLoading && (info?.title.isEmpty ?? true))
                   Text(
                     'Não deu para ler o título — digite abaixo.',
-                    style: TextStyle(color: Colors.amber.shade300, fontSize: 11),
+                    style: TextStyle(color: (context.isDarkMode ? Colors.amber.shade300 : Colors.amber.shade900), fontSize: 11),
                   ),
               ],
             ),
           ),
           if (_quickLoading)
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(left: 8),
               child: SizedBox(
                 width: 18,
                 height: 18,
                 child: CircularProgressIndicator(
-                    strokeWidth: 2, color: Colors.white54),
+                    strokeWidth: 2, color: _Yt.fgA(context, 0.54)),
               ),
             )
           else
@@ -3321,7 +3702,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                     ? 'Prévia'
                     : _titleCtrl.text.trim(),
               ),
-              icon: const Icon(Icons.open_in_new_rounded, color: Colors.white70),
+              icon: Icon(Icons.open_in_new_rounded, color: _Yt.fgA(context, 0.7)),
             ),
         ],
       ),
@@ -3369,11 +3750,16 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF0F0F0F), Color(0xFF1A1A2E), Color(0xFF16213E)],
+        gradient: LinearGradient(
+          colors: context.isDarkMode
+              ? const [Color(0xFF0F0F0F), Color(0xFF1A1A2E), Color(0xFF16213E)]
+              : const [Colors.white, Color(0xFFF8FAFC), Color(0xFFEFF6FF)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
+        border: context.isDarkMode
+            ? null
+            : Border.all(color: context.appChipIdleBorder),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.25),
@@ -3404,10 +3790,10 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Criar curso ou dica',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: _Yt.fg(context),
                         fontWeight: FontWeight.w900,
                         fontSize: 17,
                       ),
@@ -3416,7 +3802,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                     Text(
                       'Vídeo da câmera, MP4, YouTube, galeria e validade',
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.65),
+                        color: _Yt.fgA(context, 0.65),
                         fontWeight: FontWeight.w500,
                         fontSize: 12,
                       ),
@@ -3619,9 +4005,9 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: const Color(0xFF0F0F0F),
+              color: _Yt.bg(context),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+              border: Border.all(color: _Yt.line(context)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3645,7 +4031,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                           Text(
                             'Vídeos do curso',
                             style: TextStyle(
-                              color: Colors.white,
+                              color: _Yt.fg(context),
                               fontWeight: FontWeight.w900,
                               fontSize: 14,
                             ),
@@ -3653,7 +4039,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                           Text(
                             'Até ${CourseMediaUrlResolver.maxCourseVideos} vídeos · MP4, MOV ou câmera',
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.6),
+                              color: _Yt.fgA(context, 0.6),
                               fontSize: 11,
                               fontWeight: FontWeight.w500,
                             ),
@@ -3665,13 +4051,13 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.08),
+                        color: _Yt.line(context),
                         borderRadius: BorderRadius.circular(99),
                       ),
                       child: Text(
                         '${_pickedVideos.length}/${CourseMediaUrlResolver.maxCourseVideos}',
-                        style: const TextStyle(
-                          color: Colors.white70,
+                        style: TextStyle(
+                          color: _Yt.fgA(context, 0.7),
                           fontWeight: FontWeight.w800,
                           fontSize: 12,
                         ),
@@ -3700,7 +4086,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                       value: _uploadProgress > 0 ? _uploadProgress : null,
                       minHeight: 6,
                       color: const Color(0xFFEF4444),
-                      backgroundColor: Colors.white12,
+                      backgroundColor: _Yt.line(context),
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -3848,9 +4234,9 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
     final ext = name.split('.').last.toUpperCase();
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
+        color: _Yt.bg(context),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        border: Border.all(color: _Yt.line(context)),
       ),
       padding: const EdgeInsets.all(10),
       child: Row(
@@ -3860,14 +4246,14 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
             width: 72,
             height: 44,
             decoration: BoxDecoration(
-              color: const Color(0xFF282828),
+              color: _Yt.thumb(context),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Stack(
               alignment: Alignment.center,
               children: [
                 Icon(Icons.videocam_rounded,
-                    color: Colors.white.withValues(alpha: 0.5), size: 22),
+                    color: _Yt.fgA(context, 0.5), size: 22),
                 Positioned(
                   bottom: 2,
                   right: 2,
@@ -3900,8 +4286,8 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                   name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: _Yt.fg(context),
                     fontWeight: FontWeight.w700,
                     fontSize: 13,
                   ),
@@ -3910,7 +4296,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                 Text(
                   '$sizeMB MB',
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.5),
+                    color: _Yt.fgA(context, 0.5),
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                   ),
@@ -3931,7 +4317,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                   padding: const EdgeInsets.all(8),
                   child: Icon(
                     Icons.close_rounded,
-                    color: Colors.white.withValues(alpha: 0.5),
+                    color: _Yt.fgA(context, 0.5),
                     size: 18,
                   ),
                 ),
@@ -4208,12 +4594,12 @@ class _VideoGridCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         child: Container(
           decoration: BoxDecoration(
-            color: const Color(0xFF0F0F0F),
+            color: _Yt.bg(context),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: selected
                   ? accent.withValues(alpha: 0.8)
-                  : Colors.white.withValues(alpha: 0.06),
+                  : _Yt.line(context),
               width: selected ? 2 : 1,
             ),
             boxShadow: [
@@ -4367,7 +4753,7 @@ class _VideoGridCard extends StatelessWidget {
                         maxLines: feedStyle ? 3 : 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: Colors.white,
+                          color: _Yt.fg(context),
                           fontWeight: FontWeight.w900,
                           fontSize: feedStyle ? 16 : 13.5,
                           height: 1.25,
@@ -4384,7 +4770,7 @@ class _VideoGridCard extends StatelessWidget {
                           style: TextStyle(
                             fontSize: feedStyle ? 13 : 11,
                             height: 1.4,
-                            color: Colors.white.withValues(alpha: 0.55),
+                            color: _Yt.fgA(context, 0.55),
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -4402,10 +4788,10 @@ class _VideoGridCard extends StatelessWidget {
                               vertical: 8,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.04),
+                              color: _Yt.soft(context),
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.08),
+                                color: _Yt.line(context),
                               ),
                             ),
                             child: Row(
@@ -4416,8 +4802,8 @@ class _VideoGridCard extends StatelessWidget {
                                 const SizedBox(width: 6),
                                 Text(
                                   '$viewCount assistiram',
-                                  style: const TextStyle(
-                                    color: Colors.white,
+                                  style: TextStyle(
+                                    color: _Yt.fg(context),
                                     fontWeight: FontWeight.w800,
                                     fontSize: 12.5,
                                   ),
@@ -4428,8 +4814,8 @@ class _VideoGridCard extends StatelessWidget {
                                 const SizedBox(width: 6),
                                 Text(
                                   '$likeCount curtiram',
-                                  style: const TextStyle(
-                                    color: Colors.white,
+                                  style: TextStyle(
+                                    color: _Yt.fg(context),
                                     fontWeight: FontWeight.w800,
                                     fontSize: 12.5,
                                   ),
@@ -4438,8 +4824,7 @@ class _VideoGridCard extends StatelessWidget {
                                 Text(
                                   'Ver quem',
                                   style: TextStyle(
-                                    color: Colors.white
-                                        .withValues(alpha: 0.55),
+                                    color: _Yt.fgA(context, 0.55),
                                     fontWeight: FontWeight.w700,
                                     fontSize: 11,
                                   ),
@@ -4447,7 +4832,7 @@ class _VideoGridCard extends StatelessWidget {
                                 Icon(
                                   Icons.chevron_right_rounded,
                                   size: 18,
-                                  color: Colors.white.withValues(alpha: 0.45),
+                                  color: _Yt.fgA(context, 0.45),
                                 ),
                               ],
                             ),
@@ -4469,7 +4854,7 @@ class _VideoGridCard extends StatelessWidget {
                               dateLabel,
                               style: TextStyle(
                                 fontSize: 10,
-                                color: Colors.white.withValues(alpha: 0.35),
+                                color: _Yt.fgA(context, 0.35),
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -4483,7 +4868,7 @@ class _VideoGridCard extends StatelessWidget {
                           ),
                           _actionIcon(
                             Icons.forum_outlined,
-                            Colors.white.withValues(alpha: 0.5),
+                            _Yt.fgA(context, 0.5),
                             () => showCourseCommentsModeration(context,
                                 data: data),
                             'Comentários',
@@ -4492,7 +4877,7 @@ class _VideoGridCard extends StatelessWidget {
                             published
                                 ? Icons.visibility_off_outlined
                                 : Icons.visibility_rounded,
-                            Colors.white.withValues(alpha: 0.5),
+                            _Yt.fgA(context, 0.5),
                             () => onTogglePublished(!published),
                             published ? 'Ocultar' : 'Publicar',
                           ),
@@ -4634,7 +5019,7 @@ class _CompactCourseRow extends StatelessWidget {
       child: Material(
         color: selected
             ? accent.withValues(alpha: 0.18)
-            : const Color(0xFF1C1C1C),
+            : _Yt.card(context),
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
@@ -4651,7 +5036,7 @@ class _CompactCourseRow extends StatelessWidget {
                       selected
                           ? Icons.check_box_rounded
                           : Icons.check_box_outline_blank_rounded,
-                      color: selected ? accent : Colors.white38,
+                      color: selected ? accent : _Yt.fgA(context, 0.38),
                     ),
                   ),
                 ClipRRect(
@@ -4684,8 +5069,8 @@ class _CompactCourseRow extends StatelessWidget {
                         title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: _Yt.fg(context),
                           fontWeight: FontWeight.w800,
                           fontSize: 13.5,
                           height: 1.2,
@@ -4704,10 +5089,10 @@ class _CompactCourseRow extends StatelessWidget {
                           if (!published) _tag('OCULTO', Colors.grey),
                           if (!valid) _tag('EXPIRADO', Colors.redAccent),
                           _tag('$views views · $likes curtidas',
-                              Colors.white54),
+                              _Yt.fgA(context, 0.54)),
                           if (created != null)
                             _tag(DateFormat('dd/MM/yy').format(created),
-                                Colors.white38),
+                                _Yt.fgA(context, 0.38)),
                         ],
                       ),
                     ],
@@ -4715,7 +5100,7 @@ class _CompactCourseRow extends StatelessWidget {
                 ),
                 if (!selectionMode && narrow)
                   PopupMenuButton<String>(
-                    iconColor: Colors.white70,
+                    iconColor: _Yt.fgA(context, 0.7),
                     tooltip: 'Ações',
                     onSelected: (v) {
                       if (v == 'pub') onTogglePublished(!published);
@@ -4749,15 +5134,15 @@ class _CompactCourseRow extends StatelessWidget {
                     tooltip: 'Editar',
                     visualDensity: VisualDensity.compact,
                     onPressed: onEdit,
-                    icon: const Icon(Icons.edit_rounded, color: Colors.white70),
+                    icon: Icon(Icons.edit_rounded, color: _Yt.fgA(context, 0.7)),
                   ),
                   IconButton(
                     tooltip: 'Comentários (moderar)',
                     visualDensity: VisualDensity.compact,
                     onPressed: () =>
                         showCourseCommentsModeration(context, data: data),
-                    icon: const Icon(Icons.forum_outlined,
-                        color: Colors.white70),
+                    icon: Icon(Icons.forum_outlined,
+                        color: _Yt.fgA(context, 0.7)),
                   ),
                   IconButton(
                     tooltip: 'Excluir',
@@ -4790,4 +5175,36 @@ class _CompactCourseRow extends StatelessWidget {
           ),
         ),
       );
+}
+
+/// Paleta do admin de Cursos (02/10/2026): grafite estilo YouTube só no modo
+/// escuro; no claro, superfícies brancas/cinza-claro e texto escuro (antes era
+/// preto fixo e aparecia escuro mesmo com o app no modo claro).
+/// Player e capas continuam escuros — aqui é só a moldura do painel.
+class _Yt {
+  _Yt._();
+
+  static Color bg(BuildContext c) =>
+      c.isDarkMode ? const Color(0xFF0F0F0F) : Colors.white;
+
+  static Color card(BuildContext c) =>
+      c.isDarkMode ? const Color(0xFF1A1A1A) : const Color(0xFFF8FAFC);
+
+  static Color soft(BuildContext c) => c.isDarkMode
+      ? Colors.white.withValues(alpha: 0.04)
+      : const Color(0xFFF1F5F9);
+
+  static Color thumb(BuildContext c) =>
+      c.isDarkMode ? const Color(0xFF282828) : const Color(0xFFE2E8F0);
+
+  static Color fg(BuildContext c) =>
+      c.isDarkMode ? Colors.white : c.appTextPrimary;
+
+  static Color fgA(BuildContext c, double a) => c.isDarkMode
+      ? Colors.white.withValues(alpha: a)
+      : c.appTextPrimary.withValues(alpha: (a + 0.25).clamp(0.0, 1.0));
+
+  static Color line(BuildContext c) => c.isDarkMode
+      ? Colors.white.withValues(alpha: 0.08)
+      : c.appChipIdleBorder;
 }
