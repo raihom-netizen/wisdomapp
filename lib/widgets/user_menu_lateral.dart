@@ -4,7 +4,6 @@ import '../services/delegate_access_service.dart';
 import '../services/ios_payments_gate.dart';
 import '../theme/app_colors.dart';
 import '../constants/anotacoes_module_icons.dart';
-import '../constants/calculator_module_icons.dart';
 import 'home_start_module_picker.dart';
 import 'keyed_stream_builder.dart';
 
@@ -92,9 +91,6 @@ class UserMenuLateral extends StatelessWidget {
                   _tile(3, Icons.calendar_month_rounded, kAgendaModuleDisplayName,
                       isCollapsed,
                       accent: const Color(0xFF22D3EE)),
-                  _tile(4, CalculatorModuleIcons.nav, 'Calculadora',
-                      isCollapsed,
-                      accent: const Color(0xFFFDBA74)),
                   _tile(5, Icons.menu_book_rounded, 'Dicas Financeiras',
                       isCollapsed,
                       accent: const Color(0xFFC4B5FD)),

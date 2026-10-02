@@ -38,6 +38,7 @@ import '../utils/firestore_reliable_read.dart';
 import '../utils/friendly_error.dart';
 import '../utils/pdf_financeiro_super_extrato.dart';
 import '../services/express_compromisso_agenda_sync.dart';
+import '../services/compromisso_reminder_service.dart';
 import '../utils/keyboard_form_scaffold.dart';
 import '../widgets/finance_confirm_payment_sheet.dart';
 /// Relatórios — Clean Premium (PADRAO_VISUAL_CLEAN_PREMIUM.md).
@@ -67,7 +68,9 @@ class ReportsScreen extends StatefulWidget {
 }
 
 /// Tipo de relatório a emitir.
-enum _TipoRelatorio { despesasReceitas, bancoHoras, produtividade }
+/// WISDOMAPP (02/10/2026): só Despesas e Receitas + Compromissos aparecem na tela;
+/// Banco de Horas e Produtividade ficam no código, sem chip (o app não tem esses módulos).
+enum _TipoRelatorio { despesasReceitas, compromissos, bancoHoras, produtividade }
 
 class _ReportsScreenState extends State<ReportsScreen> {
   /// Padrão: 1 de janeiro do ano em curso até hoje. O utilizador ajusta o intervalo (datas ou atalhos) conforme o relatório.
@@ -97,6 +100,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Future<Map<String, dynamic>>? _exportBancoHorasFuture;
   String _exportProdutividadeKey = '';
   Future<Map<String, dynamic>>? _exportProdutividadeFuture;
+  String _compromissosKey = '';
+  Future<List<Map<String, dynamic>>>? _compromissosFuture;
   String _txPairKey = '';
   Future<Map<String, List<Map<String, dynamic>>>>? _txPairFuture;
   final Map<String, Uint8List> _pdfBytesCache = {};
@@ -133,6 +138,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
       _exportBancoHorasFuture = null;
       _exportProdutividadeKey = '';
       _exportProdutividadeFuture = null;
+      _compromissosKey = '';
+      _compromissosFuture = null;
       _txPairKey = '';
       _txPairFuture = null;
       _pdfBytesCache.clear();
@@ -401,7 +408,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           const SizedBox(height: 10),
           Text(
             'Defina início e fim ou use um atalho. O conteúdo abaixo atualiza na hora. '
-            'Despesas e receitas usam a data do lançamento; Banco de horas segue a data do plantão.',
+            'Despesas e receitas usam a data do lançamento.',
             style: TextStyle(fontSize: 13, color: _reportOnSurfaceVar, height: 1.35),
           ),
           const SizedBox(height: 12),
@@ -539,16 +546,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 accent: AppColors.primary,
               ),
               _premiumChoiceChip(
-                label: 'Banco de Horas',
-                selected: _tipoRelatorio == _TipoRelatorio.bancoHoras,
-                onTap: () => setState(() => _tipoRelatorio = _TipoRelatorio.bancoHoras),
+                label: 'Compromissos',
+                selected: _tipoRelatorio == _TipoRelatorio.compromissos,
+                onTap: () => setState(() => _tipoRelatorio = _TipoRelatorio.compromissos),
                 accent: AppColors.accent,
-              ),
-              _premiumChoiceChip(
-                label: 'Produtividade / Ocorrências',
-                selected: _tipoRelatorio == _TipoRelatorio.produtividade,
-                onTap: () => setState(() => _tipoRelatorio = _TipoRelatorio.produtividade),
-                accent: AppColors.logoOrange,
               ),
             ],
           ),
@@ -931,6 +932,178 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return _exportBancoHorasFuture!;
   }
 
+  String _compromissosCacheKey() =>
+      'c_${_dateStart.millisecondsSinceEpoch}_${_dateEnd.millisecondsSinceEpoch}';
+
+  /// Compromissos da Agenda no período (mesma consulta da limpeza em lote da Agenda),
+  /// ordenados por dia e horário.
+  Future<List<Map<String, dynamic>>> _loadCompromissosPeriodo() async {
+    final start = DateTime(_dateStart.year, _dateStart.month, _dateStart.day);
+    final docs = await CompromissoReminderService.fetchCompromissosInRange(
+      userDocId: _userDocId,
+      start: start,
+      end: _dateEnd,
+    ).timeout(
+      _kReportsExportFirestoreTimeout,
+      onTimeout: () => throw TimeoutException('Compromissos: tempo esgotado.'),
+    );
+    final items = <Map<String, dynamic>>[
+      for (final d in docs) {...d.data(), 'id': d.id},
+    ];
+    items.sort((a, b) {
+      final da = CompromissoReminderService.dateFromDoc(a);
+      final db = CompromissoReminderService.dateFromDoc(b);
+      if (da != null && db != null) {
+        final cmp = DateTime(da.year, da.month, da.day)
+            .compareTo(DateTime(db.year, db.month, db.day));
+        if (cmp != 0) return cmp;
+      }
+      return (a['time'] ?? '').toString().compareTo((b['time'] ?? '').toString());
+    });
+    return items;
+  }
+
+  Future<List<Map<String, dynamic>>> _getCompromissosCached() {
+    final key = _compromissosCacheKey();
+    if (_compromissosKey != key || _compromissosFuture == null) {
+      _compromissosKey = key;
+      _compromissosFuture = _loadCompromissosPeriodo();
+    }
+    return _compromissosFuture!;
+  }
+
+  static String _compromissoHorario(Map<String, dynamic> e) {
+    final t = (e['time'] ?? '').toString().trim();
+    final f = (e['endTime'] ?? '').toString().trim();
+    if (t.isEmpty) return 'Dia todo';
+    return f.isEmpty ? t : '$t – $f';
+  }
+
+  static String _compromissoDetalhe(Map<String, dynamic> e) {
+    final local = (e['linkLocalizacao'] ?? '').toString().trim();
+    final obs = (e['notes'] ?? '').toString().trim();
+    return [if (local.isNotEmpty) 'Local: $local', if (obs.isNotEmpty) obs].join(' · ');
+  }
+
+  Widget _buildCompromissosContent() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _getCompromissosCached(),
+      builder: (context, snap) {
+        if (snap.hasError) {
+          return _emptyCard(
+            'Erro ao carregar os compromissos. Atualize e tente novamente.\n\nDetalhe: ${friendlyMessage(snap.error!)}',
+          );
+        }
+        if (!snap.hasData) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 16),
+            child: SkeletonListLoader(itemCount: 5, itemHeight: 56),
+          );
+        }
+        final items = snap.data!;
+        final porDia = <DateTime, List<Map<String, dynamic>>>{};
+        for (final e in items) {
+          final d = CompromissoReminderService.dateFromDoc(e);
+          if (d == null) continue;
+          porDia.putIfAbsent(DateTime(d.year, d.month, d.day), () => []).add(e);
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _sectionTitle('Relatório de Compromissos'),
+            const SizedBox(height: 8),
+            Text(
+              '${DateTimeFormats.dateBR.format(_dateStart)} a ${DateTimeFormats.dateBR.format(_dateEnd)}',
+              style: TextStyle(fontSize: 13, color: _reportOnSurfaceVar),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _chipResumoOcorrencias('Compromissos', items.length, AppColors.primary),
+                _chipResumoOcorrencias('Dias com agenda', porDia.length, AppColors.accent),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (items.isEmpty)
+              _emptyCard('Nenhum compromisso na Agenda neste período.')
+            else
+              for (final dia in porDia.entries)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(_paddingCard),
+                  decoration: BoxDecoration(
+                    color: _reportSurfaceContainer,
+                    borderRadius: BorderRadius.circular(_radiusCard),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${DateTimeFormats.dateBR.format(dia.key)} · ${dia.value.length} '
+                        '${dia.value.length == 1 ? 'compromisso' : 'compromissos'}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: _reportOnSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      for (final e in dia.value)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: 96,
+                                child: Text(
+                                  _compromissoHorario(e),
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.accent,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      (e['title'] ?? 'Compromisso').toString(),
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: _reportOnSurface,
+                                      ),
+                                    ),
+                                    if (_compromissoDetalhe(e).isNotEmpty)
+                                      Text(
+                                        _compromissoDetalhe(e),
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: _reportOnSurfaceVar,
+                                          height: 1.3,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+            const SizedBox(height: 32),
+          ],
+        );
+      },
+    );
+  }
+
   Future<Map<String, dynamic>> _getProdutividadeExportDataCached() {
     final key = _produtividadeExportCacheKey();
     if (_exportProdutividadeKey != key || _exportProdutividadeFuture == null) {
@@ -944,6 +1117,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
     switch (_tipoRelatorio) {
       case _TipoRelatorio.despesasReceitas:
         return 'pdf_fin_${_financeExportCacheKey()}';
+      case _TipoRelatorio.compromissos:
+        return 'pdf_comp_${_compromissosCacheKey()}';
       case _TipoRelatorio.bancoHoras:
         return 'pdf_bh_${_bancoHorasExportCacheKey()}';
       case _TipoRelatorio.produtividade:
@@ -1263,6 +1438,20 @@ class _ReportsScreenState extends State<ReportsScreen> {
       return (bytes, filenameBase, false);
     }
 
+    if (_tipoRelatorio == _TipoRelatorio.compromissos) {
+      final items = await _getCompromissosCached();
+      await Future<void>.delayed(const Duration(milliseconds: 32));
+      // Mesmo PDF da Agenda (marca WISDOMAPP), só com os compromissos.
+      final (bytes, _) = await RelatorioService.buildRelatorioCompromissosAudienciaBytes(
+        periodo: periodo,
+        items: items,
+        contentFilter: AgendaPdfContentFilter.particular,
+        suggestedFilename: filenameBase,
+      );
+      _putPdfInCache(pdfKey, bytes);
+      return (bytes, filenameBase, false);
+    }
+
     throw StateError('tipo_relatorio_pdf');
   }
 
@@ -1276,6 +1465,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
             : '';
     final filenameBase = _tipoRelatorio == _TipoRelatorio.despesasReceitas
         ? RelatorioService.reportFilenameFromPeriod('despesa_receita', _dateStart, _dateEnd)
+        : _tipoRelatorio == _TipoRelatorio.compromissos
+            ? RelatorioService.reportFilenameFromPeriod('compromissos', _dateStart, _dateEnd)
         : _tipoRelatorio == _TipoRelatorio.bancoHoras
             ? RelatorioService.reportFilenameFromPeriod('banco_horas', _dateStart, _dateEnd)
             : RelatorioService.reportFilenameFromPeriod(
@@ -1354,6 +1545,22 @@ Despesas: ${CurrencyFormats.formatBRL(totalDespesas)}
 Saldo (acum.): ${CurrencyFormats.formatBRL(saldoAcumulado)}
 ''';
       subject = 'RELATORIO FINANCEIRO WISDOMAPP';
+    } else if (_tipoRelatorio == _TipoRelatorio.compromissos) {
+      final items = await _getCompromissosCached();
+      final sb = StringBuffer();
+      sb.writeln('Relatório WISDOMAPP - Compromissos');
+      sb.writeln('Período: $periodo');
+      sb.writeln('Total de compromissos: ${items.length}');
+      sb.writeln('');
+      for (final e in items) {
+        final d = CompromissoReminderService.dateFromDoc(e);
+        final det = _compromissoDetalhe(e);
+        sb.writeln(
+            '${d == null ? '' : DateTimeFormats.dateBR.format(d)} · ${_compromissoHorario(e)} · '
+            '${(e['title'] ?? 'Compromisso')}${det.isEmpty ? '' : ' ($det)'}');
+      }
+      text = sb.toString();
+      subject = 'RELATORIO COMPROMISSOS WISDOMAPP';
     } else if (_tipoRelatorio == _TipoRelatorio.produtividade) {
       final data = await _loadProdutividadeData();
       final semFolga = (data['semFolga'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
@@ -1532,6 +1739,9 @@ Usadas para folga: ${usadasFolga.fold<int>(0, (s, g) => s + (((g['ocorrencias'] 
 
   /// Conteúdo conforme tipo de relatório selecionado.
   Widget _buildReportContent() {
+    if (_tipoRelatorio == _TipoRelatorio.compromissos) {
+      return _buildCompromissosContent();
+    }
     if (_tipoRelatorio == _TipoRelatorio.produtividade) {
       final key =
           '${_dateStart.millisecondsSinceEpoch}_${_dateEnd.millisecondsSinceEpoch}_$_filtroProdutividade';

@@ -78,6 +78,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   String? _telemetryPingScheduledForUid;
   static const int _kShellModuleCount = 10;
 
+  /// Calculadora (índice 4) fora da navegação desde 02/10/2026: o índice continua
+  /// reservado (não desloca os outros módulos), mas qualquer pedido cai no Início.
+  static const int _kHiddenCalculatorModuleIndex = 4;
+
   /// Mesmos módulos do rodapé de acesso rápido (menu abre fullscreen com os mesmos dados).
   static const Set<int> _footerQuickAccessModuleIndices = {0, 1, 2, 3, 7};
 
@@ -556,6 +560,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   void _setModuleIndex(int i, {VoidCallback? alsoInSetState}) {
     if (!mounted || i < 0 || i >= _kShellModuleCount) return;
+    if (i == _kHiddenCalculatorModuleIndex) {
+      _setModuleIndex(0, alsoInSetState: alsoInSetState);
+      return;
+    }
     final prev = _idx;
     if (prev == i && _materializedModuleIndices.contains(i)) {
       alsoInSetState?.call();
@@ -646,6 +654,12 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           .get(const GetOptions(source: Source.serverAndCache));
       final data = snap.data() ?? <String, dynamic>{};
       final raw = data[kHomeDefaultStartModuleField];
+      if (raw is num && raw.toInt() == _kHiddenCalculatorModuleIndex) {
+        // Tela inicial era a Calculadora (removida): abre no Início.
+        await HomeStartModuleCache.clear();
+        if (mounted && _idx != 0) _setModuleIndex(0);
+        return;
+      }
       final preferred = normalizeHomeStartModuleIndex(
         raw is num ? raw.toInt() : 1,
       );

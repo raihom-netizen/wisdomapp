@@ -5,10 +5,7 @@ import '../services/financial_tips_catalog_service.dart';
 import '../utils/firestore_user_doc_id.dart';
 import '../utils/home_painel_resumo.dart';
 import '../utils/user_display_name.dart';
-import '../constants/agenda_module_icons.dart';
-import '../constants/anotacoes_module_icons.dart';
 import '../constants/app_brand.dart';
-import '../constants/calculator_module_icons.dart';
 import '../models/user_profile.dart';
 import '../theme/app_colors.dart';
 import '../theme/theme_context.dart';
@@ -21,7 +18,7 @@ import '../widgets/home_pendentes_cards.dart';
 HomeTipsCatalogSnapshot? _ultimoCatalogo;
 
 /// Início do WISDOMAPP (índice 0 do shell) — padrão do painel do Controle
-/// Total: cabeçalho com saudação e data, atalhos dos módulos, dica do dia,
+/// Total: cabeçalho com saudação e data, dica do dia,
 /// financeiro completo (saldo, contas, pendentes, fixas, gráficos) e
 /// objetivos. Grade responsiva: 1 coluna no celular, 2 na tela larga.
 ///
@@ -151,9 +148,7 @@ class _WisdomDashboardScreenState extends State<WisdomDashboardScreen> {
               padding: EdgeInsets.fromLTRB(lateral, 12, lateral, 28),
               children: [
                 _Cabecalho(profile: widget.profile),
-                const SizedBox(height: 16),
-                _AtalhosModulos(onTap: _ir),
-                const SizedBox(height: 22),
+                const SizedBox(height: 20),
                 if (largo)
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -465,203 +460,6 @@ class _Cabecalho extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// Atalhos de TODOS os módulos que o WISDOMAPP tem (mesmos índices do shell
-/// e do menu lateral). Grade responsiva: 4 por linha no celular, até 9 na
-/// tela larga.
-class _AtalhosModulos extends StatelessWidget {
-  const _AtalhosModulos({required this.onTap});
-
-  final void Function(int index) onTap;
-
-  static final _modulos =
-      <({int idx, String rotulo, IconData icone, List<Color> cores})>[
-    (
-      idx: 1,
-      rotulo: 'Financeiro',
-      icone: Icons.account_balance_wallet_rounded,
-      cores: const [Color(0xFF0F766E), Color(0xFF14B8A6)]
-    ),
-    (
-      idx: 2,
-      rotulo: 'Objetivos',
-      icone: Icons.flag_rounded,
-      cores: const [Color(0xFFBE185D), Color(0xFFEC4899)]
-    ),
-    (
-      idx: 3,
-      rotulo: 'Agenda',
-      icone: AgendaModuleIcons.nav,
-      cores: const [Color(0xFF0E7490), Color(0xFF22D3EE)]
-    ),
-    (
-      idx: 7,
-      rotulo: 'Cursos',
-      icone: Icons.ondemand_video_rounded,
-      cores: const [Color(0xFF1D4ED8), Color(0xFF38BDF8)]
-    ),
-    (
-      idx: 5,
-      rotulo: 'Dicas',
-      icone: Icons.menu_book_rounded,
-      cores: const [Color(0xFF6D28D9), Color(0xFFA78BFA)]
-    ),
-    (
-      idx: 6,
-      rotulo: 'Relatórios',
-      icone: Icons.assessment_rounded,
-      cores: const [Color(0xFF15803D), Color(0xFF4ADE80)]
-    ),
-    (
-      idx: 4,
-      rotulo: 'Calculadora',
-      icone: CalculatorModuleIcons.nav,
-      cores: const [Color(0xFFC2410C), Color(0xFFFB923C)]
-    ),
-    (
-      idx: 8,
-      rotulo: 'Anotações',
-      icone: AnotacoesModuleIcons.nav,
-      cores: const [Color(0xFF0369A1), Color(0xFF7DD3FC)]
-    ),
-    (
-      idx: 9,
-      rotulo: 'Ajustes',
-      icone: Icons.settings_rounded,
-      cores: const [Color(0xFF334155), Color(0xFF94A3B8)]
-    ),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    const espaco = 10.0;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-      decoration: context.appPanelDecoration(radius: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(left: 2, bottom: 10),
-            child: Row(
-              children: [
-                Icon(Icons.apps_rounded,
-                    size: 18, color: context.appTextSecondary),
-                const SizedBox(width: 6),
-                Text(
-                  'Acesso rápido',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w900,
-                    color: context.appTextPrimary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          LayoutBuilder(builder: (context, c) {
-            final largura = c.maxWidth;
-            final porLinha = largura >= 940
-                ? 9
-                : largura >= 600
-                    ? 5
-                    : 4;
-            // floor: sem isso a soma passa da largura por fração de pixel e o
-            // último atalho da linha desce sozinho.
-            final t = ((largura - espaco * (porLinha - 1)) / porLinha)
-                .floorToDouble()
-                .clamp(56.0, 400.0);
-            return Wrap(
-              spacing: espaco,
-              runSpacing: 12,
-              children: [
-                for (final m in _modulos)
-                  SizedBox(
-                    width: t,
-                    child: _AtalhoTile(
-                      rotulo: m.rotulo,
-                      icone: m.icone,
-                      cores: m.cores,
-                      onTap: () => onTap(m.idx),
-                    ),
-                  ),
-              ],
-            );
-          }),
-        ],
-      ),
-    );
-  }
-}
-
-class _AtalhoTile extends StatelessWidget {
-  const _AtalhoTile({
-    required this.rotulo,
-    required this.icone,
-    required this.cores,
-    required this.onTap,
-  });
-
-  final String rotulo;
-  final IconData icone;
-  final List<Color> cores;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: rotulo,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 50,
-                height: 50,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: cores,
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: cores.first.withValues(alpha: 0.32),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Icon(icone, color: Colors.white, size: 24),
-              ),
-              const SizedBox(height: 6),
-              // Reduz a fonte em vez de cortar («Calculadora» no celular).
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  rotulo,
-                  maxLines: 1,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w800,
-                    color: context.appTextPrimary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
