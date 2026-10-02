@@ -1,16 +1,20 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide showDatePicker;
+import '../theme/theme_context.dart';
 import 'package:intl/intl.dart';
 
 import '../constants/currency_formats.dart';
 import '../models/finance_account.dart';
 import '../services/functions_service.dart';
 import '../theme/app_colors.dart';
-import '../utils/firestore_user_doc_id.dart';
+import '../utils/date_picker_a11y.dart';
+import '../utils/finance_transaction_datetime.dart';
 import '../utils/finance_transactions_hub.dart';
+import '../utils/firestore_user_doc_id.dart';
 import '../utils/receipt_attachment_utils.dart';
+import 'brl_amount_text_field.dart';
 import 'finance_premium_ui.dart';
 
 /// Resultado da confirmação de pagamento/recebimento.
@@ -22,16 +26,34 @@ class FinanceConfirmPaymentSheetResult {
     this.receiptName = '',
     this.receiptMime,
     this.faturaSchedule,
+    this.paidIdsOverride,
+    this.valorPagoInformado,
+    this.deixaEmAbertoIds,
   });
 
   final DateTime paymentDate;
+
   /// Conta bancária vinculada ao lançamento (obrigatória na confirmação).
   final String? financeAccountId;
   final Uint8List? receiptBytes;
   final String receiptName;
   final String? receiptMime;
+
   /// Fechamento de fatura com data futura (só cartão de crédito).
   final FaturaClosureSchedule? faturaSchedule;
+
+  /// Pagamento PARCIAL da fatura (pedido de 21/09/2026): quando o valor pago
+  /// informado é menor que o total selecionado, só estes ids devem ser
+  /// marcados como pagos — os demais ([deixaEmAbertoIds]) continuam em
+  /// aberto. `null` = paga todos os ids selecionados, como antes.
+  final List<String>? paidIdsOverride;
+
+  /// O valor que o usuário disse que pagou de fato — pode ser diferente da
+  /// soma dos lançamentos selecionados (pagou menos, uma parcela, etc.).
+  final double? valorPagoInformado;
+
+  /// Os lançamentos que ficam pendentes por causa do pagamento parcial.
+  final List<String>? deixaEmAbertoIds;
 }
 
 /// Como tratar pagamento de fatura com data futura.
@@ -71,12 +93,25 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentSheet({
   var receiptName = '';
   String? receiptMime;
 
-  final confirmTitle = isIncome ? 'Confirmar recebimento' : 'Confirmar pagamento';
-  final confirmDateLabel = isIncome ? 'Data do recebimento' : 'Data do pagamento';
-  final confirmAccent = isIncome ? AppColors.financeReceita : AppColors.financeDespesa;
+  final confirmTitle =
+      isIncome ? 'Confirmar recebimento' : 'Confirmar pagamento';
+  final confirmDateLabel =
+      isIncome ? 'Data do recebimento' : 'Data do pagamento';
+  final confirmAccent =
+      isIncome ? AppColors.financeReceita : AppColors.financeDespesa;
   final iconGradient = isIncome
-      ? const [Color(0xFF14532D), Color(0xFF15803D), Color(0xFF22C55E), AppColors.accent]
-      : const [Color(0xFF7F1D1D), Color(0xFFB91C1C), Color(0xFFEF4444), AppColors.logoOrange];
+      ? const [
+          Color(0xFF14532D),
+          Color(0xFF15803D),
+          Color(0xFF22C55E),
+          AppColors.accent
+        ]
+      : const [
+          Color(0xFF7F1D1D),
+          Color(0xFFB91C1C),
+          Color(0xFFEF4444),
+          AppColors.logoOrange
+        ];
 
   final rawOrphan = orphanAccountId?.trim() ?? '';
 
@@ -96,24 +131,28 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentSheet({
           maxChildSize: 0.92,
           expand: false,
           builder: (ctx, scrollController) => Container(
-            decoration: financePremiumSheetDecoration(surfaceTint: confirmAccent),
+            decoration: financePremiumSheetDecoration(
+                surfaceTint: confirmAccent, context: context),
             child: SafeArea(
               top: false,
               child: ListView(
                 controller: scrollController,
-                padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.paddingOf(ctx).bottom),
+                padding: EdgeInsets.fromLTRB(
+                    20, 0, 20, 20 + MediaQuery.paddingOf(ctx).bottom),
                 children: [
                   FinancePremiumSheetHeader(
                     title: confirmTitle,
                     subtitle: isIncome
                         ? 'Escolha banco/conta, data e comprovante se quiser'
                         : 'Escolha banco/conta, data do pagamento e comprovante',
-                    icon: isIncome ? Icons.arrow_downward_rounded : Icons.payments_rounded,
+                    icon: isIncome
+                        ? Icons.arrow_downward_rounded
+                        : Icons.payments_rounded,
                     iconGradient: iconGradient,
                     onBack: () => Navigator.pop(ctx, false),
                   ),
                   if (amountPreview != null) ...[
-                    const SizedBox(height: 14),
+                    SizedBox(height: 14),
                     _ConfirmAmountPreviewCard(
                       amount: amountPreview,
                       category: categoryPreview,
@@ -122,18 +161,11 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentSheet({
                       accent: confirmAccent,
                     ),
                   ],
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
                   FinancePremiumFieldTile(
                     label: confirmDateLabel,
-                    value: DateFormat('dd/MM/yyyy · HH:mm').format(
-                      DateTime(
-                        dataConfirmacao.year,
-                        dataConfirmacao.month,
-                        dataConfirmacao.day,
-                        now.hour,
-                        now.minute,
-                      ),
-                    ),
+                    value: DateFormat('dd/MM/yyyy · HH:mm')
+                        .format(dataConfirmacao),
                     icon: Icons.event_available_rounded,
                     accent: confirmAccent,
                     onTap: () async {
@@ -144,10 +176,50 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentSheet({
                         lastDate: now,
                         helpText: confirmDateLabel,
                       );
-                      if (p != null) setModalState(() => dataConfirmacao = p);
+                      if (p != null) {
+                        setModalState(() => dataConfirmacao =
+                            FinanceTransactionDatetime
+                                .mergeCalendarDayWithExistingTime(
+                                    p, dataConfirmacao));
+                      }
                     },
                   ),
-                  const SizedBox(height: 14),
+                  SizedBox(height: 10),
+                  FinancePremiumFieldTile(
+                    label: 'Horário',
+                    value: DateFormat('HH:mm').format(dataConfirmacao),
+                    icon: Icons.schedule_rounded,
+                    accent: confirmAccent,
+                    onTap: () async {
+                      final picked = await showTimePicker(
+                        context: ctx,
+                        initialTime: TimeOfDay(
+                          hour: dataConfirmacao.hour,
+                          minute: dataConfirmacao.minute,
+                        ),
+                        helpText: 'Horário',
+                        hourLabelText: 'Hora',
+                        minuteLabelText: 'Minuto',
+                        builder: (context, child) {
+                          return MediaQuery(
+                            data: MediaQuery.of(context)
+                                .copyWith(alwaysUse24HourFormat: true),
+                            child: child ?? const SizedBox.shrink(),
+                          );
+                        },
+                      );
+                      if (picked != null) {
+                        setModalState(() => dataConfirmacao =
+                                FinanceTransactionDatetime
+                                    .mergeCalendarDayWithTimeOfDay(
+                              dataConfirmacao,
+                              picked.hour,
+                              picked.minute,
+                            ));
+                      }
+                    },
+                  ),
+                  SizedBox(height: 14),
                   Text(
                     'Banco / conta',
                     style: TextStyle(
@@ -156,20 +228,25 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentSheet({
                       color: confirmAccent.withValues(alpha: 0.92),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   if (financeAccounts.isEmpty)
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
                         color: AppColors.logoOrange.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppColors.logoOrange.withValues(alpha: 0.28)),
+                        border: Border.all(
+                            color:
+                                AppColors.logoOrange.withValues(alpha: 0.28)),
                       ),
                       child: Text(
                         rawOrphan.isNotEmpty
                             ? 'Conta anterior removida. Cadastre em Bancos e cartões para vincular.'
                             : 'Cadastre ao menos uma conta em Bancos e cartões para vincular o lançamento.',
-                        style: TextStyle(fontSize: 12.5, color: Colors.grey.shade800, height: 1.35),
+                        style: TextStyle(
+                            fontSize: 12.5,
+                            color: context.appTextPrimary,
+                            height: 1.35),
                       ),
                     )
                   else
@@ -177,7 +254,10 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentSheet({
                       key: ValueKey<String?>(selectedFinanceAccountId),
                       initialValue: selectedFinanceAccountId,
                       decoration: financePremiumDropdownDecoration(
-                        label: isIncome ? 'Banco / conta de recebimento' : 'Banco / conta de pagamento',
+                        context,
+                        label: isIncome
+                            ? 'Banco / conta de recebimento'
+                            : 'Banco / conta de pagamento',
                         prefixIcon: Icons.account_balance_rounded,
                         accent: confirmAccent,
                       ),
@@ -185,19 +265,21 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentSheet({
                         ...financeAccounts.map(
                           (a) => DropdownMenuItem<String?>(
                             value: a.id,
-                            child: Text(a.displayName, overflow: TextOverflow.ellipsis),
+                            child: Text(a.displayName,
+                                overflow: TextOverflow.ellipsis),
                           ),
                         ),
                         if (orphan && rawOrphan.isNotEmpty)
                           DropdownMenuItem<String?>(
                             value: rawOrphan,
-                            child: const Text('Manter vínculo antigo'),
+                            child: Text('Manter vínculo antigo'),
                           ),
                       ],
-                      onChanged: (v) => setModalState(() => selectedFinanceAccountId = v),
+                      onChanged: (v) =>
+                          setModalState(() => selectedFinanceAccountId = v),
                     ),
                   if (canAttachReceipt) ...[
-                    const SizedBox(height: 16),
+                    SizedBox(height: 16),
                     Text(
                       'Comprovante',
                       style: TextStyle(
@@ -206,13 +288,14 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentSheet({
                         color: confirmAccent.withValues(alpha: 0.92),
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: 8),
                     Material(
                       color: Colors.transparent,
                       child: InkWell(
                         borderRadius: BorderRadius.circular(18),
                         onTap: () async {
-                          final picked = await ReceiptAttachmentUtils.pickValidated(ctx);
+                          final picked =
+                              await ReceiptAttachmentUtils.pickValidated(ctx);
                           if (picked == null) return;
                           setModalState(() {
                             receiptBytes = picked.bytes;
@@ -226,7 +309,7 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentSheet({
                             gradient: LinearGradient(
                               colors: [
                                 confirmAccent.withValues(alpha: 0.10),
-                                Colors.white,
+                                context.appDarkModuleSurface,
                               ],
                             ),
                             border: Border.all(
@@ -243,7 +326,8 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentSheet({
                               ),
                             ],
                           ),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 18),
                           child: Row(
                             children: [
                               Container(
@@ -252,8 +336,16 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentSheet({
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
                                     colors: receiptBytes != null
-                                        ? [AppColors.success, Color.lerp(AppColors.success, AppColors.accent, 0.3)!]
-                                        : [confirmAccent, Color.lerp(confirmAccent, AppColors.accent, 0.35)!],
+                                        ? [
+                                            AppColors.success,
+                                            Color.lerp(AppColors.success,
+                                                AppColors.accent, 0.3)!
+                                          ]
+                                        : [
+                                            confirmAccent,
+                                            Color.lerp(confirmAccent,
+                                                AppColors.accent, 0.35)!
+                                          ],
                                   ),
                                   borderRadius: BorderRadius.circular(14),
                                 ),
@@ -265,20 +357,23 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentSheet({
                                   size: 26,
                                 ),
                               ),
-                              const SizedBox(width: 14),
+                              SizedBox(width: 14),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      receiptBytes != null ? 'Comprovante anexado' : 'Anexar comprovante',
+                                      receiptBytes != null
+                                          ? 'Comprovante anexado'
+                                          : 'Anexar comprovante',
                                       style: TextStyle(
                                         fontWeight: FontWeight.w900,
                                         fontSize: 14,
-                                        color: confirmAccent.withValues(alpha: 0.95),
+                                        color: confirmAccent.withValues(
+                                            alpha: 0.95),
                                       ),
                                     ),
-                                    const SizedBox(height: 3),
+                                    SizedBox(height: 3),
                                     Text(
                                       receiptBytes != null
                                           ? receiptName
@@ -287,7 +382,7 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentSheet({
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
                                         fontSize: 12,
-                                        color: Colors.grey.shade700,
+                                        color: context.appTextSecondary,
                                         height: 1.3,
                                       ),
                                     ),
@@ -302,7 +397,8 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentSheet({
                                     receiptName = '';
                                     receiptMime = null;
                                   }),
-                                  icon: Icon(Icons.close_rounded, color: Colors.grey.shade600),
+                                  icon: Icon(Icons.close_rounded,
+                                      color: context.appTextSecondary),
                                 ),
                             ],
                           ),
@@ -310,7 +406,7 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentSheet({
                       ),
                     ),
                   ],
-                  const SizedBox(height: 22),
+                  SizedBox(height: 22),
                   FinancePremiumSheetActions(
                     confirmLabel: 'Confirmar',
                     confirmColor: confirmAccent,
@@ -355,7 +451,7 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentSheet({
   if (confirmed != true) return null;
 
   return FinanceConfirmPaymentSheetResult(
-    paymentDate: dataConfirmacao,
+    paymentDate: FinanceTransactionDatetime.withoutSeconds(dataConfirmacao),
     financeAccountId: selectedFinanceAccountId?.trim(),
     receiptBytes: receiptBytes,
     receiptName: receiptName,
@@ -364,7 +460,11 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentSheet({
 }
 
 /// Grava confirmação no Firestore (+ comprovante Premium no Storage).
-Future<void> commitFinanceConfirmPayment({
+///
+/// Retorna a mensagem ESPECIAL para o usuário (ou null = mensagem normal do
+/// chamador). No WISDOMAPP (sem Finance Pro) é sempre null: não existe a
+/// quitação «só de controle» do Controle Total.
+Future<String?> commitFinanceConfirmPayment({
   required DocumentReference<Map<String, dynamic>> txRef,
   required String uid,
   required FinanceConfirmPaymentSheetResult result,
@@ -377,6 +477,7 @@ Future<void> commitFinanceConfirmPayment({
     'effectiveDate': confTs,
     'updatedAt': FieldValue.serverTimestamp(),
   };
+  const String? mensagem = null;
   final aid = result.financeAccountId?.trim() ?? '';
   if (creditCardFaturaPayment) {
     if (aid.isNotEmpty) {
@@ -394,11 +495,9 @@ Future<void> commitFinanceConfirmPayment({
       result.receiptName.isNotEmpty &&
       result.receiptMime != null &&
       result.receiptBytes!.isNotEmpty) {
-    final fn = FunctionsService();
     final fsId = firestoreUserDocIdForAppShell(uid);
-    final txPath = 'users/$fsId/transactions/${txRef.id}';
-    await fn.uploadReceiptToStorage(
-      txPath: txPath,
+    await FunctionsService().uploadReceiptToStorage(
+      txPath: 'users/$fsId/transactions/${txRef.id}',
       filename: result.receiptName,
       bytes: result.receiptBytes!,
       mimeType: result.receiptMime!,
@@ -413,9 +512,25 @@ Future<void> commitFinanceConfirmPayment({
     effectiveDate: result.paymentDate,
     invalidateOpeningBalance: false,
   );
+  return mensagem;
+}
+
+/// Um lançamento selecionado para pagar em lote — usado só para calcular o
+/// pagamento PARCIAL da fatura (quais ids ficam pagos quando o valor pago é
+/// menor que o total).
+class FinanceBatchPayableItem {
+  const FinanceBatchPayableItem({required this.id, required this.amount, required this.date});
+  final String id;
+  final double amount;
+  final DateTime date;
 }
 
 /// Sheet premium em lote: mesma data + mesmo banco para todos (sem comprovante).
+///
+/// [payableItems]: só para `creditCardFaturaPayment` — habilita o campo
+/// «Valor pago» (o usuário às vezes não paga a fatura inteira: parcela,
+/// pagamento parcial). Menor que o total → só os lançamentos mais antigos,
+/// até esse valor, saem como pagos; o resto continua em aberto.
 Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentBatchSheet({
   required BuildContext context,
   required bool isIncome,
@@ -424,47 +539,89 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentBatchSheet({
   double? totalAmountPreview,
   bool creditCardFaturaPayment = false,
   String? cardDisplayName,
+  List<FinanceBatchPayableItem>? payableItems,
+  /// Fatura ATUAL informada pelo banco (`FinanceAccount.faturaAtualBanco`) —
+  /// só passada quando [payableItems] representa TODO o pendente do cartão
+  /// (o botão principal «Gerar fechamento / Pagar fatura»). Some/é nula em
+  /// pagamento parcial manual ou cartão sem sincronização — nesse caso o
+  /// comportamento é o de sempre (default = soma de tudo em aberto).
+  double? bankOfficialTotal,
+  /// De qual conta o dinheiro provavelmente sai (pedido de 22/09/2026) —
+  /// detectado pelo chamador (ex.: mesma instituição do cartão, conectada
+  /// via Open Finance). Só define o valor INICIAL do seletor; o usuário
+  /// sempre pode trocar no dropdown abaixo (nunca é travado).
+  String? preferredFinanceAccountId,
 }) async {
   final now = DateTime.now();
-  var selectedFinanceAccountId =
-      financeAccounts.isNotEmpty ? financeAccounts.first.id : null;
+  final preferredId = preferredFinanceAccountId?.trim();
+  final hasPreferred = preferredId != null &&
+      preferredId.isNotEmpty &&
+      financeAccounts.any((a) => a.id == preferredId);
+  var selectedFinanceAccountId = hasPreferred
+      ? preferredId
+      : (financeAccounts.isNotEmpty ? financeAccounts.first.id : null);
   var dataConfirmacao = now;
+  final totalSelecionado = totalAmountPreview ?? 0;
+  final permiteValorPago = creditCardFaturaPayment && payableItems != null && payableItems.isNotEmpty;
+  // Valor oficial do banco (fatura fechada) × soma de tudo em aberto no
+  // cartão (inclui compras já previstas para faturas futuras). Pedido de
+  // 22/09/2026: deixar o usuário escolher qual dos dois valores pagar — o
+  // default passa a ser o do banco (o correto), preservando a edição manual.
+  final bankTotal = (permiteValorPago && bankOfficialTotal != null && bankOfficialTotal > 0.005)
+      ? bankOfficialTotal
+      : null;
+  final mostrarEscolhaValor = bankTotal != null && (bankTotal - totalSelecionado).abs() > 0.01;
+  final valorInicial = bankTotal ?? totalSelecionado;
+  var origemValorPago = bankTotal != null ? _OrigemValorPago.banco : _OrigemValorPago.todos;
+  final valorPagoCtrl = TextEditingController(
+    text: CurrencyFormats.formatBRLInputFromCents((valorInicial * 100).round()),
+  );
+  var valorPago = valorInicial;
+  // Ids que ficam de fora quando o valor pago é menor que o total — oldest
+  // first (o mais antigo é o primeiro a ser dado como pago).
+  List<String> calcularDeixaEmAberto(double valorPago) {
+    if (!permiteValorPago) return const [];
+    if (valorPago >= totalSelecionado - 0.005) return const [];
+    final ordenados = [...payableItems]..sort((a, b) => a.date.compareTo(b.date));
+    var acumulado = 0.0;
+    final foraDoPagamento = <String>[];
+    for (final item in ordenados) {
+      acumulado += item.amount;
+      if (acumulado > valorPago + 0.005) foraDoPagamento.add(item.id);
+    }
+    return foraDoPagamento;
+  }
 
   final confirmTitle = creditCardFaturaPayment
       ? 'Pagar fatura do cartão'
-      : (isIncome ? 'Confirmar recebimentos em lote' : 'Confirmar pagamentos em lote');
-  final confirmDateLabel = isIncome ? 'Data do recebimento' : 'Data do pagamento';
+      : (isIncome
+          ? 'Confirmar recebimentos em lote'
+          : 'Confirmar pagamentos em lote');
+  final confirmDateLabel =
+      isIncome ? 'Data do recebimento' : 'Data do pagamento';
   final confirmAccent = creditCardFaturaPayment
       ? const Color(0xFF4F46E5)
       : (isIncome ? AppColors.financeReceita : AppColors.financeDespesa);
   final iconGradient = creditCardFaturaPayment
       ? const [Color(0xFF312E81), Color(0xFF4F46E5), Color(0xFF6366F1)]
       : (isIncome
-          ? const [Color(0xFF14532D), Color(0xFF15803D), Color(0xFF22C55E), AppColors.accent]
-          : const [Color(0xFF7F1D1D), Color(0xFFB91C1C), Color(0xFFEF4444), AppColors.logoOrange]);
+          ? const [
+              Color(0xFF14532D),
+              Color(0xFF15803D),
+              Color(0xFF22C55E),
+              AppColors.accent
+            ]
+          : const [
+              Color(0xFF7F1D1D),
+              Color(0xFFB91C1C),
+              Color(0xFFEF4444),
+              AppColors.logoOrange
+            ]);
   final cardLabel = (cardDisplayName ?? '').trim();
   var faturaFutureMode = const FaturaClosureSchedule(autoDebitOnDueDate: true);
 
-  final confirmed = await showModalBottomSheet<bool>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    backgroundColor: Colors.transparent,
-    builder: (ctx) => StatefulBuilder(
-      builder: (context, setModalState) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.58,
-          minChildSize: 0.42,
-          maxChildSize: 0.88,
-          expand: false,
-          builder: (ctx, scrollController) => Container(
-            decoration: financePremiumSheetDecoration(surfaceTint: confirmAccent),
-            child: SafeArea(
-              top: false,
-              child: ListView(
-                controller: scrollController,
-                padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.paddingOf(ctx).bottom),
-                children: [
+  List<Widget> construirCampos(BuildContext ctx, StateSetter setModalState) {
+    return [
                   FinancePremiumSheetHeader(
                     title: confirmTitle,
                     subtitle: creditCardFaturaPayment
@@ -478,25 +635,133 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentBatchSheet({
                     iconGradient: iconGradient,
                     onBack: () => Navigator.pop(ctx, false),
                   ),
-                  const SizedBox(height: 14),
+                  SizedBox(height: 14),
                   _BatchConfirmCountCard(
                     count: itemCount,
                     isIncome: isIncome,
                     accent: confirmAccent,
                     totalAmount: totalAmountPreview,
                   ),
-                  const SizedBox(height: 16),
-                  FinancePremiumFieldTile(
-                    label: creditCardFaturaPayment ? 'Data do pagamento / fechamento' : confirmDateLabel,
-                    value: DateFormat('dd/MM/yyyy · HH:mm').format(
-                      DateTime(
-                        dataConfirmacao.year,
-                        dataConfirmacao.month,
-                        dataConfirmacao.day,
-                        now.hour,
-                        now.minute,
+                  // Valor pago de fato (pedido de 21/09/2026): às vezes o
+                  // usuário não paga a fatura inteira — parcela, pagamento
+                  // parcial. Menor que o total selecionado só dá como pago
+                  // os lançamentos mais antigos até esse valor; o resto
+                  // continua em aberto (nunca soma como se tivesse pago tudo).
+                  if (permiteValorPago) ...[
+                    SizedBox(height: 16),
+                    Text(
+                      'Quanto você pagou de fato?',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 13,
+                        color: confirmAccent.withValues(alpha: 0.92),
                       ),
                     ),
+                    if (mostrarEscolhaValor) ...[
+                      SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _ValorPagoQuickPick(
+                              label: 'Fatura do banco',
+                              sublabel: 'o que fecha agora',
+                              value: bankTotal,
+                              icon: Icons.account_balance_rounded,
+                              accent: confirmAccent,
+                              selected: origemValorPago == _OrigemValorPago.banco,
+                              onTap: () => setModalState(() {
+                                origemValorPago = _OrigemValorPago.banco;
+                                valorPago = bankTotal;
+                                valorPagoCtrl.text =
+                                    CurrencyFormats.formatBRLInputFromCents((bankTotal * 100).round());
+                              }),
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: _ValorPagoQuickPick(
+                              label: 'Tudo em aberto',
+                              sublabel: 'inclui faturas futuras',
+                              value: totalSelecionado,
+                              icon: Icons.layers_rounded,
+                              accent: confirmAccent,
+                              selected: origemValorPago == _OrigemValorPago.todos,
+                              onTap: () => setModalState(() {
+                                origemValorPago = _OrigemValorPago.todos;
+                                valorPago = totalSelecionado;
+                                valorPagoCtrl.text =
+                                    CurrencyFormats.formatBRLInputFromCents((totalSelecionado * 100).round());
+                              }),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    SizedBox(height: 8),
+                    BrlAmountTextField(
+                      controller: valorPagoCtrl,
+                      labelText: 'Valor pago',
+                      decoration: InputDecoration(
+                        labelText: 'Valor pago',
+                        prefixIcon: const Icon(Icons.payments_rounded),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      onChanged: (_) {
+                        final novo = CurrencyFormats.parseBRLInput(valorPagoCtrl.text);
+                        setModalState(() {
+                          valorPago = novo ?? valorPago;
+                          // Editou à mão: não corresponde mais a nenhum dos
+                          // atalhos — os dois cartões ficam sem destaque.
+                          origemValorPago = _OrigemValorPago.manual;
+                        });
+                      },
+                    ),
+                    SizedBox(height: 8),
+                    Builder(builder: (context) {
+                      if (valorPago > totalSelecionado + 0.005) {
+                        return _avisoValorPago(
+                          context,
+                          icon: Icons.error_outline_rounded,
+                          texto:
+                              'O valor pago não pode passar do total selecionado (${CurrencyFormats.formatBRL(totalSelecionado)}). Selecione mais lançamentos ou ajuste o valor.',
+                          cor: AppColors.error,
+                        );
+                      }
+                      final fora = calcularDeixaEmAberto(valorPago);
+                      if (fora.isEmpty) {
+                        return _avisoValorPago(
+                          context,
+                          icon: Icons.check_circle_rounded,
+                          texto: 'Paga a fatura selecionada por inteiro.',
+                          cor: const Color(0xFF16A34A),
+                        );
+                      }
+                      final diferenca = totalSelecionado - valorPago;
+                      if (origemValorPago == _OrigemValorPago.banco) {
+                        return _avisoValorPago(
+                          context,
+                          icon: Icons.account_balance_rounded,
+                          texto:
+                              'Pagando a fatura fechada pelo banco. ${CurrencyFormats.formatBRL(diferenca)} em ${fora.length} lançamento(s) já são de fatura(s) futuras e continuam em aberto.',
+                          cor: confirmAccent,
+                        );
+                      }
+                      return _avisoValorPago(
+                        context,
+                        icon: Icons.info_outline_rounded,
+                        texto:
+                            'Pagamento parcial: ${CurrencyFormats.formatBRL(diferenca)} continua(m) em aberto em ${fora.length} lançamento(s) — os mais antigos entram como pagos primeiro.',
+                        cor: AppColors.logoOrange,
+                      );
+                    }),
+                  ],
+                  SizedBox(height: 16),
+                  FinancePremiumFieldTile(
+                    label: creditCardFaturaPayment
+                        ? 'Data do pagamento / fechamento'
+                        : confirmDateLabel,
+                    value: DateFormat('dd/MM/yyyy · HH:mm')
+                        .format(dataConfirmacao),
                     icon: Icons.event_available_rounded,
                     accent: confirmAccent,
                     onTap: () async {
@@ -511,7 +776,47 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentBatchSheet({
                             ? 'Data do pagamento da fatura'
                             : confirmDateLabel,
                       );
-                      if (p != null) setModalState(() => dataConfirmacao = p);
+                      if (p != null) {
+                        setModalState(() => dataConfirmacao =
+                            FinanceTransactionDatetime
+                                .mergeCalendarDayWithExistingTime(
+                                    p, dataConfirmacao));
+                      }
+                    },
+                  ),
+                  SizedBox(height: 10),
+                  FinancePremiumFieldTile(
+                    label: 'Horário',
+                    value: DateFormat('HH:mm').format(dataConfirmacao),
+                    icon: Icons.schedule_rounded,
+                    accent: confirmAccent,
+                    onTap: () async {
+                      final picked = await showTimePicker(
+                        context: ctx,
+                        initialTime: TimeOfDay(
+                          hour: dataConfirmacao.hour,
+                          minute: dataConfirmacao.minute,
+                        ),
+                        helpText: 'Horário',
+                        hourLabelText: 'Hora',
+                        minuteLabelText: 'Minuto',
+                        builder: (context, child) {
+                          return MediaQuery(
+                            data: MediaQuery.of(context)
+                                .copyWith(alwaysUse24HourFormat: true),
+                            child: child ?? const SizedBox.shrink(),
+                          );
+                        },
+                      );
+                      if (picked != null) {
+                        setModalState(() => dataConfirmacao =
+                                FinanceTransactionDatetime
+                                    .mergeCalendarDayWithTimeOfDay(
+                              dataConfirmacao,
+                              picked.hour,
+                              picked.minute,
+                            ));
+                      }
                     },
                   ),
                   if (creditCardFaturaPayment) ...[
@@ -523,18 +828,23 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentBatchSheet({
                           dataConfirmacao.day,
                         );
                         final today = DateTime(now.year, now.month, now.day);
-                        if (!payDay.isAfter(today)) return const SizedBox.shrink();
+                        if (!payDay.isAfter(today)) {
+                          return const SizedBox.shrink();
+                        }
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            const SizedBox(height: 14),
+                            SizedBox(height: 14),
                             Container(
                               padding: const EdgeInsets.all(14),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFEEF2FF),
+                                color: context.appAccentSurface(
+                                  const Color(0xFF4F46E5),
+                                ),
                                 borderRadius: BorderRadius.circular(16),
                                 border: Border.all(
-                                  color: const Color(0xFF4F46E5).withValues(alpha: 0.28),
+                                  color: const Color(0xFF4F46E5)
+                                      .withValues(alpha: 0.28),
                                 ),
                               ),
                               child: Column(
@@ -548,42 +858,46 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentBatchSheet({
                                       color: Color(0xFF312E81),
                                     ),
                                   ),
-                                  const SizedBox(height: 8),
+                                  SizedBox(height: 8),
                                   Text(
                                     'Escolha como registrar o fechamento da fatura:',
                                     style: TextStyle(
                                       fontSize: 12,
                                       height: 1.35,
-                                      color: Colors.grey.shade800,
+                                      color: context.appTextPrimary,
                                     ),
                                   ),
                                 ],
                               ),
                             ),
-                            const SizedBox(height: 10),
+                            SizedBox(height: 10),
                             SegmentedButton<bool>(
                               segments: const [
                                 ButtonSegment(
                                   value: true,
-                                  label: Text('Débito automático', style: TextStyle(fontSize: 11)),
-                                  icon: Icon(Icons.schedule_send_rounded, size: 18),
+                                  label: Text('Débito automático',
+                                      style: TextStyle(fontSize: 11)),
+                                  icon: Icon(Icons.schedule_send_rounded,
+                                      size: 18),
                                 ),
                                 ButtonSegment(
                                   value: false,
-                                  label: Text('Confirmar no dia', style: TextStyle(fontSize: 11)),
+                                  label: Text('Confirmar no dia',
+                                      style: TextStyle(fontSize: 11)),
                                   icon: Icon(Icons.touch_app_rounded, size: 18),
                                 ),
                               ],
                               selected: {faturaFutureMode.autoDebitOnDueDate},
                               onSelectionChanged: (s) {
                                 setModalState(
-                                  () => faturaFutureMode = FaturaClosureSchedule(
+                                  () =>
+                                      faturaFutureMode = FaturaClosureSchedule(
                                     autoDebitOnDueDate: s.first,
                                   ),
                                 );
                               },
                             ),
-                            const SizedBox(height: 8),
+                            SizedBox(height: 8),
                             Text(
                               faturaFutureMode.autoDebitOnDueDate
                                   ? 'Em ${DateFormat('dd/MM/yyyy').format(payDay)} o valor sairá automaticamente da conta escolhida (ao abrir o app nessa data).'
@@ -592,7 +906,7 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentBatchSheet({
                                 fontSize: 11.5,
                                 height: 1.35,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.grey.shade700,
+                                color: context.appTextSecondary,
                               ),
                             ),
                           ],
@@ -600,27 +914,56 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentBatchSheet({
                       },
                     ),
                   ],
-                  const SizedBox(height: 14),
+                  SizedBox(height: 14),
                   Text(
-                    creditCardFaturaPayment ? 'Banco que paga a fatura' : 'Banco / conta (todos)',
+                    creditCardFaturaPayment
+                        ? 'Banco que paga a fatura'
+                        : 'Banco / conta (todos)',
                     style: TextStyle(
                       fontWeight: FontWeight.w900,
                       fontSize: 13,
                       color: confirmAccent.withValues(alpha: 0.92),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  if (creditCardFaturaPayment &&
+                      hasPreferred &&
+                      selectedFinanceAccountId == preferredId) ...[
+                    SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.auto_awesome_rounded,
+                            size: 13, color: confirmAccent.withValues(alpha: 0.8)),
+                        SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            'Detectado automaticamente (mesmo banco do cartão) · pode trocar abaixo',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: confirmAccent.withValues(alpha: 0.8),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  SizedBox(height: 8),
                   if (financeAccounts.isEmpty)
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
                         color: AppColors.logoOrange.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppColors.logoOrange.withValues(alpha: 0.28)),
+                        border: Border.all(
+                            color:
+                                AppColors.logoOrange.withValues(alpha: 0.28)),
                       ),
                       child: Text(
                         'Cadastre ao menos uma conta em Bancos e cartões para confirmar.',
-                        style: TextStyle(fontSize: 12.5, color: Colors.grey.shade800, height: 1.35),
+                        style: TextStyle(
+                            fontSize: 12.5,
+                            color: context.appTextPrimary,
+                            height: 1.35),
                       ),
                     )
                   else
@@ -628,7 +971,10 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentBatchSheet({
                       key: ValueKey<String?>(selectedFinanceAccountId),
                       initialValue: selectedFinanceAccountId,
                       decoration: financePremiumDropdownDecoration(
-                        label: isIncome ? 'Banco / conta de recebimento (todos)' : 'Banco / conta de pagamento (todos)',
+                        ctx,
+                        label: isIncome
+                            ? 'Banco / conta de recebimento (todos)'
+                            : 'Banco / conta de pagamento (todos)',
                         prefixIcon: Icons.account_balance_rounded,
                         accent: confirmAccent,
                       ),
@@ -636,23 +982,25 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentBatchSheet({
                         ...financeAccounts.map(
                           (a) => DropdownMenuItem<String?>(
                             value: a.id,
-                            child: Text(a.displayName, overflow: TextOverflow.ellipsis),
+                            child: Text(a.displayName,
+                                overflow: TextOverflow.ellipsis),
                           ),
                         ),
                       ],
-                      onChanged: (v) => setModalState(() => selectedFinanceAccountId = v),
+                      onChanged: (v) =>
+                          setModalState(() => selectedFinanceAccountId = v),
                     ),
-                  const SizedBox(height: 10),
+                  SizedBox(height: 10),
                   Text(
                     'Comprovantes não estão disponíveis em lote. Confirme um a um se precisar anexar.',
                     style: TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade600,
+                      color: ctx.appTextSecondary,
                       height: 1.35,
                     ),
                   ),
-                  const SizedBox(height: 22),
+                  SizedBox(height: 22),
                   FinancePremiumSheetActions(
                     confirmLabel: creditCardFaturaPayment
                         ? 'Gerar fechamento ($itemCount)'
@@ -660,6 +1008,26 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentBatchSheet({
                     confirmColor: confirmAccent,
                     confirmIcon: Icons.done_all_rounded,
                     onConfirm: () {
+                      if (permiteValorPago) {
+                        final digitado = CurrencyFormats.parseBRLInput(valorPagoCtrl.text);
+                        if (digitado == null || digitado <= 0) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            const SnackBar(content: Text('Informe quanto você pagou.')),
+                          );
+                          return;
+                        }
+                        if (digitado > totalSelecionado + 0.005) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'O valor pago não pode passar de ${CurrencyFormats.formatBRL(totalSelecionado)} (o total selecionado).',
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+                        valorPago = digitado;
+                      }
                       final payDay = DateTime(
                         dataConfirmacao.year,
                         dataConfirmacao.month,
@@ -698,15 +1066,64 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentBatchSheet({
                     },
                     onCancel: () => Navigator.pop(ctx, false),
                   ),
-                ],
+    ];
+  }
+
+  Widget construirConteudo(
+    BuildContext ctx,
+    StateSetter setModalState,
+    ScrollController? scrollController,
+  ) {
+    return ListView(
+      controller: scrollController,
+      padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.paddingOf(ctx).bottom),
+      children: construirCampos(ctx, setModalState),
+    );
+  }
+
+  // Pagar fatura do cartão sempre em tela cheia (pedido de 21/09/2026) — a
+  // folha pela metade ficava apertada com o campo de valor pago e o resumo.
+  // Os outros lotes (recebimentos/despesas em lote) continuam em folha.
+  final confirmed = creditCardFaturaPayment
+      ? await Navigator.of(context).push<bool>(
+          MaterialPageRoute<bool>(
+            fullscreenDialog: true,
+            builder: (ctx) => Scaffold(
+              backgroundColor: Colors.transparent,
+              body: Container(
+                decoration: financePremiumSheetDecoration(surfaceTint: confirmAccent, context: context),
+                child: SafeArea(
+                  child: StatefulBuilder(
+                    builder: (context, setModalState) => construirConteudo(ctx, setModalState, null),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        )
+      : await showModalBottomSheet<bool>(
+          context: context,
+          isScrollControlled: true,
+          useSafeArea: true,
+          backgroundColor: Colors.transparent,
+          builder: (ctx) => StatefulBuilder(
+            builder: (context, setModalState) => DraggableScrollableSheet(
+              initialChildSize: 0.58,
+              minChildSize: 0.42,
+              maxChildSize: 0.88,
+              expand: false,
+              builder: (ctx, scrollController) => Container(
+                decoration: financePremiumSheetDecoration(surfaceTint: confirmAccent, context: context),
+                child: SafeArea(
+                  top: false,
+                  child: construirConteudo(ctx, setModalState, scrollController),
+                ),
               ),
             ),
           ),
         );
-      },
-    ),
-  );
 
+  valorPagoCtrl.dispose();
   if (confirmed != true) return null;
 
   final payDay = DateTime(
@@ -715,27 +1132,52 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentBatchSheet({
     dataConfirmacao.day,
   );
   final today = DateTime(now.year, now.month, now.day);
-  final FaturaClosureSchedule? schedule = creditCardFaturaPayment && payDay.isAfter(today)
-      ? faturaFutureMode
-      : null;
+  final FaturaClosureSchedule? schedule =
+      creditCardFaturaPayment && payDay.isAfter(today)
+          ? faturaFutureMode
+          : null;
+
+  // Pagamento parcial: só os ids mais antigos até o valor informado saem
+  // como pagos — o resto (`deixaEmAbertoIds`) continua pendente.
+  List<String>? paidIdsOverride;
+  List<String>? deixaEmAbertoIds;
+  double? valorPagoInformado;
+  if (permiteValorPago) {
+    valorPagoInformado = valorPago;
+    final fora = calcularDeixaEmAberto(valorPago);
+    if (fora.isNotEmpty) {
+      deixaEmAbertoIds = fora;
+      final foraSet = fora.toSet();
+      paidIdsOverride = payableItems.map((e) => e.id).where((id) => !foraSet.contains(id)).toList();
+    }
+  }
 
   return FinanceConfirmPaymentSheetResult(
-    paymentDate: dataConfirmacao,
+    paymentDate: FinanceTransactionDatetime.withoutSeconds(dataConfirmacao),
     financeAccountId: selectedFinanceAccountId?.trim(),
     faturaSchedule: schedule,
+    paidIdsOverride: paidIdsOverride,
+    valorPagoInformado: valorPagoInformado,
+    deixaEmAbertoIds: deixaEmAbertoIds,
   );
 }
 
 /// Grava confirmação em lote (mesma data/conta; sem comprovante).
-Future<void> commitFinanceConfirmPaymentBatch({
+///
+/// Retorna quantos foram quitados como CONTROLE — sempre 0 no WISDOMAPP
+/// (sem Finance Pro; mantido para a assinatura ficar igual à do CT).
+Future<int> commitFinanceConfirmPaymentBatch({
   required CollectionReference<Map<String, dynamic>> txCol,
   required List<String> docIds,
   required String uid,
   required FinanceConfirmPaymentSheetResult result,
   bool creditCardFaturaPayment = false,
 }) async {
-  final unique = docIds.map((e) => e.trim()).where((e) => e.isNotEmpty).toSet().toList();
-  if (unique.isEmpty) return;
+  final unique =
+      docIds.map((e) => e.trim()).where((e) => e.isNotEmpty).toSet().toList();
+  if (unique.isEmpty) return 0;
+
+  final controleIds = <String>{};
 
   final confTs = Timestamp.fromDate(result.paymentDate);
   final updatedAt = FieldValue.serverTimestamp();
@@ -799,6 +1241,7 @@ Future<void> commitFinanceConfirmPaymentBatch({
     effectiveDate: result.paymentDate,
     invalidateOpeningBalance: false,
   );
+  return controleIds.length;
 }
 
 /// Confirma débitos de fatura agendados cuja data já chegou (ao abrir o Financeiro).
@@ -835,9 +1278,140 @@ Future<int> processDueFaturaScheduledPayments({
     n++;
   }
   if (n > 0) {
-    FinanceTransactionsHub.notifyMutated(uid: uid, invalidateOpeningBalance: false);
+    FinanceTransactionsHub.notifyMutated(
+        uid: uid, invalidateOpeningBalance: false);
   }
   return n;
+}
+
+/// Aviso do campo «Valor pago» — igual, paga menos ou passou do total.
+Widget _avisoValorPago(
+  BuildContext context, {
+  required IconData icon,
+  required String texto,
+  required Color cor,
+}) {
+  return Container(
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(
+      color: cor.withValues(alpha: 0.10),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: cor.withValues(alpha: 0.35)),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: cor),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            texto,
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: cor, height: 1.3),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Qual atalho de «Valor pago» está ativo (ou nenhum, quando editado à mão).
+enum _OrigemValorPago { banco, todos, manual }
+
+/// Atalho de valor: «Fatura do banco» × «Tudo em aberto». Tocar preenche o
+/// campo «Valor pago»; o usuário ainda pode editar à mão depois (pagamento
+/// parcial continua funcionando normalmente).
+class _ValorPagoQuickPick extends StatelessWidget {
+  const _ValorPagoQuickPick({
+    required this.label,
+    required this.sublabel,
+    required this.value,
+    required this.icon,
+    required this.accent,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final String sublabel;
+  final double value;
+  final IconData icon;
+  final Color accent;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: selected
+                ? LinearGradient(
+                    colors: [accent, Color.lerp(accent, Colors.black, 0.15)!],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : null,
+            color: selected ? null : context.appDarkModuleSurface,
+            border: Border.all(
+              color: selected ? Colors.transparent : accent.withValues(alpha: 0.28),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, size: 15, color: selected ? Colors.white : accent),
+                  SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                        color: selected ? Colors.white : context.appTextPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 4),
+              Text(
+                CurrencyFormats.formatBRL(value),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w900,
+                  color: selected ? Colors.white : accent,
+                ),
+              ),
+              SizedBox(height: 2),
+              Text(
+                sublabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: selected ? Colors.white.withValues(alpha: 0.85) : context.appTextSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _BatchConfirmCountCard extends StatelessWidget {
@@ -862,14 +1436,17 @@ class _BatchConfirmCountCard extends StatelessWidget {
           colors: [
             accent.withValues(alpha: 0.18),
             accent.withValues(alpha: 0.06),
-            Colors.white,
+            context.appDarkModuleSurface,
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         border: Border.all(color: accent.withValues(alpha: 0.3)),
         boxShadow: [
-          BoxShadow(color: accent.withValues(alpha: 0.12), blurRadius: 14, offset: const Offset(0, 4)),
+          BoxShadow(
+              color: accent.withValues(alpha: 0.12),
+              blurRadius: 14,
+              offset: const Offset(0, 4)),
         ],
       ),
       child: Padding(
@@ -880,12 +1457,13 @@ class _BatchConfirmCountCard extends StatelessWidget {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                gradient: LinearGradient(colors: [accent, accent.withValues(alpha: 0.75)]),
+                gradient: LinearGradient(
+                    colors: [accent, accent.withValues(alpha: 0.75)]),
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: const Icon(Icons.layers_rounded, color: Colors.white, size: 26),
+              child: Icon(Icons.layers_rounded, color: Colors.white, size: 26),
             ),
-            const SizedBox(width: 14),
+            SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -899,13 +1477,13 @@ class _BatchConfirmCountCard extends StatelessWidget {
                     ),
                   ),
                   if (totalAmount != null) ...[
-                    const SizedBox(height: 4),
+                    SizedBox(height: 4),
                     Text(
                       'Total: ${CurrencyFormats.formatBRL(totalAmount!.abs())}',
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 13,
-                        color: Colors.grey.shade800,
+                        color: context.appTextPrimary,
                       ),
                     ),
                   ],
@@ -945,14 +1523,17 @@ class _ConfirmAmountPreviewCard extends StatelessWidget {
           colors: [
             accent.withValues(alpha: 0.16),
             accent.withValues(alpha: 0.06),
-            Colors.white,
+            context.appDarkModuleSurface,
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         border: Border.all(color: accent.withValues(alpha: 0.28)),
         boxShadow: [
-          BoxShadow(color: accent.withValues(alpha: 0.12), blurRadius: 14, offset: const Offset(0, 4)),
+          BoxShadow(
+              color: accent.withValues(alpha: 0.12),
+              blurRadius: 14,
+              offset: const Offset(0, 4)),
         ],
       ),
       child: Padding(
@@ -970,15 +1551,16 @@ class _ConfirmAmountPreviewCard extends StatelessWidget {
               ),
             ),
             if (cat.isNotEmpty || desc.isNotEmpty) ...[
-              const SizedBox(height: 6),
+              SizedBox(height: 6),
               Text(
-                [if (cat.isNotEmpty) cat, if (desc.isNotEmpty) desc].join(' · '),
+                [if (cat.isNotEmpty) cat, if (desc.isNotEmpty) desc]
+                    .join(' · '),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade800,
+                  color: context.appTextPrimary,
                   height: 1.35,
                 ),
               ),

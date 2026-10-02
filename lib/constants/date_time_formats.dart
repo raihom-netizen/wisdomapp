@@ -22,4 +22,7 @@ class DateTimeFormats {
 
   /// Só hora e minuto (ex: 14:30) — use nas grids com cabeçalho de dia.
   static String formatTimeOnly(DateTime d) => time24.format(d);
+
+  /// Data e hora sem segundos (ex: 18/06/2026 12:28) — grids do Financeiro.
+  static String formatDateTimeMinute(DateTime d) => dateTimeBR.format(d);
 }

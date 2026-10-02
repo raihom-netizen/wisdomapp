@@ -1,12 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../theme/theme_context.dart';
 import 'fast_text_field.dart';
 
 import '../constants/app_business_rules.dart';
 import '../constants/finance_category_visuals.dart';
 import '../services/user_categories_service.dart';
 import '../theme/app_colors.dart';
+import '../widgets/modern_module_ui.dart';
 import '../utils/finance_category_grouping.dart';
 
 /// Abre o picker de categorias para filtros (receitas, despesas ou ambos).
@@ -52,7 +54,7 @@ Future<String?> pickFinanceCategoryForFilter({
     typed = await showDialog<String>(
       context: context,
       builder: (dialogCtx) => AlertDialog(
-        title: const Text('Filtrar por categoria'),
+        title: Text('Filtrar por categoria'),
         content: FastTextField(
           controller: ctrl,
           autofocus: true,
@@ -63,14 +65,14 @@ Future<String?> pickFinanceCategoryForFilter({
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.pop(dialogCtx), child: Text('Cancelar')),
           FilledButton(
             onPressed: () {
               final name = ctrl.text.trim();
               if (name.isEmpty) return;
               Navigator.pop(dialogCtx, name);
             },
-            child: const Text('Aplicar'),
+            child: Text('Aplicar'),
           ),
         ],
       ),
@@ -187,13 +189,13 @@ class _FinanceCategoryPickerScreenState extends State<_FinanceCategoryPickerScre
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(dialogCtx, false), child: const Text('Cancelar')),
+                TextButton(onPressed: () => Navigator.pop(dialogCtx, false), child: Text('Cancelar')),
                 FilledButton(
                   onPressed: () {
                     if (ctrl.text.trim().isEmpty) return;
                     Navigator.pop(dialogCtx, true);
                   },
-                  child: const Text('Adicionar'),
+                  child: Text('Adicionar'),
                 ),
               ],
             ),
@@ -223,7 +225,7 @@ class _FinanceCategoryPickerScreenState extends State<_FinanceCategoryPickerScre
     final title = widget.isIncome ? 'Categoria de receita' : 'Categoria de despesa';
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
+      backgroundColor: ModernModuleUI.scaffoldBgOf(context),
       appBar: AppBar(
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -243,7 +245,7 @@ class _FinanceCategoryPickerScreenState extends State<_FinanceCategoryPickerScre
           style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.2),
         ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
+          icon: Icon(Icons.arrow_back_rounded),
           tooltip: 'Fechar',
           onPressed: () => Navigator.of(context).pop(),
         ),
@@ -251,7 +253,7 @@ class _FinanceCategoryPickerScreenState extends State<_FinanceCategoryPickerScre
       body: Column(
         children: [
           Container(
-            color: Colors.white,
+            color: ModernModuleUI.cardBg(context),
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
             child: Column(
               children: [
@@ -261,18 +263,18 @@ class _FinanceCategoryPickerScreenState extends State<_FinanceCategoryPickerScre
                   decoration: InputDecoration(
                     isDense: true,
                     hintText: 'Pesquisar categoria',
-                    prefixIcon: const Icon(Icons.search_rounded, color: AppColors.primary),
+                    prefixIcon: Icon(Icons.search_rounded, color: AppColors.primary),
                     suffixIcon: _searchCtrl.text.isEmpty
                         ? null
                         : IconButton(
-                            icon: const Icon(Icons.close_rounded),
+                            icon: Icon(Icons.close_rounded),
                             onPressed: () {
                               _searchCtrl.clear();
                               setState(() {});
                             },
                           ),
                     filled: true,
-                    fillColor: const Color(0xFFF6F8FB),
+                    fillColor: context.appInputFill,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
                       borderSide: BorderSide.none,
@@ -280,13 +282,13 @@ class _FinanceCategoryPickerScreenState extends State<_FinanceCategoryPickerScre
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                   ),
                 ),
-                const SizedBox(height: 10),
+                SizedBox(height: 10),
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
                     onPressed: _incluirNova,
-                    icon: const Icon(Icons.add_circle_rounded),
-                    label: const Text('Incluir nova categoria', style: TextStyle(fontWeight: FontWeight.w900)),
+                    icon: Icon(Icons.add_circle_rounded),
+                    label: Text('Incluir nova categoria', style: TextStyle(fontWeight: FontWeight.w900)),
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.accent,
                       foregroundColor: Colors.white,
@@ -304,7 +306,7 @@ class _FinanceCategoryPickerScreenState extends State<_FinanceCategoryPickerScre
               padding: const EdgeInsets.symmetric(vertical: 6),
               children: [
                 Material(
-                  color: Colors.white,
+                  color: ModernModuleUI.cardBg(context),
                   child: ListTile(
                     leading: Container(
                       width: 40,
@@ -315,15 +317,15 @@ class _FinanceCategoryPickerScreenState extends State<_FinanceCategoryPickerScre
                       ),
                       child: Icon(Icons.edit_note_rounded, color: Colors.blueGrey.shade700, size: 22),
                     ),
-                    title: const Text(
+                    title: Text(
                       'Outra (digitar nome)',
-                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5, color: AppColors.textPrimary),
+                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5, color: context.appTextPrimary),
                     ),
-                    subtitle: const Text(
+                    subtitle: Text(
                       'Use quando a categoria não estiver na lista',
-                      style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+                      style: TextStyle(fontSize: 11.5, color: context.appTextMuted),
                     ),
-                    trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+                    trailing: Icon(Icons.chevron_right_rounded, color: context.appTextMuted),
                     onTap: () => Navigator.of(context).pop('__outra__'),
                   ),
                 ),
@@ -337,7 +339,7 @@ class _FinanceCategoryPickerScreenState extends State<_FinanceCategoryPickerScre
                             ? 'Carregando categorias…'
                             : 'Nenhuma categoria corresponde à pesquisa.',
                         textAlign: TextAlign.center,
-                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 13.5),
+                        style: TextStyle(color: context.appTextSecondary, fontSize: 13.5),
                       ),
                     ),
                   )
@@ -358,13 +360,13 @@ class _FinanceCategoryPickerScreenState extends State<_FinanceCategoryPickerScre
                       ),
                       title: Text(
                         c,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 14.5,
-                          color: AppColors.textPrimary,
+                          color: context.appTextPrimary,
                         ),
                       ),
-                      trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+                      trailing: Icon(Icons.chevron_right_rounded, color: context.appTextMuted),
                       onTap: () => Navigator.of(context).pop(c),
                     );
                   }),

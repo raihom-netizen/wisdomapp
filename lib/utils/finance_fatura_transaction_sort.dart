@@ -34,7 +34,8 @@ extension FinanceFaturaTxSortModeUi on FinanceFaturaTxSortMode {
     for (final m in FinanceFaturaTxSortMode.values) {
       if (m.storageKey == key) return m;
     }
-    return FinanceFaturaTxSortMode.dateDesc;
+    // Padrão do sistema: da mais antiga para a mais recente.
+    return FinanceFaturaTxSortMode.dateAsc;
   }
 }
 

@@ -1,18 +1,28 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart' hide showDatePicker;
+import '../theme/theme_context.dart';
 import '../widgets/fast_text_field.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../constants/currency_formats.dart';
 import '../theme/app_colors.dart';
 import '../utils/premium_upgrade.dart';
 import '../services/user_categories_service.dart';
 import '../services/finance_accounts_service.dart';
 import '../services/finance_advanced_settings_service.dart';
+import '../services/finance_month_cache.dart';
+import '../services/finance_receipt_upload_service.dart';
+import '../services/goal_deposit_service.dart';
+import '../services/logs_service.dart';
+import '../utils/finance_goal_tx_delete.dart';
+import '../utils/finance_line_opening.dart';
+import '../utils/finance_transaction_status_resolver.dart';
+import '../utils/finance_transactions_hub.dart';
+import '../utils/firestore_user_doc_id.dart';
 import '../models/finance_account.dart';
-import '../constants/finance_account_visuals.dart';
-import '../widgets/finance_bank_brand_thumb.dart';
+import '../widgets/fixed_flow_finance_account_field.dart';
 import '../widgets/brl_amount_text_field.dart';
 import '../utils/date_picker_a11y.dart';
 import '../constants/finance_category_visuals.dart';
@@ -20,11 +30,13 @@ import '../widgets/finance_category_picker.dart';
 import '../widgets/finance_quick_category_row.dart';
 import '../constants/app_business_rules.dart';
 import '../utils/keyboard_form_scaffold.dart';
-import '../widgets/finance_premium_ui.dart';
-import '../widgets/date_time_field.dart';
 import '../utils/finance_transaction_datetime.dart';
-import '../utils/receipt_attachment_utils.dart';
+import '../widgets/modern_module_ui.dart';
+import '../widgets/finance_premium_ui.dart';
+import '../widgets/color_palette_tabs_dialog.dart';
 import '../widgets/finance_calendar_color_picker.dart';
+import '../services/transaction_save_service.dart';
+import '../utils/receipt_attachment_utils.dart';
 
 class NovoLancamentoPage extends StatefulWidget {
   final String uid;
@@ -34,12 +46,25 @@ class NovoLancamentoPage extends StatefulWidget {
   /// Se false (licença vencida), bloqueia o salvamento mesmo se a página for aberta por outro caminho.
   final bool hasActiveLicense;
 
+  /// Se preenchido, a página entra em modo edição de um lançamento existente.
+  final String? editingTransactionId;
+  final Map<String, dynamic>? editingData;
+
+  /// Botão "Duplicar": mesmos campos de um lançamento existente, mas a
+  /// página continua em modo "novo" (cria um documento novo, sem botão
+  /// excluir). Mesmo formato de [editingData]. Ignorado se
+  /// [editingTransactionId] for informado.
+  final Map<String, dynamic>? duplicateFromData;
+
   const NovoLancamentoPage({
     super.key,
     required this.uid,
     required this.initialType,
     this.canAttachReceipt = true,
     this.hasActiveLicense = true,
+    this.editingTransactionId,
+    this.editingData,
+    this.duplicateFromData,
   });
 
   @override
@@ -49,10 +74,16 @@ class NovoLancamentoPage extends StatefulWidget {
 class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
   bool _isIncome = true;
   bool _loadingCategories = true;
+  List<String> _incomeCategories = [];
+  List<String> _expenseCategories = [];
   bool _hasReceipt = false;
   String _receiptName = '';
   Uint8List? _receiptBytes;
   String? _receiptMime;
+
+  /// No modo edição: indica que havia comprovante no Firestore (para exibir nome).
+  bool _hasExistingReceipt = false;
+  bool _removeExistingReceipt = false;
 
   final _amountCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
@@ -70,54 +101,28 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
 
   String _selectedCategory = '';
   String _status = 'paid';
-
-  /// Se true e o status for pendente, o lançamento aparece no calendário Agenda/Escala.
-  bool _addToCalendar = false;
-
-  /// Cor que o lançamento exibirá no calendário (hex, ex.: '#E53935'). Null = padrão (vermelho/verde).
-  String? _calendarColorHex;
   DateTime _date = DateTime.now();
-  TimeOfDay _selectedTime = TimeOfDay.fromDateTime(DateTime.now());
 
   /// null = saldo geral (sem conta vinculada).
   String? _selectedFinanceAccountId;
+
+  /// Contas do usuário (cache) — usado para reaplicar o status padrão ao trocar a conta.
+  List<FinanceAccount> _accounts = const [];
+
+  /// Cor que o lançamento exibirá no calendário (hex, ex.: '#E53935'). Null = padrão (vermelho/verde).
+  String? _calendarColorHex;
+
+  /// Se true e o status for pendente, o lançamento aparece no calendário Agenda/Escala.
+  /// Padrão: DESLIGADO (regra do dono 01/10/2026) — a pessoa liga se quiser.
+  bool _addToCalendar = false;
 
   /// Última descrição aplicada automaticamente (categoria + mês/ano). Se o usuário editar o campo, zera e não sobrescreve ao mudar só a data.
   String? _lastAutoDescription;
   bool _settingDescProgrammatically = false;
   Timer? _categoryCustomDebounce;
 
-  /// Evita recriar [ThemeData] a cada rebuild (teclado / viewInsets disparam muitos rebuilds).
-  Brightness? _cachedThemeBrightness;
-  ThemeData? _cachedDarkFormTheme;
-
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final b = Theme.of(context).brightness;
-    if (b != _cachedThemeBrightness) {
-      _cachedThemeBrightness = b;
-      if (b == Brightness.dark) {
-        _cachedDarkFormTheme = ThemeData.light().copyWith(
-          colorScheme: ThemeData.light().colorScheme.copyWith(
-                primary: Theme.of(context).colorScheme.primary,
-                surface: const Color(0xFFFAFAFA),
-              ),
-          inputDecorationTheme: InputDecorationTheme(
-            filled: true,
-            fillColor: Colors.grey.shade100,
-            labelStyle: TextStyle(color: Colors.grey.shade800),
-            hintStyle: TextStyle(color: Colors.grey.shade600),
-            border: InputBorder.none,
-            enabledBorder: InputBorder.none,
-          ),
-        );
-      } else {
-        _cachedDarkFormTheme = null;
-      }
-    }
-  }
+  bool get _isEditing =>
+      widget.editingTransactionId != null && widget.editingData != null;
 
   @override
   void initState() {
@@ -175,43 +180,141 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
     }
   }
 
-  Future<void> _initCategoriesAndDefaultAccount() async {
-    // Só aquece o cache das categorias (o seletor relê ao abrir). NÃO segura o
-    // formulário: desde «Escolher categoria» (4140571) o resultado não é usado
-    // aqui, e esperar a leitura deixava a tela em branco com spinner para
-    // sempre quando o Firestore demorava/falhava (Web 10.05+27, 02/10/2026).
-    unawaited(UserCategoriesService()
-        .load(widget.uid)
-        .then<void>((_) {}, onError: (Object e) {
-      debugPrint('NovoLancamentoPage: categorias não carregaram: $e');
-    }));
-    if (!mounted) return;
-    setState(() {
-      // Lançamento novo começa em «Escolher categoria» (port Controle Total,
-      // 30/09/2026): antes vinha a 1ª da lista e o gasto entrava na
-      // categoria errada quando a pessoa não trocava.
-      _selectedCategory = '';
-      _categoryCtrl.text = '';
-      _loadingCategories = false;
-    });
-    _applyAutoDescriptionFromContext();
+  void _loadEditingData(Map<String, dynamic> d) {
+    _isIncome = (d['type'] ?? 'expense').toString() == 'income';
+    final amount = (d['amount'] as num?)?.toDouble() ?? 0;
+    _amountCtrl.text = CurrencyFormats.formatBRLInput(amount);
+    _descCtrl.text = (d['description'] ?? '').toString();
+    _status = (d['status'] ?? 'paid').toString();
+    final dateTs = d['date'];
+    if (dateTs is Timestamp) {
+      _date = dateTs.toDate();
+    } else if (dateTs is DateTime) {
+      _date = dateTs;
+    }
+    _selectedFinanceAccountId = (d['financeAccountId'] ?? '').toString().trim();
+    if (_selectedFinanceAccountId!.isEmpty) _selectedFinanceAccountId = null;
+    _calendarColorHex = d['calendarColorHex']?.toString();
+    final st = (d['status'] ?? 'paid').toString();
+    // Reflete o gravado: só ligado com opt-in explícito (ausente = desligado).
+    _addToCalendar =
+        st == 'pending' && FinanceCalendarColorPicker.calendarioLigado(d);
 
-    final defId = await FinanceAdvancedSettingsService()
-        .getDefaultFinanceAccountId(widget.uid);
-    final accounts = await FinanceAccountsService().listOnce(widget.uid);
-    if (!mounted) return;
+    final receipt = Map<String, dynamic>.from(d['receipt'] ?? {});
+    final receiptName = (receipt['name'] ?? '').toString();
+    _hasExistingReceipt = receiptName.isNotEmpty;
+    _hasReceipt = _hasExistingReceipt;
+    _receiptName = receiptName;
+    _receiptBytes = null;
+    _receiptMime = null;
+    _removeExistingReceipt = false;
 
-    String? pick;
-    if (defId != null && accounts.any((a) => a.id == defId)) {
-      pick = defId;
-    } else if (!_isIncome && accounts.isNotEmpty) {
-      pick = accounts.first.id;
+    final currentCat = (d['category'] ?? '').toString().trim();
+    final list = _isIncome ? _incomeCategories : _expenseCategories;
+    final incluirNova = UserCategoriesService.kIncluirNova;
+    final match =
+        list.where((c) => c.toLowerCase() == currentCat.toLowerCase()).toList();
+    if (currentCat.isNotEmpty && match.isNotEmpty) {
+      _selectedCategory = match.first;
+      _categoryCtrl.text = _selectedCategory;
+    } else if (currentCat.isNotEmpty) {
+      _selectedCategory = '__outra__';
+      _categoryCtrl.text = currentCat;
+    } else {
+      _selectedCategory = list.length > 1 && list.first == incluirNova
+          ? list[1]
+          : (list.isNotEmpty ? list.first : '__outra__');
+      _categoryCtrl.text =
+          _selectedCategory == '__outra__' || _selectedCategory == incluirNova
+              ? ''
+              : _selectedCategory;
     }
 
+    final installments = (d['installments'] as num?)?.toInt() ?? 1;
+    _installmentMode = installments > 1;
+    _installmentsCtrl.text = installments.clamp(1, 999).toString();
+    final startIdx = (d['installmentStartIndex'] as num?)?.toInt() ?? 1;
+    _installmentStartCtrl.text = startIdx.clamp(1, installments).toString();
+    _installmentValueIsPerParcel = d['installmentValueIsPerParcel'] == true;
+  }
+
+  Future<void> _initCategoriesAndDefaultAccount() async {
+    final isEditing =
+        widget.editingTransactionId != null && widget.editingData != null;
+    final precisaDaLista = isEditing || widget.duplicateFromData != null;
+    // Lançamento NOVO não espera as categorias (WISDOMAPP ebf13c4, 02/10/2026):
+    // começa em «Escolher categoria» e o seletor relê a lista ao abrir —
+    // esperar a leitura deixava a tela em spinner para sempre na Web quando o
+    // Firestore demorava. Editar/duplicar precisa da lista para casar a
+    // categoria gravada, então espera no máximo 4 s (sem ela, a categoria
+    // aparece como «Outra» com o nome gravado — nada se perde).
+    final loadFuture = UserCategoriesService().load(widget.uid);
+    ({List<String> income, List<String> expense})? c;
+    if (precisaDaLista) {
+      try {
+        final r = await loadFuture.timeout(const Duration(seconds: 4));
+        c = (income: List<String>.from(r.income), expense: List<String>.from(r.expense));
+      } catch (e) {
+        debugPrint('NovoLancamentoPage: categorias não carregaram: $e');
+      }
+    } else {
+      unawaited(loadFuture.then<void>((_) {}, onError: (Object e) {
+        debugPrint('NovoLancamentoPage: categorias não carregaram: $e');
+      }));
+    }
+    if (!mounted) return;
     setState(() {
-      _selectedFinanceAccountId = pick;
-      _applyStatusDefaultForAccount(accounts);
+      if (c != null) {
+        _incomeCategories = c.income;
+        _expenseCategories = c.expense;
+      }
+      if (isEditing) {
+        _loadEditingData(widget.editingData!);
+      } else if (widget.duplicateFromData != null) {
+        _loadEditingData(widget.duplicateFromData!);
+        // Comprovante pertence ao lançamento original — não copia a
+        // referência; o usuário anexa de novo se precisar.
+        _hasExistingReceipt = false;
+        _hasReceipt = false;
+        _receiptName = '';
+      } else {
+        // Lançamento novo começa em «Escolher categoria» (pedido do dono,
+        // 30/09/2026): antes vinha a 1ª da lista (Alimentação) e o gasto
+        // entrava na categoria errada quando a pessoa não trocava.
+        _selectedCategory = '';
+        _categoryCtrl.text = '';
+        _applyAutoDescriptionFromContext();
+      }
+      _loadingCategories = false;
     });
+
+    final accounts = await FinanceAccountsService().listOnce(widget.uid);
+    if (!mounted) return;
+    _accounts = accounts;
+
+    if (isEditing) {
+      // Mantém conta carregada; se não existir mais, o dropdown mostrará vínculo antigo.
+      setState(() {});
+    } else {
+      final defId = await FinanceAdvancedSettingsService()
+          .getDefaultFinanceAccountId(widget.uid);
+      String? pick;
+      if (defId != null && accounts.any((a) => a.id == defId)) {
+        pick = defId;
+      } else if (accounts.isNotEmpty) {
+        // Receita também já abre com uma conta — como as fixas fazem. Sem
+        // conta, a receita não entra no saldo de banco nenhum e o «Receber
+        // via Pix» não sabe de qual chave gerar o QR. O usuário troca se
+        // precisar.
+        // O cofre (reserva) não é conta de movimento: fica por último.
+        final movimento = accounts.where((a) => !a.isVaultProduct).toList();
+        pick = (movimento.isNotEmpty ? movimento : accounts).first.id;
+      }
+      setState(() {
+        _selectedFinanceAccountId = pick;
+        _applyStatusDefaultForAccount(accounts);
+      });
+    }
   }
 
   /// Cartão de crédito: despesa com pagamento futuro → pendente. Conta/débito → pago.
@@ -263,6 +366,21 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
     super.dispose();
   }
 
+  /// Copia o conteúdo inteiro do campo — mesmo botão usado em outros
+  /// formulários do app, não depende de selecionar texto na mão (toque e
+  /// segure no iPhone).
+  Future<void> _copyWholeField(TextEditingController ctrl) async {
+    final text = ctrl.text;
+    if (text.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: text));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Copiado.'), duration: Duration(seconds: 1)),
+      );
+    }
+  }
+
   String _amountFieldLabel() {
     if (!_installmentMode) return 'Valor do lançamento';
     final n = int.tryParse(_installmentsCtrl.text.trim()) ?? 1;
@@ -283,7 +401,10 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
       final keepSync = _lastAutoDescription != null &&
           _descCtrl.text == _lastAutoDescription;
       setState(() {
-        _date = DateTime(picked.year, picked.month, picked.day);
+        _date = FinanceTransactionDatetime.mergeCalendarDayWithExistingTime(
+          picked,
+          _date,
+        );
       });
       if (keepSync) {
         _applyAutoDescriptionFromContext();
@@ -291,21 +412,46 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
     }
   }
 
-  /// Seleção de comprovante: câmera, galeria ou PDF/imagem.
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: _date.hour, minute: _date.minute),
+      helpText: 'Horário do lançamento',
+      hourLabelText: 'Hora',
+      minuteLabelText: 'Minuto',
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
+    );
+    if (picked == null) return;
+    setState(() {
+      _date = FinanceTransactionDatetime.mergeCalendarDayWithTimeOfDay(
+        _date,
+        picked.hour,
+        picked.minute,
+      );
+    });
+  }
+
+  /// Seleção de comprovante: câmera, galeria ou PDF/imagem (JPEG, PNG, PDF;
+  /// até 5 MB) — utilitário do WISDOMAPP. Retém bytes para envio ao Firebase.
   Future<void> _pickFile() async {
     final picked = await ReceiptAttachmentUtils.pickValidated(context);
     if (picked == null || !mounted) return;
     setState(() {
       _hasReceipt = true;
+      _hasExistingReceipt = false;
+      _removeExistingReceipt = false;
       _receiptName = picked.name;
       _receiptBytes = picked.bytes;
       _receiptMime = picked.mime;
     });
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Arquivo anexado: ${picked.name}')),
-      );
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Arquivo anexado: ${picked.name}')),
+    );
   }
 
   Future<void> _submit() async {
@@ -326,13 +472,34 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
             ? _categoryCtrl.text.trim()
             : _selectedCategory;
     // Sem categoria escolhida: pede a escolha (abre a lista) em vez de gravar
-    // como «Despesa»/«Receita» genérica.
-    if (categoryFinal.isEmpty) {
+    // como «Despesa»/«Receita» genérica. Na edição de um lançamento antigo
+    // sem categoria, mantém o comportamento de antes.
+    if (categoryFinal.isEmpty && !_isEditing) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Escolha a categoria do lançamento.')));
       await _openFinanceCategoryPicker();
       return;
     }
+    if (categoryFinal.isEmpty) {
+      categoryFinal = _isIncome ? 'Receita' : 'Despesa';
+    }
+
+    var financeAid = (_selectedFinanceAccountId ?? '').trim();
+    // Conta não é mais obrigatória — lança sem vínculo se não houver.
+    if (financeAid.isEmpty && !_isIncome) {
+      final list = await FinanceAccountsService().listOnce(widget.uid);
+      if (list.isNotEmpty) financeAid = list.first.id;
+    }
+
+    if (_isEditing) {
+      await _updateEditingTransaction(
+        amount: amount,
+        categoryFinal: categoryFinal,
+        financeAid: financeAid,
+      );
+      return;
+    }
+
     final installmentsTotal = _installmentMode
         ? (int.tryParse(_installmentsCtrl.text.trim()) ?? 12).clamp(1, 999)
         : 1;
@@ -348,35 +515,15 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
         _receiptName.isNotEmpty &&
         _receiptMime != null;
 
-    var financeAid = (_selectedFinanceAccountId ?? '').trim();
-    if (!_isIncome) {
-      if (financeAid.isEmpty) {
-        final list = await FinanceAccountsService().listOnce(widget.uid);
-        if (list.isNotEmpty) financeAid = list.first.id;
-      }
-      if (financeAid.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text(
-                    'Cadastre uma conta em Financeiro → Bancos e cartões. Despesas exigem conta.')),
-          );
-        }
-        return;
-      }
-    }
-
     final parceladoReal = _installmentMode && installmentsTotal > 1;
-    final effectiveDate = FinanceTransactionDatetime.mergeCalendarDayWithTime(
-        _date, _selectedTime);
-    final effectiveStatus = parceladoReal ? 'pending' : _status;
     final Map<String, dynamic> result = {
       'type': _isIncome ? 'income' : 'expense',
       'amount': amount,
       'category': categoryFinal,
       'description': _descCtrl.text.trim(),
-      'status': effectiveStatus,
-      'date': effectiveDate,
+      'status': parceladoReal ? 'pending' : _status,
+      'date': _date,
+      // O horário escolhido na tela vale (sem trocar pelo relógio ao salvar).
       'useExplicitTime': true,
       'recurrence': 'none',
       'installments': installmentsTotal,
@@ -385,8 +532,9 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
         'installmentValueIsPerParcel': true,
       if (_isIncome && financeAid.isNotEmpty) 'financeAccountId': financeAid,
       if (!_isIncome) 'financeAccountId': financeAid,
-      'addToCalendar': effectiveStatus == 'pending' && _addToCalendar,
-      if (effectiveStatus == 'pending' &&
+      'addToCalendar': _status == 'pending' && _addToCalendar,
+      'hideFromCalendar': _status == 'pending' && !_addToCalendar,
+      if (_status == 'pending' &&
           _addToCalendar &&
           _calendarColorHex != null &&
           _calendarColorHex!.isNotEmpty)
@@ -404,11 +552,205 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
     Navigator.of(context).pop(result);
   }
 
+  /// Atualiza o lançamento existente no Firestore (modo edição full-screen).
+  Future<void> _updateEditingTransaction({
+    required double amount,
+    required String categoryFinal,
+    required String financeAid,
+  }) async {
+    final docId = widget.editingTransactionId!;
+    final current = widget.editingData!;
+
+    final dateWithoutSeconds = FinanceTransactionDatetime.withoutSeconds(_date);
+    final resolvedStatus = FinanceTransactionStatusResolver.resolveByDateTime(
+      dateWithoutSeconds,
+      preferredStatus: _status,
+      respeitarPendente: true,
+    );
+    final paidForEffective = resolvedStatus == 'paid'
+        ? (current['paidAt'] is Timestamp
+            ? current['paidAt'] as Timestamp
+            : FinanceTransactionStatusResolver.paidAtForAutoPaid(
+                dateWithoutSeconds))
+        : null;
+
+    final updateData = <String, dynamic>{
+      'amount': amount,
+      'category': categoryFinal,
+      'description': _descCtrl.text.trim(),
+      'status': resolvedStatus,
+      'date': Timestamp.fromDate(dateWithoutSeconds),
+      'updatedAt': FieldValue.serverTimestamp(),
+      'effectiveDate': FinanceLineOpening.effectiveTimestampForWrite(
+        date: dateWithoutSeconds,
+        paidAt: paidForEffective,
+      ),
+    };
+
+    if (financeAid.isEmpty) {
+      updateData['financeAccountId'] = FieldValue.delete();
+    } else {
+      updateData['financeAccountId'] = financeAid;
+    }
+
+
+    updateData['addToCalendar'] = _status == 'pending' && _addToCalendar;
+    updateData['hideFromCalendar'] = _status == 'pending' && !_addToCalendar;
+    if (_status == 'pending' &&
+        _addToCalendar &&
+        _calendarColorHex != null &&
+        _calendarColorHex!.isNotEmpty) {
+      updateData['calendarColorHex'] = _calendarColorHex;
+    } else {
+      updateData['calendarColorHex'] = FieldValue.delete();
+    }
+
+    try {
+      if (widget.canAttachReceipt) {
+        if (_removeExistingReceipt) {
+          updateData['receipt'] = FieldValue.delete();
+          updateData['hasReceipt'] = false;
+        } else if (_receiptBytes != null &&
+            _receiptBytes!.isNotEmpty &&
+            _receiptName.isNotEmpty &&
+            _receiptMime != null) {
+          await FinanceReceiptUploadService.attachToTransaction(
+            uid: widget.uid,
+            txDocId: docId,
+            bytes: _receiptBytes!,
+            filename: _receiptName,
+            mimeType: _receiptMime!,
+            context: context,
+          );
+          updateData['hasReceipt'] = true;
+        }
+      }
+
+      // Local primeiro (padrão WISDOMAPP): vale no cache na hora; não espera o
+      // servidor confirmar para fechar. Sem Finance Pro: nada de «controle».
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      await TransactionSaveService.writeLocalFirst(
+        () => FirebaseFirestore.instance
+            .collection('users')
+            .doc(firestoreUserDocIdForAppShell(widget.uid))
+            .collection('transactions')
+            .doc(docId)
+            .update(updateData),
+        messenger: messenger,
+        failureMessage: 'Não foi possível sincronizar a edição',
+      );
+
+      final goalId = (current['goalId'] ?? '').toString().trim();
+      if (goalId.isNotEmpty && _isIncome) {
+        unawaited(
+          GoalDepositService.syncFromTransaction(
+            uid: widget.uid,
+            goalId: goalId,
+            txId: docId,
+            amount: amount,
+            date: dateWithoutSeconds,
+            financeAccountId: financeAid.isEmpty ? null : financeAid,
+          ).catchError((_) {}),
+        );
+      }
+
+      unawaited(
+        LogsService()
+            .saveLog(
+              modulo: 'Agenda/Escala',
+              acao: _isIncome ? 'Editou receita' : 'Editou despesa',
+              detalhes: '$categoryFinal • ${CurrencyFormats.formatBRL(amount)}',
+            )
+            .catchError((_) {}),
+      );
+
+      FinanceMonthCache.clearUid(widget.uid);
+      FinanceTransactionsHub.notifyMutated(uid: widget.uid);
+
+      if (mounted) {
+        HapticFeedback.lightImpact();
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Lançamento atualizado.')));
+        Navigator.of(context).pop(true);
+      }
+    } catch (err) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content:
+              Text('Erro ao atualizar: ${err.toString().split('\n').first}'),
+          backgroundColor: AppColors.error,
+        ));
+      }
+    }
+  }
+
+  /// Confirma e executa a exclusão do lançamento em edição.
+  Future<void> _confirmDeleteEditing() async {
+    final current = widget.editingData!;
+    final metaInfo = await GoalDepositService.linkedInfoForTransaction(
+      uid: widget.uid,
+      txId: widget.editingTransactionId!,
+      txData: current,
+    );
+    if (!mounted) return;
+    final confirmed = await confirmFinanceTransactionDelete(
+      context: context,
+      metaInfo: metaInfo,
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      final txCol = FirebaseFirestore.instance
+          .collection('users')
+          .doc(firestoreUserDocIdForAppShell(widget.uid))
+          .collection('transactions');
+      await deleteFinanceTransactionRecord(
+        uid: widget.uid,
+        docId: widget.editingTransactionId!,
+        txData: current,
+        txCol: txCol,
+      );
+
+      final typeLog = (current['type'] ?? 'expense').toString();
+      final amountLog = (current['amount'] ?? 0).toDouble();
+      final categoryLog = (current['category'] ?? '').toString();
+
+      unawaited(
+        LogsService()
+            .saveLog(
+              modulo: 'Agenda/Escala',
+              acao: typeLog == 'income' ? 'Excluiu receita' : 'Excluiu despesa',
+              detalhes:
+                  '${categoryLog.isEmpty ? 'Categoria' : categoryLog} • ${CurrencyFormats.formatBRL(amountLog)}',
+            )
+            .catchError((_) {}),
+      );
+
+      FinanceMonthCache.clearUid(widget.uid);
+      FinanceTransactionsHub.notifyMutated(uid: widget.uid);
+
+      if (mounted) {
+        final extra = metaInfo?.hasWeeksImpact == true
+            ? ' Semanas da meta atualizadas.'
+            : '';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lançamento excluído.$extra')),
+        );
+        Navigator.of(context).pop(true);
+      }
+    } catch (err) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Erro ao excluir: ${err.toString().split('\n').first}'),
+          backgroundColor: AppColors.error,
+        ));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final effectiveTheme = isDark ? _cachedDarkFormTheme : null;
-
     final mq = MediaQuery.of(context);
     final padBottom = KeyboardFormInsets.scrollBottomExtra(
       context,
@@ -425,10 +767,10 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
     final scaffold = Scaffold(
       resizeToAvoidBottomInset: scaffoldKeyboardResizeToAvoidBottomInset(
           standaloneFullPageForm: true),
-      backgroundColor: const Color(0xFFF1F5F9),
+      backgroundColor: ModernModuleUI.scaffoldBgOf(context),
       extendBodyBehindAppBar: true,
       appBar: financePremiumGradientAppBar(
-        title: 'Novo Lançamento',
+        title: _isEditing ? 'Editar Lançamento' : 'Novo Lançamento',
         onBack: () => Navigator.maybePop(context),
         gradientColors: _isIncome
             ? const [
@@ -439,14 +781,21 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
               ]
             : const [
                 Color(0xFF7F1D1D),
-                Color(0xFFB91C1C),
+                Color(0xFFDC2626),
                 Color(0xFFEF4444),
                 AppColors.logoOrange
               ],
         actions: [
+          if (_isEditing)
+            IconButton(
+              tooltip: 'Excluir lançamento',
+              onPressed: _confirmDeleteEditing,
+              icon: const Icon(Icons.delete_outline_rounded,
+                  color: Colors.white, size: 24),
+            ),
           TextButton(
             onPressed: () => Navigator.maybePop(context),
-            child: const Text('Cancelar',
+            child: Text('Cancelar',
                 style: TextStyle(
                     color: Colors.white, fontWeight: FontWeight.w800)),
           ),
@@ -456,16 +805,16 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
           ? null
           : KeyboardAwareFormBar(
               standaloneFullPageForm: true,
-              backgroundColor:
-                  isDark ? const Color(0xFFF5F5F5) : const Color(0xFFF8F9FA),
+              backgroundColor: context.appScaffold,
               child: FinancePremiumFormFooterActions(
                 onCancel: () => Navigator.maybePop(context),
                 onSave: _submit,
-                saveLabel: 'Confirmar lançamento',
+                saveLabel:
+                    _isEditing ? 'Salvar alterações' : 'Confirmar lançamento',
                 saveIcon: Icons.check_rounded,
                 accent: _isIncome
                     ? const Color(0xFF15803D)
-                    : const Color(0xFFB91C1C),
+                    : const Color(0xFFDC2626),
               ),
             ),
       body: keyboardScaffoldBody(
@@ -473,7 +822,7 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
         SafeArea(
           bottom: false,
           child: _loadingCategories
-              ? const Center(child: CircularProgressIndicator())
+              ? Center(child: CircularProgressIndicator())
               : RepaintBoundary(
                   child: SingleChildScrollView(
                     padding: EdgeInsets.fromLTRB(16, 72, 16, padBottom),
@@ -483,7 +832,7 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _buildTypeToggle(),
-                        const SizedBox(height: 12),
+                        SizedBox(height: 12),
                         FinanceQuickCategoryRow(
                           isIncome: _isIncome,
                           currentCategory: _selectedCategory == '__outra__'
@@ -507,19 +856,19 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
                             _applyAutoDescriptionFromContext();
                           },
                         ),
-                        const SizedBox(height: 12),
+                        SizedBox(height: 12),
                         ListenableBuilder(
                           listenable: Listenable.merge(
                               [_installmentsCtrl, _installmentStartCtrl]),
                           builder: (_, __) => Text(
                             _amountFieldLabel(),
                             style: TextStyle(
-                                color: Colors.grey.shade700,
+                                color: context.appTextSecondary,
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600),
                           ),
                         ),
-                        const SizedBox(height: 6),
+                        SizedBox(height: 6),
                         RepaintBoundary(
                           child: Container(
                             width: double.infinity,
@@ -529,28 +878,40 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
                               gradient: LinearGradient(
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
-                                colors: _isIncome
+                                colors: context.isDarkMode
                                     ? [
-                                        const Color(0xFFE8F5E9),
-                                        const Color(0xFFF1F8E9),
+                                        (_isIncome
+                                                ? const Color(0xFF14532D)
+                                                : const Color(0xFF7F1D1D))
+                                            .withValues(alpha: 0.55),
+                                        context.appSurfaceHigh,
                                       ]
-                                    : [
-                                        const Color(0xFFFFEBEE),
-                                        const Color(0xFFFFF3E0),
-                                      ],
+                                    : _isIncome
+                                        ? [
+                                            const Color(0xFFE8F5E9),
+                                            const Color(0xFFF1F8E9),
+                                          ]
+                                        : [
+                                            const Color(0xFFFFEBEE),
+                                            const Color(0xFFFFF3E0),
+                                          ],
                               ),
                               borderRadius: BorderRadius.circular(18),
                               border: Border.all(
                                 color: (_isIncome
-                                        ? const Color(0xFF2E7D32)
+                                        ? const Color(0xFF16A34A)
                                         : const Color(0xFFC62828))
-                                    .withValues(alpha: 0.35),
+                                    .withValues(
+                                        alpha:
+                                            context.isDarkMode ? 0.72 : 0.35),
                                 width: 1.5,
                               ),
                               boxShadow: [
                                 BoxShadow(
                                   color: (_isIncome ? Colors.green : Colors.red)
-                                      .withValues(alpha: 0.12),
+                                      .withValues(
+                                          alpha:
+                                              context.isDarkMode ? 0.22 : 0.12),
                                   blurRadius: 14,
                                   offset: const Offset(0, 4),
                                 ),
@@ -567,8 +928,12 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
                                 fontWeight: FontWeight.w900,
                                 height: 1.05,
                                 color: _isIncome
-                                    ? const Color(0xFF1B5E20)
-                                    : const Color(0xFFB71C1C),
+                                    ? (context.isDarkMode
+                                        ? const Color(0xFF86EFAC)
+                                        : const Color(0xFF1B5E20))
+                                    : (context.isDarkMode
+                                        ? const Color(0xFFFCA5A5)
+                                        : const Color(0xFFB71C1C)),
                               ),
                               decoration: InputDecoration(
                                 isDense: true,
@@ -578,272 +943,78 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
                                   fontSize: amountFont,
                                   fontWeight: FontWeight.w900,
                                   color: _isIncome
-                                      ? const Color(0xFF2E7D32)
-                                      : const Color(0xFFD32F2F),
+                                      ? (context.isDarkMode
+                                          ? const Color(0xFF4ADE80)
+                                          : const Color(0xFF16A34A))
+                                      : (context.isDarkMode
+                                          ? const Color(0xFFF87171)
+                                          : const Color(0xFFD32F2F)),
                                 ),
                                 border: InputBorder.none,
                                 hintText: '0,00',
                                 hintStyle: TextStyle(
                                   fontSize: amountFont,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.grey.shade400,
+                                  color: context.appTextMuted,
                                 ),
                               ),
                             ),
                           ),
                         ),
                         const Divider(height: 16, thickness: 1),
-                        const SizedBox(height: 6),
+                        SizedBox(height: 6),
                         _buildPremiumCategorySelector(),
-                        const SizedBox(height: 10),
+                        SizedBox(height: 10),
                         _buildPremiumDescField(),
-                        const SizedBox(height: 14),
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    const Color(0xFF1A237E)
-                                        .withValues(alpha: 0.12),
-                                    const Color(0xFF3949AB)
-                                        .withValues(alpha: 0.08),
-                                  ],
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(Icons.account_balance_rounded,
-                                  color: Color(0xFF1A237E), size: 22),
-                            ),
-                            const SizedBox(width: 10),
-                            const Expanded(
-                              child: Text(
-                                'Conta',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    color: Color(0xFF1A237E),
-                                    fontSize: 15),
-                              ),
-                            ),
-                          ],
+                        SizedBox(height: 12),
+                        Text(
+                          'Conta',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: context.appTextPrimary,
+                              fontSize: 12.5),
                         ),
-                        const SizedBox(height: 8),
-                        StreamBuilder<List<FinanceAccount>>(
-                          stream: FinanceAccountsService()
-                              .streamAccounts(widget.uid),
-                          builder: (context, snap) {
-                            final accounts = snap.data ?? [];
-                            if (accounts.isEmpty) {
-                              return Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(14),
-                                decoration: BoxDecoration(
-                                  color: Colors.amber.shade50,
-                                  borderRadius: BorderRadius.circular(14),
-                                  border:
-                                      Border.all(color: Colors.amber.shade200),
-                                ),
-                                child: Text(
-                                  _isIncome
-                                      ? 'Cadastre uma conta em Financeiro (Bancos e cartões) para vincular. Receitas podem ser salvas sem conta; despesas exigem conta.'
-                                      : 'Cadastre ao menos uma conta corrente, poupança ou cartão em Financeiro → Bancos e cartões. Despesas exigem conta.',
-                                  style: const TextStyle(
-                                      fontSize: 13, height: 1.35),
-                                ),
-                              );
-                            }
-                            final String? resolvedId = () {
-                              if (_isIncome) {
-                                final v = _selectedFinanceAccountId;
-                                if (v == null || v.isEmpty) return null;
-                                return accounts.any((a) => a.id == v)
-                                    ? v
-                                    : null;
-                              }
-                              final v = _selectedFinanceAccountId;
-                              if (v != null &&
-                                  v.isNotEmpty &&
-                                  accounts.any((a) => a.id == v)) {
-                                return v;
-                              }
-                              return accounts.first.id;
-                            }();
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                DropdownButtonFormField<String?>(
-                                  key: ValueKey<String?>(resolvedId),
-                                  isExpanded: true,
-                                  initialValue: resolvedId,
-                                  decoration: InputDecoration(
-                                    filled: true,
-                                    fillColor: const Color(0xFFF8FAFC),
-                                    prefixIcon: Padding(
-                                      padding: const EdgeInsets.only(left: 8),
-                                      child: Icon(Icons.wallet_rounded,
-                                          color: const Color(0xFF1A237E)
-                                              .withValues(alpha: 0.9),
-                                          size: 26),
-                                    ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                      borderSide: BorderSide(
-                                          color: const Color(0xFF1A237E)
-                                              .withValues(alpha: 0.2)),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                      borderSide: BorderSide(
-                                          color: const Color(0xFF1A237E)
-                                              .withValues(alpha: 0.18)),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                      borderSide: const BorderSide(
-                                          color: Color(0xFF1A237E), width: 1.8),
-                                    ),
-                                    labelText: _isIncome
-                                        ? 'Conta (opcional)'
-                                        : 'Conta da despesa *',
-                                    labelStyle: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.grey.shade800,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  items: [
-                                    if (_isIncome)
-                                      const DropdownMenuItem<String?>(
-                                        value: null,
-                                        child: Text('Sem conta vinculada'),
-                                      ),
-                                    ...accounts.map((a) {
-                                      final vis = financeAccountVisualFor(a);
-                                      return DropdownMenuItem<String?>(
-                                        value: a.id,
-                                        child: Row(
-                                          children: [
-                                            _NovoLancamentoAccountBadge(
-                                                account: a),
-                                            const SizedBox(width: 10),
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Text(
-                                                    a.displayName,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    style: const TextStyle(
-                                                        fontWeight:
-                                                            FontWeight.w700),
-                                                  ),
-                                                  Text(
-                                                    vis.badgeLabel,
-                                                    style: TextStyle(
-                                                      fontSize: 11,
-                                                      fontWeight:
-                                                          FontWeight.w700,
-                                                      color:
-                                                          vis.isCreditCardStyle
-                                                              ? const Color(
-                                                                  0xFF4F46E5)
-                                                              : Colors.grey
-                                                                  .shade600,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    }),
-                                  ],
-                                  onChanged: (v) => setState(() {
-                                    _selectedFinanceAccountId = v;
-                                    _applyStatusDefaultForAccount(accounts);
-                                  }),
-                                ),
-                                if (!_isIncome && resolvedId != null)
-                                  Builder(
-                                    builder: (context) {
-                                      FinanceAccount? acc;
-                                      for (final a in accounts) {
-                                        if (a.id == resolvedId) {
-                                          acc = a;
-                                          break;
-                                        }
-                                      }
-                                      if (acc == null ||
-                                          !acc.expenseDefaultsToPending) {
-                                        return const SizedBox.shrink();
-                                      }
-                                      return Padding(
-                                        padding: const EdgeInsets.only(top: 8),
-                                        child: Row(
-                                          children: [
-                                            Icon(Icons.info_outline_rounded,
-                                                size: 16,
-                                                color: Colors.indigo.shade400),
-                                            const SizedBox(width: 6),
-                                            Expanded(
-                                              child: Text(
-                                                'Cartão de crédito: pagamento futuro — status Pendente aplicado automaticamente.',
-                                                style: TextStyle(
-                                                  fontSize: 11.5,
-                                                  height: 1.35,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: Colors.indigo.shade700,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    },
-                                  ),
-                              ],
-                            );
-                          },
+                        SizedBox(height: 6),
+                        FixedFlowFinanceAccountField(
+                          uid: widget.uid,
+                          selectedAccountId: _selectedFinanceAccountId,
+                          onChanged: (v) => setState(() {
+                            _selectedFinanceAccountId = v;
+                            _applyStatusDefaultForAccount(_accounts);
+                          }),
                         ),
-                        const SizedBox(height: 10),
+                        SizedBox(height: 10),
                         ListenableBuilder(
                           listenable: Listenable.merge(
                               [_installmentsCtrl, _installmentStartCtrl]),
                           builder: (_, __) => _buildDateField(),
                         ),
-                        const SizedBox(height: 10),
-                        _buildTimeField(),
-                        const SizedBox(height: 12),
+                        SizedBox(height: 12),
                         _buildStatusRecurrenceRow(),
-                        const SizedBox(height: 10),
+                        SizedBox(height: 10),
                         ListenableBuilder(
                           listenable: Listenable.merge(
                               [_installmentsCtrl, _installmentStartCtrl]),
                           builder: (_, __) => _buildInstallmentsField(),
                         ),
                         if (_status == 'pending') ...[
-                          const SizedBox(height: 14),
+                          SizedBox(height: 14),
                           _buildAddToCalendarToggle(),
                           if (_addToCalendar) ...[
-                            const SizedBox(height: 10),
+                            SizedBox(height: 10),
                             _buildCalendarColorRow(),
                           ],
                         ],
                         if (widget.canAttachReceipt) ...[
-                          const SizedBox(height: 18),
-                          const Text(
+                          SizedBox(height: 18),
+                          Text(
                             'Comprovante (JPEG, PNG ou PDF)',
                             style: TextStyle(
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFF1A237E),
+                                color: context.appDeepTitle,
                                 fontSize: 14),
                           ),
-                          const SizedBox(height: 8),
+                          SizedBox(height: 8),
                           GestureDetector(
                             behavior: HitTestBehavior.opaque,
                             onTap: widget.canAttachReceipt
@@ -853,55 +1024,68 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
                               width: double.infinity,
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 16, vertical: 14),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: !widget.canAttachReceipt
-                                      ? Colors.grey.shade300
-                                      : (_hasReceipt
-                                          ? Colors.blue
-                                          : Colors.blue.shade100),
-                                  width: 2,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                      color:
-                                          Colors.black.withValues(alpha: 0.03),
-                                      blurRadius: 10)
-                                ],
-                              ),
-                              child: Column(
+                              decoration:
+                                  context.appPanelDecoration(radius: 16),
+                              child: Stack(
                                 children: [
-                                  Icon(
-                                    _hasReceipt
-                                        ? Icons.check_circle_rounded
-                                        : Icons.cloud_upload_outlined,
-                                    size: 40,
-                                    color: !widget.canAttachReceipt
-                                        ? Colors.grey
-                                        : (_hasReceipt
-                                            ? Colors.green
-                                            : Colors.blue.shade400),
+                                  Column(
+                                    children: [
+                                      Icon(
+                                        _hasReceipt
+                                            ? Icons.check_circle_rounded
+                                            : Icons.cloud_upload_outlined,
+                                        size: 40,
+                                        color: !widget.canAttachReceipt
+                                            ? Colors.grey
+                                            : (_hasReceipt
+                                                ? Colors.green
+                                                : Colors.blue.shade400),
+                                      ),
+                                      SizedBox(height: 10),
+                                      Text(
+                                        _hasReceipt
+                                            ? _receiptName
+                                            : 'Clique para anexar comprovante',
+                                        style: TextStyle(
+                                          color: !widget.canAttachReceipt
+                                              ? Colors.grey
+                                              : (_hasReceipt
+                                                  ? Colors.blue.shade700
+                                                  : Colors.grey),
+                                          fontWeight: _hasReceipt
+                                              ? FontWeight.w600
+                                              : FontWeight.normal,
+                                          fontSize: 14,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(height: 10),
-                                  Text(
-                                    _hasReceipt
-                                        ? _receiptName
-                                        : 'Clique para anexar comprovante',
-                                    style: TextStyle(
-                                      color: !widget.canAttachReceipt
-                                          ? Colors.grey
-                                          : (_hasReceipt
-                                              ? Colors.blue.shade700
-                                              : Colors.grey),
-                                      fontWeight: _hasReceipt
-                                          ? FontWeight.w600
-                                          : FontWeight.normal,
-                                      fontSize: 14,
+                                  if (_hasExistingReceipt)
+                                    Positioned(
+                                      top: 0,
+                                      right: 0,
+                                      child: GestureDetector(
+                                        behavior: HitTestBehavior.opaque,
+                                        onTap: () => setState(() {
+                                          _removeExistingReceipt = true;
+                                          _hasExistingReceipt = false;
+                                          _hasReceipt = false;
+                                          _receiptName = '';
+                                          _receiptBytes = null;
+                                          _receiptMime = null;
+                                        }),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(6),
+                                          decoration: const BoxDecoration(
+                                            color: Color(0xFFEF4444),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(Icons.close_rounded,
+                                              color: Colors.white, size: 16),
+                                        ),
+                                      ),
                                     ),
-                                    textAlign: TextAlign.center,
-                                  ),
                                 ],
                               ),
                             ),
@@ -914,121 +1098,7 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
         ),
       ),
     );
-    if (effectiveTheme != null) {
-      return Theme(data: effectiveTheme, child: scaffold);
-    }
     return scaffold;
-  }
-
-  /// Toggle «Mostrar no calendário» (Agenda/Escala) para lançamentos pendentes.
-  Widget _buildAddToCalendarToggle() {
-    final accent =
-        _isIncome ? const Color(0xFF2E7D32) : const Color(0xFFE53935);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: accent.withValues(alpha: 0.28)),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            _addToCalendar
-                ? Icons.event_available_rounded
-                : Icons.event_busy_rounded,
-            size: 20,
-            color: accent,
-          ),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Mostrar no calendário',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13,
-                    color: Color(0xFF1A237E),
-                  ),
-                ),
-                Text(
-                  'Agenda/Escala',
-                  style: TextStyle(fontSize: 11.5, color: Colors.black54),
-                ),
-              ],
-            ),
-          ),
-          Switch.adaptive(
-            value: _addToCalendar,
-            activeThumbColor: accent,
-            activeTrackColor: accent.withValues(alpha: 0.5),
-            onChanged: (v) async {
-              setState(() => _addToCalendar = v);
-              if (!v) return;
-              // Ao ativar: paleta padrão já com a cor sugerida/atual.
-              final hex = await FinanceCalendarColorPicker.escolherAoAtivar(
-                context,
-                isIncome: _isIncome,
-                currentHex: _calendarColorHex,
-              );
-              if (!mounted) return;
-              setState(() => _calendarColorHex = hex);
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Botão «Cor no calendário»: abre a paleta e mostra a cor atual do lançamento.
-  Widget _buildCalendarColorRow() {
-    final hex = _calendarColorHex ??
-        FinanceCalendarColorPicker.defaultHexFor(_isIncome);
-    var clean = hex
-        .replaceFirst('#', '')
-        .replaceFirst(RegExp(r'^0x', caseSensitive: false), '')
-        .toUpperCase();
-    if (clean.length > 6) clean = clean.substring(clean.length - 6);
-    final color = Color(int.parse('FF$clean', radix: 16));
-    return Material(
-      color: color,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () async {
-          final picked = await FinanceCalendarColorPicker.show(
-            context,
-            isIncome: _isIncome,
-            currentHex: _calendarColorHex,
-          );
-          if (picked != null && mounted) {
-            setState(() => _calendarColorHex = picked);
-          }
-        },
-        child: Container(
-          width: double.infinity,
-          height: 44,
-          alignment: Alignment.center,
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.palette_outlined, size: 18, color: Colors.white),
-              SizedBox(width: 8),
-              Text(
-                'Cor no calendário',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 13.5,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   Widget _buildTypeToggle() {
@@ -1056,16 +1126,11 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
     List<TextInputFormatter>? inputFormatters,
     TextCapitalization textCapitalization = TextCapitalization.sentences,
     ValueChanged<String>? onChanged,
+    bool showCopyButton = false,
   }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10)
-        ],
-      ),
+      decoration: context.appPanelDecoration(radius: 14),
       child: FastTextField(
         controller: controller,
         keyboardType: keyboardType,
@@ -1079,8 +1144,18 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
           labelText: label,
           hintText: hint,
           border: InputBorder.none,
-          labelStyle: TextStyle(color: Colors.grey.shade600),
+          labelStyle: TextStyle(color: context.appTextSecondary),
           hintStyle: TextStyle(color: Colors.grey.shade400),
+          suffixIcon: (showCopyButton && controller != null)
+              ? IconButton(
+                  tooltip: 'Copiar',
+                  icon: const Icon(Icons.copy_rounded, size: 18),
+                  color: AppColors.primary,
+                  onPressed: () => _copyWholeField(controller),
+                  splashRadius: 22,
+                  constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                )
+              : null,
         ),
       ),
     );
@@ -1094,26 +1169,31 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
           'Descrição',
           style: TextStyle(
               fontWeight: FontWeight.w700,
-              color: Colors.grey.shade800,
+              color: context.appTextPrimary,
               fontSize: 12.5),
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: 6),
         Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [
-                const Color(0xFFE3F2FD),
-                Colors.white,
-              ],
+              colors: context.isDarkMode
+                  ? [
+                      context.appDarkModuleSurface,
+                      context.appSurfaceHigh,
+                    ]
+                  : [
+                      const Color(0xFFE3F2FD),
+                      Colors.white,
+                    ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-                color: const Color(0xFF1565C0).withValues(alpha: 0.22)),
+                color: const Color(0xFF2563EB).withValues(alpha: 0.22)),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF1565C0).withValues(alpha: 0.08),
+                color: const Color(0xFF2563EB).withValues(alpha: 0.08),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
@@ -1134,9 +1214,14 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
                           horizontal: 12, vertical: 10),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12)),
-                      foregroundColor: const Color(0xFF0D47A1),
+                      foregroundColor: context.isDarkMode
+                          ? const Color(0xFF93C5FD)
+                          : const Color(0xFF0D47A1),
+                      backgroundColor: context.isDarkMode
+                          ? const Color(0xFF2563EB).withValues(alpha: 0.22)
+                          : null,
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.list_alt_rounded, size: 20),
@@ -1158,13 +1243,13 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        const Color(0xFF1565C0).withValues(alpha: 0.18),
+                        const Color(0xFF2563EB).withValues(alpha: 0.18),
                         const Color(0xFF1976D2).withValues(alpha: 0.12),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.edit_note_rounded,
+                  child: Icon(Icons.edit_note_rounded,
                       color: Color(0xFF0D47A1), size: 24),
                 ),
               ),
@@ -1187,10 +1272,19 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
                         'Padrão: categoria + mês do lançamento (ex.: Supermercado MAIO/2026). Edite se quiser.',
                     border: InputBorder.none,
                     labelStyle: TextStyle(
-                        color: Colors.grey.shade700,
+                        color: context.appTextSecondary,
                         fontWeight: FontWeight.w600),
                     hintStyle: TextStyle(color: Colors.grey.shade400),
                     contentPadding: const EdgeInsets.fromLTRB(8, 14, 14, 14),
+                    suffixIcon: IconButton(
+                      tooltip: 'Copiar',
+                      icon: const Icon(Icons.copy_rounded, size: 18),
+                      color: AppColors.primary,
+                      onPressed: () => _copyWholeField(_descCtrl),
+                      splashRadius: 22,
+                      constraints:
+                          const BoxConstraints(minWidth: 44, minHeight: 44),
+                    ),
                   ),
                 ),
               ),
@@ -1212,9 +1306,11 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
     );
     if (picked == null || !mounted) return;
     if (picked != '__outra__') {
-      await UserCategoriesService().load(widget.uid);
+      final c = await UserCategoriesService().load(widget.uid);
       if (!mounted) return;
       setState(() {
+        _incomeCategories = List<String>.from(c.income);
+        _expenseCategories = List<String>.from(c.expense);
         _selectedCategory = picked;
         _categoryCtrl.text = picked;
       });
@@ -1254,12 +1350,12 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
           'Categoria',
           style: TextStyle(
               fontWeight: FontWeight.w700,
-              color: Colors.grey.shade800,
+              color: context.appTextPrimary,
               fontSize: 12.5),
         ),
-        const SizedBox(height: 5),
+        SizedBox(height: 5),
         Material(
-          color: Colors.white,
+          color: context.appSurface,
           borderRadius: BorderRadius.circular(14),
           elevation: 0,
           shadowColor: Colors.black26,
@@ -1270,7 +1366,7 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                    color: const Color(0xFF1A237E).withValues(alpha: 0.18)),
+                    color: context.appDeepTitle.withValues(alpha: 0.18)),
                 boxShadow: [
                   BoxShadow(
                       color: Colors.black.withValues(alpha: 0.04),
@@ -1292,16 +1388,16 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
                       ),
                       child: Icon(vis.icon, color: vis.color, size: 21),
                     ),
-                    const SizedBox(width: 10),
+                    SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         label,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 14,
-                          color: Color(0xFF0F172A),
+                          color: context.appTextPrimary,
                           height: 1.2,
                         ),
                       ),
@@ -1323,10 +1419,10 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
                           });
                           _applyAutoDescriptionFromContext();
                         },
-                        icon: const Icon(Icons.backspace_outlined, size: 22),
+                        icon: Icon(Icons.backspace_outlined, size: 22),
                       ),
-                    const Icon(Icons.unfold_more_rounded,
-                        color: Color(0xFF1A237E)),
+                    Icon(Icons.unfold_more_rounded,
+                        color: context.appDeepTitle),
                   ],
                 ),
               ),
@@ -1334,13 +1430,14 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
           ),
         ),
         if (_selectedCategory == '__outra__') ...[
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           _buildCustomField(
             'Nome da categoria',
             Icons.category_outlined,
             _categoryCtrl,
             hint: 'Ex: Freelance',
             onChanged: (_) => _onCategoryCustomChanged(),
+            showCopyButton: true,
           ),
         ],
       ],
@@ -1357,6 +1454,7 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
     final dateLabel = isToday
         ? 'Hoje, ${DateFormat('d \'de\' MMM', 'pt_BR').format(_date)}'
         : DateFormat('d \'de\' MMM yyyy', 'pt_BR').format(_date);
+    final timeLabel = DateFormat('HH:mm', 'pt_BR').format(_date);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1364,8 +1462,8 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
           Padding(
             padding: const EdgeInsets.only(bottom: 6),
             child: Text(
-              'Data da 1ª parcela — o sistema calcula as demais (15/04, 15/05...). Retroativos e futuros ok.',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              'Data e horário da 1ª parcela — o sistema calcula as demais mantendo a mesma hora. Retroativos e futuros ok.',
+              style: TextStyle(fontSize: 12, color: context.appTextSecondary),
             ),
           )
         else
@@ -1375,14 +1473,15 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Toque para escolher o dia (retroativo ou futuro).',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  'Toque para escolher o dia e o horário (retroativo ou futuro).',
+                  style:
+                      TextStyle(fontSize: 12, color: context.appTextSecondary),
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: 4),
                 Text(
-                  'Informe também a hora abaixo (formato 24h).',
+                  'O horário já vem com a hora atual e pode ser ajustado em hora/minuto.',
                   style: TextStyle(
-                      fontSize: 11, color: Colors.grey.shade500, height: 1.35),
+                      fontSize: 11, color: context.appTextMuted, height: 1.35),
                 ),
               ],
             ),
@@ -1392,24 +1491,29 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
           onTap: _pickDate,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  const Color(0xFFE0F2F1),
-                  const Color(0xFFF1F8E9).withValues(alpha: 0.85),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                  color: const Color(0xFF00897B).withValues(alpha: 0.35)),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF00897B).withValues(alpha: 0.1),
-                  blurRadius: 12,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
+            decoration: context.isDarkMode
+                ? context.appPanelDecoration(
+                    radius: 16,
+                    borderAccent: const Color(0xFF14B8A6),
+                  )
+                : BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFFE0F2F1),
+                        const Color(0xFFF1F8E9).withValues(alpha: 0.85),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                        color: const Color(0xFF14B8A6).withValues(alpha: 0.35)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF14B8A6).withValues(alpha: 0.1),
+                        blurRadius: 12,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
             child: Row(
               children: [
                 Container(
@@ -1417,23 +1521,23 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        const Color(0xFF00897B).withValues(alpha: 0.9),
+                        const Color(0xFF14B8A6).withValues(alpha: 0.9),
                         const Color(0xFF00695C),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF00897B).withValues(alpha: 0.35),
+                        color: const Color(0xFF14B8A6).withValues(alpha: 0.35),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
                     ],
                   ),
-                  child: const Icon(Icons.calendar_month_rounded,
+                  child: Icon(Icons.calendar_month_rounded,
                       color: Colors.white, size: 22),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1443,15 +1547,17 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          color: Colors.grey.shade700,
+                          color: context.appTextSecondary,
                           letterSpacing: 0.2,
                         ),
                       ),
-                      const SizedBox(height: 2),
+                      SizedBox(height: 2),
                       Text(
                         dateLabel,
-                        style: const TextStyle(
-                          color: Color(0xFF004D40),
+                        style: TextStyle(
+                          color: context.isDarkMode
+                              ? const Color(0xFF6EE7B7)
+                              : const Color(0xFF004D40),
                           fontSize: 16,
                           fontWeight: FontWeight.w800,
                         ),
@@ -1460,29 +1566,72 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
                   ),
                 ),
                 Icon(Icons.chevron_right_rounded,
-                    color: Colors.grey.shade500, size: 28),
+                    color: context.appTextMuted, size: 28),
+              ],
+            ),
+          ),
+        ),
+        SizedBox(height: 8),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _pickTime,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            decoration: context.appPanelDecoration(
+              radius: 16,
+              borderAccent: const Color(0xFF14B8A6),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF14B8A6).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(Icons.schedule_rounded,
+                      color: context.isDarkMode
+                          ? const Color(0xFF6EE7B7)
+                          : const Color(0xFF00695C),
+                      size: 22),
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Horário do lançamento',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: context.appTextSecondary,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        timeLabel,
+                        style: TextStyle(
+                          color: context.isDarkMode
+                              ? const Color(0xFF6EE7B7)
+                              : const Color(0xFF004D40),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton(
+                  onPressed: _pickTime,
+                  child: Text('Alterar'),
+                ),
               ],
             ),
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildTimeField() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE8EAF6).withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(16),
-        border:
-            Border.all(color: const Color(0xFF3949AB).withValues(alpha: 0.25)),
-      ),
-      child: TimeFieldWithClockOrManual(
-        label: 'Horário do lançamento',
-        value: _selectedTime,
-        onChanged: (t) => setState(() => _selectedTime = t),
-      ),
     );
   }
 
@@ -1504,7 +1653,7 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        const Color(0xFF7E57C2).withValues(alpha: 0.15),
+                        const Color(0xFF8B5CF6).withValues(alpha: 0.15),
                         const Color(0xFFFFB74D).withValues(alpha: 0.12),
                       ],
                     ),
@@ -1513,37 +1662,43 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
                   child: Icon(Icons.flag_circle_rounded,
                       color: Colors.deepPurple.shade700, size: 22),
                 ),
-                const SizedBox(width: 10),
+                SizedBox(width: 10),
                 Text(
                   'Status do lançamento',
                   style: TextStyle(
                       fontSize: 13,
-                      color: Colors.grey.shade800,
+                      color: context.appTextPrimary,
                       fontWeight: FontWeight.w800),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    const Color(0xFFFFF8E1),
-                    Colors.white,
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                    color: const Color(0xFFF9A825).withValues(alpha: 0.35)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.orange.withValues(alpha: 0.06),
-                    blurRadius: 10,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-              ),
+              decoration: context.isDarkMode
+                  ? context.appPanelDecoration(
+                      radius: 16,
+                      borderAccent: const Color(0xFFEAB308),
+                    )
+                  : BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [
+                          Color(0xFFFFF8E1),
+                          Colors.white,
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                          color:
+                              const Color(0xFFEAB308).withValues(alpha: 0.35)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.orange.withValues(alpha: 0.06),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
               child: parceladoPendente
                   ? Padding(
                       padding: const EdgeInsets.symmetric(
@@ -1559,14 +1714,14 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
                             child: Icon(Icons.hourglass_top_rounded,
                                 color: Colors.orange.shade900, size: 24),
                           ),
-                          const SizedBox(width: 12),
+                          SizedBox(width: 12),
                           Expanded(
                             child: Text(
                               'Pendente (automático em parcelado)',
                               style: TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.w800,
-                                  color: Colors.grey.shade900),
+                                  color: context.appTextPrimary),
                             ),
                           ),
                         ],
@@ -1598,8 +1753,8 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
                             children: [
                               Icon(Icons.check_circle_rounded,
                                   color: Colors.green.shade700, size: 22),
-                              const SizedBox(width: 10),
-                              const Text('Pago',
+                              SizedBox(width: 10),
+                              Text('Pago',
                                   style:
                                       TextStyle(fontWeight: FontWeight.w700)),
                             ],
@@ -1611,15 +1766,19 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
                             children: [
                               Icon(Icons.schedule_rounded,
                                   color: Colors.orange.shade800, size: 22),
-                              const SizedBox(width: 10),
-                              const Text('Pendente',
+                              SizedBox(width: 10),
+                              Text('Pendente',
                                   style:
                                       TextStyle(fontWeight: FontWeight.w700)),
                             ],
                           ),
                         ),
                       ],
-                      onChanged: (v) => setState(() => _status = v ?? 'paid'),
+                      onChanged: (v) => setState(() {
+                        _status = v ?? 'paid';
+                        // Calendário NÃO liga sozinho (regra 01/10/2026):
+                        // a pessoa ativa no switch se quiser.
+                      }),
                     ),
             ),
             if (parceladoPendente)
@@ -1628,13 +1787,159 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
                 child: Text(
                   'As parcelas aparecem nas listas de pendentes até você confirmar o pagamento/recebimento.',
                   style: TextStyle(
-                      fontSize: 11, color: Colors.grey.shade600, height: 1.35),
+                      fontSize: 11,
+                      color: context.appTextSecondary,
+                      height: 1.35),
                 ),
               ),
           ],
         );
       },
     );
+  }
+
+  /// Toggle para incluir/excluir o lançamento pendente do calendário Agenda/Escala.
+  Widget _buildAddToCalendarToggle() {
+    final accent =
+        _isIncome ? const Color(0xFF16A34A) : const Color(0xFFEF4444);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: context.isDarkMode
+            ? accent.withValues(alpha: 0.12)
+            : accent.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: accent.withValues(alpha: 0.28),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            _addToCalendar
+                ? Icons.event_available_rounded
+                : Icons.event_busy_rounded,
+            size: 20,
+            color: accent,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Mostrar no calendário',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: context.appTextPrimary,
+                  ),
+                ),
+                Text(
+                  'Agenda/Escala',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: context.appTextSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch.adaptive(
+            value: _addToCalendar,
+            activeThumbColor: accent,
+            activeTrackColor: accent.withValues(alpha: 0.5),
+            onChanged: (v) async {
+              setState(() => _addToCalendar = v);
+              if (!v) return;
+              // Ao ativar: paleta padrão já com a cor sugerida/atual.
+              final hex = await FinanceCalendarColorPicker.escolherAoAtivar(
+                context,
+                isIncome: _isIncome,
+                currentHex: _calendarColorHex,
+              );
+              if (!mounted) return;
+              setState(() => _calendarColorHex = hex);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Linha de seleção de cor para exibição no calendário (Agenda/Escala).
+  /// Padrão: vermelho para despesas, verde para receitas. Usuário pode trocar.
+  /// Usa a mesma paleta de 72 cores do módulo Escalas.
+  Widget _buildCalendarColorRow() {
+    final defaultHex = _isIncome ? '#2E7D32' : '#E53935';
+    final current = _calendarColorHex ?? defaultHex;
+    final currentClean = current.replaceFirst('#', '').toUpperCase();
+    final currentColor = Color(0xFF000000 +
+        int.parse(
+            currentClean.length > 6
+                ? currentClean.substring(currentClean.length - 6)
+                : currentClean,
+            radix: 16));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.palette_rounded,
+                size: 18, color: context.appTextSecondary),
+            SizedBox(width: 8),
+            Text(
+              'Cor no calendário',
+              style: TextStyle(
+                  fontSize: 13,
+                  color: context.appTextPrimary,
+                  fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+        SizedBox(height: 8),
+        Material(
+          color: currentColor,
+          borderRadius: BorderRadius.circular(14),
+          elevation: 2,
+          shadowColor: currentColor.withValues(alpha: 0.45),
+          child: InkWell(
+            onTap: _abrirSeletorCorFinancas,
+            borderRadius: BorderRadius.circular(14),
+            child: SizedBox(
+              height: 44,
+              width: double.infinity,
+              child: Center(
+                child: Text(
+                  'Toque para escolher a cor',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.25,
+                      fontSize: 13.5),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Seletor padrao do app: paleta completa em abas (Paleta 01/02/03).
+  Future<void> _abrirSeletorCorFinancas() async {
+    // Cor atual (ou o padrao do tipo) ja pre-selecionada no dialogo.
+    final defaultHex = _isIncome ? '#16A34A' : '#EF4444';
+    final current = (_calendarColorHex ?? defaultHex);
+    final escolhida = await mostrarSeletorDeCores(
+      context,
+      titulo: 'Cor no calendário',
+      selecionadaHex: current,
+    );
+    if (escolhida != null) {
+      setState(() => _calendarColorHex = escolhida);
+    }
   }
 
   Widget _buildInstallmentsField() {
@@ -1648,19 +1953,18 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
         Row(
           children: [
             Icon(Icons.payments_rounded,
-                color: const Color(0xFF1A237E).withValues(alpha: 0.85),
-                size: 22),
-            const SizedBox(width: 8),
+                color: context.appDeepTitle.withValues(alpha: 0.85), size: 22),
+            SizedBox(width: 8),
             Text(
               'À vista ou parcelado',
               style: TextStyle(
                   fontSize: 13,
-                  color: Colors.grey.shade800,
+                  color: context.appTextPrimary,
                   fontWeight: FontWeight.w800),
             ),
           ],
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: 10),
         SegmentedButton<bool>(
           segments: const [
             ButtonSegment<bool>(
@@ -1698,12 +2002,14 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
             });
           },
           style: SegmentedButton.styleFrom(
-            selectedBackgroundColor: const Color(0xFF1A237E),
+            selectedBackgroundColor: const Color(0xFF3730A3),
             selectedForegroundColor: Colors.white,
-            foregroundColor: const Color(0xFF1A237E),
-            backgroundColor: Colors.white,
+            foregroundColor: context.isDarkMode
+                ? context.appTextPrimary
+                : const Color(0xFF3730A3),
+            backgroundColor: context.appSurface,
             side: BorderSide(
-                color: const Color(0xFF1A237E).withValues(alpha: 0.35),
+                color: context.appDeepTitle.withValues(alpha: 0.35),
                 width: 1.5),
             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
             textStyle:
@@ -1711,7 +2017,7 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
           ),
         ),
         if (_installmentMode) ...[
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           _buildCustomField(
             'Total de parcelas (plano)',
             Icons.numbers_rounded,
@@ -1721,7 +2027,7 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             textCapitalization: TextCapitalization.none,
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           _buildCustomField(
             'Começar na parcela nº',
             Icons.play_arrow_rounded,
@@ -1732,13 +2038,13 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
             textCapitalization: TextCapitalization.none,
           ),
           if (n > 1) ...[
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             Text('O valor no topo é:',
                 style: TextStyle(
                     fontSize: 12,
-                    color: Colors.grey.shade600,
+                    color: context.appTextSecondary,
                     fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             SegmentedButton<bool>(
               segments: const [
                 ButtonSegment<bool>(
@@ -1771,7 +2077,7 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
                   ? 'Cada lançamento usa o valor acima. Serão criados $geradas lançamento(s) (parcelas $start a $n). A data acima é a da parcela $start.'
                   : 'O total acima é dividido por $n; cada lançamento fica com a quota mensal. Serão criados $geradas lançamento(s) (parcelas $start a $n). A data acima é a da parcela $start.',
               style: TextStyle(
-                  fontSize: 12, color: Colors.grey.shade600, height: 1.35),
+                  fontSize: 12, color: context.appTextSecondary, height: 1.35),
             ),
           ),
       ],
@@ -1779,59 +2085,3 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
   }
 }
 
-class _NovoLancamentoAccountBadge extends StatelessWidget {
-  final FinanceAccount account;
-
-  const _NovoLancamentoAccountBadge({required this.account});
-
-  @override
-  Widget build(BuildContext context) {
-    final vis = financeAccountVisualFor(account);
-    final p = account.preset;
-    return Container(
-      width: 38,
-      height: 38,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(11),
-        gradient: LinearGradient(
-          colors: vis.gradient.length >= 2
-              ? vis.gradient.sublist(0, 2)
-              : vis.gradient,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        border: Border.all(
-          color: vis.isCreditCardStyle
-              ? const Color(0xFFFBBF24).withValues(alpha: 0.55)
-              : Colors.white.withValues(alpha: 0.35),
-          width: vis.isCreditCardStyle ? 1.4 : 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: vis.gradient.first.withValues(alpha: 0.35),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (vis.isCreditCardStyle)
-            const FinanceCreditCardPattern(stripeColor: Color(0xFFFBBF24)),
-          Center(
-            child: p != null
-                ? FinanceBankBrandThumb(
-                    preset: p,
-                    size: 28,
-                    onBrandGradient: true,
-                    fallbackIcon: vis.icon,
-                  )
-                : Icon(vis.icon, color: Colors.white, size: 20),
-          ),
-        ],
-      ),
-    );
-  }
-}

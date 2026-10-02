@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/goal_deposit_service.dart';
+import '../utils/fifty_two_weeks_plan.dart';
 import 'brl_amount_text_field.dart';
 
 /// Verde destacado para ações de depósito (paridade com sheet 52 semanas).
@@ -146,6 +147,94 @@ class GoalDepositAmountField extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// Port Controle Total (02/10/2026): prévia das semanas ao editar o valor
+// de um lançamento vinculado a uma meta de 52 semanas.
+/// Recalcula semanas do Projeto 52 ao editar valor (Meta / Financeiro vinculado).
+List<int> computeGoalDepositPreviewWeeks({
+  required Map<String, dynamic> goalData,
+  required List<FiftyTwoWeeksWeekEntry> schedule,
+  required List<int> oldWeeks,
+  required double amount,
+}) {
+  if (!FiftyTwoWeeksPlan.is52WeeksGoal(goalData) || amount <= 0) {
+    return const [];
+  }
+  var paid = FiftyTwoWeeksPlan.paidWeeksFromData(goalData);
+  paid.removeWhere(oldWeeks.contains);
+  return FiftyTwoWeeksPlan.weeksForDepositAmount(
+    amount: amount,
+    schedule: schedule,
+    paidWeeks: paid,
+  );
+}
+
+String goalDepositWeeksPreviewMessage({
+  required List<int> oldWeeks,
+  required List<int> previewWeeks,
+}) {
+  if (previewWeeks.isEmpty) return '';
+  final oldSorted = [...oldWeeks]..sort();
+  final newSorted = [...previewWeeks]..sort();
+  final same = oldSorted.length == newSorted.length &&
+      oldSorted.every(newSorted.contains);
+  if (same) {
+    return previewWeeks.length == 1
+        ? 'Semana ${previewWeeks.first} será marcada automaticamente'
+        : 'Semanas ${previewWeeks.join(', ')} serão marcadas automaticamente';
+  }
+  final de = oldSorted.isEmpty ? '—' : oldSorted.join(', ');
+  final para = newSorted.join(', ');
+  return 'Semanas atualizadas: de $de para $para (Projeto 52 semanas)';
+}
+
+/// Faixa verde — aviso de semanas (padrão edição Meta).
+class GoalDepositWeeksPreviewBanner extends StatelessWidget {
+  const GoalDepositWeeksPreviewBanner({
+    super.key,
+    required this.oldWeeks,
+    required this.previewWeeks,
+  });
+
+  final List<int> oldWeeks;
+  final List<int> previewWeeks;
+
+  @override
+  Widget build(BuildContext context) {
+    final msg = goalDepositWeeksPreviewMessage(
+      oldWeeks: oldWeeks,
+      previewWeeks: previewWeeks,
+    );
+    if (msg.isEmpty) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: GoalDepositUi.green.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: GoalDepositUi.green.withValues(alpha: 0.22)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.event_available_rounded,
+              size: 18, color: GoalDepositUi.greenDark),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              msg,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: GoalDepositUi.greenDark,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -44,6 +44,15 @@ abstract final class FinanceLineOpening {
     return null;
   }
 
+  /// Campo da quitação só de CONTROLE (Finance Pro no Controle Total).
+  /// No WISDOMAPP nada grava esse campo (sem Finance Pro): o helper existe
+  /// para as telas portadas do CT compilarem iguais — a fórmula do saldo
+  /// ([openingContribution]) NÃO foi alterada.
+  static const String kBaixaSemSaldo = 'baixaSemSaldo';
+
+  /// `true` = quitação de controle (fora dos gráficos de categoria).
+  static bool foraDoSaldo(Map<String, dynamic> d) => d[kBaixaSemSaldo] == true;
+
   /// Contribuição para o saldo de abertura (só movimentos pagos), igual ao painel.
   static double openingContribution(Map<String, dynamic> d) {
     final isPaid = (d['status'] ?? 'paid').toString() == 'paid';

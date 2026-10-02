@@ -50,4 +50,27 @@ abstract final class FinanceTransactionDatetime {
       previous.microsecond,
     );
   }
+
+  /// Normaliza lançamentos manuais para hora/minuto, sem segundos (port CT).
+  static DateTime withoutSeconds(DateTime d) {
+    return DateTime(d.year, d.month, d.day, d.hour, d.minute);
+  }
+
+  /// Se a data veio sem horário (00:00), preenche com o relógio atual; se já
+  /// veio com horário escolhido, preserva hora/minuto e remove segundos.
+  static DateTime normalizeManualDateTime(DateTime d) {
+    final hasClock = d.hour != 0 ||
+        d.minute != 0 ||
+        d.second != 0 ||
+        d.millisecond != 0 ||
+        d.microsecond != 0;
+    return hasClock ? withoutSeconds(d) : mergeCalendarDayWithClockNow(d);
+  }
+
+  /// Dia escolhido + hora/minuto do seletor de horário (port CT).
+  static DateTime mergeCalendarDayWithTimeOfDay(
+      DateTime pickedDay, int hour, int minute) {
+    return DateTime(
+        pickedDay.year, pickedDay.month, pickedDay.day, hour, minute);
+  }
 }

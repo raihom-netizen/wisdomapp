@@ -3,20 +3,35 @@ import 'package:flutter/material.dart';
 import '../constants/currency_formats.dart';
 import '../constants/date_time_formats.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import 'fast_text_field.dart';
 
 /// Decoração padrão de sheets financeiros premium (fundo suave + cantos).
-BoxDecoration financePremiumSheetDecoration({Color? surfaceTint}) {
+BoxDecoration financePremiumSheetDecoration({
+  Color? surfaceTint,
+  BuildContext? context,
+}) {
   final tint = surfaceTint ?? AppColors.primary;
+  final dark = context != null && Theme.of(context).brightness == Brightness.dark;
   return BoxDecoration(
     gradient: LinearGradient(
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
-      colors: [
-        tint.withValues(alpha: 0.06),
-        const Color(0xFFF8FAFC),
-        Colors.white,
-      ],
+      // O topo era `tint` com 6% (claro) / 14% (escuro) de opacidade: os
+      // primeiros 12% da folha ficavam quase transparentes e o painel de trás
+      // aparecia através dela. A mistura sobre a superfície dá a mesma cor,
+      // só que opaca.
+      colors: dark
+          ? [
+              Color.alphaBlend(tint.withValues(alpha: 0.14), const Color(0xFF1E1E1E)),
+              const Color(0xFF1E1E1E),
+              const Color(0xFF121212),
+            ]
+          : [
+              Color.alphaBlend(tint.withValues(alpha: 0.06), Colors.white),
+              const Color(0xFFF8FAFC),
+              Colors.white,
+            ],
       stops: const [0.0, 0.12, 0.35],
     ),
     borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
@@ -36,6 +51,8 @@ PreferredSizeWidget financePremiumGradientAppBar({
   required VoidCallback onBack,
   List<Widget>? actions,
   List<Color>? gradientColors,
+  /// Telas abertas como aba do shell não têm para onde voltar: sem seta.
+  bool showBack = true,
 }) {
   return AppBar(
     toolbarHeight: 56,
@@ -44,12 +61,14 @@ PreferredSizeWidget financePremiumGradientAppBar({
     backgroundColor: Colors.transparent,
     surfaceTintColor: Colors.transparent,
     automaticallyImplyLeading: false,
-    leading: IconButton(
-      tooltip: 'Voltar',
-      onPressed: onBack,
-      icon: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 24),
-      style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
-    ),
+    leading: showBack
+        ? IconButton(
+            tooltip: 'Voltar',
+            onPressed: onBack,
+            icon: Icon(Icons.arrow_back_rounded, color: Colors.white, size: 24),
+            style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
+          )
+        : null,
     flexibleSpace: Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -135,14 +154,15 @@ class FinancePremiumSheetHeader extends StatelessWidget {
                   child: InkWell(
                     borderRadius: BorderRadius.circular(14),
                     onTap: onBack,
-                    child: const SizedBox(
+                    child: SizedBox(
                       width: 48,
                       height: 48,
-                      child: Icon(Icons.arrow_back_rounded, color: AppColors.primary, size: 22),
+                      child: Icon(Icons.arrow_back_rounded,
+                          color: AppColors.primary, size: 22),
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
+                SizedBox(width: 10),
               ],
               Container(
                 width: 52,
@@ -164,7 +184,7 @@ class FinancePremiumSheetHeader extends StatelessWidget {
                 ),
                 child: Icon(icon, color: Colors.white, size: 28),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -179,13 +199,13 @@ class FinancePremiumSheetHeader extends StatelessWidget {
                       ),
                     ),
                     if (subtitle != null && subtitle!.isNotEmpty) ...[
-                      const SizedBox(height: 4),
+                      SizedBox(height: 4),
                       Text(
                         subtitle!,
                         style: TextStyle(
                           fontSize: 12.5,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.textSecondary,
+                          color: context.appTextSecondary,
                           height: 1.35,
                         ),
                       ),
@@ -222,6 +242,7 @@ class FinancePremiumFieldTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -232,17 +253,19 @@ class FinancePremiumFieldTile extends StatelessWidget {
             borderRadius: BorderRadius.circular(18),
             gradient: LinearGradient(
               colors: [
-                accent.withValues(alpha: 0.10),
-                Colors.white,
+                accent.withValues(alpha: isDark ? 0.22 : 0.10),
+                isDark ? context.appSurfaceHigh : Colors.white,
               ],
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
             ),
-            border: Border.all(color: accent.withValues(alpha: 0.28), width: 1.2),
+            border: Border.all(
+                color: accent.withValues(alpha: isDark ? 0.55 : 0.28),
+                width: isDark ? 1.4 : 1.2),
             boxShadow: [
               BoxShadow(
-                color: accent.withValues(alpha: 0.08),
-                blurRadius: 10,
+                color: accent.withValues(alpha: isDark ? 0.18 : 0.08),
+                blurRadius: isDark ? 14 : 10,
                 offset: const Offset(0, 3),
               ),
             ],
@@ -256,13 +279,16 @@ class FinancePremiumFieldTile extends StatelessWidget {
                   height: 42,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [accent, Color.lerp(accent, AppColors.secondary, 0.35)!],
+                      colors: [
+                        accent,
+                        Color.lerp(accent, AppColors.secondary, 0.35)!
+                      ],
                     ),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(icon, color: Colors.white, size: 22),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -276,19 +302,21 @@ class FinancePremiumFieldTile extends StatelessWidget {
                           letterSpacing: 0.2,
                         ),
                       ),
-                      const SizedBox(height: 2),
+                      SizedBox(height: 2),
                       Text(
                         value,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w800,
-                          color: Color(0xFF0F172A),
+                          color: context.appTextPrimary,
                         ),
                       ),
                     ],
                   ),
                 ),
-                trailing ?? Icon(Icons.chevron_right_rounded, color: accent.withValues(alpha: 0.7)),
+                trailing ??
+                    Icon(Icons.chevron_right_rounded,
+                        color: accent.withValues(alpha: 0.7)),
               ],
             ),
           ),
@@ -299,16 +327,18 @@ class FinancePremiumFieldTile extends StatelessWidget {
 }
 
 /// Decoração de dropdown premium.
-InputDecoration financePremiumDropdownDecoration({
+InputDecoration financePremiumDropdownDecoration(
+  BuildContext context, {
   required String label,
   IconData? prefixIcon,
   Color accent = AppColors.primary,
 }) {
   return InputDecoration(
     filled: true,
-    fillColor: Colors.white,
+    fillColor: context.appSurface,
     labelText: label,
-    labelStyle: TextStyle(fontWeight: FontWeight.w700, color: Colors.grey.shade700, fontSize: 13),
+    labelStyle: TextStyle(
+        fontWeight: FontWeight.w700, color: context.appTextSecondary, fontSize: 13),
     prefixIcon: prefixIcon != null
         ? Padding(
             padding: const EdgeInsets.only(left: 4),
@@ -362,7 +392,10 @@ class FinancePremiumSheetActions extends StatelessWidget {
             borderRadius: BorderRadius.circular(18),
             gradient: LinearGradient(
               colors: confirmEnabled
-                  ? [confirmColor, Color.lerp(confirmColor, AppColors.accent, 0.25)!]
+                  ? [
+                      confirmColor,
+                      Color.lerp(confirmColor, AppColors.accent, 0.25)!
+                    ]
                   : [Colors.grey.shade400, Colors.grey.shade500],
             ),
             boxShadow: confirmEnabled
@@ -378,21 +411,25 @@ class FinancePremiumSheetActions extends StatelessWidget {
           child: FilledButton.icon(
             onPressed: confirmEnabled ? onConfirm : null,
             icon: Icon(confirmIcon, size: 22),
-            label: Text(confirmLabel, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+            label: Text(confirmLabel,
+                style:
+                    const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
             style: FilledButton.styleFrom(
               backgroundColor: Colors.transparent,
               shadowColor: Colors.transparent,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18)),
             ),
           ),
         ),
         if (onCancel != null) ...[
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           TextButton(
             onPressed: onCancel,
-            child: Text(cancelLabel, style: const TextStyle(fontWeight: FontWeight.w700)),
+            child: Text(cancelLabel,
+                style: const TextStyle(fontWeight: FontWeight.w700)),
           ),
         ],
       ],
@@ -462,7 +499,10 @@ class FinancePremiumTypeToggle extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
             gradient: selected
-                ? LinearGradient(colors: colors, begin: Alignment.topLeft, end: Alignment.bottomRight)
+                ? LinearGradient(
+                    colors: colors,
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight)
                 : null,
             borderRadius: BorderRadius.circular(14),
             boxShadow: selected
@@ -478,8 +518,10 @@ class FinancePremiumTypeToggle extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 18, color: selected ? Colors.white : Colors.grey.shade600),
-              const SizedBox(width: 6),
+              Icon(icon,
+                  size: 18,
+                  color: selected ? Colors.white : Colors.grey.shade600),
+              SizedBox(width: 6),
               Text(
                 label,
                 style: TextStyle(
@@ -513,7 +555,8 @@ Future<T?> showFinancePremiumEditDialog<T>({
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.88),
+        constraints:
+            BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.88),
         child: DecoratedBox(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(24),
@@ -538,9 +581,13 @@ Future<T?> showFinancePremiumEditDialog<T>({
                 padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [accent, Color.lerp(accent, AppColors.accent, 0.45)!],
+                    colors: [
+                      accent,
+                      Color.lerp(accent, AppColors.accent, 0.45)!
+                    ],
                   ),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(24)),
                 ),
                 child: Row(
                   children: [
@@ -550,9 +597,10 @@ Future<T?> showFinancePremiumEditDialog<T>({
                         color: Colors.white.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(Icons.edit_rounded, color: Colors.white, size: 22),
+                      child: Icon(Icons.edit_rounded,
+                          color: Colors.white, size: 22),
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: 12),
                     Expanded(
                       child: Text(
                         title,
@@ -568,8 +616,10 @@ Future<T?> showFinancePremiumEditDialog<T>({
                         onCancel?.call();
                         Navigator.pop(ctx);
                       },
-                      icon: const Icon(Icons.close_rounded, color: Colors.white),
-                      style: IconButton.styleFrom(minimumSize: const Size(44, 44)),
+                      icon:
+                          Icon(Icons.close_rounded, color: Colors.white),
+                      style:
+                          IconButton.styleFrom(minimumSize: const Size(44, 44)),
                     ),
                   ],
                 ),
@@ -581,7 +631,8 @@ Future<T?> showFinancePremiumEditDialog<T>({
                 ),
               ),
               Padding(
-                padding: EdgeInsets.fromLTRB(18, 8, 18, 16 + MediaQuery.paddingOf(ctx).bottom),
+                padding: EdgeInsets.fromLTRB(
+                    18, 8, 18, 16 + MediaQuery.paddingOf(ctx).bottom),
                 child: Row(
                   children: [
                     Expanded(
@@ -592,21 +643,31 @@ Future<T?> showFinancePremiumEditDialog<T>({
                         },
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 14),
-                          side: BorderSide(color: accent.withValues(alpha: 0.4)),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          side:
+                              BorderSide(color: accent.withValues(alpha: 0.4)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14)),
                         ),
-                        child: Text('Cancelar', style: TextStyle(fontWeight: FontWeight.w800, color: accent)),
+                        child: Text('Cancelar',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w800, color: accent)),
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    SizedBox(width: 10),
                     Expanded(
                       flex: 2,
                       child: DecoratedBox(
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(14),
-                          gradient: LinearGradient(colors: [accent, Color.lerp(accent, AppColors.secondary, 0.3)!]),
+                          gradient: LinearGradient(colors: [
+                            accent,
+                            Color.lerp(accent, AppColors.secondary, 0.3)!
+                          ]),
                           boxShadow: [
-                            BoxShadow(color: accent.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4)),
+                            BoxShadow(
+                                color: accent.withValues(alpha: 0.3),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4)),
                           ],
                         ),
                         child: FilledButton(
@@ -616,9 +677,12 @@ Future<T?> showFinancePremiumEditDialog<T>({
                             shadowColor: Colors.transparent,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14)),
                           ),
-                          child: Text(saveLabel, style: const TextStyle(fontWeight: FontWeight.w900)),
+                          child: Text(saveLabel,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w900)),
                         ),
                       ),
                     ),
@@ -669,14 +733,16 @@ class FinancePremiumFormFooterActions extends StatelessWidget {
             side: BorderSide(color: accent.withValues(alpha: 0.38), width: 1.2),
             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
             minimumSize: const Size(0, _kMinHeight),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           ),
-          child: const Row(
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(Icons.close_rounded, size: 20),
               SizedBox(width: 8),
-              Text('Cancelar', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+              Text('Cancelar',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
             ],
           ),
         );
@@ -692,7 +758,10 @@ class FinancePremiumFormFooterActions extends StatelessWidget {
             boxShadow: isBusy
                 ? null
                 : [
-                    BoxShadow(color: accent.withValues(alpha: 0.32), blurRadius: 12, offset: const Offset(0, 4)),
+                    BoxShadow(
+                        color: accent.withValues(alpha: 0.32),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4)),
                   ],
           ),
           child: FilledButton(
@@ -703,28 +772,33 @@ class FinancePremiumFormFooterActions extends StatelessWidget {
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
               minimumSize: const Size(0, _kMinHeight),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (isBusy) ...[
-                  const SizedBox(
+                  SizedBox(
                     width: 22,
                     height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2.2, color: Colors.white),
                   ),
-                  const SizedBox(width: 10),
-                  Text(busyLabel, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+                  SizedBox(width: 10),
+                  Text(busyLabel,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w900, fontSize: 15)),
                 ] else ...[
                   Icon(saveIcon, size: 21),
-                  const SizedBox(width: 8),
+                  SizedBox(width: 8),
                   Flexible(
                     child: Text(
                       saveLabel,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w900, fontSize: 15),
                     ),
                   ),
                 ],
@@ -737,13 +811,13 @@ class FinancePremiumFormFooterActions extends StatelessWidget {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
-            children: [cancel, const SizedBox(height: 10), save],
+            children: [cancel, SizedBox(height: 10), save],
           );
         }
         return Row(
           children: [
             Expanded(child: cancel),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             Expanded(flex: 2, child: save),
           ],
         );
@@ -777,6 +851,7 @@ class FinancePremiumAccountCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -787,17 +862,18 @@ class FinancePremiumAccountCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(20),
             gradient: LinearGradient(
               colors: [
-                gradient.first.withValues(alpha: 0.14),
-                gradient.last.withValues(alpha: 0.06),
-                Colors.white,
+                gradient.first.withValues(alpha: isDark ? 0.22 : 0.14),
+                gradient.last.withValues(alpha: isDark ? 0.12 : 0.06),
+                isDark ? context.appSurfaceHigh : Colors.white,
               ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
-            border: Border.all(color: gradient.first.withValues(alpha: 0.22)),
+            border: Border.all(
+                color: gradient.first.withValues(alpha: isDark ? 0.45 : 0.22)),
             boxShadow: [
               BoxShadow(
-                color: gradient.first.withValues(alpha: 0.12),
+                color: gradient.first.withValues(alpha: isDark ? 0.16 : 0.12),
                 blurRadius: 14,
                 offset: const Offset(0, 4),
               ),
@@ -808,7 +884,7 @@ class FinancePremiumAccountCard extends StatelessWidget {
             child: Row(
               children: [
                 leading,
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -817,17 +893,26 @@ class FinancePremiumAccountCard extends StatelessWidget {
                         title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: Color(0xFF0F172A)),
+                        style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 15,
+                            color: context.appTextPrimary),
                       ),
-                      const SizedBox(height: 2),
+                      SizedBox(height: 2),
                       Text(
                         subtitle,
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: context.appTextSecondary),
                       ),
-                      const SizedBox(height: 6),
+                      SizedBox(height: 6),
                       Text(
                         balanceText,
-                        style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17, color: balanceColor),
+                        style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 17,
+                            color: balanceColor),
                       ),
                     ],
                   ),
@@ -846,6 +931,7 @@ class FinancePremiumAccountCard extends StatelessWidget {
 class FinanceInsightPeriodTotalizer extends StatelessWidget {
   final double income;
   final double expense;
+
   /// Saldo antes do período — quando informado, exibe abertura e saldo acumulado.
   final double? openingBalance;
 
@@ -869,26 +955,21 @@ class FinanceInsightPeriodTotalizer extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.06),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
+      decoration: context.appPanelDecoration(
+        radius: 18,
+        borderColor: context.appChipIdleBorder,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
+          Text(
             'Resumo do período',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.textSecondary),
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: context.appTextSecondary),
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: 10),
           LayoutBuilder(
             builder: (context, c) {
               final narrow = c.maxWidth < 340;
@@ -924,7 +1005,7 @@ class FinanceInsightPeriodTotalizer extends StatelessWidget {
                 return Column(
                   children: [
                     for (var i = 0; i < tiles.length; i++) ...[
-                      if (i > 0) const SizedBox(height: 8),
+                      if (i > 0) SizedBox(height: 8),
                       tiles[i],
                     ],
                   ],
@@ -934,8 +1015,7 @@ class FinanceInsightPeriodTotalizer extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  for (final t in tiles)
-                    SizedBox(width: halfW, child: t),
+                  for (final t in tiles) SizedBox(width: halfW, child: t),
                 ],
               );
             },
@@ -950,7 +1030,10 @@ class FinanceInsightPeriodTotalizer extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [color.withValues(alpha: 0.14), color.withValues(alpha: 0.05)],
+          colors: [
+            color.withValues(alpha: 0.14),
+            color.withValues(alpha: 0.05)
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -963,24 +1046,31 @@ class FinanceInsightPeriodTotalizer extends StatelessWidget {
           Row(
             children: [
               Icon(icon, size: 16, color: color),
-              const SizedBox(width: 6),
+              SizedBox(width: 6),
               Expanded(
                 child: Text(
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color.withValues(alpha: 0.9)),
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: color.withValues(alpha: 0.9)),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: 6),
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
             child: Text(
               value,
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: color, height: 1.1),
+              style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w900,
+                  color: color,
+                  height: 1.1),
             ),
           ),
         ],
@@ -1000,6 +1090,10 @@ class FinanceInsightTransactionCard extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
+  /// Linha do cliente/fornecedor (opcional) — quem monta é quem tem o
+  /// lançamento em mãos.
+  final Widget? parceiro;
+
   const FinanceInsightTransactionCard({
     super.key,
     required this.category,
@@ -1010,20 +1104,28 @@ class FinanceInsightTransactionCard extends StatelessWidget {
     required this.percent,
     required this.onEdit,
     required this.onDelete,
+    this.parceiro,
   });
 
   @override
   Widget build(BuildContext context) {
-    final accent = isIncome ? AppColors.financeReceita : AppColors.financeDespesa;
+    final accent =
+        isIncome ? AppColors.financeReceita : AppColors.financeDespesa;
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appSurface,
         borderRadius: BorderRadius.circular(18),
         border: Border(left: BorderSide(color: accent, width: 4)),
         boxShadow: [
-          BoxShadow(color: accent.withValues(alpha: 0.08), blurRadius: 14, offset: const Offset(0, 5)),
-          BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 6, offset: const Offset(0, 2)),
+          BoxShadow(
+              color: accent.withValues(alpha: 0.08),
+              blurRadius: 14,
+              offset: const Offset(0, 5)),
+          BoxShadow(
+              color: Colors.black.withValues(alpha: context.isDarkMode ? 0.35 : 0.03),
+              blurRadius: 6,
+              offset: const Offset(0, 2)),
         ],
       ),
       child: Padding(
@@ -1040,27 +1142,38 @@ class FinanceInsightTransactionCard extends StatelessWidget {
                     children: [
                       Text(
                         category,
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Color(0xFF0F172A)),
+                        style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w900,
+                            color: context.appTextPrimary),
                       ),
                       if (description.isNotEmpty) ...[
-                        const SizedBox(height: 3),
+                        SizedBox(height: 3),
                         Text(
                           description,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500, color: AppColors.textSecondary),
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
+                              color: context.appTextSecondary),
                         ),
+                      ],
+                      if (parceiro != null) ...[
+                        SizedBox(height: 3),
+                        parceiro!,
                       ],
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 _actionBtn(Icons.edit_rounded, AppColors.primary, onEdit),
-                const SizedBox(width: 6),
-                _actionBtn(Icons.delete_outline_rounded, AppColors.error, onDelete),
+                SizedBox(width: 6),
+                _actionBtn(
+                    Icons.delete_outline_rounded, AppColors.error, onDelete),
               ],
             ),
-            const SizedBox(height: 10),
+            SizedBox(height: 10),
             Wrap(
               spacing: 10,
               runSpacing: 6,
@@ -1068,23 +1181,31 @@ class FinanceInsightTransactionCard extends StatelessWidget {
               children: [
                 Text(
                   CurrencyFormats.formatBRLTight(amount),
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: accent),
+                  style: TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.w900, color: accent),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: accent.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     '${percent.toStringAsFixed(1)}%',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: accent),
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: accent),
                   ),
                 ),
                 if (date != null)
                   Text(
-                    DateTimeFormats.formatTimeOnly(date!),
-                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.textMuted),
+                    DateTimeFormats.formatDateTimeMinute(date!),
+                    style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: context.appTextMuted),
                   ),
               ],
             ),
@@ -1131,17 +1252,10 @@ class FinanceFilterSearchField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
-        color: Colors.white,
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.12)),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.deepBlueDark.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
+      decoration: context.appPanelDecoration(
+        radius: 18,
+        borderAccent: AppColors.primary,
+        borderAlpha: 0.12,
       ),
       child: FastTextField(
         controller: controller,
@@ -1150,19 +1264,26 @@ class FinanceFilterSearchField extends StatelessWidget {
         onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
         decoration: InputDecoration(
           hintText: hintText,
-          hintStyle: TextStyle(color: AppColors.textMuted.withValues(alpha: 0.9), fontSize: 14),
-          prefixIcon: Icon(Icons.search_rounded, color: AppColors.primary.withValues(alpha: 0.85)),
+          hintStyle: TextStyle(
+              color: context.appTextMuted.withValues(alpha: 0.9), fontSize: 14),
+          prefixIcon: Icon(Icons.search_rounded,
+              color: AppColors.primary.withValues(alpha: 0.85)),
           suffixIcon: showClear
               ? IconButton(
                   tooltip: 'Limpar busca',
                   onPressed: onClear,
-                  icon: Icon(Icons.close_rounded, size: 20, color: AppColors.textMuted.withValues(alpha: 0.9)),
+                  icon: Icon(Icons.close_rounded,
+                      size: 20,
+                      color: context.appTextMuted.withValues(alpha: 0.9)),
                 )
               : null,
           filled: true,
           fillColor: Colors.transparent,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+          border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(18),
+              borderSide: BorderSide.none),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
         ),
         onChanged: onChanged,
       ),
@@ -1192,7 +1313,9 @@ class FinanceCategoryFilterTile extends StatelessWidget {
       children: [
         FinancePremiumFieldTile(
           label: 'Filtrar por categoria',
-          value: loading ? 'A carregar categorias…' : (selectedCategory ?? 'Todas as categorias'),
+          value: loading
+              ? 'A carregar categorias…'
+              : (selectedCategory ?? 'Todas as categorias'),
           icon: Icons.category_rounded,
           accent: AppColors.accent,
           onTap: loading ? null : onTap,
@@ -1205,18 +1328,19 @@ class FinanceCategoryFilterTile extends StatelessWidget {
                     color: AppColors.primary.withValues(alpha: 0.85),
                   ),
                 )
-              : Icon(Icons.arrow_drop_down_circle_outlined, color: AppColors.accent.withValues(alpha: 0.75)),
+              : Icon(Icons.arrow_drop_down_circle_outlined,
+                  color: AppColors.accent.withValues(alpha: 0.75)),
         ),
         if (!loading && selectedCategory != null && onClear != null)
           Align(
             alignment: Alignment.centerRight,
             child: TextButton.icon(
               onPressed: onClear,
-              icon: const Icon(Icons.clear_rounded, size: 18),
-              label: const Text('Limpar categoria'),
+              icon: Icon(Icons.clear_rounded, size: 18),
+              label: Text('Limpar categoria'),
               style: TextButton.styleFrom(
                 visualDensity: VisualDensity.compact,
-                foregroundColor: AppColors.textMuted,
+                foregroundColor: context.appTextMuted,
               ),
             ),
           ),

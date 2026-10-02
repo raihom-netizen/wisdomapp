@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import '../theme/theme_context.dart';
 
 import '../constants/finance_category_visuals.dart';
-import '../theme/app_colors.dart';
 
 /// Linha de ícones rápidos (estilo Compromissos): um toque preenche categoria + descrição sugerida.
 class FinanceQuickCategoryRow extends StatelessWidget {
@@ -20,7 +20,8 @@ class FinanceQuickCategoryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final presets = isIncome ? kFinanceIncomeQuickPresets : kFinanceExpenseQuickPresets;
+    final presets =
+        isIncome ? kFinanceIncomeQuickPresets : kFinanceExpenseQuickPresets;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -29,11 +30,11 @@ class FinanceQuickCategoryRow extends StatelessWidget {
           style: TextStyle(
             fontSize: 11.5,
             fontWeight: FontWeight.w700,
-            color: Colors.grey.shade700,
+            color: context.appTextSecondary,
             letterSpacing: 0.2,
           ),
         ),
-        const SizedBox(height: 5),
+        SizedBox(height: 5),
         Wrap(
           spacing: 6,
           runSpacing: 6,
@@ -41,7 +42,8 @@ class FinanceQuickCategoryRow extends StatelessWidget {
             for (final p in presets)
               _QuickChip(
                 preset: p,
-                selected: currentCategory.trim().toLowerCase() == p.categoryName.toLowerCase(),
+                selected: currentCategory.trim().toLowerCase() ==
+                    p.categoryName.toLowerCase(),
                 onTap: enabled ? () => onPick(p) : null,
               ),
           ],
@@ -70,6 +72,7 @@ class _QuickChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = context.isDarkMode;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -80,13 +83,25 @@ class _QuickChip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
             color: selected
-                ? preset.color.withValues(alpha: 0.18)
-                : preset.color.withValues(alpha: 0.08),
+                ? preset.color.withValues(alpha: dark ? 0.28 : 0.18)
+                : preset.color.withValues(alpha: dark ? 0.14 : 0.08),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: selected ? preset.color.withValues(alpha: 0.85) : preset.color.withValues(alpha: 0.25),
+              color: selected
+                  ? preset.color.withValues(alpha: 0.95)
+                  : preset.color.withValues(alpha: dark ? 0.55 : 0.25),
               width: selected ? 1.5 : 1,
             ),
+            boxShadow: dark
+                ? [
+                    BoxShadow(
+                      color: preset.color
+                          .withValues(alpha: selected ? 0.32 : 0.14),
+                      blurRadius: selected ? 12 : 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -107,13 +122,13 @@ class _QuickChip extends StatelessWidget {
                 ),
                 child: Icon(preset.icon, color: Colors.white, size: 16),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               Text(
                 _shortLabel,
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 12.5,
-                  color: AppColors.textPrimary,
+                  color: context.appTextPrimary,
                   height: 1.1,
                 ),
               ),

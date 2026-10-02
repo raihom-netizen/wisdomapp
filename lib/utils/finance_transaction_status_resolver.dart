@@ -23,7 +23,18 @@ abstract final class FinanceTransactionStatusResolver {
 
   /// Compara data e horário completos. Usado para lançamentos manuais, onde o usuário
   /// pode escolher uma hora específica no dia.
-  static String resolveByDateTime(DateTime date, {String? preferredStatus}) {
+  ///
+  /// [respeitarPendente]: o usuário ESCOLHEU «Pendente» na tela — vale a
+  /// escolha dele, mesmo com data de hoje/agora ou passada (bug de 30/09/2026:
+  /// «hoje às 11:41» virava pago porque, ao confirmar, 11:41 já tinha passado).
+  /// Sem a flag (parcelas antigas de um parcelado, rotinas automáticas), a
+  /// regra antiga continua: data passada entra como paga.
+  static String resolveByDateTime(
+    DateTime date, {
+    String? preferredStatus,
+    bool respeitarPendente = false,
+  }) {
+    if (respeitarPendente && preferredStatus == 'pending') return 'pending';
     final now = DateTime.now();
     if (date.isBefore(now)) return 'paid';
     return preferredStatus ?? 'pending';

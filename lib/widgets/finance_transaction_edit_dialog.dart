@@ -1,39 +1,65 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide showDatePicker;
+import '../theme/theme_context.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
-import '../constants/date_time_formats.dart';
 import '../constants/currency_formats.dart';
 import '../constants/finance_category_visuals.dart';
 import '../models/finance_account.dart';
 import '../models/user_profile.dart';
 import '../screens/anexo_viewer_screen.dart';
-import '../utils/receipt_attachment_utils.dart';
 import '../services/finance_accounts_service.dart';
-import '../services/functions_service.dart';
 import '../services/goal_deposit_service.dart';
+import '../services/functions_service.dart';
 import '../services/logs_service.dart';
 import '../services/transaction_save_service.dart';
 import '../services/user_categories_service.dart';
 import '../theme/app_colors.dart';
+import '../widgets/modern_module_ui.dart';
 import '../utils/finance_line_opening.dart';
+import '../utils/finance_goal_tx_delete.dart';
 import '../utils/finance_transaction_datetime.dart';
 import '../utils/firestore_user_doc_id.dart';
+import '../utils/date_picker_a11y.dart';
+import '../utils/fifty_two_weeks_plan.dart';
 import '../utils/premium_upgrade.dart';
+import '../utils/receipt_attachment_utils.dart';
 import 'brl_amount_text_field.dart';
 import 'fast_text_field.dart';
+import 'finance_calendar_color_picker.dart';
 import 'finance_category_picker.dart';
 import 'finance_premium_ui.dart';
 import 'finance_transfer_bottom_sheet.dart';
+import 'goal_deposit_ui.dart';
 
 typedef FinanceTxEditOnSaved = void Function(
   String docId,
   Map<String, dynamic> patch,
   DateTime effectiveDate,
 );
+
+typedef FinanceTxEditOnDeleted = void Function(
+  String docId,
+  DateTime? effectiveDate,
+);
+
+/// Copia o conteúdo inteiro do campo — mesmo botão usado em outros
+/// formulários do app, não depende de selecionar texto na mão (toque e
+/// segure no iPhone).
+Future<void> _copyWholeField(
+    BuildContext context, TextEditingController ctrl) async {
+  final text = ctrl.text;
+  if (text.isEmpty) return;
+  await Clipboard.setData(ClipboardData(text: text));
+  if (context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Copiado.'), duration: Duration(seconds: 1)),
+    );
+  }
+}
 
 /// Modal premium de edição — verde (receita) / vermelho (despesa), igual ao Financeiro.
 Future<bool> showFinanceTransactionEditDialog({
@@ -46,6 +72,7 @@ Future<bool> showFinanceTransactionEditDialog({
   List<FinanceAccount>? financeAccountsPreloaded,
   String logModulo = 'Financeiro',
   FinanceTxEditOnSaved? onSaved,
+  FinanceTxEditOnDeleted? onDeleted,
 }) async {
   if (!profile.hasActiveLicense) {
     mostrarAvisoSeLicencaInativa(context, profile);
@@ -77,7 +104,8 @@ Future<bool> showFinanceTransactionEditDialog({
   final amountCtrl = TextEditingController(
     text: CurrencyFormats.formatBRLInput((current['amount'] ?? 0).toDouble()),
   );
-  final descCtrl = TextEditingController(text: (current['description'] ?? '').toString());
+  final descCtrl =
+      TextEditingController(text: (current['description'] ?? '').toString());
   final currentCat = (current['category'] ?? '').toString().trim();
 
   String pickFirstSelectable() {
@@ -87,21 +115,34 @@ Future<bool> showFinanceTransactionEditDialog({
 
   late String selectedCategory;
   if (currentCat.isNotEmpty) {
-    final match = categoryList.where((c) => c.toLowerCase() == currentCat.toLowerCase()).toList();
+    final match = categoryList
+        .where((c) => c.toLowerCase() == currentCat.toLowerCase())
+        .toList();
     selectedCategory = match.isNotEmpty ? match.first : '__outra__';
   } else {
     selectedCategory = pickFirstSelectable();
   }
 
   final catCtrl = TextEditingController(
-    text: currentCat.isNotEmpty ? currentCat : (selectedCategory == '__outra__' ? '' : selectedCategory),
+    text: currentCat.isNotEmpty
+        ? currentCat
+        : (selectedCategory == '__outra__' ? '' : selectedCategory),
   );
   String status = (current['status'] ?? 'paid').toString();
-  DateTime date = (current['date'] is Timestamp) ? (current['date'] as Timestamp).toDate() : DateTime.now();
-  final fromOpenFinance = FinanceTransactionDatetime.isOpenFinanceBacked(current);
+  // Calendário: reflete o gravado — só ligado com opt-in explícito
+  // (ausente = desligado; regra do dono 01/10/2026).
+  var addToCalendar = status == 'pending' &&
+      FinanceCalendarColorPicker.calendarioLigado(current);
+  String? calendarColorHex = current['calendarColorHex']?.toString();
+  DateTime date = (current['date'] is Timestamp)
+      ? (current['date'] as Timestamp).toDate()
+      : DateTime.now();
+  final fromOpenFinance =
+      FinanceTransactionDatetime.isOpenFinanceBacked(current);
 
   final receipt = Map<String, dynamic>.from(current['receipt'] ?? {});
-  final hasExistingReceiptLink = ReceiptAttachmentUtils.hasViewableReceipt(receipt);
+  final hasExistingReceiptLink =
+      ReceiptAttachmentUtils.hasViewableReceipt(receipt);
   var removeReceipt = false;
   Uint8List? newReceiptBytes;
   var newReceiptName = '';
@@ -113,33 +154,75 @@ Future<bool> showFinanceTransactionEditDialog({
   var selectedFinanceAccountId = rawAid.isEmpty ? null : rawAid;
   if (type == 'expense' &&
       financeAccounts.isNotEmpty &&
-      (selectedFinanceAccountId == null || selectedFinanceAccountId.trim().isEmpty)) {
+      (selectedFinanceAccountId == null ||
+          selectedFinanceAccountId.trim().isEmpty)) {
     selectedFinanceAccountId = financeAccounts.first.id;
   }
   if (!context.mounted) return false;
+
+  final goalIdFromTx = (current['goalId'] ?? '').toString().trim();
+  final metaEdit = type == 'income' && goalIdFromTx.isNotEmpty
+      ? await _loadGoalFinanceEditContext(
+          fsUid: fsUid,
+          goalId: goalIdFromTx,
+          txId: docId,
+        )
+      : null;
+  if (!context.mounted) return false;
+
+  var metaPreviewWeeks = metaEdit?.initialWeeks ?? const <int>[];
+  if (metaEdit != null && metaEdit.is52) {
+    final initialAmount = CurrencyFormats.parseBRLInput(amountCtrl.text) ?? 0;
+    metaPreviewWeeks = computeGoalDepositPreviewWeeks(
+      goalData: metaEdit.goalData,
+      schedule: metaEdit.schedule,
+      oldWeeks: metaEdit.initialWeeks,
+      amount: initialAmount,
+    );
+  }
+
+  void recalcMetaWeeks(void Function(void Function()) setState) {
+    if (metaEdit == null || !metaEdit.is52) return;
+    final amount = CurrencyFormats.parseBRLInput(amountCtrl.text) ?? 0;
+    metaPreviewWeeks = computeGoalDepositPreviewWeeks(
+      goalData: metaEdit.goalData,
+      schedule: metaEdit.schedule,
+      oldWeeks: metaEdit.initialWeeks,
+      amount: amount,
+    );
+    setState(() {});
+  }
 
   final ok = await showDialog<bool>(
     context: context,
     barrierColor: AppColors.deepBlueDark.withValues(alpha: 0.55),
     builder: (ctx) => StatefulBuilder(
       builder: (context, setState) {
-        final hasExistingReceipt = hasExistingReceiptLink && !removeReceipt && newReceiptBytes == null;
+        final hasExistingReceipt =
+            hasExistingReceiptLink && !removeReceipt && newReceiptBytes == null;
         final hasNewReceipt = newReceiptBytes != null;
         final showComprovante = profile.temAcessoPremium;
         final orphan = selectedFinanceAccountId != null &&
             selectedFinanceAccountId!.isNotEmpty &&
             !financeAccounts.any((a) => a.id == selectedFinanceAccountId);
-        final editAccent = type == 'income' ? AppColors.financeReceita : AppColors.financeDespesa;
+        final editAccent = type == 'income'
+            ? AppColors.financeReceita
+            : AppColors.financeDespesa;
 
         return Dialog(
           backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.9),
+            constraints:
+                BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.9),
             child: DecoratedBox(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(24),
-                gradient: const LinearGradient(colors: [Color(0xFFF8FAFC), Colors.white]),
+                gradient: LinearGradient(colors: [
+                  ctx.appChipIdleBg,
+                  ModernModuleUI.cardBg(ctx),
+                ]),
                 boxShadow: [
                   BoxShadow(
                     color: AppColors.deepBlueDark.withValues(alpha: 0.22),
@@ -156,9 +239,13 @@ Future<bool> showFinanceTransactionEditDialog({
                     padding: const EdgeInsets.fromLTRB(18, 16, 12, 14),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [editAccent, Color.lerp(editAccent, AppColors.accent, 0.4)!],
+                        colors: [
+                          editAccent,
+                          Color.lerp(editAccent, AppColors.accent, 0.4)!
+                        ],
                       ),
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                      borderRadius:
+                          const BorderRadius.vertical(top: Radius.circular(24)),
                     ),
                     child: Row(
                       children: [
@@ -169,21 +256,28 @@ Future<bool> showFinanceTransactionEditDialog({
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Icon(
-                            type == 'income' ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
+                            type == 'income'
+                                ? Icons.arrow_downward_rounded
+                                : Icons.arrow_upward_rounded,
                             color: Colors.white,
                             size: 22,
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            type == 'income' ? 'Editar Receita' : 'Editar Despesa',
-                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900),
+                            type == 'income'
+                                ? 'Editar Receita'
+                                : 'Editar Despesa',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900),
                           ),
                         ),
                         IconButton(
                           onPressed: () => Navigator.pop(ctx, false),
-                          icon: const Icon(Icons.close_rounded, color: Colors.white),
+                          icon: Icon(Icons.close_rounded, color: Colors.white),
                         ),
                       ],
                     ),
@@ -195,33 +289,46 @@ Future<bool> showFinanceTransactionEditDialog({
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 10),
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(18),
                               gradient: LinearGradient(
-                                colors: [editAccent.withValues(alpha: 0.12), Colors.white],
+                                colors: [
+                                  editAccent.withValues(alpha: 0.12),
+                                  Colors.white
+                                ],
                               ),
-                              border: Border.all(color: editAccent.withValues(alpha: 0.28)),
+                              border: Border.all(
+                                  color: editAccent.withValues(alpha: 0.28)),
                             ),
                             child: BrlAmountTextField(
                               controller: amountCtrl,
+                              onChanged: metaEdit?.is52 == true
+                                  ? (_) => recalcMetaWeeks(setState)
+                                  : null,
                               decoration: InputDecoration(
                                 labelText: 'Valor',
                                 isDense: true,
                                 border: InputBorder.none,
-                                labelStyle: TextStyle(fontWeight: FontWeight.w800, color: editAccent),
+                                labelStyle: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    color: editAccent),
                               ),
                             ),
                           ),
-                          const SizedBox(height: 12),
+                          SizedBox(height: 12),
                           Align(
                             alignment: Alignment.centerLeft,
                             child: Text(
                               'Categoria',
-                              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Colors.grey.shade800),
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                  color: context.appTextPrimary),
                             ),
                           ),
-                          const SizedBox(height: 6),
+                          SizedBox(height: 6),
                           Material(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(14),
@@ -232,19 +339,25 @@ Future<bool> showFinanceTransactionEditDialog({
                                   context: context,
                                   uid: fsUid,
                                   isIncome: type == 'income',
-                                  initialQuery:
-                                      selectedCategory == '__outra__' ? catCtrl.text.trim() : selectedCategory,
+                                  initialQuery: selectedCategory == '__outra__'
+                                      ? catCtrl.text.trim()
+                                      : selectedCategory,
                                 );
                                 if (picked == null || !ctx.mounted) return;
                                 if (picked == '__outra__') {
-                                  setState(() => selectedCategory = '__outra__');
+                                  setState(
+                                      () => selectedCategory = '__outra__');
                                   return;
                                 }
-                                final reloaded = await UserCategoriesService().load(fsUid);
+                                final reloaded =
+                                    await UserCategoriesService().load(fsUid);
                                 if (!ctx.mounted) return;
                                 setState(() {
-                                  categoryList = UserCategoriesService.sortedWithoutIncluirNova(
-                                    type == 'income' ? reloaded.income : reloaded.expense,
+                                  categoryList = UserCategoriesService
+                                      .sortedWithoutIncluirNova(
+                                    type == 'income'
+                                        ? reloaded.income
+                                        : reloaded.expense,
                                   );
                                   selectedCategory = picked;
                                   catCtrl.text = picked;
@@ -253,33 +366,44 @@ Future<bool> showFinanceTransactionEditDialog({
                               child: Ink(
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.22)),
-                                  color: const Color(0xFFF8FAFC),
+                                  border: Border.all(
+                                      color: AppColors.primary
+                                          .withValues(alpha: 0.22)),
+                                  color: ctx.appChipIdleBg,
                                 ),
                                 child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 12),
                                   child: Row(
                                     children: [
                                       Builder(
                                         builder: (_) {
-                                          final vis = selectedCategory != '__outra__'
-                                              ? financeCategoryVisualFor(selectedCategory, isIncome: type == 'income')
+                                          final vis = selectedCategory !=
+                                                  '__outra__'
+                                              ? financeCategoryVisualFor(
+                                                  selectedCategory,
+                                                  isIncome: type == 'income')
                                               : financeCategoryVisualFor(
-                                                  catCtrl.text.trim().isEmpty ? 'Outros' : catCtrl.text.trim(),
+                                                  catCtrl.text.trim().isEmpty
+                                                      ? 'Outros'
+                                                      : catCtrl.text.trim(),
                                                   isIncome: type == 'income',
                                                 );
                                           return Container(
                                             width: 38,
                                             height: 38,
                                             decoration: BoxDecoration(
-                                              color: vis.color.withValues(alpha: 0.14),
-                                              borderRadius: BorderRadius.circular(10),
+                                              color: vis.color
+                                                  .withValues(alpha: 0.14),
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
                                             ),
-                                            child: Icon(vis.icon, color: vis.color, size: 22),
+                                            child: Icon(vis.icon,
+                                                color: vis.color, size: 22),
                                           );
                                         },
                                       ),
-                                      const SizedBox(width: 10),
+                                      SizedBox(width: 10),
                                       Expanded(
                                         child: Text(
                                           selectedCategory == '__outra__'
@@ -289,14 +413,16 @@ Future<bool> showFinanceTransactionEditDialog({
                                               : selectedCategory,
                                           maxLines: 2,
                                           overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontWeight: FontWeight.w800,
                                             fontSize: 14,
-                                            color: Color(0xFF0F172A),
+                                            color: context.appTextPrimary,
                                           ),
                                         ),
                                       ),
-                                      Icon(Icons.unfold_more_rounded, color: Colors.grey.shade600, size: 22),
+                                      Icon(Icons.unfold_more_rounded,
+                                          color: context.appTextSecondary,
+                                          size: 22),
                                     ],
                                   ),
                                 ),
@@ -304,20 +430,46 @@ Future<bool> showFinanceTransactionEditDialog({
                             ),
                           ),
                           if (selectedCategory == '__outra__') ...[
-                            const SizedBox(height: 8),
+                            SizedBox(height: 8),
                             FastTextField(
                               controller: catCtrl,
-                              decoration: const InputDecoration(
+                              decoration: InputDecoration(
                                 labelText: 'Nome da categoria',
-                                border: OutlineInputBorder(),
+                                border: const OutlineInputBorder(),
                                 isDense: true,
+                                suffixIcon: IconButton(
+                                  tooltip: 'Copiar',
+                                  icon: const Icon(Icons.copy_rounded,
+                                      size: 18),
+                                  color: AppColors.primary,
+                                  onPressed: () =>
+                                      _copyWholeField(context, catCtrl),
+                                  splashRadius: 22,
+                                  constraints: const BoxConstraints(
+                                      minWidth: 44, minHeight: 44),
+                                ),
                               ),
                               textCapitalization: TextCapitalization.words,
                             ),
                           ],
-                          const SizedBox(height: 12),
-                          FastTextField(controller: descCtrl, decoration: const InputDecoration(labelText: 'Descrição')),
-                          const SizedBox(height: 10),
+                          SizedBox(height: 12),
+                          FastTextField(
+                              controller: descCtrl,
+                              decoration: InputDecoration(
+                                labelText: 'Descrição',
+                                suffixIcon: IconButton(
+                                  tooltip: 'Copiar',
+                                  icon: const Icon(Icons.copy_rounded,
+                                      size: 18),
+                                  color: AppColors.primary,
+                                  onPressed: () =>
+                                      _copyWholeField(context, descCtrl),
+                                  splashRadius: 22,
+                                  constraints: const BoxConstraints(
+                                      minWidth: 44, minHeight: 44),
+                                ),
+                              )),
+                          SizedBox(height: 10),
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -326,24 +478,28 @@ Future<bool> showFinanceTransactionEditDialog({
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      fromOpenFinance ? 'Data e horário (Open Finance)' : 'Data do lançamento',
+                                      fromOpenFinance
+                                          ? 'Data e horário (Open Finance)'
+                                          : 'Data e horário do lançamento',
                                       style: TextStyle(
                                         fontWeight: FontWeight.w700,
                                         fontSize: 13,
-                                        color: Colors.grey.shade800,
+                                        color: context.appTextPrimary,
                                       ),
                                     ),
-                                    const SizedBox(height: 4),
+                                    SizedBox(height: 4),
                                     Text(
-                                      '${DateFormat('dd/MM/yyyy', 'pt_BR').format(date)} · ${DateTimeFormats.formatTimeOnly(date)}',
+                                      '${DateFormat('dd/MM/yyyy', 'pt_BR').format(date)} · ${DateFormat('HH:mm', 'pt_BR').format(date)}',
                                       style: const TextStyle(fontSize: 14),
                                     ),
                                   ],
                                 ),
                               ),
                               if (!fromOpenFinance)
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 4,
+                                  alignment: WrapAlignment.end,
                                   children: [
                                     TextButton(
                                       onPressed: () async {
@@ -355,59 +511,207 @@ Future<bool> showFinanceTransactionEditDialog({
                                         );
                                         if (picked != null) {
                                           setState(() => date =
-                                              FinanceTransactionDatetime.mergeCalendarDayWithExistingTime(picked, date));
+                                              FinanceTransactionDatetime
+                                                  .mergeCalendarDayWithExistingTime(
+                                                      picked, date));
                                         }
                                       },
-                                      child: const Text('Alterar dia'),
+                                      child: Text('Alterar dia'),
                                     ),
                                     TextButton(
                                       onPressed: () async {
                                         final picked = await showTimePicker(
                                           context: context,
-                                          initialTime: TimeOfDay.fromDateTime(date),
+                                          initialTime: TimeOfDay(
+                                              hour: date.hour,
+                                              minute: date.minute),
+                                          helpText: 'Horário do lançamento',
+                                          hourLabelText: 'Hora',
+                                          minuteLabelText: 'Minuto',
+                                          builder: (context, child) {
+                                            return MediaQuery(
+                                              data: MediaQuery.of(context)
+                                                  .copyWith(
+                                                      alwaysUse24HourFormat:
+                                                          true),
+                                              child: child ??
+                                                  const SizedBox.shrink(),
+                                            );
+                                          },
                                         );
                                         if (picked != null) {
-                                          setState(() => date = FinanceTransactionDatetime.mergeCalendarDayWithTime(
-                                                DateTime(date.year, date.month, date.day),
-                                                picked,
+                                          setState(() =>
+                                              date = FinanceTransactionDatetime
+                                                  .mergeCalendarDayWithTimeOfDay(
+                                                date,
+                                                picked.hour,
+                                                picked.minute,
                                               ));
                                         }
                                       },
-                                      child: const Text('Alterar hora'),
+                                      child: Text('Alterar hora'),
                                     ),
                                   ],
                                 ),
                             ],
                           ),
-                          const SizedBox(height: 10),
+                          SizedBox(height: 10),
                           DropdownButtonFormField<String>(
                             key: ValueKey<String>(status),
                             initialValue: status,
                             decoration: financePremiumDropdownDecoration(
+                              context,
                               label: 'Status',
                               prefixIcon: Icons.flag_rounded,
                               accent: editAccent,
                             ),
                             items: const [
-                              DropdownMenuItem(value: 'paid', child: Text('Pago')),
-                              DropdownMenuItem(value: 'pending', child: Text('Pendente')),
+                              DropdownMenuItem(
+                                  value: 'paid', child: Text('Pago')),
+                              DropdownMenuItem(
+                                  value: 'pending', child: Text('Pendente')),
                             ],
-                            onChanged: (v) => setState(() => status = v ?? 'paid'),
+                            onChanged: (v) => setState(() {
+                              status = v ?? 'paid';
+                            }),
                           ),
-                          const SizedBox(height: 12),
-                          const Text('Conta', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-                          const SizedBox(height: 6),
+                          if (status == 'pending') ...[
+                            SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: editAccent.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: editAccent.withValues(alpha: 0.28),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    addToCalendar
+                                        ? Icons.event_available_rounded
+                                        : Icons.event_busy_rounded,
+                                    size: 20,
+                                    color: editAccent,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Mostrar no calendário',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w800,
+                                            color: context.appTextPrimary,
+                                          ),
+                                        ),
+                                        Text(
+                                          'Agenda/Escala',
+                                          style: TextStyle(
+                                            fontSize: 11.5,
+                                            color: context.appTextSecondary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Switch.adaptive(
+                                    value: addToCalendar,
+                                    activeThumbColor: editAccent,
+                                    activeTrackColor:
+                                        editAccent.withValues(alpha: 0.5),
+                                    onChanged: (v) async {
+                                      setState(() => addToCalendar = v);
+                                      if (!v) return;
+                                      final hex = await FinanceCalendarColorPicker
+                                          .escolherAoAtivar(
+                                        context,
+                                        isIncome: type == 'income',
+                                        currentHex: calendarColorHex,
+                                      );
+                                      if (!context.mounted) return;
+                                      setState(() => calendarColorHex = hex);
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (addToCalendar) ...[
+                              SizedBox(height: 10),
+                              Builder(builder: (ctx) {
+                                final hex = (calendarColorHex ??
+                                        FinanceCalendarColorPicker
+                                            .defaultHexFor(type == 'income'))
+                                    .replaceFirst('#', '')
+                                    .replaceFirst(
+                                        RegExp(r'^0x', caseSensitive: false),
+                                        '');
+                                final six = hex.length > 6
+                                    ? hex.substring(hex.length - 6)
+                                    : hex.padLeft(6, '0');
+                                final bg =
+                                    Color(int.parse('FF$six', radix: 16));
+                                return Material(
+                                  color: bg,
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(14),
+                                    onTap: () async {
+                                      final picked =
+                                          await FinanceCalendarColorPicker.show(
+                                        context,
+                                        isIncome: type == 'income',
+                                        currentHex: calendarColorHex,
+                                      );
+                                      if (picked != null) {
+                                        setState(
+                                            () => calendarColorHex = picked);
+                                      }
+                                    },
+                                    child: const SizedBox(
+                                      height: 44,
+                                      width: double.infinity,
+                                      child: Center(
+                                        child: Text(
+                                          'Cor no calendário',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w900,
+                                            fontSize: 13.5,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ],
+                          ],
+                          SizedBox(height: 12),
+                          Text('Conta',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w700, fontSize: 13)),
+                          SizedBox(height: 6),
                           if (financeAccounts.isEmpty)
                             Text(
                               'Cadastre ao menos uma conta em Financeiro → Bancos e cartões.',
-                              style: TextStyle(fontSize: 12, color: Colors.grey.shade700, height: 1.35),
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: context.appTextSecondary,
+                                  height: 1.35),
                             )
                           else
                             DropdownButtonFormField<String?>(
                               key: ValueKey<String?>(selectedFinanceAccountId),
                               initialValue: selectedFinanceAccountId,
                               decoration: financePremiumDropdownDecoration(
-                                label: 'Conta do lançamento',
+                              context,
+                              label: 'Conta do lançamento',
                                 prefixIcon: Icons.account_balance_rounded,
                                 accent: editAccent,
                               ),
@@ -415,16 +719,20 @@ Future<bool> showFinanceTransactionEditDialog({
                                 if (type == 'income')
                                   const DropdownMenuItem<String?>(
                                     value: null,
-                                    child: Text('Sem conta vinculada (opcional)'),
+                                    child:
+                                        Text('Sem conta vinculada (opcional)'),
                                   ),
                                 ...financeAccounts.map(
                                   (a) => DropdownMenuItem<String?>(
                                     value: a.id,
-                                    child: Text(a.displayName, overflow: TextOverflow.ellipsis),
+                                    child: Text(a.displayName,
+                                        overflow: TextOverflow.ellipsis),
                                   ),
                                 ),
                                 if (orphan)
-                                  DropdownMenuItem<String?>(value: rawAid, child: const Text('Manter vínculo antigo')),
+                                  DropdownMenuItem<String?>(
+                                      value: rawAid,
+                                      child: Text('Manter vínculo antigo')),
                               ],
                               onChanged: (v) => setState(() {
                                 selectedFinanceAccountId = v;
@@ -444,38 +752,90 @@ Future<bool> showFinanceTransactionEditDialog({
                                 }
                               }),
                             ),
+                          if (metaEdit != null) ...[
+                            SizedBox(height: 12),
+                            if (metaEdit.is52)
+                              GoalDepositWeeksPreviewBanner(
+                                oldWeeks: metaEdit.initialWeeks,
+                                previewWeeks: metaPreviewWeeks,
+                              )
+                            else
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: GoalDepositUi.green
+                                      .withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: GoalDepositUi.green
+                                        .withValues(alpha: 0.22),
+                                  ),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Icon(Icons.savings_rounded,
+                                        size: 18,
+                                        color: GoalDepositUi.greenDark),
+                                    SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Lançamento vinculado à meta «${metaEdit.goalTitle}». '
+                                        'Ao salvar, o depósito na meta será atualizado.',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: GoalDepositUi.greenDark,
+                                          height: 1.35,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
                           if (showComprovante) ...[
-                            const SizedBox(height: 16),
+                            SizedBox(height: 16),
                             const Divider(),
-                            const Text('Comprovante', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                            const SizedBox(height: 8),
+                            Text('Comprovante',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w700, fontSize: 14)),
+                            SizedBox(height: 8),
                             if (hasExistingReceipt)
                               Row(
                                 children: [
                                   Expanded(
                                     child: OutlinedButton.icon(
-                                      icon: const Icon(Icons.visibility_rounded, size: 18),
-                                      label: const Text('Ver anexo'),
+                                      icon: Icon(Icons.visibility_rounded,
+                                          size: 18),
+                                      label: Text('Ver anexo'),
                                       onPressed: () async {
                                         if (!hasExistingReceiptLink) return;
                                         await Navigator.of(context).push(
                                           MaterialPageRoute<void>(
                                             builder: (_) => AnexoViewerScreen(
-                                              url: ReceiptAttachmentUtils.viewUrl(receipt),
-                                              fileName: ReceiptAttachmentUtils.fileName(receipt),
-                                              storagePath: ReceiptAttachmentUtils.storagePath(receipt),
-                                              mimeType: ReceiptAttachmentUtils.mimeType(receipt),
+                                              url: ReceiptAttachmentUtils
+                                                  .viewUrl(receipt),
+                                              fileName: ReceiptAttachmentUtils
+                                                  .fileName(receipt),
+                                              storagePath:
+                                                  ReceiptAttachmentUtils
+                                                      .storagePath(receipt),
+                                              mimeType: ReceiptAttachmentUtils
+                                                  .mimeType(receipt),
                                             ),
                                           ),
                                         );
                                       },
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
+                                  SizedBox(width: 8),
                                   OutlinedButton.icon(
-                                    icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                                    label: const Text('Remover'),
-                                    style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+                                    icon: Icon(Icons.delete_outline_rounded,
+                                        size: 18),
+                                    label: Text('Remover'),
+                                    style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.red),
                                     onPressed: () => setState(() {
                                       removeReceipt = true;
                                       newReceiptBytes = null;
@@ -491,10 +851,13 @@ Future<bool> showFinanceTransactionEditDialog({
                                 size: 18,
                               ),
                               label: Text(
-                                hasExistingReceipt || hasNewReceipt ? 'Trocar comprovante' : 'Anexar comprovante',
+                                hasExistingReceipt || hasNewReceipt
+                                    ? 'Trocar comprovante'
+                                    : 'Anexar comprovante',
                               ),
                               onPressed: () async {
-                                final picked = await ReceiptAttachmentUtils.pickValidated(context);
+                                final picked = await ReceiptAttachmentUtils
+                                    .pickValidated(context);
                                 if (picked == null) return;
                                 setState(() {
                                   removeReceipt = false;
@@ -510,7 +873,73 @@ Future<bool> showFinanceTransactionEditDialog({
                     ),
                   ),
                   Padding(
-                    padding: EdgeInsets.fromLTRB(16, 8, 16, 12 + MediaQuery.paddingOf(ctx).bottom),
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                    child: Align(
+                      alignment: Alignment.center,
+                      child: TextButton.icon(
+                        icon: Icon(Icons.delete_outline_rounded, size: 20),
+                        label: Text('Excluir lançamento'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: const Color(0xFFEF4444),
+                        ),
+                        onPressed: () async {
+                          final metaInfo =
+                              await GoalDepositService.linkedInfoForTransaction(
+                            uid: uid,
+                            txId: docId,
+                            txData: current,
+                          );
+                          if (!ctx.mounted) return;
+                          final ok = await confirmFinanceTransactionDelete(
+                            context: ctx,
+                            metaInfo: metaInfo,
+                          );
+                          if (ok != true || !ctx.mounted) return;
+                          final txCol = FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(fsUid)
+                              .collection('transactions');
+                          await deleteFinanceTransactionRecord(
+                            uid: uid,
+                            docId: docId,
+                            txData: current,
+                            txCol: txCol,
+                          );
+                          final effectiveDate =
+                              FinanceLineOpening.effectiveDateTimeFromMap(
+                                      current) ??
+                                  (current['date'] as Timestamp?)?.toDate();
+                          final typeLog =
+                              (current['type'] ?? 'expense').toString();
+                          final amountLog = (current['amount'] ?? 0).toDouble();
+                          final categoryLog =
+                              (current['category'] ?? '').toString();
+                          await LogsService().saveLog(
+                            modulo: logModulo,
+                            acao: typeLog == 'income'
+                                ? 'Excluiu receita'
+                                : 'Excluiu despesa',
+                            detalhes:
+                                '${categoryLog.isEmpty ? 'Categoria' : categoryLog} • ${CurrencyFormats.formatBRL(amountLog)}',
+                          );
+                          onDeleted?.call(docId, effectiveDate);
+                          if (ctx.mounted) {
+                            Navigator.pop(ctx, false);
+                            final extra = metaInfo?.hasWeeksImpact == true
+                                ? ' Semanas da meta atualizadas.'
+                                : '';
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                  content: Text('Lançamento excluído.$extra')),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(
+                        16, 8, 16, 12 + MediaQuery.paddingOf(ctx).bottom),
                     child: Row(
                       children: [
                         Expanded(
@@ -518,20 +947,29 @@ Future<bool> showFinanceTransactionEditDialog({
                             onPressed: () => Navigator.pop(ctx, false),
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
-                              side: BorderSide(color: editAccent.withValues(alpha: 0.4)),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              side: BorderSide(
+                                  color: editAccent.withValues(alpha: 0.4)),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14)),
                             ),
-                            child: Text('Cancelar', style: TextStyle(fontWeight: FontWeight.w800, color: editAccent)),
+                            child: Text('Cancelar',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    color: editAccent)),
                           ),
                         ),
-                        const SizedBox(width: 10),
+                        SizedBox(width: 10),
                         Expanded(
                           flex: 2,
                           child: DecoratedBox(
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(14),
                               gradient: LinearGradient(
-                                colors: [editAccent, Color.lerp(editAccent, AppColors.secondary, 0.35)!],
+                                colors: [
+                                  editAccent,
+                                  Color.lerp(
+                                      editAccent, AppColors.secondary, 0.35)!
+                                ],
                               ),
                             ),
                             child: FilledButton(
@@ -539,9 +977,13 @@ Future<bool> showFinanceTransactionEditDialog({
                                 if (type == 'expense' &&
                                     financeAccounts.isNotEmpty &&
                                     (selectedFinanceAccountId == null ||
-                                        selectedFinanceAccountId!.trim().isEmpty)) {
+                                        selectedFinanceAccountId!
+                                            .trim()
+                                            .isEmpty)) {
                                   ScaffoldMessenger.of(ctx).showSnackBar(
-                                    const SnackBar(content: Text('Selecione a conta da despesa.')),
+                                    const SnackBar(
+                                        content: Text(
+                                            'Selecione a conta da despesa.')),
                                   );
                                   return;
                                 }
@@ -551,10 +993,14 @@ Future<bool> showFinanceTransactionEditDialog({
                                 backgroundColor: Colors.transparent,
                                 shadowColor: Colors.transparent,
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14)),
                               ),
-                              child: const Text('Salvar', style: TextStyle(fontWeight: FontWeight.w900)),
+                              child: Text('Salvar',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.w900)),
                             ),
                           ),
                         ),
@@ -579,7 +1025,8 @@ Future<bool> showFinanceTransactionEditDialog({
 
   final messenger = ScaffoldMessenger.maybeOf(context);
   final amount = CurrencyFormats.parseBRLInput(amountCtrl.text) ?? 0;
-  var categoryFinal = selectedCategory == '__outra__' ? catCtrl.text.trim() : selectedCategory;
+  var categoryFinal =
+      selectedCategory == '__outra__' ? catCtrl.text.trim() : selectedCategory;
   if (categoryFinal.isEmpty || categoryFinal == incluirNovaCat) {
     categoryFinal = type == 'income' ? 'Receita' : 'Despesa';
   }
@@ -590,19 +1037,33 @@ Future<bool> showFinanceTransactionEditDialog({
     return false;
   }
 
+  // Lançamento que veio do banco (Open Finance) com a categoria trocada: vira
+  // escolha do usuário e, depois de salvar, o app oferece aplicar nos iguais.
+  final categoriaAnterior = (current['category'] ?? '').toString().trim();
+  final veioDoBanco = current['source'] == 'open_finance' ||
+      (current['openFinanceExternalId'] ?? '').toString().trim().isNotEmpty;
+  final categoriaMudou = categoryFinal != categoriaAnterior;
+
   final updateData = <String, dynamic>{
     'amount': amount,
     'category': categoryFinal,
+    if (veioDoBanco && categoriaMudou) 'categoriaOrigem': 'manual',
     'description': descCtrl.text.trim(),
+    // A observação é editada na ficha do lançamento; aqui ela só é
+    // preservada — salvar sem este campo apagaria o que a pessoa escreveu.
+    if ((current['observacao'] ?? '').toString().trim().isNotEmpty)
+      'observacao': current['observacao'],
     'status': status,
-    'date': Timestamp.fromDate(date),
+    'date': Timestamp.fromDate(FinanceTransactionDatetime.withoutSeconds(date)),
     'updatedAt': FieldValue.serverTimestamp(),
   };
   final paidForEffective = status == 'paid'
-      ? (current['paidAt'] is Timestamp ? current['paidAt'] as Timestamp : Timestamp.fromDate(date))
+      ? (current['paidAt'] is Timestamp
+          ? current['paidAt'] as Timestamp
+          : Timestamp.fromDate(date))
       : null;
   updateData['effectiveDate'] = FinanceLineOpening.effectiveTimestampForWrite(
-    date: date,
+    date: FinanceTransactionDatetime.withoutSeconds(date),
     paidAt: paidForEffective,
   );
 
@@ -611,6 +1072,22 @@ Future<bool> showFinanceTransactionEditDialog({
     updateData['financeAccountId'] = FieldValue.delete();
   } else {
     updateData['financeAccountId'] = aid;
+  }
+
+  if (status == 'pending') {
+    updateData['addToCalendar'] = addToCalendar;
+    updateData['hideFromCalendar'] = !addToCalendar;
+    if (addToCalendar &&
+        calendarColorHex != null &&
+        calendarColorHex!.trim().isNotEmpty) {
+      updateData['calendarColorHex'] = calendarColorHex!.trim();
+    } else {
+      updateData['calendarColorHex'] = FieldValue.delete();
+    }
+  } else {
+    updateData['addToCalendar'] = false;
+    updateData['hideFromCalendar'] = FieldValue.delete();
+    updateData['calendarColorHex'] = FieldValue.delete();
   }
 
   if (profile.temAcessoPremium) {
@@ -622,10 +1099,8 @@ Future<bool> showFinanceTransactionEditDialog({
         newReceiptName.isNotEmpty &&
         newReceiptMime != null) {
       try {
-        final fn = FunctionsService();
-        final txPath = 'users/$fsUid/transactions/$docId';
-        await fn.uploadReceiptToStorage(
-          txPath: txPath,
+        await FunctionsService().uploadReceiptToStorage(
+          txPath: 'users/$fsUid/transactions/$docId',
           filename: newReceiptName,
           bytes: newReceiptBytes!,
           mimeType: newReceiptMime!,
@@ -633,15 +1108,17 @@ Future<bool> showFinanceTransactionEditDialog({
         updateData['hasReceipt'] = true;
       } catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao anexar comprovante: $e')));
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Erro ao anexar comprovante: $e')));
         }
       }
     }
   }
 
   try {
-    // Local primeiro: a edição já vale no cache; não espera o servidor
-    // confirmar para fechar e atualizar a lista/saldos.
+    // Local primeiro (WISDOMAPP 01/10/2026): a edição já vale no cache; não
+    // espera o servidor confirmar para fechar e atualizar a lista/saldos.
+    // Sem Finance Pro: não há quitação «só de controle» (baixaSemSaldo).
     await TransactionSaveService.writeLocalFirst(
       () => FirebaseFirestore.instance
           .collection('users')
@@ -665,19 +1142,30 @@ Future<bool> showFinanceTransactionEditDialog({
         ).catchError((_) {}),
       );
     }
-    final effectiveDate = date;
-    onSaved?.call(docId, {
-      'type': type,
-      'amount': amount,
-      'category': categoryFinal,
-      'description': descCtrl.text.trim(),
-      'status': status,
-      'date': Timestamp.fromDate(date),
-      'financeAccountId': aid,
-    }, effectiveDate);
+    final effectiveDate = FinanceTransactionDatetime.withoutSeconds(date);
+    onSaved?.call(
+        docId,
+        {
+          'type': type,
+          'amount': amount,
+          'category': categoryFinal,
+          'description': descCtrl.text.trim(),
+          'status': status,
+          'date': Timestamp.fromDate(effectiveDate),
+          'financeAccountId': aid,
+          'addToCalendar': status == 'pending' && addToCalendar,
+          'hideFromCalendar': status == 'pending' && !addToCalendar,
+          if (status == 'pending' &&
+              addToCalendar &&
+              calendarColorHex != null &&
+              calendarColorHex!.trim().isNotEmpty)
+            'calendarColorHex': calendarColorHex!.trim(),
+        },
+        effectiveDate);
     if (context.mounted) {
       HapticFeedback.lightImpact();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lançamento atualizado.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Text('Lançamento atualizado.')));
     }
     unawaited(
       LogsService()
@@ -703,5 +1191,64 @@ Future<bool> showFinanceTransactionEditDialog({
     descCtrl.dispose();
     catCtrl.dispose();
     return false;
+  }
+}
+
+class _GoalFinanceEditContext {
+  const _GoalFinanceEditContext({
+    required this.is52,
+    required this.goalData,
+    required this.schedule,
+    required this.initialWeeks,
+    required this.goalTitle,
+  });
+
+  final bool is52;
+  final Map<String, dynamic> goalData;
+  final List<FiftyTwoWeeksWeekEntry> schedule;
+  final List<int> initialWeeks;
+  final String goalTitle;
+}
+
+Future<_GoalFinanceEditContext?> _loadGoalFinanceEditContext({
+  required String fsUid,
+  required String goalId,
+  required String txId,
+}) async {
+  try {
+    final goalRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(fsUid)
+        .collection('goals')
+        .doc(goalId);
+    final goalSnap = await goalRef.get();
+    if (!goalSnap.exists) return null;
+    final goalData = goalSnap.data() ?? {};
+    final is52 = FiftyTwoWeeksPlan.is52WeeksGoal(goalData);
+    final target = (goalData['targetAmount'] as num?)?.toDouble() ?? 0;
+    final planStart =
+        FiftyTwoWeeksPlan.planStartFromData(goalData) ?? DateTime.now();
+    final schedule = is52
+        ? FiftyTwoWeeksPlan.buildSchedule(target: target, planStart: planStart)
+        : const <FiftyTwoWeeksWeekEntry>[];
+    var initialWeeks = <int>[];
+    final contribQ = await goalRef
+        .collection('contributions')
+        .where('transactionId', isEqualTo: txId)
+        .limit(1)
+        .get();
+    if (contribQ.docs.isNotEmpty) {
+      initialWeeks =
+          GoalDepositService.weeksFromContribData(contribQ.docs.first.data());
+    }
+    return _GoalFinanceEditContext(
+      is52: is52,
+      goalData: goalData,
+      schedule: schedule,
+      initialWeeks: initialWeeks,
+      goalTitle: (goalData['title'] ?? 'Meta').toString(),
+    );
+  } catch (_) {
+    return null;
   }
 }
