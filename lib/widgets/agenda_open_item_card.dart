@@ -6,6 +6,7 @@ import '../models/user_profile.dart';
 import '../services/yearly_commitment_repeat_service.dart';
 import '../theme/agenda_modern_ui.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/anexo_viewer_helper.dart';
 import '../utils/url_launcher_helper.dart';
 import '../screens/reminder_detail_screen.dart';
@@ -91,17 +92,30 @@ class AgendaOpenItemCard extends StatelessWidget {
         ? const Color(0xFF43A047)
         : (isAudiencia ? const Color(0xFF0E7490) : const Color(0xFF2563EB));
 
+    final isDark = context.isDarkMode;
     final cardDecoration = isYearly
         ? BoxDecoration(
             borderRadius: BorderRadius.circular(20),
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [
-                Color(0xFFE8F5E9),
-                Color(0xFFFFFDE7),
-                Colors.white,
-              ],
+              colors: isDark
+                  ? [
+                      Color.alphaBlend(
+                        const Color(0xFF2E7D32).withValues(alpha: 0.22),
+                        context.appSurface,
+                      ),
+                      Color.alphaBlend(
+                        const Color(0xFFFFEB3B).withValues(alpha: 0.06),
+                        context.appSurface,
+                      ),
+                      context.appSurface,
+                    ]
+                  : const [
+                      Color(0xFFE8F5E9),
+                      Color(0xFFFFFDE7),
+                      Colors.white,
+                    ],
             ),
             border: Border.all(color: const Color(0xFF2E7D32), width: 2),
             boxShadow: [
@@ -112,7 +126,8 @@ class AgendaOpenItemCard extends StatelessWidget {
               ),
             ],
           )
-        : AgendaModernUI.modernCardDecoration(
+        : AgendaModernUI.modernCardDecorationOf(
+            context,
             accent: accentStart,
             urgency: urgency,
           ).copyWith(
@@ -120,8 +135,8 @@ class AgendaOpenItemCard extends StatelessWidget {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                Colors.white,
-                accentStart.withValues(alpha: 0.06),
+                isDark ? context.appSurface : Colors.white,
+                accentStart.withValues(alpha: isDark ? 0.14 : 0.06),
               ],
             ),
           );
@@ -191,12 +206,12 @@ class AgendaOpenItemCard extends StatelessWidget {
                           children: [
                             Text(
                               displayTitle,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.w900,
                                 fontSize: 15.5,
                                 letterSpacing: -0.2,
                                 height: 1.2,
-                                color: Color(0xFF0F172A),
+                                color: context.appTextPrimary,
                               ),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
@@ -208,7 +223,9 @@ class AgendaOpenItemCard extends StatelessWidget {
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
-                                  color: Colors.grey.shade700,
+                                  color: isDark
+                                      ? context.appTextSecondary
+                                      : Colors.grey.shade700,
                                 ),
                               ),
                             ],
@@ -262,7 +279,10 @@ class AgendaOpenItemCard extends StatelessWidget {
                                 width: double.infinity,
                                 padding: const EdgeInsets.all(10),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.85),
+                                  color: isDark
+                                      ? context.appSurfaceHigh
+                                          .withValues(alpha: 0.85)
+                                      : Colors.white.withValues(alpha: 0.85),
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
                                     color: const Color(0xFF2E7D32)
@@ -288,7 +308,9 @@ class AgendaOpenItemCard extends StatelessWidget {
                                         fontSize: 12,
                                         height: 1.35,
                                         fontWeight: FontWeight.w600,
-                                        color: Colors.grey.shade800,
+                                        color: isDark
+                                            ? context.appTextSecondary
+                                            : Colors.grey.shade800,
                                       ),
                                     ),
                                   ],
@@ -342,7 +364,11 @@ class AgendaOpenItemCard extends StatelessWidget {
                               ? const Color(0xFF2E7D32).withValues(alpha: 0.12)
                               : null,
                           foregroundColor:
-                              isYearly ? const Color(0xFF1B5E20) : null,
+                              isYearly
+                                  ? (isDark
+                                      ? const Color(0xFF81C784)
+                                      : const Color(0xFF1B5E20))
+                                  : null,
                         ),
                       ),
                       OutlinedButton.icon(
@@ -440,25 +466,27 @@ class AgendaOpenItemCard extends StatelessWidget {
   }
 
   Widget _quickRow(IconData icon, String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
-      child: Row(
-        children: [
-          Icon(icon, size: 14, color: AppColors.textMuted),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textSecondary,
+    return Builder(
+      builder: (context) => Padding(
+        padding: const EdgeInsets.only(bottom: 2),
+        child: Row(
+          children: [
+            Icon(icon, size: 14, color: context.appTextMuted),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                text,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: context.appTextSecondary,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

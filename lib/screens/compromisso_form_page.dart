@@ -334,7 +334,7 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         filled: true,
-        fillColor: const Color(0xFFF1F5F9),
+        fillColor: context.appInputFill,
         suffixIcon: suffixIcon,
         prefixIcon: prefixIcon,
         border: OutlineInputBorder(
@@ -382,7 +382,7 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
     required VoidCallback onTap,
   }) {
     return Material(
-      color: const Color(0xFFF1F5F9),
+      color: context.appInputFill,
       borderRadius: BorderRadius.circular(GeminiTheme.inputRadius),
       child: InkWell(
         onTap: onTap,
@@ -401,17 +401,19 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
                         style: TextStyle(
                           fontSize: 10.5,
                           fontWeight: FontWeight.w700,
-                          color: Colors.grey.shade700,
+                          color: context.isDarkMode
+                              ? context.appTextSecondary
+                              : Colors.grey.shade700,
                           letterSpacing: 0.2,
                         )),
                     const SizedBox(height: 2),
                     Text(value,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w800,
-                          color: Color(0xFF0F172A),
+                          color: context.appTextPrimary,
                           height: 1.1,
                         )),
                   ],
@@ -625,7 +627,9 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
         : Colors.white;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
+      backgroundColor: context.isDarkMode
+          ? context.appScaffold
+          : const Color(0xFFF1F5F9),
       resizeToAvoidBottomInset: scaffoldKeyboardResizeToAvoidBottomInset(
           standaloneFullPageForm: true),
       appBar: AppBar(
@@ -836,7 +840,7 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
                         style: TextStyle(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade700,
+                          color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                           height: 1.25,
                         ),
                       ),
@@ -905,7 +909,9 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
 
   Widget _buildHeader(String title) {
     return Material(
-      color: Colors.white.withValues(alpha: 0.98),
+      color: context.isDarkMode
+          ? context.appSurface
+          : Colors.white.withValues(alpha: 0.98),
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: Padding(
@@ -930,10 +936,10 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w900,
-                        color: Color(0xFF0F172A),
+                        color: context.appTextPrimary,
                         height: 1.1),
                   ),
                   const SizedBox(height: 1),
@@ -942,7 +948,7 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
                     style: TextStyle(
                         fontSize: 11.5,
                         height: 1.15,
-                        color: Colors.grey.shade700,
+                        color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                         fontWeight: FontWeight.w600),
                   ),
                 ],
@@ -956,7 +962,7 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
 
   Widget _buildColorCard(Color pickedFill, Color onPicked) {
     return Material(
-      color: Colors.white,
+      color: context.isDarkMode ? context.appSurface : Colors.white,
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: Padding(
@@ -965,13 +971,13 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
           children: [
             Icon(Icons.palette_rounded, size: 18, color: AppColors.primary),
             const SizedBox(width: 9),
-            const Expanded(
+            Expanded(
               child: Text(
                 'Cor no calendário',
                 style: TextStyle(
                   fontSize: 13.5,
                   fontWeight: FontWeight.w800,
-                  color: Color(0xFF0F172A),
+                  color: context.appTextPrimary,
                 ),
               ),
             ),
@@ -1016,14 +1022,16 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Material(
-          color: Colors.white,
+          color: context.isDarkMode ? context.appSurface : Colors.white,
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
             side: BorderSide(
               color: _repeatYearly
                   ? const Color(0xFF2E7D32).withValues(alpha: 0.45)
-                  : Colors.grey.shade300,
+                  : (context.isDarkMode
+                      ? context.appChipIdleBorder
+                      : Colors.grey.shade300),
               width: _repeatYearly ? 2 : 1,
             ),
           ),
@@ -1055,7 +1063,7 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
               style: TextStyle(
                 fontSize: 11.5,
                 height: 1.3,
-                color: Colors.grey.shade700,
+                color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1091,7 +1099,9 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
                 'Este compromisso aparece no calendário da Agenda, com a cor escolhida. Se a integração Google Calendar estiver ativa, também será sincronizado lá.',
                 style: TextStyle(
                   fontSize: 11.5,
-                  color: Colors.grey.shade800,
+                  color: context.isDarkMode
+                      ? context.appTextSecondary
+                      : Colors.grey.shade800,
                   fontWeight: FontWeight.w600,
                   height: 1.3,
                 ),

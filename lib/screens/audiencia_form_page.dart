@@ -8,6 +8,7 @@ import '../constants/field_text_limits.dart';
 import '../models/user_profile.dart';
 import '../services/agenda_scale_mirror_service.dart';
 import '../theme/gemini_theme.dart';
+import '../theme/theme_context.dart';
 import '../utils/keyboard_form_scaffold.dart';
 import '../utils/premium_upgrade.dart';
 import '../widgets/agenda_form_footer_actions.dart';
@@ -172,7 +173,7 @@ class _AudienciaFormPageState extends State<AudienciaFormPage> {
         isDense: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         filled: true,
-        fillColor: const Color(0xFFF1F5F9),
+        fillColor: context.appInputFill,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(GeminiTheme.inputRadius),
           borderSide: BorderSide.none,
@@ -212,7 +213,7 @@ class _AudienciaFormPageState extends State<AudienciaFormPage> {
     required VoidCallback onTap,
   }) {
     return Material(
-      color: const Color(0xFFF1F5F9),
+      color: context.appInputFill,
       borderRadius: BorderRadius.circular(GeminiTheme.inputRadius),
       child: InkWell(
         onTap: onTap,
@@ -221,7 +222,7 @@ class _AudienciaFormPageState extends State<AudienciaFormPage> {
           padding: const EdgeInsets.fromLTRB(10, 10, 8, 10),
           child: Row(
             children: [
-              Icon(icon, size: 17, color: const Color(0xFF1A237E)),
+              Icon(icon, size: 17, color: context.appDeepTitle),
               const SizedBox(width: 8),
               Expanded(
                 child: Column(
@@ -231,17 +232,19 @@ class _AudienciaFormPageState extends State<AudienciaFormPage> {
                         style: TextStyle(
                           fontSize: 10.5,
                           fontWeight: FontWeight.w700,
-                          color: Colors.grey.shade700,
+                          color: context.isDarkMode
+                              ? context.appTextSecondary
+                              : Colors.grey.shade700,
                           letterSpacing: 0.2,
                         )),
                     const SizedBox(height: 2),
                     Text(value,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w800,
-                          color: Color(0xFF0F172A),
+                          color: context.appTextPrimary,
                           height: 1.1,
                         )),
                   ],
@@ -396,7 +399,9 @@ class _AudienciaFormPageState extends State<AudienciaFormPage> {
         : Colors.white;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
+      backgroundColor: context.isDarkMode
+          ? context.appScaffold
+          : const Color(0xFFF1F5F9),
       resizeToAvoidBottomInset:
           scaffoldKeyboardResizeToAvoidBottomInset(standaloneFullPageForm: true),
       appBar: AppBar(
@@ -527,7 +532,9 @@ class _AudienciaFormPageState extends State<AudienciaFormPage> {
 
   Widget _buildHeader(String title) {
     return Material(
-      color: Colors.white.withValues(alpha: 0.98),
+      color: context.isDarkMode
+          ? context.appSurface
+          : Colors.white.withValues(alpha: 0.98),
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: Padding(
@@ -539,10 +546,10 @@ class _AudienciaFormPageState extends State<AudienciaFormPage> {
                 color: const Color(0xFFD4AF37).withValues(alpha: 0.18),
                 borderRadius: BorderRadius.circular(11),
               ),
-              child: const Padding(
-                padding: EdgeInsets.all(7),
+              child: Padding(
+                padding: const EdgeInsets.all(7),
                 child: Icon(Icons.gavel_rounded,
-                    color: Color(0xFF1A237E), size: 20),
+                    color: context.appDeepTitle, size: 20),
               ),
             ),
             const SizedBox(width: 10),
@@ -551,10 +558,10 @@ class _AudienciaFormPageState extends State<AudienciaFormPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(title,
-                      style: const TextStyle(
+                      style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w900,
-                          color: Color(0xFF0F172A),
+                          color: context.appTextPrimary,
                           height: 1.1)),
                   const SizedBox(height: 1),
                   Text(
@@ -562,7 +569,9 @@ class _AudienciaFormPageState extends State<AudienciaFormPage> {
                     style: TextStyle(
                         fontSize: 11.5,
                         height: 1.15,
-                        color: Colors.grey.shade700,
+                        color: context.isDarkMode
+                            ? context.appTextSecondary
+                            : Colors.grey.shade700,
                         fontWeight: FontWeight.w600),
                   ),
                 ],
@@ -576,21 +585,21 @@ class _AudienciaFormPageState extends State<AudienciaFormPage> {
 
   Widget _buildColorCard(Color pickedFill, Color onPicked) {
     return Material(
-      color: Colors.white,
+      color: context.isDarkMode ? context.appSurface : Colors.white,
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
         child: Row(
           children: [
-            const Icon(Icons.palette_rounded, size: 18, color: Color(0xFF1A237E)),
+            Icon(Icons.palette_rounded, size: 18, color: context.appDeepTitle),
             const SizedBox(width: 9),
-            const Expanded(
+            Expanded(
               child: Text('Cor no calendário',
                   style: TextStyle(
                       fontSize: 13.5,
                       fontWeight: FontWeight.w800,
-                      color: Color(0xFF0F172A))),
+                      color: context.appTextPrimary)),
             ),
             Material(
               color: pickedFill,
@@ -628,19 +637,19 @@ class _AudienciaFormPageState extends State<AudienciaFormPage> {
         (!_removeOficio && _existingOficioName.isNotEmpty);
 
     return Material(
-      color: Colors.white,
+      color: context.isDarkMode ? context.appSurface : Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Row(
+            Row(
               children: [
                 Icon(Icons.attach_file_rounded,
-                    size: 18, color: Color(0xFF1A237E)),
-                SizedBox(width: 8),
-                Text('Anexo / ofício (opcional)',
+                    size: 18, color: context.appDeepTitle),
+                const SizedBox(width: 8),
+                const Text('Anexo / ofício (opcional)',
                     style: TextStyle(
                         fontWeight: FontWeight.w800, fontSize: 13.5)),
               ],
@@ -650,7 +659,9 @@ class _AudienciaFormPageState extends State<AudienciaFormPage> {
                 style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade800)),
+                    color: context.isDarkMode
+                        ? context.appTextSecondary
+                        : Colors.grey.shade800)),
             const SizedBox(height: 10),
             Row(
               children: [
@@ -693,17 +704,24 @@ class _AudienciaFormPageState extends State<AudienciaFormPage> {
   Widget _buildInfoRodape() {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: const Color(0xFF1A237E).withValues(alpha: 0.06),
+        color: (context.isDarkMode
+                ? const Color(0xFF5C6BC0)
+                : const Color(0xFF1A237E))
+            .withValues(alpha: context.isDarkMode ? 0.14 : 0.06),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF1A237E).withValues(alpha: 0.18)),
+        border: Border.all(
+            color: (context.isDarkMode
+                    ? const Color(0xFF5C6BC0)
+                    : const Color(0xFF1A237E))
+                .withValues(alpha: context.isDarkMode ? 0.35 : 0.18)),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.event_note_rounded,
-                size: 16, color: Color(0xFF1A237E)),
+            Icon(Icons.event_note_rounded,
+                size: 16, color: context.appDeepTitle),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -711,7 +729,9 @@ class _AudienciaFormPageState extends State<AudienciaFormPage> {
                 'Você receberá lembretes conforme as notificações configuradas.',
                 style: TextStyle(
                   fontSize: 11.5,
-                  color: Colors.grey.shade800,
+                  color: context.isDarkMode
+                      ? context.appTextSecondary
+                      : Colors.grey.shade800,
                   fontWeight: FontWeight.w600,
                   height: 1.3,
                 ),

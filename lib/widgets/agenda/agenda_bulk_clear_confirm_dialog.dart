@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/theme_context.dart';
+
 /// Confirmação moderna e colorida para limpeza em massa na Agenda.
 Future<bool> showAgendaBulkClearConfirm(
   BuildContext context, {
@@ -86,7 +88,9 @@ Future<bool> showAgendaBulkClearConfirm(
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
-                      color: Colors.grey.shade800,
+                      color: ctx.isDarkMode
+                          ? ctx.appTextPrimary
+                          : Colors.grey.shade800,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -116,7 +120,9 @@ Future<bool> showAgendaBulkClearConfirm(
                       fontSize: 12,
                       height: 1.35,
                       fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade700,
+                      color: ctx.isDarkMode
+                          ? ctx.appTextSecondary
+                          : Colors.grey.shade700,
                     ),
                   ),
                 ],

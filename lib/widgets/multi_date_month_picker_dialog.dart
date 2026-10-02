@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../shared/utils/holiday_helper.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 
 DateTime _normD(DateTime d) => DateTime(d.year, d.month, d.day);
 
@@ -157,7 +158,11 @@ class _MultiDateMonthBodyState extends State<_MultiDateMonthBody> {
                       end: Alignment.bottomRight,
                     )
                   : null,
-              color: enabled ? null : Colors.grey.shade300,
+              color: enabled
+                  ? null
+                  : (context.isDarkMode
+                      ? context.appSurfaceHigh
+                      : Colors.grey.shade300),
               boxShadow: enabled
                   ? [
                       BoxShadow(
@@ -290,9 +295,16 @@ class _MultiDateMonthBodyState extends State<_MultiDateMonthBody> {
     const weekLabels = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB', 'DOM'];
 
     final isSingle = widget.maxSelection == 1;
+    final isDark = context.isDarkMode;
+    final panelBg = isDark ? context.appSurface : Colors.white;
+    final panelBorder = isDark
+        ? context.appChipIdleBorder
+        : AppColors.deepBlue.withValues(alpha: 0.10);
+    final deepText = isDark ? context.appDeepTitle : AppColors.deepBlue;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
+      backgroundColor:
+          isDark ? context.appScaffold : const Color(0xFFF1F5F9),
       appBar: AppBar(
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -349,10 +361,9 @@ class _MultiDateMonthBodyState extends State<_MultiDateMonthBody> {
                   Container(
                     padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: panelBg,
                       borderRadius: BorderRadius.circular(18),
-                      border: Border.all(
-                          color: AppColors.deepBlue.withValues(alpha: 0.10)),
+                      border: Border.all(color: panelBorder),
                       boxShadow: [
                         BoxShadow(
                           color:
@@ -376,10 +387,10 @@ class _MultiDateMonthBodyState extends State<_MultiDateMonthBody> {
                             child: Text(
                               tituloMes,
                               textAlign: TextAlign.center,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w900,
-                                color: AppColors.deepBlue,
+                                color: deepText,
                                 letterSpacing: -0.3,
                               ),
                             ),
@@ -399,10 +410,9 @@ class _MultiDateMonthBodyState extends State<_MultiDateMonthBody> {
                     padding:
                         const EdgeInsets.fromLTRB(10, 12, 10, 12),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: panelBg,
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                          color: AppColors.deepBlue.withValues(alpha: 0.10)),
+                      border: Border.all(color: panelBorder),
                       boxShadow: [
                         BoxShadow(
                           color:
@@ -430,7 +440,9 @@ class _MultiDateMonthBodyState extends State<_MultiDateMonthBody> {
                                       : FontWeight.w800,
                                   color: isWeekendCol
                                       ? _weekendHolidayRed
-                                      : Colors.grey.shade700,
+                                      : (isDark
+                                          ? context.appCalendarWeekday
+                                          : Colors.grey.shade700),
                                 ),
                               ),
                             );
@@ -496,7 +508,11 @@ class _MultiDateMonthBodyState extends State<_MultiDateMonthBody> {
                                               color: sel
                                                   ? null
                                                   : (!canPick
-                                                      ? Colors.grey.shade200
+                                                      ? (isDark
+                                                          ? context
+                                                              .appSurfaceHigh
+                                                          : Colors
+                                                              .grey.shade200)
                                                       : (isToday
                                                           ? AppColors
                                                               .accent
@@ -508,8 +524,8 @@ class _MultiDateMonthBodyState extends State<_MultiDateMonthBody> {
                                                                   .withValues(
                                                                       alpha:
                                                                           0.10)
-                                                              : const Color(
-                                                                  0xFFF8FAFC)))),
+                                                              : context
+                                                                  .appChipIdleBg))),
                                               borderRadius:
                                                   BorderRadius.circular(14),
                                               border: Border.all(
@@ -525,9 +541,12 @@ class _MultiDateMonthBodyState extends State<_MultiDateMonthBody> {
                                                                 ? _weekendHolidayRed.withValues(
                                                                     alpha:
                                                                         0.45)
-                                                                : Colors
-                                                                    .grey
-                                                                    .shade200))),
+                                                                : (isDark
+                                                                    ? context
+                                                                        .appChipIdleBorder
+                                                                    : Colors
+                                                                        .grey
+                                                                        .shade200)))),
                                                 width: sel
                                                     ? 0
                                                     : (isToday ? 2 : 1),
@@ -560,8 +579,7 @@ class _MultiDateMonthBodyState extends State<_MultiDateMonthBody> {
                                                             .grey.shade500
                                                         : (redDay
                                                             ? _weekendHolidayRed
-                                                            : AppColors
-                                                                .deepBlue)),
+                                                            : deepText)),
                                               ),
                                             ),
                                           ),
@@ -584,7 +602,9 @@ class _MultiDateMonthBodyState extends State<_MultiDateMonthBody> {
                                 'Vermelho/negrito: sábado, domingo e feriados.',
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: Colors.grey.shade700,
+                                  color: isDark
+                                      ? context.appTextSecondary
+                                      : Colors.grey.shade700,
                                   height: 1.25,
                                 ),
                               ),
@@ -599,11 +619,9 @@ class _MultiDateMonthBodyState extends State<_MultiDateMonthBody> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: panelBg,
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                            color: AppColors.deepBlue
-                                .withValues(alpha: 0.10)),
+                        border: Border.all(color: panelBorder),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -615,10 +633,10 @@ class _MultiDateMonthBodyState extends State<_MultiDateMonthBody> {
                               const SizedBox(width: 6),
                               Text(
                                 'Feriados de $tituloMes',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 12.5,
                                   fontWeight: FontWeight.w900,
-                                  color: AppColors.deepBlue,
+                                  color: deepText,
                                 ),
                               ),
                             ],
@@ -645,7 +663,9 @@ class _MultiDateMonthBodyState extends State<_MultiDateMonthBody> {
                                           style: TextStyle(
                                             fontSize: 12,
                                             height: 1.35,
-                                            color: Colors.grey.shade900,
+                                            color: isDark
+                                                ? context.appTextPrimary
+                                                : Colors.grey.shade900,
                                           ),
                                           children: [
                                             TextSpan(
@@ -663,7 +683,10 @@ class _MultiDateMonthBodyState extends State<_MultiDateMonthBody> {
                                                     ? FontWeight.w600
                                                     : FontWeight.w900,
                                                 color: f.isOptional
-                                                    ? Colors.grey.shade800
+                                                    ? (isDark
+                                                        ? context
+                                                            .appTextSecondary
+                                                        : Colors.grey.shade800)
                                                     : _weekendHolidayRed,
                                               ),
                                             ),
@@ -674,8 +697,9 @@ class _MultiDateMonthBodyState extends State<_MultiDateMonthBody> {
                                                   fontSize: 10,
                                                   fontWeight:
                                                       FontWeight.w600,
-                                                  color:
-                                                      Colors.grey.shade600,
+                                                  color: isDark
+                                                      ? context.appTextMuted
+                                                      : Colors.grey.shade600,
                                                   fontStyle:
                                                       FontStyle.italic,
                                                 ),
@@ -702,10 +726,12 @@ class _MultiDateMonthBodyState extends State<_MultiDateMonthBody> {
         child: Container(
           padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: panelBg,
             border: Border(
               top: BorderSide(
-                  color: AppColors.deepBlue.withValues(alpha: 0.08)),
+                  color: isDark
+                      ? context.appChipIdleBorder
+                      : AppColors.deepBlue.withValues(alpha: 0.08)),
             ),
             boxShadow: [
               BoxShadow(
@@ -740,10 +766,10 @@ class _MultiDateMonthBodyState extends State<_MultiDateMonthBody> {
                           isSingle
                               ? '1 dia selecionado'
                               : '${_selected.length} dia(s) selecionado(s)',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w800,
-                            color: AppColors.deepBlue,
+                            color: deepText,
                           ),
                         ),
                       ],
@@ -756,7 +782,7 @@ class _MultiDateMonthBodyState extends State<_MultiDateMonthBody> {
                     child: OutlinedButton(
                       onPressed: () => Navigator.pop(context),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.textSecondary,
+                        foregroundColor: context.appTextSecondary,
                         padding:
                             const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(

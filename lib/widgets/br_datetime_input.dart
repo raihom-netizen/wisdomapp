@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../constants/date_time_formats.dart';
+import '../theme/theme_context.dart';
 import 'fast_text_field.dart';
 
 /// Converte texto dd/MM/yyyy → [DateTime] (só calendário).
@@ -112,7 +113,7 @@ class BrDateTextField extends StatelessWidget {
         prefixIcon: const Icon(Icons.calendar_today_rounded, size: 20),
         border: const OutlineInputBorder(),
         filled: true,
-        fillColor: const Color(0xFFF8FAFC),
+        fillColor: context.appChipIdleBg,
       ),
       onChanged: onChanged,
     );
@@ -144,7 +145,7 @@ class BrTimeTextField extends StatelessWidget {
         prefixIcon: const Icon(Icons.schedule_rounded, size: 20),
         border: const OutlineInputBorder(),
         filled: true,
-        fillColor: const Color(0xFFF8FAFC),
+        fillColor: context.appChipIdleBg,
       ),
       onChanged: onChanged,
     );

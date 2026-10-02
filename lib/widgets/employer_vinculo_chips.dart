@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/shift_location.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 
 /// Chips **Estado / Município / Particular** — mesmo padrão visual (lançamento expresso, pré-cadastro, incluir plantão).
 class EmployerVinculoChips {
@@ -125,7 +126,7 @@ class EmployerVinculoChips {
             selected: filter == null,
             label: 'Todos',
             icon: Icons.layers_rounded,
-            accent: _todosAccent,
+            accent: context.isDarkMode ? AppColors.primary : _todosAccent,
             onTap: () => onChanged(null),
           ),
         );

@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../services/notification_audio_player.dart';
 import '../services/notification_sound_catalog.dart';
 import '../services/notification_sound_preferences.dart';
@@ -178,7 +179,7 @@ class _NotificationSoundSettingsScreenState
     final picked = await showModalBottomSheet<NotificationSoundCatalogItem>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: context.isDarkMode ? context.appSurface : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -226,7 +227,9 @@ class _NotificationSoundSettingsScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
+      backgroundColor: context.isDarkMode
+          ? context.appScaffold
+          : const Color(0xFFF1F5F9),
       appBar: AppBar(
         title: const Text('Sons das notificações'),
         leading: IconButton(
@@ -322,7 +325,7 @@ class _NotificationSoundSettingsScreenState
     final color = _colorFor(cat);
     final icon = _iconFor(cat);
     return Material(
-      color: Colors.white,
+      color: context.isDarkMode ? context.appSurface : Colors.white,
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
@@ -349,10 +352,10 @@ class _NotificationSoundSettingsScreenState
                     children: [
                       Text(
                         cat.displayName,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 14.5,
-                          color: Color(0xFF0F172A),
+                          color: context.appTextPrimary,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -362,7 +365,7 @@ class _NotificationSoundSettingsScreenState
                             : _subtitleFor(pref),
                         style: TextStyle(
                           fontSize: 11.5,
-                          color: Colors.grey.shade700,
+                          color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                           height: 1.2,
                         ),
                         maxLines: 2,
@@ -392,7 +395,7 @@ class _NotificationSoundSettingsScreenState
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
-                  color: Colors.grey.shade700,
+                  color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                 ),
               ),
               const SizedBox(height: 6),
@@ -462,7 +465,12 @@ class _NotificationSoundSettingsScreenState
               const SizedBox(height: 6),
               Text(
                 'Dica: para usar sua voz, grave em qualquer app de gravador do celular (.m4a) e selecione aqui.',
-                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: context.isDarkMode
+                      ? context.appTextMuted
+                      : Colors.grey.shade600,
+                ),
               ),
             ],
           ],
@@ -543,7 +551,11 @@ class _NotificationSoundSettingsScreenState
         label,
         style: TextStyle(
           fontWeight: FontWeight.w700,
-          color: selected ? Colors.white : Colors.grey.shade800,
+          color: selected
+              ? Colors.white
+              : (context.isDarkMode
+                  ? context.appTextPrimary
+                  : Colors.grey.shade800),
         ),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
@@ -587,7 +599,11 @@ class _NotificationSoundSettingsScreenState
         label,
         style: TextStyle(
           fontWeight: FontWeight.w700,
-          color: isBundled ? Colors.white : Colors.grey.shade800,
+          color: isBundled
+              ? Colors.white
+              : (context.isDarkMode
+                  ? context.appTextPrimary
+                  : Colors.grey.shade800),
         ),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
@@ -691,8 +707,12 @@ class _DeliveryModeButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = selected ? color : color.withValues(alpha: 0.08);
-    final fg = selected ? Colors.white : color;
+    // No escuro, cor muito escura (ex.: «Só push») some sobre o fundo grafite.
+    final tone = context.isDarkMode && color.computeLuminance() < 0.05
+        ? const Color(0xFF94A3B8)
+        : color;
+    final bg = selected ? color : tone.withValues(alpha: 0.08);
+    final fg = selected ? Colors.white : tone;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
@@ -703,7 +723,7 @@ class _DeliveryModeButton extends StatelessWidget {
           color: bg,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: selected ? color : color.withValues(alpha: 0.25),
+            color: selected ? color : tone.withValues(alpha: 0.25),
             width: selected ? 1.5 : 1,
           ),
           boxShadow: selected
@@ -738,7 +758,7 @@ class _DeliveryModeButton extends StatelessWidget {
                 style: TextStyle(
                   color: selected
                       ? Colors.white.withValues(alpha: 0.9)
-                      : color.withValues(alpha: 0.8),
+                      : tone.withValues(alpha: 0.8),
                   fontWeight: FontWeight.w600,
                   fontSize: 10.5,
                 ),
@@ -787,10 +807,10 @@ class _BundledSoundBottomSheet extends StatelessWidget {
                 Expanded(
                   child: Text(
                     'Banco do app — ${category.shortName}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w900,
                       fontSize: 15,
-                      color: Color(0xFF0F172A),
+                      color: context.appTextPrimary,
                     ),
                   ),
                 ),
@@ -799,7 +819,12 @@ class _BundledSoundBottomSheet extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               'Escolha um toque pré-instalado. Funciona sem internet.',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              style: TextStyle(
+                fontSize: 12,
+                color: context.isDarkMode
+                    ? context.appTextMuted
+                    : Colors.grey.shade600,
+              ),
             ),
             const SizedBox(height: 2),
             Text(
@@ -812,7 +837,12 @@ class _BundledSoundBottomSheet extends StatelessWidget {
                 shrinkWrap: true,
                 itemCount: kNotificationSoundCatalog.length,
                 separatorBuilder: (_, __) =>
-                    Divider(height: 1, color: Colors.grey.shade200),
+                    Divider(
+                  height: 1,
+                  color: context.isDarkMode
+                      ? context.appBorderSubtle
+                      : Colors.grey.shade200,
+                ),
                 itemBuilder: (ctx, i) {
                   final item = kNotificationSoundCatalog[i];
                   final isSel = item.id == selectedId;

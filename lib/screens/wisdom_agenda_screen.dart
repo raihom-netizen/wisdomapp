@@ -26,6 +26,7 @@ import 'report_preview_screen.dart';
 import '../shared/utils/holiday_helper.dart';
 import '../theme/agenda_modern_ui.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/agenda_finance_pending_utils.dart';
 import '../utils/finance_account_balance_utils.dart';
 import '../utils/finance_transactions_hub.dart';
@@ -746,7 +747,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
         Container(
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
-            color: const Color(0xFFF1F5F9),
+            color: context.appInputFill,
             borderRadius: BorderRadius.circular(16),
             border:
                 Border.all(color: AppColors.deepBlue.withValues(alpha: 0.08)),
@@ -795,7 +796,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: Colors.grey.shade600,
+              color: context.isDarkMode
+                  ? context.appTextMuted
+                  : Colors.grey.shade600,
             ),
           ),
         ),
@@ -859,7 +862,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                   style: TextStyle(
                     fontWeight: FontWeight.w900,
                     fontSize: compact ? 11.5 : 13,
-                    color: selected ? Colors.white : AppColors.textPrimary,
+                    color: selected ? Colors.white : context.appTextPrimary,
                   ),
                 ),
               ),
@@ -1143,10 +1146,10 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
             children: [
               Text(
                 sheetTitle,
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w900,
                   fontSize: 17,
-                  color: AppColors.textPrimary,
+                  color: ctx.appTextPrimary,
                 ),
               ),
               const SizedBox(height: 12),
@@ -1200,12 +1203,12 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
+              Text(
                 'Qual lançamento financeiro?',
                 style: TextStyle(
                   fontWeight: FontWeight.w900,
                   fontSize: 17,
-                  color: AppColors.textPrimary,
+                  color: ctx.appTextPrimary,
                 ),
               ),
               const SizedBox(height: 12),
@@ -1275,10 +1278,10 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
             children: [
               Text(
                 sheetTitle,
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w900,
                   fontSize: 17,
-                  color: AppColors.textPrimary,
+                  color: ctx.appTextPrimary,
                 ),
               ),
               const SizedBox(height: 12),
@@ -1838,8 +1841,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
           color,
           Color.lerp(color, Colors.black, 0.22) ?? color,
         ];
-    final bgA = Color.lerp(Colors.white, color, 0.05)!;
-    final bgB = Color.lerp(Colors.white, color, 0.11)!;
+    final menuBase = context.isDarkMode ? context.appSurface : Colors.white;
+    final bgA = Color.lerp(menuBase, color, context.isDarkMode ? 0.10 : 0.05)!;
+    final bgB = Color.lerp(menuBase, color, context.isDarkMode ? 0.18 : 0.11)!;
     final btn = Material(
       color: Colors.transparent,
       borderRadius: BorderRadius.circular(14),
@@ -1900,7 +1904,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                       fontSize: 10.5,
                       fontWeight: FontWeight.w800,
                       height: 1.12,
-                      color: Color.lerp(color, const Color(0xFF0F172A), 0.38),
+                      color: context.isDarkMode
+                          ? Color.lerp(color, Colors.white, 0.55)
+                          : Color.lerp(color, const Color(0xFF0F172A), 0.38),
                     ),
                   ),
                 ],
@@ -2001,10 +2007,12 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                       DateFormat("EEEE, d 'de' MMMM 'de' yyyy", 'pt_BR')
                           .format(dayStart),
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w900,
                         fontSize: 15,
-                        color: AppColors.deepBlue,
+                        color: ctx.isDarkMode
+                            ? ctx.appDeepTitle
+                            : AppColors.deepBlue,
                       ),
                     ),
                   ),
@@ -2101,7 +2109,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                     const SizedBox(height: 20),
                     const Divider(height: 1),
                     const SizedBox(height: 14),
-                    AgendaModernUI.sectionHeader(
+                    AgendaModernUI.sectionHeaderOf(
+                      ctx,
                       title: 'Resumo do dia',
                       subtitle: _resumoDiaSubtitle(
                         items,
@@ -2506,7 +2515,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                       DateFormat("d 'de' MMMM", 'pt_BR').format(day),
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        color: Colors.grey.shade700,
+                        color: ctx.isDarkMode
+                            ? ctx.appTextSecondary
+                            : Colors.grey.shade700,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -2716,12 +2727,17 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
       width: double.infinity,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.isDarkMode ? context.appSurface : Colors.white,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.deepBlue.withValues(alpha: 0.12)),
+        border: Border.all(
+          color: context.isDarkMode
+              ? context.appChipIdleBorder
+              : AppColors.deepBlue.withValues(alpha: 0.12),
+        ),
         boxShadow: [
           BoxShadow(
-            color: AppColors.deepBlueDark.withValues(alpha: 0.1),
+            color: (context.isDarkMode ? Colors.black : AppColors.deepBlueDark)
+                .withValues(alpha: context.isDarkMode ? 0.4 : 0.1),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -2840,7 +2856,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
         child: Container(
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.isDarkMode ? context.appSurface : Colors.white,
             borderRadius: BorderRadius.circular(10),
           ),
           child: Text(
@@ -2863,7 +2879,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
           margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 2),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.isDarkMode ? context.appSurface : Colors.white,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: AppColors.primary, width: 2.5),
             boxShadow: [
@@ -3041,7 +3057,11 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
       child: Text(
         '${day.day}',
         style: TextStyle(
-          color: redDay ? const Color(0xFFE53935) : const Color(0xFF1A1C1E),
+          color: redDay
+              ? const Color(0xFFE53935)
+              : (context.isDarkMode
+                  ? context.appTextPrimary
+                  : const Color(0xFF1A1C1E)),
           fontWeight: redDay ? FontWeight.w900 : FontWeight.w700,
           fontSize: numSize,
         ),
@@ -3305,9 +3325,12 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => StatefulBuilder(
         builder: (sheetContext, setSheetState) => Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFFF8FAFC),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          decoration: BoxDecoration(
+            color: sheetContext.isDarkMode
+                ? sheetContext.appSurface
+                : const Color(0xFFF8FAFC),
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(24)),
           ),
           child: SafeArea(
             top: false,
@@ -3342,13 +3365,13 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      const Expanded(
+                      Expanded(
                         child: Text(
                           'Início da semana no calendário',
                           style: TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w900,
-                            color: AppColors.textPrimary,
+                            color: sheetContext.appTextPrimary,
                           ),
                         ),
                       ),
@@ -3444,12 +3467,16 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
           decoration: BoxDecoration(
             color: selected
                 ? accent.withValues(alpha: 0.12)
-                : Colors.grey.shade100,
+                : (context.isDarkMode
+                    ? context.appChipIdleBg
+                    : Colors.grey.shade100),
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
               color: selected
                   ? accent.withValues(alpha: 0.65)
-                  : Colors.grey.shade300,
+                  : (context.isDarkMode
+                      ? context.appChipIdleBorder
+                      : Colors.grey.shade300),
               width: selected ? 2 : 1,
             ),
           ),
@@ -3471,10 +3498,12 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                       children: [
                         Text(
                           title,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w900,
-                            color: AppColors.deepBlue,
+                            color: context.isDarkMode
+                                ? context.appDeepTitle
+                                : AppColors.deepBlue,
                           ),
                         ),
                         Text(
@@ -3482,7 +3511,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: AppColors.deepBlue.withValues(alpha: 0.65),
+                            color: context.isDarkMode
+                                ? context.appTextSecondary
+                                : AppColors.deepBlue.withValues(alpha: 0.65),
                           ),
                         ),
                       ],
@@ -3499,7 +3530,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                           margin: const EdgeInsets.symmetric(horizontal: 2),
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: context.isDarkMode
+                                ? context.appSurface
+                                : Colors.white,
                             borderRadius: BorderRadius.circular(9),
                           ),
                           child: Text(
@@ -3510,7 +3543,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                               fontWeight: FontWeight.w900,
                               color: label == 'SAB' || label == 'DOM'
                                   ? const Color(0xFFD32F2F)
-                                  : AppColors.deepBlue,
+                                  : (context.isDarkMode
+                                      ? context.appCalendarWeekday
+                                      : AppColors.deepBlue),
                             ),
                           ),
                         ),
@@ -3553,7 +3588,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
           fontWeight: FontWeight.w900,
           fontSize: isNarrow ? 22 : 26,
           letterSpacing: -0.4,
-          color: const Color(0xFF0F172A),
+          color: context.isDarkMode
+              ? context.appTextPrimary
+              : const Color(0xFF0F172A),
         ),
         leftChevronIcon:
             const Icon(Icons.chevron_left_rounded, color: AppColors.primary),
@@ -3643,8 +3680,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                 fontSize: isNarrow ? 11 : 10.5,
                 fontWeight: FontWeight.w900,
                 letterSpacing: 0.2,
-                color:
-                    isWeekend ? Colors.red.shade700 : const Color(0xFF455A64),
+                color: isWeekend
+                    ? Colors.red.shade700
+                    : context.appCalendarWeekday,
               ),
             ),
           );
@@ -3733,10 +3771,12 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                     color: AppColors.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.today_rounded,
                     size: 18,
-                    color: AppColors.deepBlue,
+                    color: context.isDarkMode
+                        ? context.appDeepTitle
+                        : AppColors.deepBlue,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -3750,16 +3790,16 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                           fontSize: 10.5,
                           fontWeight: FontWeight.w900,
                           letterSpacing: 0.55,
-                          color: AppColors.textMuted,
+                          color: context.appTextMuted,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         DateFormat('EEEE, dd/MM/yyyy', 'pt_BR').format(day),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w900,
-                          color: AppColors.textPrimary,
+                          color: context.appTextPrimary,
                           height: 1.2,
                         ),
                       ),
@@ -3776,9 +3816,11 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                     financePending: [...incomePending, ...expensePending],
                     googleEvents: googleOnly,
                   ),
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.more_horiz_rounded,
-                    color: AppColors.deepBlue,
+                    color: context.isDarkMode
+                        ? context.appDeepTitle
+                        : AppColors.deepBlue,
                   ),
                 ),
               ],
@@ -3791,7 +3833,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade700,
+                    color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                     height: 1.35,
                   ),
                 )
@@ -3808,7 +3850,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade700,
+                    color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                     height: 1.35,
                   ),
                 )
@@ -3827,7 +3869,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade700,
+                    color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                     height: 1.35,
                   ),
                 )
@@ -3896,10 +3938,10 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w900,
                     fontSize: 16,
-                    color: Color(0xFF1A237E),
+                    color: context.appDeepTitle,
                   ),
                 ),
                 if (horario.isNotEmpty) ...[
@@ -3920,7 +3962,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade700,
+                      color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                       height: 1.35,
                     ),
                   ),
@@ -3986,10 +4028,10 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                     Expanded(
                       child: Text(
                         event.title,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w900,
                           fontSize: 16,
-                          color: Color(0xFF1A237E),
+                          color: context.appDeepTitle,
                         ),
                       ),
                     ),
@@ -4031,7 +4073,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade700,
+                      color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                       height: 1.35,
                     ),
                   ),
@@ -4098,10 +4140,10 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w900,
                     fontSize: 16,
-                    color: Color(0xFF1A237E),
+                    color: context.appDeepTitle,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -4199,7 +4241,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: Colors.grey.shade700,
+              color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
             ),
           ),
         ),
@@ -4211,7 +4253,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            AgendaModernUI.sectionHeader(
+            AgendaModernUI.sectionHeaderOf(
+              context,
               title: 'Resumo do mês',
               subtitle:
                   'Financeiro · ${monthItems.length} lançamento${monthItems.length == 1 ? '' : 's'} · $tituloMes',
@@ -4256,7 +4299,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: Colors.grey.shade700,
+              color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
               height: 1.35,
             ),
           ),
@@ -4271,7 +4314,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            AgendaModernUI.sectionHeader(
+            AgendaModernUI.sectionHeaderOf(
+              context,
               title: 'Resumo do mês',
               subtitle:
                   'Particular · $total item${total == 1 ? '' : 'ns'} · $tituloMes'
@@ -4313,7 +4357,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w800,
-          color: Colors.grey.shade600,
+          color: context.isDarkMode
+              ? context.appTextMuted
+              : Colors.grey.shade600,
         ),
       ),
     );
@@ -4341,10 +4387,12 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                     color: AppColors.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.event_available_rounded,
                     size: 18,
-                    color: AppColors.deepBlue,
+                    color: context.isDarkMode
+                        ? context.appDeepTitle
+                        : AppColors.deepBlue,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -4358,16 +4406,18 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                           fontSize: 10.5,
                           fontWeight: FontWeight.w900,
                           letterSpacing: 0.55,
-                          color: AppColors.textMuted,
+                          color: context.appTextMuted,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         tituloMes,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w900,
-                          color: AppColors.deepBlueDark,
+                          color: context.isDarkMode
+                              ? context.appTextPrimary
+                              : AppColors.deepBlueDark,
                           height: 1.1,
                           letterSpacing: -0.3,
                         ),
@@ -4378,7 +4428,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.textSecondary,
+                          color: context.appTextSecondary,
                         ),
                       ),
                     ],
@@ -4392,7 +4442,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                 'Sem feriados nacionais neste mês.',
                 style: TextStyle(
                   fontSize: 12,
-                  color: AppColors.textSecondary,
+                  color: context.appTextSecondary,
                   fontWeight: FontWeight.w600,
                   height: 1.35,
                 ),
@@ -4423,9 +4473,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                     ),
                     child: Text(
                       '$data · ${f.name}$extra',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: AppColors.textPrimary,
+                        color: context.appTextPrimary,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -4462,7 +4512,10 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Colors.white, accent.withValues(alpha: 0.06)],
+          colors: [
+            context.isDarkMode ? context.appSurface : Colors.white,
+            accent.withValues(alpha: context.isDarkMode ? 0.12 : 0.06),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -4512,10 +4565,10 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w900,
                           fontSize: 16,
-                          color: Color(0xFF1A237E),
+                          color: context.appDeepTitle,
                         ),
                       ),
                       if (horario.isNotEmpty) ...[
@@ -4550,7 +4603,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade700,
+                  color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                   height: 1.35,
                 ),
               ),
@@ -4586,7 +4639,10 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Colors.white, accent.withValues(alpha: 0.06)],
+          colors: [
+            context.isDarkMode ? context.appSurface : Colors.white,
+            accent.withValues(alpha: context.isDarkMode ? 0.12 : 0.06),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -4636,10 +4692,10 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w900,
                           fontSize: 16,
-                          color: Color(0xFF1A237E),
+                          color: context.appDeepTitle,
                         ),
                       ),
                       const SizedBox(height: 3),
@@ -4785,7 +4841,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                     width: 42,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
+                      color: context.isDarkMode
+                          ? context.appChipIdleBorder
+                          : Colors.grey.shade300,
                       borderRadius: BorderRadius.circular(999),
                     ),
                   ),
@@ -4818,16 +4876,16 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                               fontSize: 10.5,
                               fontWeight: FontWeight.w900,
                               letterSpacing: 0.55,
-                              color: AppColors.textMuted,
+                              color: context.appTextMuted,
                             ),
                           ),
                           const SizedBox(height: 2),
                           Text(
                             title,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w900,
-                              color: AppColors.textPrimary,
+                              color: context.appTextPrimary,
                               height: 1.2,
                             ),
                           ),
@@ -4938,7 +4996,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                     width: 42,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
+                      color: context.isDarkMode
+                          ? context.appChipIdleBorder
+                          : Colors.grey.shade300,
                       borderRadius: BorderRadius.circular(999),
                     ),
                   ),
@@ -4971,16 +5031,16 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                               fontSize: 10.5,
                               fontWeight: FontWeight.w900,
                               letterSpacing: 0.55,
-                              color: AppColors.textMuted,
+                              color: context.appTextMuted,
                             ),
                           ),
                           const SizedBox(height: 2),
                           Text(
                             title,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w900,
-                              color: AppColors.textPrimary,
+                              color: context.appTextPrimary,
                               height: 1.2,
                             ),
                           ),
@@ -5090,16 +5150,16 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                     fontSize: 10.5,
                     fontWeight: FontWeight.w900,
                     letterSpacing: 0.5,
-                    color: AppColors.textMuted,
+                    color: context.appTextMuted,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   value,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                    color: context.appTextPrimary,
                     height: 1.3,
                   ),
                 ),
@@ -5125,7 +5185,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
           ),
           child: Container(
             margin: const EdgeInsets.only(bottom: 10),
-            decoration: AgendaModernUI.modernCardDecoration(
+            decoration: AgendaModernUI.modernCardDecorationOf(
+              context,
               accent: color,
               elevated: true,
             ),
@@ -5159,10 +5220,10 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                             Expanded(
                               child: Text(
                                 event.title,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontWeight: FontWeight.w900,
                                   fontSize: 16,
-                                  color: Color(0xFF1A237E),
+                                  color: context.appDeepTitle,
                                 ),
                               ),
                             ),
@@ -5207,7 +5268,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade700,
+                              color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                               height: 1.35,
                             ),
                           ),
@@ -5412,7 +5473,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
               Text(
                 'Toque abaixo para tentar novamente.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+                style: TextStyle(color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700, fontSize: 13),
               ),
               const SizedBox(height: 16),
               FilledButton.icon(
@@ -5495,11 +5556,17 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                       isNarrow ? 12 : 16,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: context.isDarkMode
+                          ? context.appSurface
+                          : Colors.white,
                       borderRadius: BorderRadius.circular(isNarrow ? 22 : 28),
+                      border: context.isDarkMode
+                          ? Border.all(color: context.appChipIdleBorder)
+                          : null,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.06),
+                          color: Colors.black.withValues(
+                              alpha: context.isDarkMode ? 0.4 : 0.06),
                           blurRadius: 20,
                           offset: const Offset(0, 8),
                         ),
@@ -5535,7 +5602,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w600,
-                                  color: Colors.grey.shade700,
+                                  color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                                 ),
                               ),
                             ),
@@ -5594,7 +5661,9 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade600,
+                        color: context.isDarkMode
+                            ? context.appTextMuted
+                            : Colors.grey.shade600,
                       ),
                     ),
                 ],

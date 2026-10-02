@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/gemini_theme.dart';
+import '../theme/theme_context.dart';
 
 /// Rodapé duplo (Cancelar + ação principal) — Audiência, Compromisso, Lançamento expresso, etc.
 /// Layout estável em telemóveis (evita o texto «Cancelar» a partir ao meio); padrão visual premium.
@@ -38,8 +39,8 @@ class AgendaFormFooterActions extends StatelessWidget {
         final cancel = OutlinedButton(
           onPressed: isBusy ? null : onCancel,
           style: OutlinedButton.styleFrom(
-            foregroundColor: AppColors.textSecondary,
-            backgroundColor: const Color(0xFFF8FAFC),
+            foregroundColor: context.appTextSecondary,
+            backgroundColor: context.appChipIdleBg,
             side: BorderSide(color: AppColors.primary.withValues(alpha: 0.32), width: 1.2),
             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
             minimumSize: const Size(0, _kMinHeight),
@@ -55,7 +56,7 @@ class AgendaFormFooterActions extends StatelessWidget {
               Icon(
                 Icons.close_rounded,
                 size: 20,
-                color: AppColors.textSecondary.withValues(alpha: 0.95),
+                color: context.appTextSecondary.withValues(alpha: 0.95),
               ),
               const SizedBox(width: 8),
               Expanded(

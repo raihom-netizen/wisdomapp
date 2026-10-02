@@ -9,6 +9,7 @@ import '../services/agenda_alerts_queue_service.dart';
 import '../services/notification_center_service.dart';
 import '../services/notification_center_store.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/agenda_alerts_archive_policy.dart';
 import '../utils/firestore_user_doc_id.dart';
 import '../widgets/compromisso_contact_chips.dart';
@@ -262,7 +263,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
 
     return Scaffold(
       backgroundColor:
-          isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+          isDark ? context.appScaffold : const Color(0xFFF8FAFC),
       appBar: AppBar(
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -526,9 +527,9 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.isDarkMode ? context.appSurface : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: context.appChipIdleBorder),
         boxShadow: [
           BoxShadow(
               color: const Color(0xFF0F172A).withValues(alpha: 0.04),
@@ -566,7 +567,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                       gradient: selected
                           ? LinearGradient(colors: palette.gradient)
                           : null,
-                      color: selected ? null : const Color(0xFFF1F5F9),
+                      color: selected ? null : context.appInputFill,
                       boxShadow: selected
                           ? [
                               BoxShadow(
@@ -593,7 +594,9 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                             fontWeight: FontWeight.w900,
                             color: selected
                                 ? Colors.white
-                                : const Color(0xFF334155),
+                                : (context.isDarkMode
+                                    ? context.appChipIdleLabel
+                                    : const Color(0xFF334155)),
                           ),
                         ),
                       ],
@@ -632,7 +635,9 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                 gradient: selected
                     ? LinearGradient(colors: activePalette.gradient)
                     : null,
-                color: selected ? null : Colors.white,
+                color: selected
+                    ? null
+                    : (context.isDarkMode ? context.appSurface : Colors.white),
                 border: Border.all(
                   color: selected
                       ? Colors.transparent
@@ -653,7 +658,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                 style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w800,
-                  color: selected ? Colors.white : const Color(0xFF64748B),
+                  color: selected ? Colors.white : context.appTextMuted,
                 ),
               ),
             ),
@@ -680,17 +685,17 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
             Text(
               'Nenhum aviso de ${palette.shortLabel.toLowerCase()}',
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w800,
-                color: Color(0xFF0F172A),
+                color: context.appTextPrimary,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Itens futuros aparecem aqui por ordem de data.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+              style: TextStyle(fontSize: 13, color: context.appTextMuted),
             ),
           ],
         ),
@@ -725,7 +730,9 @@ class _NotificationCard extends StatelessWidget {
         entry.isPending ? const Color(0xFFF59E0B) : const Color(0xFF16A34A);
 
     return Material(
-      color: selected ? theme.color.withValues(alpha: 0.08) : Colors.white,
+      color: selected
+          ? theme.color.withValues(alpha: 0.08)
+          : (context.isDarkMode ? context.appSurface : Colors.white),
       elevation: 0,
       shadowColor: Colors.black26,
       borderRadius: BorderRadius.circular(16),
@@ -785,10 +792,10 @@ class _NotificationCard extends StatelessWidget {
                             entry.title,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w800,
-                              color: Color(0xFF0F172A),
+                              color: context.appTextPrimary,
                             ),
                           ),
                         ),
@@ -816,9 +823,9 @@ class _NotificationCard extends StatelessWidget {
                         entry.body,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12.5,
-                          color: Color(0xFF64748B),
+                          color: context.appTextMuted,
                         ),
                       ),
                     ],

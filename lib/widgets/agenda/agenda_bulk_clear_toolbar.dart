@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/theme_context.dart';
+
 /// Barra estreita com atalhos de limpeza rápida (semana / mês / período).
 class AgendaBulkClearToolbar extends StatelessWidget {
   const AgendaBulkClearToolbar({
@@ -17,23 +19,34 @@ class AgendaBulkClearToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F172A).withValues(alpha: 0.04),
+        color: isDark
+            ? context.appChipIdleBg
+            : const Color(0xFF0F172A).withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF0F172A).withValues(alpha: 0.08)),
+        border: Border.all(
+          color: isDark
+              ? context.appChipIdleBorder
+              : const Color(0xFF0F172A).withValues(alpha: 0.08),
+        ),
       ),
       child: Row(
         children: [
-          Icon(Icons.bolt_rounded, size: 16, color: Colors.grey.shade600),
+          Icon(
+            Icons.bolt_rounded,
+            size: 16,
+            color: isDark ? context.appTextMuted : Colors.grey.shade600,
+          ),
           const SizedBox(width: 6),
           Text(
             'Limpeza rápida',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w800,
-              color: Colors.grey.shade700,
+              color: isDark ? context.appTextSecondary : Colors.grey.shade700,
             ),
           ),
           const Spacer(),
@@ -89,7 +102,11 @@ class _ChipAction extends StatelessWidget {
             gradient: disabled
                 ? null
                 : LinearGradient(colors: colors),
-            color: disabled ? Colors.grey.shade300 : null,
+            color: disabled
+                ? (context.isDarkMode
+                    ? context.appSurfaceHigh
+                    : Colors.grey.shade300)
+                : null,
             borderRadius: BorderRadius.circular(12),
             boxShadow: disabled
                 ? null

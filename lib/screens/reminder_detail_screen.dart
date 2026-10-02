@@ -6,6 +6,7 @@ import '../utils/url_launcher_helper.dart';
 import '../utils/premium_upgrade.dart';
 import '../models/user_profile.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 
 /// True se o anexo for imagem (PNG/JPEG) para exibir preview.
 bool _isImageOficio(String url, String fileName) {
@@ -111,9 +112,19 @@ class _ReminderDetailScreenState extends State<ReminderDetailScreen> {
     final linkSalaAudiencia = (data['linkSalaAudiencia'] ?? '').toString().trim();
     final oficioUrl = (data['oficioUrl'] ?? '').toString().trim();
     final oficioFileName = (data['oficioFileName'] ?? '').toString().trim();
+    final isDark = context.isDarkMode;
+    final labelStyle = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w700,
+      color: isDark ? context.appTextMuted : const Color(0xFF64748B),
+    );
+    final bodyStyle = TextStyle(
+      fontSize: 15,
+      color: isDark ? context.appTextSecondary : Colors.grey.shade800,
+    );
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FA),
+      backgroundColor: isDark ? context.appScaffold : const Color(0xFFF4F7FA),
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
@@ -139,10 +150,11 @@ class _ReminderDetailScreenState extends State<ReminderDetailScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: isDark ? context.appSurface : Colors.white,
                 borderRadius: BorderRadius.circular(16),
-                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 12, offset: const Offset(0, 4))],
-                border: Border.all(color: Colors.grey.shade200),
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.06), blurRadius: 12, offset: const Offset(0, 4))],
+                border: Border.all(
+                    color: isDark ? context.appChipIdleBorder : Colors.grey.shade200),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -160,7 +172,7 @@ class _ReminderDetailScreenState extends State<ReminderDetailScreen> {
                           (title.isEmpty || title == 'Audiência')
                               ? 'Compromisso'
                               : title,
-                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF1A237E)),
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: context.appDeepTitle),
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -169,13 +181,13 @@ class _ReminderDetailScreenState extends State<ReminderDetailScreen> {
                   ),
                   if (!isAudiencia && title.isNotEmpty) ...[
                     const SizedBox(height: 16),
-                    const Text('Título', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF64748B))),
+                    Text('Título', style: labelStyle),
                     const SizedBox(height: 4),
                     Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                   ],
                   if (date != null || timeStr.isNotEmpty) ...[
                     const SizedBox(height: 16),
-                    const Text('Data e horário', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF64748B))),
+                    Text('Data e horário', style: labelStyle),
                     const SizedBox(height: 4),
                     Text(
                       [
@@ -187,38 +199,38 @@ class _ReminderDetailScreenState extends State<ReminderDetailScreen> {
                   ],
                   if (!isAudiencia && notes.isNotEmpty) ...[
                     const SizedBox(height: 16),
-                    const Text('Observações', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF64748B))),
+                    Text('Observações', style: labelStyle),
                     const SizedBox(height: 4),
-                    Text(notes, style: TextStyle(fontSize: 15, color: Colors.grey.shade800)),
+                    Text(notes, style: bodyStyle),
                   ],
                   if (isAudiencia) ...[
                     if (numeroSei.isNotEmpty) ...[
                       const SizedBox(height: 16),
-                      const Text('Número SEI', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF64748B))),
+                      Text('Número SEI', style: labelStyle),
                       const SizedBox(height: 4),
                       Text(numeroSei, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                     ],
                     if (numeroOcorrencia.isNotEmpty) ...[
                       const SizedBox(height: 16),
-                      const Text('Nº Ocorrência', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF64748B))),
+                      Text('Nº Ocorrência', style: labelStyle),
                       const SizedBox(height: 4),
                       Text(numeroOcorrencia, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                     ],
                     if (resumoRelato.isNotEmpty) ...[
                       const SizedBox(height: 16),
-                      const Text('Resumo relato', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF64748B))),
+                      Text('Resumo relato', style: labelStyle),
                       const SizedBox(height: 4),
-                      Text(resumoRelato, style: TextStyle(fontSize: 15, color: Colors.grey.shade800)),
+                      Text(resumoRelato, style: bodyStyle),
                     ],
                     if (localAudiencia.isNotEmpty) ...[
                       const SizedBox(height: 16),
-                      const Text('Local', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF64748B))),
+                      Text('Local', style: labelStyle),
                       const SizedBox(height: 4),
                       Text(localAudiencia, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                     ],
                     if (isAudiencia && linkSalaAudiencia.isNotEmpty) ...[
                       const SizedBox(height: 16),
-                      const Text('Link da sala', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF64748B))),
+                      Text('Link da sala', style: labelStyle),
                       const SizedBox(height: 6),
                       FilledButton.icon(
                         onPressed: () async {
@@ -257,11 +269,15 @@ class _ReminderDetailScreenState extends State<ReminderDetailScreen> {
                           padding: const EdgeInsets.symmetric(vertical: 4),
                           child: Text(
                             linkSalaAudiencia,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
-                              color: Color(0xFF1565C0),
+                              color: isDark
+                                  ? const Color(0xFF64B5F6)
+                                  : const Color(0xFF1565C0),
                               decoration: TextDecoration.underline,
-                              decorationColor: Color(0xFF1565C0),
+                              decorationColor: isDark
+                                  ? const Color(0xFF64B5F6)
+                                  : const Color(0xFF1565C0),
                             ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -271,7 +287,7 @@ class _ReminderDetailScreenState extends State<ReminderDetailScreen> {
                     ],
                     if (isAudiencia && oficioUrl.isNotEmpty) ...[
                       const SizedBox(height: 16),
-                      const Text('Ofício de comparecimento', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF64748B))),
+                      Text('Ofício de comparecimento', style: labelStyle),
                       const SizedBox(height: 6),
                       _buildOficioPreview(context, oficioUrl, oficioFileName),
                       const SizedBox(height: 10),
@@ -346,14 +362,14 @@ class _ReminderDetailScreenState extends State<ReminderDetailScreen> {
           errorBuilder: (_, __, ___) => Container(
             height: 120,
             alignment: Alignment.center,
-            color: Colors.grey.shade200,
+            color: context.isDarkMode ? context.appSurfaceHigh : Colors.grey.shade200,
             child: Icon(Icons.image_not_supported_rounded, size: 48, color: Colors.grey.shade600),
           ),
           loadingBuilder: (_, child, progress) {
             if (progress == null) return child;
             return Container(
               height: 120,
-              color: Colors.grey.shade100,
+              color: context.isDarkMode ? context.appSurfaceHigh : Colors.grey.shade100,
               alignment: Alignment.center,
               child: SizedBox(
                 width: 32,

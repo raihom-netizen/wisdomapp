@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../theme/theme_context.dart';
 import '../date_time_field.dart';
 
 /// Diálogo direto: data inicial + data final (digitar ou calendário).
@@ -141,7 +142,9 @@ Future<DateTimeRange?> showAgendaBulkClearPeriodDialog(
                             style: TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w800,
-                              color: Colors.grey.shade800,
+                              color: ctx.isDarkMode
+                                  ? ctx.appTextPrimary
+                                  : Colors.grey.shade800,
                             ),
                           ),
                         ),

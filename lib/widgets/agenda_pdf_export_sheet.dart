@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/relatorio_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import 'modern_pdf_export_button.dart';
 
 /// Opções escolhidas no sheet de exportação PDF da Agenda.
@@ -121,12 +122,14 @@ class _AgendaPdfExportSheetState extends State<AgendaPdfExportSheet> {
             decoration: BoxDecoration(
               color: selected
                   ? accent.withValues(alpha: 0.14)
-                  : Colors.white,
+                  : (context.isDarkMode ? context.appChipIdleBg : Colors.white),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
                 color: selected
                     ? accent.withValues(alpha: 0.55)
-                    : Colors.black.withValues(alpha: 0.12),
+                    : (context.isDarkMode
+                        ? context.appChipIdleBorder
+                        : Colors.black.withValues(alpha: 0.12)),
                 width: selected ? 1.6 : 1,
               ),
               boxShadow: selected
@@ -152,7 +155,7 @@ class _AgendaPdfExportSheetState extends State<AgendaPdfExportSheet> {
                   style: TextStyle(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w900,
-                    color: selected ? accent : AppColors.textPrimary,
+                    color: selected ? accent : context.appTextPrimary,
                   ),
                 ),
               ],
@@ -202,13 +205,13 @@ class _AgendaPdfExportSheetState extends State<AgendaPdfExportSheet> {
                 children: [
                   ModernPdfUi.iconBadge(size: 40),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'Exportar PDF da Agenda',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w900,
-                        color: AppColors.textPrimary,
+                        color: context.appTextPrimary,
                       ),
                     ),
                   ),
@@ -220,7 +223,9 @@ class _AgendaPdfExportSheetState extends State<AgendaPdfExportSheet> {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
-                  color: Colors.grey.shade700,
+                  color: context.isDarkMode
+                      ? context.appTextSecondary
+                      : Colors.grey.shade700,
                 ),
               ),
               const SizedBox(height: 8),
@@ -254,7 +259,9 @@ class _AgendaPdfExportSheetState extends State<AgendaPdfExportSheet> {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
-                  color: Colors.grey.shade700,
+                  color: context.isDarkMode
+                      ? context.appTextSecondary
+                      : Colors.grey.shade700,
                 ),
               ),
               const SizedBox(height: 8),
@@ -277,7 +284,12 @@ class _AgendaPdfExportSheetState extends State<AgendaPdfExportSheet> {
                     '${_monthStart.day.toString().padLeft(2, '0')}/${_monthStart.month.toString().padLeft(2, '0')}/${_monthStart.year}'
                     ' — '
                     '${_monthEnd.day.toString().padLeft(2, '0')}/${_monthEnd.month.toString().padLeft(2, '0')}/${_monthEnd.year}',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: context.isDarkMode
+                          ? context.appTextMuted
+                          : Colors.grey.shade600,
+                    ),
                   ),
                   value: _useMonth,
                   activeTrackColor: AppColors.primary.withValues(alpha: 0.45),
@@ -299,9 +311,13 @@ class _AgendaPdfExportSheetState extends State<AgendaPdfExportSheet> {
                   ),
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size(double.infinity, 46),
-                    foregroundColor: AppColors.deepBlue,
+                    foregroundColor: context.isDarkMode
+                        ? context.appDeepTitle
+                        : AppColors.deepBlue,
                     side: BorderSide(
-                      color: AppColors.deepBlue.withValues(alpha: 0.28),
+                      color: context.isDarkMode
+                          ? context.appChipIdleBorder
+                          : AppColors.deepBlue.withValues(alpha: 0.28),
                     ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),

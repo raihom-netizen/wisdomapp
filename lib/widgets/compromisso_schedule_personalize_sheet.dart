@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/compromisso_schedule_dates.dart';
 import 'multi_date_month_picker_dialog.dart';
 
@@ -163,9 +164,12 @@ class _CompromissoSchedulePersonalizeBodyState
       expand: false,
       builder: (context, scrollController) {
         return Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFFF1F5F9),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+          decoration: BoxDecoration(
+            color: context.isDarkMode
+                ? context.appScaffold
+                : const Color(0xFFF1F5F9),
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(22)),
           ),
           child: Column(
             children: [
@@ -177,12 +181,14 @@ class _CompromissoSchedulePersonalizeBodyState
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
+                          Text(
                             'Personalizar datas',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w900,
-                              color: AppColors.deepBlue,
+                              color: context.isDarkMode
+                                  ? context.appDeepTitle
+                                  : AppColors.deepBlue,
                             ),
                           ),
                           Text(
@@ -190,7 +196,7 @@ class _CompromissoSchedulePersonalizeBodyState
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade700,
+                              color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                             ),
                           ),
                         ],
@@ -318,10 +324,12 @@ class _CompromissoSchedulePersonalizeBodyState
                                 previewCount == 0
                                     ? 'Nenhum dia neste intervalo.'
                                     : '$previewCount dia(s) serão adicionados à seleção.',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontWeight: FontWeight.w800,
                                   fontSize: 12.5,
-                                  color: AppColors.deepBlue,
+                                  color: context.isDarkMode
+                                      ? context.appDeepTitle
+                                      : AppColors.deepBlue,
                                 ),
                               ),
                             ),
@@ -349,7 +357,7 @@ class _CompromissoSchedulePersonalizeBodyState
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
-                          color: Colors.grey.shade700,
+                          color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                         ),
                       ),
                     ],
@@ -387,7 +395,7 @@ class _CompromissoSchedulePersonalizeBodyState
     required Widget child,
   }) {
     return Material(
-      color: Colors.white,
+      color: context.isDarkMode ? context.appSurface : Colors.white,
       borderRadius: BorderRadius.circular(16),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
@@ -396,10 +404,12 @@ class _CompromissoSchedulePersonalizeBodyState
           children: [
             Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w900,
                 fontSize: 15,
-                color: AppColors.deepBlue,
+                color: context.isDarkMode
+                    ? context.appDeepTitle
+                    : AppColors.deepBlue,
               ),
             ),
             const SizedBox(height: 4),
@@ -408,7 +418,7 @@ class _CompromissoSchedulePersonalizeBodyState
               style: TextStyle(
                 fontSize: 12,
                 height: 1.3,
-                color: Colors.grey.shade700,
+                color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                 fontWeight: FontWeight.w500,
               ),
             ),

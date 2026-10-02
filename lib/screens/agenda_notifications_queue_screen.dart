@@ -7,6 +7,7 @@ import '../services/agenda_alerts_queue_service.dart';
 import '../services/agenda_server_sync_service.dart';
 import '../theme/agenda_modern_ui.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/firestore_user_doc_id.dart';
 
 /// Fila de notificações (servidor): audiências, compromissos e escalas — grid premium.
@@ -66,7 +67,9 @@ class _AgendaNotificationsQueueScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FA),
+      backgroundColor: context.isDarkMode
+          ? context.appScaffold
+          : const Color(0xFFF4F7FA),
       appBar: AppBar(
         title: const Text(
           'Fila de notificações',
@@ -158,13 +161,13 @@ class _AgendaNotificationsQueueScreenState
               ),
             ),
           if (_uid.isEmpty)
-            const Expanded(
+            Expanded(
               child: Center(
                 child: Text(
                   'Faça login para ver a fila.',
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textMuted,
+                    color: context.appTextMuted,
                   ),
                 ),
               ),
@@ -193,7 +196,9 @@ class _AgendaNotificationsQueueScreenState
                   final dayGroups =
                       AgendaAlertsQueueService.groupByEventDay(filtered);
                   final channelColor = switch (_channel) {
-                    AgendaQueueChannelFilter.audiencia => AppColors.deepBlue,
+                    AgendaQueueChannelFilter.audiencia => context.isDarkMode
+                        ? AppColors.primary
+                        : AppColors.deepBlue,
                     AgendaQueueChannelFilter.compromisso => AppColors.accent,
                     AgendaQueueChannelFilter.escala => AppColors.logoOrange,
                   };
@@ -266,8 +271,8 @@ class _AgendaNotificationsQueueScreenState
                               child: Text(
                                 _emptyMessage(_channel, _statusFilter),
                                 textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  color: AppColors.textMuted,
+                                style: TextStyle(
+                                  color: context.appTextMuted,
                                   fontWeight: FontWeight.w600,
                                   height: 1.35,
                                 ),
@@ -413,12 +418,14 @@ class _DaySectionHeader extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         gradient: gradient,
-        color: gradient == null ? Colors.white : null,
+        color: gradient == null
+            ? (context.isDarkMode ? context.appSurface : Colors.white)
+            : null,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isToday
               ? accent.withValues(alpha: 0.55)
-              : const Color(0xFFE2E8F0),
+              : context.appChipIdleBorder,
           width: isToday ? 2 : 1,
         ),
         boxShadow: isToday
@@ -455,7 +462,11 @@ class _DaySectionHeader extends StatelessWidget {
               style: TextStyle(
                 fontWeight: FontWeight.w800,
                 fontSize: 14,
-                color: isToday ? Colors.white : AppColors.deepBlueDark,
+                color: isToday
+                    ? Colors.white
+                    : (context.isDarkMode
+                        ? context.appTextPrimary
+                        : AppColors.deepBlueDark),
               ),
             ),
           ),
@@ -576,10 +587,10 @@ class _ChannelChip extends StatelessWidget {
                     end: Alignment.bottomRight,
                   )
                 : null,
-            color: isOn ? null : const Color(0xFFF8FAFC),
+            color: isOn ? null : context.appChipIdleBg,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: isOn ? color.withValues(alpha: 0.5) : const Color(0xFFE2E8F0),
+              color: isOn ? color.withValues(alpha: 0.5) : context.appChipIdleBorder,
               width: isOn ? 2 : 1,
             ),
             boxShadow: isOn
@@ -606,7 +617,11 @@ class _ChannelChip extends StatelessWidget {
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 11,
-                  color: isOn ? Colors.white : AppColors.deepBlueDark,
+                  color: isOn
+                      ? Colors.white
+                      : (context.isDarkMode
+                          ? context.appTextPrimary
+                          : AppColors.deepBlueDark),
                 ),
               ),
               const SizedBox(height: 2),
@@ -620,7 +635,7 @@ class _ChannelChip extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                   color: isOn
                       ? Colors.white.withValues(alpha: 0.92)
-                      : AppColors.textMuted,
+                      : context.appTextMuted,
                 ),
               ),
             ],
@@ -656,12 +671,14 @@ class _InfoBanner extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
+          Text(
             'Push e e-mail no horário agendado',
             style: TextStyle(
               fontWeight: FontWeight.w800,
               fontSize: 14,
-              color: AppColors.deepBlueDark,
+              color: context.isDarkMode
+                  ? context.appTextPrimary
+                  : AppColors.deepBlueDark,
             ),
           ),
           const SizedBox(height: 6),
@@ -675,7 +692,7 @@ class _InfoBanner extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             'A fila é montada no servidor — este app só exibe, para ficar rápido. '
             'Ao criar compromisso ou plantão, o aviso entra na fila na hora. '
             'Push/e-mail saem no horário «Enviar em» (ex.: plantão 07:00 com «1 hora antes» = 06:00). '
@@ -683,7 +700,7 @@ class _InfoBanner extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               height: 1.35,
-              color: AppColors.textMuted,
+              color: context.appTextMuted,
             ),
           ),
           const SizedBox(height: 10),
@@ -701,7 +718,9 @@ class _InfoBanner extends StatelessWidget {
             ),
             style: OutlinedButton.styleFrom(
               minimumSize: const Size(double.infinity, 44),
-              foregroundColor: AppColors.deepBlueDark,
+              foregroundColor: context.isDarkMode
+                  ? context.appTextPrimary
+                  : AppColors.deepBlueDark,
             ),
           ),
         ],
@@ -744,7 +763,7 @@ class _AlertGridCard extends StatelessWidget {
     if (item.emailEnabled) channels.add('E-mail');
 
     return Material(
-      color: Colors.white,
+      color: context.isDarkMode ? context.appSurface : Colors.white,
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
@@ -790,10 +809,12 @@ class _AlertGridCard extends StatelessWidget {
                     children: [
                       Text(
                         item.title,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 13,
-                          color: AppColors.deepBlueDark,
+                          color: context.isDarkMode
+                              ? context.appTextPrimary
+                              : AppColors.deepBlueDark,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -835,9 +856,9 @@ class _AlertGridCard extends StatelessWidget {
             Expanded(
               child: Text(
                 item.body,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: AppColors.textSecondary,
+                  color: context.appTextSecondary,
                   height: 1.25,
                 ),
                 maxLines: 3,
@@ -846,6 +867,7 @@ class _AlertGridCard extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             _miniRow(
+              context,
               Icons.alarm_rounded,
               item.isPending
                   ? 'Enviar em: ${AgendaAlertsQueueService.formatDateTime(item.notifyAt)}'
@@ -853,6 +875,7 @@ class _AlertGridCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             _miniRow(
+              context,
               Icons.event_available_rounded,
               'Evento: ${AgendaAlertsQueueService.formatDateTime(item.eventAt)}',
             ),
@@ -861,10 +884,11 @@ class _AlertGridCard extends StatelessWidget {
               spacing: 6,
               runSpacing: 4,
               children: [
-                _tag(AgendaAlertsQueueService.leadLabel(item.leadMin)),
-                if (channels.isNotEmpty) _tag(channels.join(' + ')),
+                _tag(context, AgendaAlertsQueueService.leadLabel(item.leadMin)),
+                if (channels.isNotEmpty) _tag(context, channels.join(' + ')),
                 if (item.isSent && item.sentAt != null)
                   _tag(
+                    context,
                     switch (statusFilter) {
                       AgendaQueueStatusFilter.archived =>
                         'Arquivado · ${AgendaAlertsQueueService.formatDateTime(item.sentAt!)}',
@@ -885,18 +909,18 @@ class _AlertGridCard extends StatelessWidget {
     );
   }
 
-  Widget _miniRow(IconData icon, String text) {
+  Widget _miniRow(BuildContext context, IconData icon, String text) {
     return Row(
       children: [
-        Icon(icon, size: 13, color: AppColors.textMuted),
+        Icon(icon, size: 13, color: context.appTextMuted),
         const SizedBox(width: 4),
         Expanded(
           child: Text(
             text,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w600,
-              color: AppColors.textSecondary,
+              color: context.appTextSecondary,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -906,14 +930,14 @@ class _AlertGridCard extends StatelessWidget {
     );
   }
 
-  Widget _tag(String text, {bool success = false}) {
+  Widget _tag(BuildContext context, String text, {bool success = false}) {
     return Container(
       constraints: const BoxConstraints(minHeight: 26),
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       decoration: BoxDecoration(
         color: success
             ? AppColors.success.withValues(alpha: 0.1)
-            : const Color(0xFFF1F5F9),
+            : context.appInputFill,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
@@ -921,7 +945,7 @@ class _AlertGridCard extends StatelessWidget {
         style: TextStyle(
           fontSize: 9,
           fontWeight: FontWeight.w700,
-          color: success ? AppColors.success : AppColors.textSecondary,
+          color: success ? AppColors.success : context.appTextSecondary,
         ),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,

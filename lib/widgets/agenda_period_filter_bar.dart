@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/date_picker_a11y.dart';
 
 /// Períodos do painel / módulo Audiências e Compromissos.
@@ -323,15 +324,15 @@ class _AgendaPeriodFilterBarState extends State<AgendaPeriodFilterBar> {
           widget.layout == AgendaPeriodFilterBarLayout.segmented;
       final accent = AppColors.primary;
       if (segmented) {
-        iconColor = selected ? accent : AppColors.textMuted;
-        textColor = selected ? accent : AppColors.textSecondary;
+        iconColor = selected ? accent : context.appTextMuted;
+        textColor = selected ? accent : context.appTextSecondary;
         decoration = BoxDecoration(
           borderRadius: BorderRadius.circular(chipRadius),
           color: selected
               ? accent.withValues(alpha: 0.12)
-              : const Color(0xFFF8FAFC),
+              : context.appChipIdleBg,
           border: Border.all(
-            color: selected ? accent : const Color(0xFFE2E8F0),
+            color: selected ? accent : context.appChipIdleBorder,
             width: selected ? 2 : 1,
           ),
           boxShadow: selected
@@ -360,9 +361,9 @@ class _AgendaPeriodFilterBarState extends State<AgendaPeriodFilterBar> {
                   end: Alignment.bottomRight,
                 )
               : null,
-          color: selected ? null : const Color(0xFFF8FAFC),
+          color: selected ? null : context.appChipIdleBg,
           border: Border.all(
-            color: selected ? Colors.transparent : const Color(0xFFE2E8F0),
+            color: selected ? Colors.transparent : context.appChipIdleBorder,
           ),
           boxShadow: selected
               ? [
@@ -551,7 +552,7 @@ class _AgendaPeriodFilterBarState extends State<AgendaPeriodFilterBar> {
                   fontWeight: FontWeight.w700,
                   color: _onGradient
                       ? Colors.white.withValues(alpha: 0.92)
-                      : AppColors.textMuted,
+                      : context.appTextMuted,
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,

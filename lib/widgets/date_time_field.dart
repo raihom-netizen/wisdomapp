@@ -3,6 +3,7 @@ import 'fast_text_field.dart';
 import 'package:flutter/services.dart';
 import '../constants/date_time_formats.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/date_picker_a11y.dart';
 
 /// Campo de data: calendário (toque) OU digitação manual (dd/MM/yyyy).
@@ -140,7 +141,8 @@ class _DateFieldWithCalendarOrManualState
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   filled: true,
-                  fillColor: Colors.white,
+                  fillColor:
+                      context.isDarkMode ? context.appInputFill : Colors.white,
                 ),
                 onChanged: _onManualChange,
               ),
@@ -279,7 +281,8 @@ class _TimeFieldWithClockOrManualState
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   filled: true,
-                  fillColor: Colors.white,
+                  fillColor:
+                      context.isDarkMode ? context.appInputFill : Colors.white,
                 ),
                 onChanged: _onManualChange,
               ),

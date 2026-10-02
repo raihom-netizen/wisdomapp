@@ -7,6 +7,7 @@ import '../services/apple_calendar_sync_service.dart';
 import '../services/google_calendar_auth_helper.dart';
 import '../services/google_calendar_oauth_return.dart';
 import '../services/google_calendar_sync_service.dart';
+import '../theme/theme_context.dart';
 import '../utils/firestore_web_guard.dart';
 import 'google_calendar_connect_sheet.dart';
 
@@ -703,7 +704,9 @@ class ExternalCalendarSyncScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6FB),
+      backgroundColor: context.isDarkMode
+          ? context.appScaffold
+          : const Color(0xFFF4F6FB),
       appBar: AppBar(
         backgroundColor: const Color(0xFF0B1B4B),
         foregroundColor: Colors.white,

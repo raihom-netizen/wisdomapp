@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart' as fa;
 import 'package:flutter/material.dart';
 import '../models/shift_location.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/firestore_user_doc_id.dart';
 import 'edit_location_screen.dart';
 
@@ -361,15 +362,27 @@ class _LocationsScreenState extends State<LocationsScreen> {
                   Text(
                     _hintForError(_loadError)!,
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 13, color: Colors.brown.shade800, height: 1.3),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: context.isDarkMode
+                          ? Colors.amber.shade200
+                          : Colors.brown.shade800,
+                      height: 1.3,
+                    ),
                   ),
                 ],
                 const SizedBox(height: 14),
                 Container(
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
+                    color: context.isDarkMode
+                        ? context.appSurfaceHigh
+                        : Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.grey.shade300),
+                    border: Border.all(
+                      color: context.isDarkMode
+                          ? context.appChipIdleBorder
+                          : Colors.grey.shade300,
+                    ),
                   ),
                   child: Theme(
                     data: Theme.of(context)
@@ -387,7 +400,7 @@ class _LocationsScreenState extends State<LocationsScreen> {
                           _loadError.toString(),
                           style: TextStyle(
                             fontSize: 11,
-                            color: AppColors.textMuted,
+                            color: context.appTextMuted,
                             fontFamily: 'monospace',
                           ),
                         ),
@@ -435,13 +448,13 @@ class _LocationsScreenState extends State<LocationsScreen> {
                   Text(
                     'A ligar à sua conta…',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 15, color: AppColors.textMuted, fontWeight: FontWeight.w600),
+                    style: TextStyle(fontSize: 15, color: context.appTextMuted, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Na web, o login pode levar um instante. Se demorar, use Tentar abaixo.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 13, color: AppColors.textMuted, height: 1.3),
+                    style: TextStyle(fontSize: 13, color: context.appTextMuted, height: 1.3),
                   ),
                   const SizedBox(height: 16),
                   FilledButton.tonalIcon(
@@ -471,7 +484,9 @@ class _LocationsScreenState extends State<LocationsScreen> {
           children: [
             if (_loadError != null) ...[
               Material(
-                color: Colors.amber.shade50,
+                color: context.isDarkMode
+                    ? Colors.amber.withValues(alpha: 0.16)
+                    : Colors.amber.shade50,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   child: Row(
@@ -502,18 +517,18 @@ class _LocationsScreenState extends State<LocationsScreen> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(Icons.event_note_rounded,
-                                size: 64, color: AppColors.textMuted.withValues(alpha: 0.5)),
+                                size: 64, color: context.appTextMuted.withValues(alpha: 0.5)),
                             const SizedBox(height: 16),
                             Text(
                               'Nenhum tipo de plantão cadastrado',
                               textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 16, color: AppColors.textMuted),
+                              style: TextStyle(fontSize: 16, color: context.appTextMuted),
                             ),
                             const SizedBox(height: 8),
                             Text(
                               'Toque em + para criar o primeiro (ex: Ordinário, Case Diurno, Reforço)',
                               textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+                              style: TextStyle(fontSize: 13, color: context.appTextMuted),
                             ),
                           ],
                         ),
@@ -542,7 +557,7 @@ class _LocationsScreenState extends State<LocationsScreen> {
                                 title: const Text('Plantão com dados inválidos'),
                                 subtitle: Text(
                                   doc.id,
-                                  style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                                  style: TextStyle(fontSize: 12, color: context.appTextMuted),
                                 ),
                                 trailing: IconButton(
                                   tooltip: 'Excluir',
@@ -684,7 +699,7 @@ class _LocationCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       '${location.startTime} - ${location.endTime}',
-                      style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+                      style: TextStyle(fontSize: 13, color: context.appTextMuted),
                     ),
                   ],
                 ),

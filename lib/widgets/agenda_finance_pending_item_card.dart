@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../constants/currency_formats.dart';
 import '../theme/agenda_modern_ui.dart';
+import '../theme/theme_context.dart';
 import '../utils/agenda_finance_pending_utils.dart';
 
 /// Cartão azul (receita) ou laranja (despesa) pendente — integrado à grid da Agenda.
@@ -55,7 +56,7 @@ class AgendaFinancePendingItemCard extends StatelessWidget {
             colors: [
               gradient.first.withValues(alpha: 0.14),
               gradient.last.withValues(alpha: 0.08),
-              Colors.white,
+              context.isDarkMode ? context.appSurface : Colors.white,
             ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -95,10 +96,10 @@ class AgendaFinancePendingItemCard extends StatelessWidget {
                             Expanded(
                               child: Text(
                                 title,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontWeight: FontWeight.w900,
                                   fontSize: 16,
-                                  color: Color(0xFF1A237E),
+                                  color: context.appDeepTitle,
                                 ),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
@@ -142,7 +143,9 @@ class AgendaFinancePendingItemCard extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade700,
+                              color: context.isDarkMode
+                                  ? context.appTextSecondary
+                                  : Colors.grey.shade700,
                             ),
                           ),
                         ],

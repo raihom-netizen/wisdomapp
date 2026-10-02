@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/user_profile.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/anexo_viewer_helper.dart';
 import '../utils/url_launcher_helper.dart';
 import '../screens/reminder_detail_screen.dart';
@@ -36,13 +37,17 @@ class AgendaReminderListTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
-        color: Colors.white,
+        color: context.isDarkMode ? context.appSurface : Colors.white,
         borderRadius: BorderRadius.circular(12),
         elevation: 0,
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey.shade200),
+            border: Border.all(
+              color: context.isDarkMode
+                  ? context.appChipIdleBorder
+                  : Colors.grey.shade200,
+            ),
           ),
           child: ListTile(
             leading: Icon(
@@ -64,7 +69,12 @@ class AgendaReminderListTile extends StatelessWidget {
                         DateFormat('dd/MM/yyyy', 'pt_BR').format(date),
                       if (timeStr.isNotEmpty) timeStr,
                     ].join(' · '),
-                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: context.isDarkMode
+                          ? context.appTextMuted
+                          : Colors.grey.shade600,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   )

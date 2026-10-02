@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../services/google_calendar_auth_helper.dart';
 import '../services/google_calendar_sync_service.dart';
+import '../theme/theme_context.dart';
 
 /// Autorização Google Calendar — Web: redirect OAuth; mobile: sheet in-app.
 class GoogleCalendarConnectSheet extends StatefulWidget {
@@ -187,7 +188,9 @@ class _GoogleCalendarConnectSheetState extends State<GoogleCalendarConnectSheet>
                 style: TextStyle(
                   fontSize: 13.5,
                   height: 1.4,
-                  color: Colors.grey.shade700,
+                  color: context.isDarkMode
+                      ? context.appTextSecondary
+                      : Colors.grey.shade700,
                 ),
               ),
               if (widget.preferredEmail != null &&
@@ -199,7 +202,9 @@ class _GoogleCalendarConnectSheetState extends State<GoogleCalendarConnectSheet>
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade600,
+                    color: context.isDarkMode
+                        ? context.appTextMuted
+                        : Colors.grey.shade600,
                   ),
                 ),
               ],
@@ -219,7 +224,9 @@ class _GoogleCalendarConnectSheetState extends State<GoogleCalendarConnectSheet>
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade700,
+                          color: context.isDarkMode
+                              ? context.appTextSecondary
+                              : Colors.grey.shade700,
                         ),
                       ),
                     ),

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import 'notification_despertador_screen.dart';
 import '../services/agenda_notifications_refresher.dart';
 import '../services/local_notification_preferences.dart';
@@ -431,7 +432,7 @@ class _LocalNotificationSettingsScreenState extends State<LocalNotificationSetti
                     ),
                     Text(
                       subtitle,
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      style: TextStyle(fontSize: 12, color: context.isDarkMode ? context.appTextMuted : Colors.grey.shade600),
                     ),
                   ],
                 ),
@@ -525,14 +526,14 @@ class _LocalNotificationSettingsScreenState extends State<LocalNotificationSetti
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w700,
-            color: Colors.grey.shade700,
+            color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
             letterSpacing: 0.5,
           ),
         ),
         const SizedBox(height: 6),
         Text(
           'Ex.: financeiro só no celular e cursos só por e-mail. O servidor respeita na hora do lembrete.',
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade600, height: 1.35),
+          style: TextStyle(fontSize: 12, color: context.isDarkMode ? context.appTextMuted : Colors.grey.shade600, height: 1.35),
         ),
         const SizedBox(height: 12),
         Card(
@@ -541,7 +542,7 @@ class _LocalNotificationSettingsScreenState extends State<LocalNotificationSetti
             borderRadius: BorderRadius.circular(16),
             side: BorderSide(color: AppColors.primary.withValues(alpha: 0.1)),
           ),
-          color: const Color(0xFFF8FAFC),
+          color: context.appChipIdleBg,
           child: Column(
             children: [
               _deliveryModeSelector(
@@ -648,7 +649,7 @@ class _LocalNotificationSettingsScreenState extends State<LocalNotificationSetti
     return SwitchListTile(
       secondary: Icon(icon, color: color, size: 26),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+      subtitle: Text(subtitle, style: TextStyle(fontSize: 12, color: context.isDarkMode ? context.appTextMuted : Colors.grey.shade600)),
       value: value,
       onChanged: onChanged,
       activeThumbColor: AppColors.primary,
@@ -757,7 +758,7 @@ class _LocalNotificationSettingsScreenState extends State<LocalNotificationSetti
           children: [
             Text(
               'Ative ou desative cada tipo de aviso. Simples e direto.',
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade700, height: 1.4),
+              style: TextStyle(fontSize: 14, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700, height: 1.4),
             ),
             const SizedBox(height: 20),
             Text(
@@ -765,7 +766,7 @@ class _LocalNotificationSettingsScreenState extends State<LocalNotificationSetti
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                color: Colors.grey.shade700,
+                color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                 letterSpacing: 0.5,
               ),
             ),
@@ -801,7 +802,7 @@ class _LocalNotificationSettingsScreenState extends State<LocalNotificationSetti
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                color: Colors.grey.shade700,
+                color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                 letterSpacing: 0.5,
               ),
             ),
@@ -836,7 +837,7 @@ class _LocalNotificationSettingsScreenState extends State<LocalNotificationSetti
             const SizedBox(height: 16),
             Text(
               'Preferências salvas neste aparelho e na sua conta.',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              style: TextStyle(fontSize: 12, color: context.isDarkMode ? context.appTextMuted : Colors.grey.shade600),
             ),
           ],
         ),

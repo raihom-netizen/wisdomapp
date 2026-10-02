@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../constants/reminder_lead_chip_presets.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 
 /// Lembrete específico do item — quando ativo, substitui o padrão global
 /// (`settings/notifications`) só para este lançamento (plantão, pré-cadastro ou agenda).
@@ -29,9 +30,13 @@ class LembretePersonalizadoParaItemCard extends StatelessWidget {
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.isDarkMode ? context.appSurface : Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.deepBlue.withValues(alpha: 0.1)),
+        border: Border.all(
+          color: context.isDarkMode
+              ? context.appChipIdleBorder
+              : AppColors.deepBlue.withValues(alpha: 0.1),
+        ),
         boxShadow: [
           BoxShadow(
             color: AppColors.deepBlueDark.withValues(alpha: 0.06),
@@ -56,7 +61,7 @@ class LembretePersonalizadoParaItemCard extends StatelessWidget {
                     style: TextStyle(
                       fontWeight: FontWeight.w800,
                       fontSize: dense ? 13 : 14,
-                      color: AppColors.textPrimary,
+                      color: context.appTextPrimary,
                     ),
                   ),
                 ),
@@ -69,7 +74,7 @@ class LembretePersonalizadoParaItemCard extends StatelessWidget {
                   : 'Usa o padrão global (Configurações → Notificações)',
               style: TextStyle(
                 fontSize: dense ? 11 : 11.5,
-                color: AppColors.textMuted,
+                color: context.appTextMuted,
                 height: 1.25,
               ),
             ),
@@ -90,7 +95,7 @@ class LembretePersonalizadoParaItemCard extends StatelessWidget {
                 'Quando ligado, ignora as antecedências gerais só para este $itemLabel.',
                 style: TextStyle(
                   fontSize: dense ? 10.5 : 11,
-                  color: AppColors.textMuted,
+                  color: context.appTextMuted,
                 ),
               ),
               activeTrackColor: AppColors.primary.withValues(alpha: 0.45),
@@ -121,7 +126,7 @@ class LembretePersonalizadoParaItemCard extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                         color: selectedMinutes.contains(opt.minutes)
                             ? Colors.white
-                            : AppColors.textPrimary,
+                            : context.appTextPrimary,
                       ),
                       selectedColor: AppColors.primary,
                       backgroundColor: AppColors.primary.withValues(alpha: 0.06),

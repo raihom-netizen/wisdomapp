@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/shift_location.dart';
 import '../constants/currency_formats.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import 'locations_screen.dart';
 import '../utils/uppercase_text_input_formatter.dart';
 import '../utils/firestore_user_doc_id.dart';
@@ -255,13 +256,17 @@ class _EditLocationScreenState extends State<EditLocationScreen> {
       prefixText: prefixText,
       isDense: true,
       filled: true,
-      fillColor: Colors.white,
+      fillColor: context.isDarkMode ? context.appInputFill : Colors.white,
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      labelStyle: TextStyle(fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+      labelStyle: TextStyle(fontWeight: FontWeight.w600, color: context.appTextSecondary),
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: AppColors.deepBlue.withValues(alpha: 0.12)),
+        borderSide: BorderSide(
+          color: context.isDarkMode
+              ? context.appChipIdleBorder
+              : AppColors.deepBlue.withValues(alpha: 0.12),
+        ),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
@@ -275,7 +280,9 @@ class _EditLocationScreenState extends State<EditLocationScreen> {
     return Scaffold(
       resizeToAvoidBottomInset:
           scaffoldKeyboardResizeToAvoidBottomInset(standaloneFullPageForm: true),
-      backgroundColor: const Color(0xFFF1F5F9),
+      backgroundColor: context.isDarkMode
+          ? context.appScaffold
+          : const Color(0xFFF1F5F9),
       appBar: AppBar(
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -312,7 +319,9 @@ class _EditLocationScreenState extends State<EditLocationScreen> {
       ),
       bottomNavigationBar: KeyboardAwareFormBar(
         standaloneFullPageForm: true,
-        backgroundColor: const Color(0xFFF1F5F9),
+        backgroundColor: context.isDarkMode
+            ? context.appScaffold
+            : const Color(0xFFF1F5F9),
         child: AgendaFormFooterActions(
           onCancel: () => Navigator.of(context).maybePop(),
           onSave: _save,
@@ -389,7 +398,7 @@ class _EditLocationScreenState extends State<EditLocationScreen> {
                         ),
                         child: Text(
                           _startCtrl.text.isEmpty ? '08:00' : _startCtrl.text,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: context.appTextPrimary),
                         ),
                       ),
                     ),
@@ -407,7 +416,7 @@ class _EditLocationScreenState extends State<EditLocationScreen> {
                         ),
                         child: Text(
                           _endCtrl.text.isEmpty ? '18:00' : _endCtrl.text,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: context.appTextPrimary),
                         ),
                       ),
                     ),
@@ -417,7 +426,7 @@ class _EditLocationScreenState extends State<EditLocationScreen> {
               const SizedBox(height: 8),
               Text(
                 'Toque no campo para abrir o relógio 24h e escolher hora inicial e final.',
-                style: TextStyle(fontSize: 11.5, color: AppColors.textMuted, fontWeight: FontWeight.w500, height: 1.3),
+                style: TextStyle(fontSize: 11.5, color: context.appTextMuted, fontWeight: FontWeight.w500, height: 1.3),
               ),
               if (_notifyEnabled) ...[
                 const SizedBox(height: 14),
@@ -425,7 +434,7 @@ class _EditLocationScreenState extends State<EditLocationScreen> {
                   'Lembretes usam o padrão de Configurações → Notificações.',
                   style: TextStyle(
                     fontSize: 11.5,
-                    color: AppColors.textMuted,
+                    color: context.appTextMuted,
                     fontWeight: FontWeight.w600,
                     height: 1.3,
                   ),
@@ -449,11 +458,11 @@ class _EditLocationScreenState extends State<EditLocationScreen> {
               ),
               if (_financialEnabled) ...[
                 const SizedBox(height: 12),
-                const Text('Vínculo', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppColors.textPrimary)),
+                Text('Vínculo', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: context.appTextPrimary)),
                 const SizedBox(height: 4),
                 Text(
                   'Padrão: Estado. Estado e Município usam valores padrão GO. Particular: informe valor/hora, diária, bônus etc.',
-                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.35, fontWeight: FontWeight.w500),
+                  style: TextStyle(fontSize: 12, color: context.appTextSecondary, height: 1.35, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -665,12 +674,17 @@ class _EditLocationScreenState extends State<EditLocationScreen> {
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.isDarkMode ? context.appSurface : Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.deepBlue.withValues(alpha: 0.1)),
+        border: Border.all(
+          color: context.isDarkMode
+              ? context.appChipIdleBorder
+              : AppColors.deepBlue.withValues(alpha: 0.1),
+        ),
         boxShadow: [
           BoxShadow(
-            color: AppColors.deepBlueDark.withValues(alpha: 0.08),
+            color: (context.isDarkMode ? Colors.black : AppColors.deepBlueDark)
+                .withValues(alpha: context.isDarkMode ? 0.4 : 0.08),
             blurRadius: 14,
             offset: const Offset(0, 6),
           ),
@@ -707,16 +721,20 @@ class _EditLocationScreenState extends State<EditLocationScreen> {
                         color: AppColors.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Icon(icon, color: AppColors.deepBlue, size: 18),
+                      child: Icon(icon,
+                          color: context.isDarkMode
+                              ? context.appDeepTitle
+                              : AppColors.deepBlue,
+                          size: 18),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         title,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 14.5,
                           fontWeight: FontWeight.w900,
-                          color: AppColors.textPrimary,
+                          color: context.appTextPrimary,
                           height: 1.15,
                         ),
                       ),
@@ -730,7 +748,7 @@ class _EditLocationScreenState extends State<EditLocationScreen> {
                     style: TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.textMuted,
+                      color: context.appTextMuted,
                       height: 1.3,
                     ),
                   ),

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../services/notification_audio_player.dart';
 import '../services/notification_sound_catalog.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 
 /// Modo de entrega da notificação só para este evento.
 ///
@@ -154,8 +155,9 @@ class _EventNotificationSoundPickerState
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Colors.white,
-            const Color(0xFF7C3AED).withValues(alpha: 0.04),
+            context.isDarkMode ? context.appSurface : Colors.white,
+            const Color(0xFF7C3AED)
+                .withValues(alpha: context.isDarkMode ? 0.10 : 0.04),
           ],
         ),
         boxShadow: [
@@ -182,7 +184,7 @@ class _EventNotificationSoundPickerState
               SizedBox(height: dense ? 6 : 8),
               TextButton.icon(
                 style: TextButton.styleFrom(
-                  foregroundColor: AppColors.textMuted,
+                  foregroundColor: context.appTextMuted,
                   padding: EdgeInsets.zero,
                   minimumSize: const Size(0, 32),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -228,7 +230,7 @@ class _EventNotificationSoundPickerState
                 style: TextStyle(
                   fontWeight: FontWeight.w900,
                   fontSize: dense ? 13.5 : 14.5,
-                  color: AppColors.textPrimary,
+                  color: context.appTextPrimary,
                 ),
               ),
               const SizedBox(height: 2),
@@ -236,7 +238,7 @@ class _EventNotificationSoundPickerState
                 _subtitleFor(widget.value),
                 style: TextStyle(
                   fontSize: dense ? 10.5 : 11,
-                  color: AppColors.textMuted,
+                  color: context.appTextMuted,
                   height: 1.25,
                 ),
                 maxLines: 2,
@@ -314,7 +316,7 @@ class _EventNotificationSoundPickerState
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(12, dense ? 8 : 10, 12, dense ? 10 : 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.isDarkMode ? context.appSurfaceHigh : Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
             color: const Color(0xFF7C3AED).withValues(alpha: 0.16)),
@@ -335,7 +337,7 @@ class _EventNotificationSoundPickerState
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: dense ? 12 : 12.5,
-                    color: AppColors.textPrimary,
+                    color: context.appTextPrimary,
                   ),
                 ),
               ),
@@ -352,7 +354,7 @@ class _EventNotificationSoundPickerState
             'Toque numa linha para aplicar e ouvir. Use ▶ só para ouvir sem mudar.',
             style: TextStyle(
               fontSize: dense ? 10.5 : 11,
-              color: AppColors.textMuted,
+              color: context.appTextMuted,
               height: 1.25,
             ),
           ),
@@ -369,7 +371,9 @@ class _EventNotificationSoundPickerState
               separatorBuilder: (_, __) => Divider(
                 height: 1,
                 indent: 52,
-                color: Colors.grey.shade200,
+                color: context.isDarkMode
+                    ? context.appBorderSubtle
+                    : Colors.grey.shade200,
               ),
               itemBuilder: (context, index) {
                 if (index == 0) {
@@ -390,7 +394,7 @@ class _EventNotificationSoundPickerState
 
   Widget _padraoListTile(bool dense) {
     final isSel = widget.value.soundId == null;
-    final deep = AppColors.deepBlue;
+    final deep = context.isDarkMode ? AppColors.primary : AppColors.deepBlue;
     return Material(
       color: Colors.transparent,
       child: ListTile(
@@ -413,14 +417,14 @@ class _EventNotificationSoundPickerState
           style: TextStyle(
             fontWeight: FontWeight.w800,
             fontSize: dense ? 13 : 14,
-            color: AppColors.textPrimary,
+            color: context.appTextPrimary,
           ),
         ),
         subtitle: Text(
           'Tom da categoria em Preferências → Sons',
           style: TextStyle(
             fontSize: dense ? 11 : 11.5,
-            color: AppColors.textMuted,
+            color: context.appTextMuted,
           ),
         ),
         onTap: () {
@@ -459,7 +463,7 @@ class _EventNotificationSoundPickerState
           style: TextStyle(
             fontWeight: FontWeight.w800,
             fontSize: dense ? 13 : 14,
-            color: AppColors.textPrimary,
+            color: context.appTextPrimary,
           ),
         ),
         subtitle: item.description != null
@@ -467,7 +471,7 @@ class _EventNotificationSoundPickerState
                 item.description!,
                 style: TextStyle(
                   fontSize: dense ? 11 : 11.5,
-                  color: AppColors.textMuted,
+                  color: context.appTextMuted,
                 ),
               )
             : null,
@@ -530,10 +534,14 @@ class _ModeButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // No escuro, cor muito escura (ex.: «Só push») some sobre o fundo grafite.
+    final color = context.isDarkMode && data.color.computeLuminance() < 0.05
+        ? const Color(0xFF94A3B8)
+        : data.color;
     final bg = selected
         ? data.color
-        : data.color.withValues(alpha: 0.08);
-    final fg = selected ? Colors.white : data.color;
+        : color.withValues(alpha: 0.08);
+    final fg = selected ? Colors.white : color;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),
@@ -547,7 +555,7 @@ class _ModeButton extends StatelessWidget {
           border: Border.all(
             color: selected
                 ? data.color
-                : data.color.withValues(alpha: 0.25),
+                : color.withValues(alpha: 0.25),
             width: selected ? 1.5 : 1,
           ),
         ),
@@ -575,7 +583,7 @@ class _ModeButton extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                   color: selected
                       ? Colors.white.withValues(alpha: 0.9)
-                      : data.color.withValues(alpha: 0.75),
+                      : color.withValues(alpha: 0.75),
                 ),
               ),
             ),

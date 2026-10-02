@@ -6,6 +6,7 @@ import '../constants/commitment_presets.dart';
 import '../services/commitment_descriptions_service.dart';
 import '../services/user_categories_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/uppercase_text_input_formatter.dart';
 
 /// Linha de chips premium com os 6 compromissos mais comuns. Reutilizada no
@@ -110,10 +111,10 @@ class _CommitmentQuickChip extends StatelessWidget {
             const SizedBox(width: 8),
             Text(
               _shortName,
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w800,
                 fontSize: 12.5,
-                color: AppColors.textPrimary,
+                color: context.appTextPrimary,
                 height: 1.1,
               ),
             ),
@@ -286,7 +287,9 @@ class _CommitmentDescriptionPickerScreenState
     final showIncluirNova = query.isNotEmpty && !_exactMatchExists(query);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
+      backgroundColor: context.isDarkMode
+          ? context.appScaffold
+          : const Color(0xFFF1F5F9),
       appBar: AppBar(
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -315,7 +318,7 @@ class _CommitmentDescriptionPickerScreenState
         children: [
           // Pesquisa + Incluir nova fixos no topo.
           Container(
-            color: Colors.white,
+            color: context.isDarkMode ? context.appSurface : Colors.white,
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
             child: Column(
               children: [
@@ -338,7 +341,9 @@ class _CommitmentDescriptionPickerScreenState
                             },
                           ),
                     filled: true,
-                    fillColor: const Color(0xFFF6F8FB),
+                    fillColor: context.isDarkMode
+                        ? context.appInputFill
+                        : const Color(0xFFF6F8FB),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
                       borderSide: BorderSide.none,
@@ -397,22 +402,22 @@ class _CommitmentDescriptionPickerScreenState
                         ),
                         title: Text(
                           it.name,
-                          style: const TextStyle(
+                          style: TextStyle(
                               fontWeight: FontWeight.w700,
                               fontSize: 14.5,
-                              color: AppColors.textPrimary),
+                              color: context.appTextPrimary),
                         ),
                         subtitle: it.custom
-                            ? const Text('Sua descrição',
+                            ? Text('Sua descrição',
                                 style: TextStyle(
                                     fontSize: 11.5,
-                                    color: AppColors.textMuted))
+                                    color: context.appTextMuted))
                             : null,
                         trailing: it.custom
                             ? IconButton(
                                 tooltip: 'Remover',
-                                icon: const Icon(Icons.delete_outline_rounded,
-                                    color: AppColors.textMuted),
+                                icon: Icon(Icons.delete_outline_rounded,
+                                    color: context.appTextMuted),
                                 onPressed: () async {
                                   await _service.remove(widget.uid, it.name);
                                   if (!mounted) return;
@@ -423,8 +428,8 @@ class _CommitmentDescriptionPickerScreenState
                                       .toList());
                                 },
                               )
-                            : const Icon(Icons.chevron_right_rounded,
-                                color: AppColors.textMuted),
+                            : Icon(Icons.chevron_right_rounded,
+                                color: context.appTextMuted),
                         onTap: () =>
                             Navigator.of(context).pop(it.name),
                       );
@@ -444,15 +449,15 @@ class _CommitmentDescriptionPickerScreenState
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.event_note_rounded,
-                size: 56, color: AppColors.textMuted.withValues(alpha: 0.6)),
+                size: 56, color: context.appTextMuted.withValues(alpha: 0.6)),
             const SizedBox(height: 12),
             Text(
               query.isEmpty
                   ? 'Sem descrições disponíveis.'
                   : 'Nenhuma descrição corresponde a "$query".',
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                  color: AppColors.textSecondary,
+              style: TextStyle(
+                  color: context.appTextSecondary,
                   fontSize: 13.5,
                   height: 1.4),
             ),

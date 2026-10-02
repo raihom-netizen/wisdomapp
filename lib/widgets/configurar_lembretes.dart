@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/theme_context.dart';
 import 'fast_text_field.dart';
 
 /// Converte tempo + unidade para minutos (antecedência).
@@ -119,13 +120,13 @@ class _ConfigurarLembretesState extends State<ConfigurarLembretes> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Row(
+        Row(
           children: [
-            Icon(Icons.notifications_active_outlined, color: Color(0xFF1A237E), size: 22),
-            SizedBox(width: 10),
+            Icon(Icons.notifications_active_outlined, color: context.appDeepTitle, size: 22),
+            const SizedBox(width: 10),
             Text(
               'Lembretes de plantão',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1A237E)),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: context.appDeepTitle),
             ),
           ],
         ),
@@ -136,7 +137,9 @@ class _ConfigurarLembretesState extends State<ConfigurarLembretes> {
           children: lembretes.map((l) {
             final label = (l['label'] ?? '${l['tempo']} ${l['unidade']} antes').toString();
             return Chip(
-              backgroundColor: Colors.blue.shade50,
+              backgroundColor: context.isDarkMode
+                  ? Colors.blue.withValues(alpha: 0.18)
+                  : Colors.blue.shade50,
               deleteIcon: const Icon(Icons.close, size: 16),
               onDeleted: () {
                 setState(() {
