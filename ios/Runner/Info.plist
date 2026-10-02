@@ -92,10 +92,18 @@
 		<string>remote-notification</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>O app usa a câmara para tirar foto de comprovantes financeiros, anexos e orçamentos quando você escolher essa opção.</string>
+	<string>O app usa a câmera para tirar foto de comprovantes financeiros, anexos e orçamentos quando você escolher essa opção.</string>
+	<!-- Gravar vídeo pela câmera (aulas dos Cursos no painel): o iOS encerra o app se o
+	     microfone for acessado sem esta chave. -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>O WISDOMAPP usa o microfone só para gravar o áudio dos vídeos que você filmar pelo app (aulas dos Cursos).</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>O app acessa a galeria para anexar fotos, prints e PDFs salvos em comprovantes financeiros e anotações.</string>
 	<!-- iOS 14+ (PHPicker / acesso limitado): mesma finalidade; evita rejeição por falta de chave em revisões estritas -->
+	<!-- «Salvar imagem» na folha de compartilhar (comprovantes, PDFs, qualificação): sem esta
+	     chave o iOS encerra o app ao tocar em salvar na galeria. -->
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>O WISDOMAPP salva na sua galeria as imagens e comprovantes que você escolher salvar.</string>
 	<key>NSPhotoLibraryLimitedUsageDescription</key>
 	<string>O app usa fotos que você selecionar da galeria para anexar em comprovantes e anotações.</string>
 	<key>NSFaceIDUsageDescription</key>
