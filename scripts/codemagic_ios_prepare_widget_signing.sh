@@ -27,6 +27,11 @@ PY
   if [[ -n "${CM_ENV:-}" ]]; then
     echo "WISDOMAPP_WIDGET_ENABLED=false" >> "$CM_ENV"
   fi
+  # GitHub Actions: sem isto o ExportOptions continuava exigindo o perfil do
+  # Widget e o build falhava («perfil Widget … não encontrado»).
+  if [[ -n "${GITHUB_ENV:-}" ]]; then
+    echo "WISDOMAPP_WIDGET_ENABLED=false" >> "$GITHUB_ENV"
+  fi
   exit 0
 }
 

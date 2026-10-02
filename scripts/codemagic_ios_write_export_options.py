@@ -22,6 +22,10 @@ WIDGET_BUNDLE_ID = os.environ.get(
     "WIDGET_BUNDLE_ID", "br.com.controletotalapp1.app.ControleTotalWidget"
 )
 APP_GROUP = os.environ.get("APP_GROUP_ID", "group.br.com.controletotalapp1.widget")
+# O preparo do Widget desliga a extensão quando a Apple não aceita o App Group
+# (fallback_without_widget): aí o IPA sai só com o app, sem exigir perfil do Widget.
+if os.environ.get("WISDOMAPP_WIDGET_ENABLED", "").strip().lower() == "false":
+    WIDGET_BUNDLE_ID = ""
 
 
 def main() -> int:
