@@ -83,12 +83,33 @@ function buildDigestEmailHtml(userName, dateLabel, sections, appDomain, template
   );
 }
 
+/**
+ * Modelo da série anual (`isYearlyRepeatTemplate`) não é compromisso do dia —
+ * as ocorrências `{id}_yAAAA` já entram; contar o modelo dava o anual em dobro.
+ */
+function isYearlyRepeatTemplateDoc(d) {
+  if (!d) return false;
+  return d.isYearlyRepeatTemplate === true ||
+    String(d.source || "") === "yearly_repeat_template";
+}
+
+/** Só os docs do dia-alvo (antes lia a coleção inteira de cada usuário). */
+function dayRangeQuery(col, bounds) {
+  return col
+    .where("date", ">=", admin.firestore.Timestamp.fromDate(bounds.start))
+    .where("date", "<=", admin.firestore.Timestamp.fromDate(bounds.end));
+}
+
 async function collectTomorrowAgendaItems(db, uid, bounds) {
   const items = { audiencia: [], compromisso: [], escala: [] };
 
-  const remSnap = await db.collection("users").doc(uid).collection("reminders").get();
+  const remSnap = await dayRangeQuery(
+    db.collection("users").doc(uid).collection("reminders"),
+    bounds,
+  ).get();
   for (const doc of remSnap.docs) {
     const d = doc.data();
+    if (isYearlyRepeatTemplateDoc(d)) continue;
     const date = d.date?.toDate ? d.date.toDate() : null;
     if (!date || !isSameCalendarDayBrasilia(date, bounds)) continue;
     const type = (d.type || "compromisso").toString().toLowerCase();
@@ -103,10 +124,14 @@ async function collectTomorrowAgendaItems(db, uid, bounds) {
     }
   }
 
-  const scalesSnap = await db.collection("users").doc(uid).collection("scales").get();
+  const scalesSnap = await dayRangeQuery(
+    db.collection("users").doc(uid).collection("scales"),
+    bounds,
+  ).get();
   for (const doc of scalesSnap.docs) {
     const d = doc.data();
     if (d.isAgendaMirror === true || d.isProdutividadeFolgaMirror === true) continue;
+    if (isYearlyRepeatTemplateDoc(d)) continue;
     const date = d.date?.toDate ? d.date.toDate() : null;
     if (!date || !isSameCalendarDayBrasilia(date, bounds)) continue;
     const isComp = d.isCompromisso === true;
@@ -236,4 +261,6 @@ module.exports = {
   runDailyAgendaDigest,
   dayBoundsBrasilia,
   dateKeyBrasilia,
+  collectTomorrowAgendaItems,
+  isYearlyRepeatTemplateDoc,
 };
