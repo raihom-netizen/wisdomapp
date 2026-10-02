@@ -143,12 +143,10 @@ class AdminPermissionsService {
 
   bool canRemoveUser(AdminCapability c) => _gereUsuarios(c);
 
-  /// Mercado Pago: master (completo); sócio e gestor seguem só com a leitura
-  /// de recebimentos que já tinham (menu próprio de cada um).
+  /// Mercado Pago: SÓ master (raihom e isabelle por e-mail). Decisão do dono
+  /// 02/10/2026: não aparece para o Tarley nem para sócio/gestor.
   bool canAccessMercadoPago(AdminCapability c) =>
-      c == AdminCapability.superAdmin ||
-      c == AdminCapability.partner ||
-      c == AdminCapability.contentGestor;
+      c == AdminCapability.superAdmin;
 
   /// Chaves/config do Mercado Pago — só master.
   bool canEditMercadoPagoConfig(AdminCapability c) =>
