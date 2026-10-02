@@ -34,12 +34,12 @@
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="WISDOMAPP — Sabedoria financeira baseada nos princípios bíblicos. Teste grátis 30 dias. Financeiro, objetivos financeiros, agenda e cursos.">
-  <link rel="canonical" href="https://wisdomapp-b9e98.web.app/">
+  <link rel="canonical" id="wa-canonical" href="https://wisdomapp.com.br/">
   <meta property="og:title" content="WISDOMAPP — Sabedoria financeira">
   <meta property="og:description" content="Teste grátis 30 dias. Finanças, Objetivos Financeiros (Projeto 52 semanas), agenda e cursos com princípios bíblicos. Acesso por celular ou computador.">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://wisdomapp-b9e98.web.app/">
-  <meta property="og:image" content="https://wisdomapp-b9e98.web.app/icons/Icon-512.png">
+  <meta property="og:url" id="wa-og-url" content="https://wisdomapp.com.br/">
+  <meta property="og:image" id="wa-og-image" content="https://wisdomapp.com.br/icons/Icon-512.png">
   <meta property="og:image:width" content="512">
   <meta property="og:image:height" content="512">
   <meta property="og:locale" content="pt_BR">
@@ -57,8 +57,23 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="WISDOMAPP">
   <meta name="google-signin-client_id" content="766524666378-ce9albkkvn01si77s6ofcqvoaatn29s0.apps.googleusercontent.com">
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <!-- GSI sob demanda no login Google — não bloqueia o boot (estilo Controle Total). -->
   <meta name="format-detection" content="telephone=no">
+  <script>
+    (function () {
+      try {
+        var host = (location.hostname || "").toLowerCase();
+        var origin = location.origin || ("https://" + host);
+        if (!host) return;
+        var canon = document.getElementById("wa-canonical");
+        var ogUrl = document.getElementById("wa-og-url");
+        var ogImg = document.getElementById("wa-og-image");
+        if (canon) canon.setAttribute("href", origin + "/");
+        if (ogUrl) ogUrl.setAttribute("content", origin + "/");
+        if (ogImg) ogImg.setAttribute("content", origin + "/icons/Icon-512.png");
+      } catch (e) {}
+    })();
+  </script>
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="icons/Icon-192.png">
   <style>
@@ -377,8 +392,7 @@
     Config atual (espelho de firebase_options.dart): apiKey, projectId: controletotal-4c867,
     authDomain: controletotal-4c867.firebaseapp.com, storageBucket: controletotal-4c867.firebasestorage.app.
   -->
-  <!-- PDF.js — defer: não bloquear parse no Safari iOS -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
+  <!-- PDF.js sob demanda (só quando o módulo PDF for usado) — boot mais leve. -->
 </head>
 <body>
   <!-- Pré-aquecimento do teclado nativo (Android/iOS):
@@ -542,7 +556,7 @@
       if (isIOS || inApp) return;
       if ("serviceWorker" in navigator && "PushManager" in window) {
         // Marcador de versao (scripts/sync_app_version.ps1): muda a cada release e atualiza o SW/PWA instalado.
-        var swVersion = "v=26";
+        var swVersion = "v=27";
         navigator.serviceWorker.register("/firebase-messaging-sw.js?" + swVersion)
           .then(function (swReg) { console.log("FCM Service Worker registrado.", swReg.scope); })
           .catch(function (err) { console.warn("Registro FCM Service Worker falhou:", err); });
@@ -662,6 +676,6 @@
   <!-- Boot único: web/flutter_bootstrap.js customizado já chama _flutter.loader.load
        (canvaskit full local). Load duplicado aqui causava 2ª execução do main() e
        FirebaseError failed-precondition: initializeFirestore() com opções diferentes. -->
-  <script src="flutter_bootstrap.js?v=26" async></script>
+  <script src="flutter_bootstrap.js?v=27" async></script>
 </body>
 </html>
