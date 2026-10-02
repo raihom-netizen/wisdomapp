@@ -12,7 +12,13 @@ const { onCall } = require("firebase-functions/v2/https");
 // 3 (02/10/2026): bumpAccountMonthNet gravava `netByAccount.<id>` com set() —
 // virava um campo literal com ponto e o mapa netByAccount ficava vazio. A versão
 // nova força um rebuild por usuário (o app chama ctFinanceRebuildOpeningBuckets).
-const OPENING_BUCKETS_VERSION = 3;
+// 4 (02/10/2026, regra do Controle Total — `accountBucketDelta`): compra paga
+// pela fatura (`paidFromFinanceAccountId`) entra na conta que PAGOU, não no
+// cartão. Ex.: compra de 300 no cartão Nubank paga pela conta Itaú → antes
+// netByAccount { nubank: −300 } (Itaú sem o débito); agora { itau: −300 }.
+// O total (netPaid) não muda. O rebuild deixou de usar merge (chave velha de
+// cartão ficava presa no mapa).
+const OPENING_BUCKETS_VERSION = 4;
 
 function monthKeyBr(ts) {
   if (!ts || typeof ts.toDate !== "function") return "1970-01";
@@ -114,23 +120,55 @@ async function bumpAccountMonthNet(userId, monthKey, accountId, delta) {
   );
 }
 
+/**
+ * Conta que o lançamento movimenta no bucket por conta (regra do Controle
+ * Total, `accountBucketDelta`, igual ao app em
+ * `FinanceAccountBalanceUtils.openingPaidByAccountFromDocMaps`): despesa paga
+ * com `paidFromFinanceAccountId` (compra no cartão quitada pela fatura) sai da
+ * conta que PAGOU; o resto, da própria `financeAccountId`.
+ */
+function accountBucketDelta(data) {
+  if (!data) return { accountId: null, delta: 0 };
+  const isPaid = (data.status || "paid").toString() === "paid";
+  if (!isPaid) return { accountId: null, delta: 0 };
+  const type = (data.type || "expense").toString();
+  const amount = Math.abs(Number(data.amount) || 0);
+  if (amount <= 0) return { accountId: null, delta: 0 };
+  const paidFrom = ((data.paidFromFinanceAccountId || "") + "").trim();
+  const accountId = ((data.financeAccountId || "") + "").trim();
+  if (paidFrom && type === "expense") {
+    return { accountId: paidFrom, delta: -amount };
+  }
+  if (!accountId) return { accountId: null, delta: 0 };
+  return { accountId, delta: openingContribution(data) };
+}
+
 async function applyAccountMonthBucketDelta(userId, before, after) {
   const bEff = before ? effectiveTs(before) : null;
   const aEff = after ? effectiveTs(after) : null;
-  const bC = before ? openingContribution(before) : 0;
-  const aC = after ? openingContribution(after) : 0;
-  const bAcc = accountIdFrom(before);
-  const aAcc = accountIdFrom(after);
   const bKey = bEff ? monthKeyBr(bEff) : null;
   const aKey = aEff ? monthKeyBr(aEff) : null;
+  const bSlot = accountBucketDelta(before);
+  const aSlot = accountBucketDelta(after);
 
-  if (bKey && aKey && bKey === aKey && bAcc && aAcc && bAcc === aAcc) {
-    const net = aC - bC;
-    if (net !== 0) await bumpAccountMonthNet(userId, bKey, bAcc, net);
+  if (
+    bKey &&
+    aKey &&
+    bKey === aKey &&
+    bSlot.accountId &&
+    aSlot.accountId &&
+    bSlot.accountId === aSlot.accountId
+  ) {
+    const net = aSlot.delta - bSlot.delta;
+    if (net !== 0) await bumpAccountMonthNet(userId, bKey, bSlot.accountId, net);
     return;
   }
-  if (bKey && bAcc && bC !== 0) await bumpAccountMonthNet(userId, bKey, bAcc, -bC);
-  if (aKey && aAcc && aC !== 0) await bumpAccountMonthNet(userId, aKey, aAcc, aC);
+  if (bKey && bSlot.accountId && bSlot.delta !== 0) {
+    await bumpAccountMonthNet(userId, bKey, bSlot.accountId, -bSlot.delta);
+  }
+  if (aKey && aSlot.accountId && aSlot.delta !== 0) {
+    await bumpAccountMonthNet(userId, aKey, aSlot.accountId, aSlot.delta);
+  }
 }
 
 async function applyAllBucketDeltas(userId, before, after) {
@@ -157,8 +195,19 @@ const financeMonthBucketsOnTransactionWrite = onDocumentWritten(
 );
 
 /**
- * Reconstrói buckets a partir de todos os lançamentos (one-shot após deploy ou migração).
- * Idempotente: sobrescreve netPaid por mês e netByAccount por mês.
+ * Reconstrói buckets a partir de todos os lançamentos (one-shot após deploy,
+ * migração, ou quando o usuário exclui uma conta/lançamentos em massa).
+ *
+ * NÃO usa `merge: true` de propósito: o gatilho incremental
+ * (`financeMonthBucketsOnTransactionWrite`) só soma/subtrai o que muda a cada
+ * lançamento — se uma exclusão em lote falhar silenciosamente pra um ou dois
+ * documentos (erro transiente, cota, etc.), o decremento correspondente nunca
+ * acontece e um resíduo fica preso no bucket pra sempre, mesmo com a conta e
+ * todos os lançamentos já apagados. Com `merge: true`, o rebuild também não
+ * resolveria isso: ele só sobrescreve as chaves que aparecem no cálculo novo,
+ * nunca remove uma chave de conta/mês que não tem lançamento nenhum. Por
+ * isso aqui o documento é substituído por inteiro (mês sem lançamento vira
+ * `delete()`, mês com lançamento grava `netByAccount` do zero).
  */
 const ctFinanceRebuildOpeningBuckets = onCall({ region: "us-central1", memory: "512MiB", timeoutSeconds: 300 }, async (req) => {
   if (!req.auth || !req.auth.uid) {
@@ -186,52 +235,70 @@ const ctFinanceRebuildOpeningBuckets = onCall({ region: "us-central1", memory: "
       const k = monthKeyBr(eff);
       const c = openingContribution(d);
       monthSums.set(k, (monthSums.get(k) || 0) + c);
-      const acc = accountIdFrom(d);
-      if (acc && c !== 0) {
+      const slot = accountBucketDelta(d);
+      if (slot.accountId && slot.delta !== 0) {
         if (!accountMonthSums.has(k)) accountMonthSums.set(k, new Map());
         const m = accountMonthSums.get(k);
-        m.set(acc, (m.get(acc) || 0) + c);
+        m.set(slot.accountId, (m.get(slot.accountId) || 0) + slot.delta);
       }
     }
     last = snap.docs[snap.docs.length - 1];
     if (snap.size < 400) break;
   }
 
+  // Documentos que já existem — qualquer um que não aparecer no cálculo novo
+  // não tem mais lançamento nenhum por trás e precisa ser apagado, não só
+  // deixado de fora do próximo write.
+  const [existingMonthDocs, existingAccountMonthDocs] = await Promise.all([
+    db.collection(`users/${uid}/finance_month_buckets`).listDocuments(),
+    db.collection(`users/${uid}/finance_account_month_buckets`).listDocuments(),
+  ]);
+
   const monthEntries = [...monthSums.entries()];
-  for (let i = 0; i < monthEntries.length; i += 400) {
+  const monthKeysAtivos = new Set(monthEntries.map(([k]) => k));
+  const monthWrites = monthEntries.map(([k, v]) => ({
+    ref: db.doc(`users/${uid}/finance_month_buckets/${k}`),
+    data: { netPaid: v, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+  }));
+  const monthDeletes = existingMonthDocs
+    .filter((ref) => !monthKeysAtivos.has(ref.id))
+    .map((ref) => ref);
+
+  for (let i = 0; i < monthWrites.length; i += 400) {
     const batch = db.batch();
-    const chunk = monthEntries.slice(i, i + 400);
-    for (const [k, v] of chunk) {
-      batch.set(
-        db.doc(`users/${uid}/finance_month_buckets/${k}`),
-        {
-          netPaid: v,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true },
-      );
-    }
+    for (const w of monthWrites.slice(i, i + 400)) batch.set(w.ref, w.data);
+    await batch.commit();
+  }
+  for (let i = 0; i < monthDeletes.length; i += 400) {
+    const batch = db.batch();
+    for (const ref of monthDeletes.slice(i, i + 400)) batch.delete(ref);
     await batch.commit();
   }
 
   const accountMonthEntries = [...accountMonthSums.entries()];
-  for (let i = 0; i < accountMonthEntries.length; i += 200) {
-    const batch = db.batch();
-    const chunk = accountMonthEntries.slice(i, i + 200);
-    for (const [monthKey, accMap] of chunk) {
-      const netByAccount = {};
-      for (const [acc, val] of accMap.entries()) {
-        netByAccount[safeAccountFieldId(acc)] = val;
-      }
-      batch.set(
-        db.doc(`users/${uid}/finance_account_month_buckets/${monthKey}`),
-        {
-          netByAccount,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true },
-      );
+  const accountMonthKeysAtivos = new Set(accountMonthEntries.map(([k]) => k));
+  const accountMonthWrites = accountMonthEntries.map(([monthKey, accMap]) => {
+    const netByAccount = {};
+    for (const [acc, val] of accMap.entries()) {
+      netByAccount[safeAccountFieldId(acc)] = val;
     }
+    return {
+      ref: db.doc(`users/${uid}/finance_account_month_buckets/${monthKey}`),
+      data: { netByAccount, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+    };
+  });
+  const accountMonthDeletes = existingAccountMonthDocs
+    .filter((ref) => !accountMonthKeysAtivos.has(ref.id))
+    .map((ref) => ref);
+
+  for (let i = 0; i < accountMonthWrites.length; i += 200) {
+    const batch = db.batch();
+    for (const w of accountMonthWrites.slice(i, i + 200)) batch.set(w.ref, w.data);
+    await batch.commit();
+  }
+  for (let i = 0; i < accountMonthDeletes.length; i += 400) {
+    const batch = db.batch();
+    for (const ref of accountMonthDeletes.slice(i, i + 400)) batch.delete(ref);
     await batch.commit();
   }
 
@@ -245,8 +312,10 @@ const ctFinanceRebuildOpeningBuckets = onCall({ region: "us-central1", memory: "
 
   return {
     ok: true,
-    months: monthEntries.length,
-    accountMonths: accountMonthEntries.length,
+    months: monthWrites.length,
+    monthsRemoved: monthDeletes.length,
+    accountMonths: accountMonthWrites.length,
+    accountMonthsRemoved: accountMonthDeletes.length,
     version: OPENING_BUCKETS_VERSION,
   };
 });
@@ -257,6 +326,7 @@ module.exports = {
   monthKeyBr,
   effectiveTs,
   openingContribution,
+  accountBucketDelta,
   accountIdFrom,
   safeAccountFieldId,
   restoreAccountFieldId,

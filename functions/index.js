@@ -2755,11 +2755,74 @@ exports.ctFinancePeriodTotals = onCall(
     const start = new Date(from.getFullYear(), from.getMonth(), from.getDate(), 0, 0, 0, 0);
     const end = new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999);
     const txCol = admin.firestore().collection("users").doc(uid).collection("transactions");
-    const { monthKeyBr, openingContribution: openingContribFn, restoreAccountFieldId } = require("./financeMonthBuckets");
+    const {
+      monthKeyBr,
+      openingContribution: openingContribFn,
+      accountBucketDelta,
+      restoreAccountFieldId,
+    } = require("./financeMonthBuckets");
+    const regras = require("./financePeriodRules");
 
     let openingTotal = 0;
     const openingByAccount = {};
     const monthStart = new Date(start.getFullYear(), start.getMonth(), 1, 0, 0, 0, 0);
+
+    // Cartões de crédito do usuário (saldo por conta e pendentes tiram o cartão,
+    // igual ao app — FinanceAccountBalanceUtils.creditCardAccountIds).
+    const creditCardIds = new Set();
+    try {
+      const accSnap = await admin.firestore().collection(`users/${uid}/finance_accounts`).get();
+      accSnap.forEach((d) => {
+        if (regras.isCreditCardAccountData(d.data())) creditCardIds.add(d.id);
+      });
+    } catch (e) {
+      console.warn("ctFinancePeriodTotals finance_accounts", e?.message || e);
+    }
+
+    /**
+     * Lançamentos com data efetiva (effectiveDate › paidAt › date) no
+     * intervalo — 3 leituras mescladas por id, igual ao app
+     * (`financePeriodMergedDocumentsCollect`). Antes só `date`: compra com
+     * date 28/09 e paga em 02/10 não entrava em outubro no servidor.
+     */
+    async function collectByEffective(from, to, { toExclusive = false, status = null, type = null, maxDocs = 8000 } = {}) {
+      const byId = new Map();
+      const fromTs = admin.firestore.Timestamp.fromDate(from);
+      const toTs = admin.firestore.Timestamp.fromDate(to);
+      for (const field of ["date", "effectiveDate", "paidAt"]) {
+        const build = (withFilters) => {
+          let q = txCol.where(field, ">=", fromTs).where(field, toExclusive ? "<" : "<=", toTs).orderBy(field, "asc");
+          if (withFilters && status) q = q.where("status", "==", status);
+          if (withFilters && type) q = q.where("type", "==", type);
+          return q;
+        };
+        try {
+          await _iterateQueryPaged(build(true), async (doc) => {
+            byId.set(doc.id, doc.data() || {});
+          }, 400, maxDocs);
+        } catch (e) {
+          console.warn(`ctFinancePeriodTotals ${field}`, e?.message || e);
+          if (status || type) {
+            // Sem índice composto: lê só pelo intervalo e filtra aqui.
+            try {
+              await _iterateQueryPaged(build(false), async (doc) => {
+                byId.set(doc.id, doc.data() || {});
+              }, 400, maxDocs);
+            } catch (e2) {
+              console.warn(`ctFinancePeriodTotals ${field} fallback`, e2?.message || e2);
+            }
+          }
+        }
+      }
+      const out = [];
+      for (const x of byId.values()) {
+        const eff = regras.effectiveJsDate(x);
+        if (!eff || eff < from) continue;
+        if (toExclusive ? eff >= to : eff > to) continue;
+        out.push(x);
+      }
+      return out;
+    }
 
     try {
       const partialKey = monthKeyBr(admin.firestore.Timestamp.fromDate(start));
@@ -2789,94 +2852,53 @@ exports.ctFinancePeriodTotals = onCall(
       console.warn("ctFinancePeriodTotals buckets", e?.message || e);
     }
 
-    async function absorbOpeningDoc(doc) {
-      const x = doc.data() || {};
-      if ((x.status || "paid").toString() !== "paid") return;
-      const c = openingContribFn(x);
-      if (c === 0) return;
-      openingTotal += c;
-      const acc = ((x.financeAccountId || "") + "").toString().trim();
-      if (acc) openingByAccount[acc] = (openingByAccount[acc] || 0) + c;
-    }
-
+    // Mês parcial (do dia 1 até a véspera do período) — data efetiva, igual
+    // aos buckets; por conta com a regra dos buckets (paidFrom = quem pagou).
     try {
-      await _iterateQueryPaged(
-        txCol
-          .where("effectiveDate", ">=", admin.firestore.Timestamp.fromDate(monthStart))
-          .where("effectiveDate", "<", admin.firestore.Timestamp.fromDate(start)),
-        absorbOpeningDoc,
-        400,
-        3000,
-      );
-    } catch (e) {
-      console.warn("ctFinancePeriodTotals effectiveDate partial", e?.message || e);
-    }
-
-    try {
-      await _iterateQueryPaged(
-        txCol
-          .where("date", ">=", admin.firestore.Timestamp.fromDate(monthStart))
-          .where("date", "<", admin.firestore.Timestamp.fromDate(start))
-          .orderBy("date", "asc"),
-        async (doc) => {
-          const x = doc.data() || {};
-          if (x.effectiveDate) return;
-          await absorbOpeningDoc(doc);
-        },
-        400,
-        2500,
-      );
-    } catch (e) {
-      console.warn("ctFinancePeriodTotals date partial fallback", e?.message || e);
-    }
-
-    let qPeriod = txCol
-      .where("date", ">=", admin.firestore.Timestamp.fromDate(start))
-      .where("date", "<=", admin.firestore.Timestamp.fromDate(end))
-      .orderBy("date", "asc");
-    if (typeFilter === "income") {
-      qPeriod = qPeriod.where("type", "==", "income");
-    } else if (typeFilter === "expense") {
-      qPeriod = qPeriod.where("type", "==", "expense");
-    }
-    if (statusFilter === "pending") {
-      qPeriod = qPeriod.where("status", "==", "pending");
-    } else if (statusFilter === "paid") {
-      qPeriod = qPeriod.where("status", "==", "paid");
-    }
-
-    let income = 0;
-    let expense = 0;
-    // Depósito/retirada de meta (`goalReserve: true`, 02/10/2026): reserva que
-    // sai/volta da conta — NÃO entra em Receitas nem Despesas do período, mas
-    // continua mexendo no saldo (por conta e total). Ex.: receita 1000, gasto
-    // 300 e depósito na meta 200 → income 1000, expense 300, goalReserveNet
-    // −200, balance = abertura + 1000 − 300 − 200 (igual a antes).
-    let goalReserveNet = 0;
-    const periodByAccount = {};
-    await _iterateQueryPaged(qPeriod, async (doc) => {
-      const x = doc.data() || {};
-      if (statusFilter !== "all" && statusFilter !== "pending" && statusFilter !== "paid") {
-        if ((x.status || "paid").toString() !== statusFilter) return;
-      } else if (statusFilter === "all" && (x.status || "paid").toString() !== "paid") {
-        return;
+      const parciais = await collectByEffective(monthStart, start, {
+        toExclusive: true,
+        status: "paid",
+        maxDocs: 3000,
+      });
+      for (const x of parciais) {
+        if ((x.status || "paid").toString() !== "paid") continue;
+        const c = openingContribFn(x);
+        if (c === 0) continue;
+        openingTotal += c;
+        const slot = accountBucketDelta(x);
+        if (slot.accountId && slot.delta !== 0) {
+          openingByAccount[slot.accountId] = (openingByAccount[slot.accountId] || 0) + slot.delta;
+        }
       }
-      const amount = Math.abs(Number(x.amount || 0));
-      if (!Number.isFinite(amount)) return;
-      const type = (x.type || "expense").toString();
-      if (typeFilter === "income" && type !== "income") return;
-      if (typeFilter === "expense" && type !== "expense") return;
-      if (x.goalReserve === true) {
-        goalReserveNet += type === "income" ? amount : -amount;
-      } else if (type === "income") income += amount;
-      else expense += amount;
-      const acc = ((x.financeAccountId || "") + "").toString().trim();
-      if (!acc) return;
-      const delta = type === "income" ? amount : -amount;
-      periodByAccount[acc] = (periodByAccount[acc] || 0) + delta;
+    } catch (e) {
+      console.warn("ctFinancePeriodTotals partial month", e?.message || e);
+    }
+
+    // Período: data efetiva (effectiveDate › paidAt › date), como o Início e o
+    // Financeiro do app. Pagamento de fatura, transferência própria e reserva/
+    // resgate de meta ficam FORA de income/expense e voltam no saldo pelo
+    // ajuste. Ex.: receita 1000, gasto 300, pagamento de fatura 500 e depósito
+    // na meta 200 → income 1000, expense 300, ajuste −700,
+    // balance = abertura + 1000 − 300 − 700 (o saldo não muda).
+    const statusQuery = statusFilter === "pending" ? "pending" : "paid";
+    const typeQuery = typeFilter === "income" || typeFilter === "expense" ? typeFilter : null;
+    const periodItems = await collectByEffective(start, end, {
+      status: statusFilter === "all" || statusFilter === "paid" || statusFilter === "pending" ? statusQuery : null,
+      type: typeQuery,
+      maxDocs: 20000,
+    });
+    const soma = regras.somarPeriodo(periodItems, {
+      start,
+      end,
+      statusFilter,
+      typeFilter,
+      creditCardIds,
     });
 
+    // «N pendente(s)»: vencimento no período, sem cartão (vai na fatura) e sem
+    // pagamento de fatura/transferência/meta.
     let pendingExpenseCount = 0;
+    const pendingItems = [];
     try {
       await _iterateQueryPaged(
         txCol
@@ -2885,12 +2907,15 @@ exports.ctFinancePeriodTotals = onCall(
           .where("status", "==", "pending")
           .where("type", "==", "expense")
           .orderBy("date", "asc"),
-        async () => {
-          pendingExpenseCount += 1;
+        async (doc) => {
+          pendingItems.push(doc.data() || {});
         },
         400,
         8000,
       );
+      for (const x of pendingItems) {
+        if (regras.contaComoPendente(x, { start, end, creditCardIds })) pendingExpenseCount += 1;
+      }
     } catch (e) {
       console.warn("ctFinancePeriodTotals pendingExpenseCount", e?.message || e);
     }
@@ -2899,12 +2924,18 @@ exports.ctFinancePeriodTotals = onCall(
       ok: true,
       openingTotal,
       openingByAccount,
-      income,
-      expense,
-      periodByAccount,
+      income: soma.income,
+      expense: soma.expense,
+      periodByAccount: soma.periodByAccount,
       pendingExpenseCount,
-      goalReserveNet,
-      balance: openingTotal + income - expense + goalReserveNet,
+      // Compatibilidade: a versão 33 do app soma `goalReserveNet` ao saldo —
+      // agora ele leva o ajuste INTEIRO (meta + fatura + transferência), para o
+      // saldo dela continuar certo. O valor só de meta vai em `metaReservaNet`.
+      goalReserveNet: soma.ajusteSaldo,
+      ajusteSaldoForaDosTotais: soma.ajusteSaldo,
+      metaReservaNet: soma.goalReserveNet,
+      regraTotais: 2,
+      balance: openingTotal + soma.income - soma.expense + soma.ajusteSaldo,
     };
   },
 );
