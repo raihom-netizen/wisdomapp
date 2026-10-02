@@ -66,11 +66,17 @@ class AdminPartnerStatsService {
       final snap = await AdminLoadGuard.comPrazo(
         FirebaseFirestore.instance
             .collection('mp_project_config')
-            .doc('default')
+            .doc('main')
             .get(),
         oQue: 'o percentual do sócio',
       );
-      final split = snap.data()?['split'];
+      // Mesmo doc que a configuração do Mercado Pago grava (mp_project_config/main,
+      // campo partnerSharePercent no topo; split.* como formato antigo). Antes lia
+      // o doc «default», vazio. Percentual do sócio = 50% (dono, 02/10/2026).
+      final data = snap.data() ?? const <String, dynamic>{};
+      final top = data['partnerSharePercent'];
+      if (top is num && top > 0) return top.toDouble().clamp(0, 100);
+      final split = data['split'];
       if (split is Map) {
         final pct = split['partnerSharePercent'] ?? split['partner_share_percent'];
         if (pct is num && pct > 0) return pct.toDouble().clamp(0, 100);
