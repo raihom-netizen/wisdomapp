@@ -40,6 +40,11 @@ class CourseVideosCacheService extends ChangeNotifier {
   bool get hasCachedData => _docs.isNotEmpty;
   bool get hasServerSync => _hasServerSync;
 
+  /// Última carga do servidor falhou (ou passou do prazo) — a tela mostra
+  /// «Tentar novamente» quando não há nada em cache.
+  Object? _lastError;
+  Object? get lastError => _lastError;
+
   /// Indica spinner só quando não há nada em cache ainda.
   bool get showInitialLoading => _refreshing && _docs.isEmpty;
 
@@ -125,8 +130,10 @@ class CourseVideosCacheService extends ChangeNotifier {
         _fetchVideos(forceServer: forceServer),
       ]);
       _hasServerSync = true;
+      _lastError = null;
       await _persistToDisk();
     } catch (e, st) {
+      _lastError = e;
       debugPrint('CourseVideosCacheService.load: $e\n$st');
     } finally {
       _refreshing = false;
@@ -140,7 +147,8 @@ class CourseVideosCacheService extends ChangeNotifier {
     try {
       final snap = await FirebaseFirestore.instance
           .collection('course_videos')
-          .get(const GetOptions(source: Source.cache));
+          .get(const GetOptions(source: Source.cache))
+          .timeout(const Duration(seconds: 4));
       if (snap.docs.isEmpty) return;
       _docs = snap.docs
           .map((d) => CourseVideoDoc(id: d.id, data: d.data()))
@@ -151,7 +159,8 @@ class CourseVideosCacheService extends ChangeNotifier {
       final cfg = await FirebaseFirestore.instance
           .collection('app_config')
           .doc('wisdom_courses_module')
-          .get(const GetOptions(source: Source.cache));
+          .get(const GetOptions(source: Source.cache))
+          .timeout(const Duration(seconds: 4));
       if (cfg.exists) {
         _config = WisdomCoursesModuleConfig.fromMap(cfg.data());
         _notifyIfMeaningfulChange();
@@ -159,12 +168,17 @@ class CourseVideosCacheService extends ChangeNotifier {
     } catch (_) {}
   }
 
+  /// Sem resposta do servidor nesse prazo: encerra a carga (nada de vitrine
+  /// girando para sempre) e a tela oferece «Tentar novamente».
+  static const _kPrazoServidor = Duration(seconds: 25);
+
   Future<void> _fetchConfig({required bool forceServer}) async {
     final source = forceServer ? Source.server : Source.serverAndCache;
     final snap = await FirebaseFirestore.instance
         .collection('app_config')
         .doc('wisdom_courses_module')
-        .get(GetOptions(source: source));
+        .get(GetOptions(source: source))
+        .timeout(_kPrazoServidor);
     _config = WisdomCoursesModuleConfig.fromMap(snap.data());
   }
 
@@ -172,7 +186,8 @@ class CourseVideosCacheService extends ChangeNotifier {
     final source = forceServer ? Source.server : Source.serverAndCache;
     final snap = await FirebaseFirestore.instance
         .collection('course_videos')
-        .get(GetOptions(source: source));
+        .get(GetOptions(source: source))
+        .timeout(_kPrazoServidor);
     _docs = snap.docs
         .map((d) => CourseVideoDoc(id: d.id, data: d.data()))
         .toList(growable: false);

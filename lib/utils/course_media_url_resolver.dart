@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_storage/firebase_storage.dart';
 
 import 'course_thumb_resolver.dart';
@@ -8,10 +10,17 @@ class CourseMediaUploadResult {
   const CourseMediaUploadResult({
     required this.downloadUrl,
     required this.storagePath,
+    this.posterUrl,
+    this.posterStoragePath,
   });
 
   final String downloadUrl;
   final String storagePath;
+
+  /// Vídeo: quadro do próprio vídeo (JPEG) gerado no envio — capa «prévia»
+  /// quando o curso não tem capa própria. `null` se não deu para gerar.
+  final String? posterUrl;
+  final String? posterStoragePath;
 }
 
 /// Entrada de vídeo MP4 hospedado no Storage.
@@ -20,11 +29,15 @@ class CourseVideoEntry {
     required this.url,
     this.storagePath,
     this.label,
+    this.posterUrl,
   });
 
   final String url;
   final String? storagePath;
   final String? label;
+
+  /// Quadro do vídeo gravado no envio (ver [CourseMediaUploadResult.posterUrl]).
+  final String? posterUrl;
 }
 
 class _ImageUrlsMemo {
@@ -180,6 +193,55 @@ class CourseMediaUrlResolver {
     return out;
   }
 
+  /// Prazo de cada ida ao Storage (getDownloadURL/listAll): sem resposta, a
+  /// capa cai na reserva em vez de ficar no esqueleto cinza para sempre.
+  static const _kStorageTimeout = Duration(seconds: 12);
+
+  /// Quadros do vídeo gravados no envio (`videoPosterUrl` e `posterUrl` de
+  /// cada item de `mp4Urls`), na ordem das aulas.
+  static List<String> videoPosterUrls(Map<String, dynamic> data) {
+    final out = <String>[];
+    void add(Object? raw) {
+      final t = (raw ?? '').toString().trim();
+      if (t.isNotEmpty && looksLikeHttpUrl(t) && !out.contains(t)) out.add(t);
+    }
+
+    final list = data['mp4Urls'];
+    if (list is List) {
+      for (final item in list) {
+        if (item is Map) add(item['posterUrl']);
+      }
+    }
+    add(data['videoPosterUrl']);
+    return out;
+  }
+
+  /// URL (ou caminho no Storage) do primeiro vídeo MP4 — base da prévia
+  /// gerada na hora quando não há capa nem quadro gravado.
+  static String? firstVideoRef(Map<String, dynamic> data) {
+    final entries = collectVideoEntries(data);
+    if (entries.isEmpty) return null;
+    final e = entries.first;
+    return looksLikeHttpUrl(e.url) ? e.url : (e.storagePath ?? e.url);
+  }
+
+  /// Resolve o link do primeiro MP4 (com prazo) — `null` se não houver.
+  static Future<String?> resolveFirstVideoUrl(Map<String, dynamic> data) async {
+    final entries = collectVideoEntries(data);
+    if (entries.isEmpty) return null;
+    final e = entries.first;
+    if (looksLikeHttpUrl(e.url)) return e.url;
+    final path = e.storagePath ?? normalizeStoragePath(e.url);
+    try {
+      return await FirebaseStorage.instance
+          .ref(path)
+          .getDownloadURL()
+          .timeout(_kStorageTimeout);
+    } catch (_) {
+      return null;
+    }
+  }
+
   static bool hasResolvableImage(Map<String, dynamic> data) {
     if (collectHttpUrls(data).isNotEmpty) return true;
     if (collectStoragePaths(data).isNotEmpty) return true;
@@ -201,6 +263,9 @@ class CourseMediaUrlResolver {
       ...collectHttpUrls(data),
       ...collectStoragePaths(data),
       CourseThumbResolver.videoIdFromData(data) ?? '',
+      // Prévia do MP4 (sem capa): o vídeo/quadro também identifica a capa.
+      ...videoPosterUrls(data),
+      firstVideoRef(data) ?? '',
     ].join('|');
   }
 
@@ -273,14 +338,24 @@ class CourseMediaUrlResolver {
     final resolved = await Future.wait(
       collectStoragePaths(data).map((path) async {
         try {
-          return await FirebaseStorage.instance.ref(path).getDownloadURL();
+          return await FirebaseStorage.instance
+              .ref(path)
+              .getDownloadURL()
+              .timeout(_kStorageTimeout);
         } catch (_) {
-          return null; // ignora path inválido
+          return null; // ignora path inválido (ou Storage sem resposta)
         }
       }),
     );
     for (final url in resolved) {
       if (url != null && seen.add(url)) out.add(url);
+    }
+
+    // Sem capa própria: quadro do vídeo gerado no envio (prévia do MP4).
+    if (out.isEmpty && ytId == null) {
+      for (final u in videoPosterUrls(data)) {
+        if (seen.add(u)) out.add(u);
+      }
     }
 
     final id = (docId ?? data['id'] ?? '').toString().trim();
@@ -309,11 +384,13 @@ class CourseMediaUrlResolver {
   static Future<List<String>> _discoverImagesInStorage(String docId) async {
     try {
       final dir = FirebaseStorage.instance.ref('wisdomapp/course_videos/$docId');
-      final list = await dir.listAll();
+      final list = await dir.listAll().timeout(_kStorageTimeout);
       final urls = <String>[];
       final items = list.items.where((ref) {
         final name = ref.name.toLowerCase();
+        // Quadro do vídeo (poster_*) também serve de capa no legado.
         return name.startsWith('cover_') ||
+            name.startsWith('poster_') ||
             name.startsWith('photo_') ||
             name.endsWith('.jpg') ||
             name.endsWith('.jpeg') ||
@@ -323,7 +400,7 @@ class CourseMediaUrlResolver {
         ..sort((a, b) => a.name.compareTo(b.name));
       for (final ref in items) {
         try {
-          urls.add(await ref.getDownloadURL());
+          urls.add(await ref.getDownloadURL().timeout(_kStorageTimeout));
         } catch (_) {}
       }
       return urls;
@@ -354,18 +431,27 @@ class CourseMediaUrlResolver {
     final seen = <String>{};
     final out = <CourseVideoEntry>[];
 
-    void addEntry({required String url, String? path, String? label}) {
+    void addEntry({
+      required String url,
+      String? path,
+      String? label,
+      String? poster,
+    }) {
       final u = url.trim();
       if (u.isEmpty) return;
+      final pu = (poster ?? '').trim();
+      final posterUrl = looksLikeHttpUrl(pu) ? pu : null;
       if (!looksLikeHttpUrl(u) && looksLikeStoragePath(u)) {
         final p = normalizeStoragePath(u);
         if (seen.add('path:$p')) {
-          out.add(CourseVideoEntry(url: u, storagePath: p, label: label));
+          out.add(CourseVideoEntry(
+              url: u, storagePath: p, label: label, posterUrl: posterUrl));
         }
         return;
       }
       if (looksLikeHttpUrl(u) && seen.add(u)) {
-        out.add(CourseVideoEntry(url: u, storagePath: path, label: label));
+        out.add(CourseVideoEntry(
+            url: u, storagePath: path, label: label, posterUrl: posterUrl));
       }
     }
 
@@ -382,6 +468,7 @@ class CourseMediaUrlResolver {
                 ? null
                 : (item['storagePath'] ?? '').toString(),
             label: (item['label'] ?? item['title'] ?? 'Vídeo ${i + 1}').toString(),
+            poster: (item['posterUrl'] ?? '').toString(),
           );
         }
       }
@@ -390,6 +477,7 @@ class CourseMediaUrlResolver {
         url: (data['mp4Url'] ?? '').toString(),
         path: (data['mp4StoragePath'] ?? data['videoStoragePath'] ?? '').toString(),
         label: 'Vídeo 1',
+        poster: (data['videoPosterUrl'] ?? '').toString(),
       );
     }
 
@@ -409,8 +497,15 @@ class CourseMediaUrlResolver {
       }
       final path = e.storagePath ?? normalizeStoragePath(e.url);
       try {
-        final url = await FirebaseStorage.instance.ref(path).getDownloadURL();
-        out.add(CourseVideoEntry(url: url, storagePath: path, label: e.label));
+        final url = await FirebaseStorage.instance
+            .ref(path)
+            .getDownloadURL()
+            .timeout(_kStorageTimeout);
+        out.add(CourseVideoEntry(
+            url: url,
+            storagePath: path,
+            label: e.label,
+            posterUrl: e.posterUrl));
       } catch (_) {}
     }
 
@@ -426,7 +521,7 @@ class CourseMediaUrlResolver {
   static Future<List<CourseVideoEntry>> _discoverVideosInStorage(String docId) async {
     try {
       final dir = FirebaseStorage.instance.ref('wisdomapp/course_videos/$docId');
-      final list = await dir.listAll();
+      final list = await dir.listAll().timeout(_kStorageTimeout);
       final out = <CourseVideoEntry>[];
       final items = list.items.where((ref) {
         final name = ref.name.toLowerCase();
@@ -438,7 +533,8 @@ class CourseMediaUrlResolver {
         ..sort((a, b) => a.name.compareTo(b.name));
       for (var i = 0; i < items.length && i < maxCourseVideos; i++) {
         try {
-          final url = await items[i].getDownloadURL();
+          final url =
+              await items[i].getDownloadURL().timeout(_kStorageTimeout);
           out.add(CourseVideoEntry(
             url: url,
             storagePath: items[i].fullPath,
@@ -481,12 +577,25 @@ class CourseMediaUrlResolver {
         'url': u.downloadUrl,
         'storagePath': u.storagePath,
         'label': 'Vídeo ${i + 1}',
+        if ((u.posterUrl ?? '').isNotEmpty) 'posterUrl': u.posterUrl,
+        if ((u.posterStoragePath ?? '').isNotEmpty)
+          'posterStoragePath': u.posterStoragePath,
       });
+    }
+    String? poster;
+    for (final u in uploads) {
+      if ((u.posterUrl ?? '').isNotEmpty) {
+        poster = u.posterUrl;
+        break;
+      }
     }
     return {
       'mp4Urls': entries,
       'mp4Url': uploads.first.downloadUrl,
       'mp4StoragePath': uploads.first.storagePath,
+      // Prévia do vídeo (quadro) para quem não enviou capa — NÃO entra nos
+      // campos de imagem (`posterUrl` lá é tratado como foto da galeria).
+      if (poster != null) 'videoPosterUrl': poster,
     };
   }
 
@@ -527,6 +636,7 @@ class CourseMediaUrlResolver {
         prior.add(CourseMediaUploadResult(
           downloadUrl: e.url,
           storagePath: e.storagePath ?? '',
+          posterUrl: e.posterUrl,
         ));
       }
     }

@@ -157,10 +157,14 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
   Future<void> _loadLessons() async {
     var lessons = CourseLessons.fromData(widget.data);
     if (lessons.isEmpty) {
-      lessons = await CourseLessons.discoverFromStorage(
-        widget.data,
-        docId: _courseId,
-      );
+      try {
+        lessons = await CourseLessons.discoverFromStorage(
+          widget.data,
+          docId: _courseId,
+        ).timeout(const Duration(seconds: 30));
+      } catch (_) {
+        lessons = const [];
+      }
     }
     if (!mounted) return;
     var start = 0;
@@ -802,28 +806,94 @@ class _LessonTile extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(10, 10, 4, 10),
           child: Row(
             children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: done
-                      ? _kGreen
-                      : (selected ? _kRed : CourseYt.surfaceAlt(context)),
-                ),
-                alignment: Alignment.center,
-                child: done
-                    ? const Icon(Icons.check_rounded, color: Colors.white, size: 20)
-                    : (selected
-                        ? const Icon(Icons.play_arrow_rounded,
-                            color: Colors.white, size: 20)
-                        : Text(
-                            '${lesson.index + 1}',
-                            style: TextStyle(
-                              color: CourseYt.text(context),
-                              fontWeight: FontWeight.w900,
+              // Capa da aula (padrão playlist do YouTube): miniatura em alta
+              // ou quadro do próprio vídeo, nº da aula, duração e progresso.
+              SizedBox(
+                width: 118,
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        CourseMediaThumbnail.fromData(
+                          lesson.thumbData,
+                          fit: BoxFit.cover,
+                          showPlayButton: false,
+                          fallback: ColoredBox(
+                            color: CourseYt.surfaceAlt(context),
+                            child: Icon(Icons.play_circle_outline_rounded,
+                                color: CourseYt.textMuted(context), size: 28),
+                          ),
+                        ),
+                        if (selected || done)
+                          ColoredBox(
+                            color: Colors.black.withValues(alpha: 0.45),
+                            child: Icon(
+                              done
+                                  ? Icons.check_circle_rounded
+                                  : Icons.equalizer_rounded,
+                              color: done ? _kGreen : Colors.white,
+                              size: 26,
                             ),
-                          )),
+                          ),
+                        Positioned(
+                          left: 4,
+                          top: 4,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.72),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              '${lesson.index + 1}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (dur.isNotEmpty)
+                          Positioned(
+                            right: 4,
+                            bottom: 5,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 4, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.78),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                dur,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ),
+                        if (progress.fraction > 0 && !done)
+                          Align(
+                            alignment: Alignment.bottomCenter,
+                            child: LinearProgressIndicator(
+                              value: progress.fraction,
+                              minHeight: 3,
+                              color: _kRed,
+                              backgroundColor:
+                                  Colors.white.withValues(alpha: 0.25),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(

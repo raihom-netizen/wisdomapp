@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -6,6 +7,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../core/wisdom_storage_upload.dart';
 import '../utils/course_media_url_resolver.dart';
+import 'course_video_poster.dart';
 
 /// Permite cancelar o envio em andamento (botão «Cancelar» do admin).
 class CourseUploadCancelToken {
@@ -186,17 +188,33 @@ class CourseVideoFileService {
     // Celular: putFile lê do disco em partes (retomável, sem carregar até
     // 250 MB na memória). Na web não existe File de disco → bytes.
     final Uint8List? webBytes = kIsWeb ? await file.readAsBytes() : null;
-    final url = await _put(
-      path: path,
-      startTask: (ref, md) =>
-          webBytes != null ? ref.putData(webBytes, md) : ref.putFile(file, md),
-      mime: mime,
-      onProgress: onProgress,
-      cancelToken: cancelToken,
+    // Quadro gerado em paralelo ao envio (não atrasa o vídeo).
+    final previa = _enviarPrevia(
+      gerar: () => webBytes != null
+          ? courseVideoPosterFromBytes(webBytes, mime)
+          : courseVideoPosterFromFilePath(file.path),
+      id: id,
+      index: index,
+      ts: ts,
     );
+    final url = await _putDescartandoPrevia(
+      previa,
+      () => _put(
+        path: path,
+        startTask: (ref, md) => webBytes != null
+            ? ref.putData(webBytes, md)
+            : ref.putFile(file, md),
+        mime: mime,
+        onProgress: onProgress,
+        cancelToken: cancelToken,
+      ),
+    );
+    final p = await previa;
     return CourseMediaUploadResult(
       downloadUrl: url,
       storagePath: path,
+      posterUrl: p?.url,
+      posterStoragePath: p?.path,
     );
   }
 
@@ -219,17 +237,73 @@ class CourseVideoFileService {
     final ts = DateTime.now().millisecondsSinceEpoch;
     final path = 'wisdomapp/course_videos/$id/video_${index}_$ts.$ext';
 
-    final url = await _put(
-      path: path,
-      startTask: (ref, md) => ref.putData(bytes, md),
-      mime: mimeType,
-      onProgress: onProgress,
-      cancelToken: cancelToken,
+    final previa = _enviarPrevia(
+      gerar: () => courseVideoPosterFromBytes(bytes, mimeType),
+      id: id,
+      index: index,
+      ts: ts,
     );
+    final url = await _putDescartandoPrevia(
+      previa,
+      () => _put(
+        path: path,
+        startTask: (ref, md) => ref.putData(bytes, md),
+        mime: mimeType,
+        onProgress: onProgress,
+        cancelToken: cancelToken,
+      ),
+    );
+    final p = await previa;
     return CourseMediaUploadResult(
       downloadUrl: url,
       storagePath: path,
+      posterUrl: p?.url,
+      posterStoragePath: p?.path,
     );
+  }
+
+  /// Prévia do vídeo (quadro em ~1 s) enviada junto: vira a capa «tipo
+  /// YouTube» de quem não mandou capa própria — todos veem na hora, sem
+  /// cada aparelho ter que gerar. Falhar aqui NUNCA derruba o envio do vídeo.
+  static Future<({String url, String path})?> _enviarPrevia({
+    required Future<Uint8List?> Function() gerar,
+    required String id,
+    required int index,
+    required int ts,
+  }) async {
+    try {
+      final jpeg = await gerar().timeout(const Duration(seconds: 60));
+      if (jpeg == null || jpeg.isEmpty) return null;
+      final path = 'wisdomapp/course_videos/$id/poster_${index}_$ts.jpg';
+      final ref = FirebaseStorage.instance.ref(path);
+      await ref
+          .putData(jpeg, _metadata('image/jpeg'))
+          .timeout(const Duration(seconds: 60));
+      final url =
+          await ref.getDownloadURL().timeout(const Duration(seconds: 15));
+      return (url: url, path: path);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Envio do vídeo falhou/cancelado: apaga a prévia que já tinha subido
+  /// (não deixa arquivo órfão na pasta do curso).
+  static Future<String> _putDescartandoPrevia(
+    Future<({String url, String path})?> previa,
+    Future<String> Function() enviar,
+  ) async {
+    try {
+      return await enviar();
+    } catch (_) {
+      unawaited(previa.then((p) async {
+        if (p == null) return;
+        try {
+          await FirebaseStorage.instance.ref(p.path).delete();
+        } catch (_) {}
+      }));
+      rethrow;
+    }
   }
 
   static String _extFromPath(String path) {

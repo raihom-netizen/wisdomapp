@@ -7,6 +7,7 @@ import '../utils/course_thumb_resolver.dart';
 import '../utils/youtube_url_helper.dart';
 import 'course_video/course_photo_lightbox.dart';
 import 'course_video/course_protected_image.dart';
+import 'course_video/course_video_frame_preview.dart';
 
 /// Preview de imagem — imagem inteira visível (contain), fundo escuro, alta qualidade.
 class CourseImagePreview extends StatelessWidget {
@@ -557,6 +558,29 @@ class _CourseMediaThumbnailState extends State<CourseMediaThumbnail> {
   String _fingerprint = '';
   String? _ytId;
 
+  /// MP4 sem capa nem YouTube: link do 1º vídeo para a prévia (quadro).
+  Future<String?>? _videoUrl;
+  Set<String> _posterUrls = const {};
+
+  void _prepararPreviaVideo() {
+    final data = widget.firestoreData;
+    _posterUrls = data == null
+        ? const {}
+        : CourseMediaUrlResolver.videoPosterUrls(data).toSet();
+    if (data == null || _ytId != null) {
+      _videoUrl = null;
+      return;
+    }
+    final ref = CourseMediaUrlResolver.firstVideoRef(data);
+    if (ref == null) {
+      _videoUrl = null;
+    } else if (CourseMediaUrlResolver.looksLikeHttpUrl(ref)) {
+      _videoUrl = Future.value(ref);
+    } else {
+      _videoUrl = CourseMediaUrlResolver.resolveFirstVideoUrl(data);
+    }
+  }
+
   /// Identidade estável: o pai costuma recriar o Map a cada build
   /// (`{...doc.data, 'id': doc.id}`) — comparar a instância refazia a
   /// resolução (Storage) e a capa piscava a cada letra da busca.
@@ -574,6 +598,7 @@ class _CourseMediaThumbnailState extends State<CourseMediaThumbnail> {
     _fingerprint = _computeFingerprint();
     final data = widget.firestoreData;
     _ytId = data != null ? CourseThumbResolver.videoIdFromData(data) : null;
+    _prepararPreviaVideo();
     // Capa já resolvida antes (outro card / volta da rolagem): sem spinner.
     final cached = data != null
         ? CourseMediaUrlResolver.cachedImageUrls(
@@ -598,6 +623,7 @@ class _CourseMediaThumbnailState extends State<CourseMediaThumbnail> {
       _fingerprint = fp;
       final data = widget.firestoreData;
       _ytId = data != null ? CourseThumbResolver.videoIdFromData(data) : null;
+      _prepararPreviaVideo();
       _urlIndex = 0;
       _loaded = false;
       _failedAll = false;
@@ -673,11 +699,9 @@ class _CourseMediaThumbnailState extends State<CourseMediaThumbnail> {
         .toList();
     return [
       ...own,
-      ...YoutubeUrlHelper.thumbnailUrlsForWidth(
-        yt,
-        targetPx,
-        light: widget.light,
-      ),
+      // Alta resolução pelo tamanho REAL do quadro (maxres → sd → hq → mq);
+      // o modo leve (mq 320 px) só em quadro pequeno — capa nítida em card.
+      ...YoutubeUrlHelper.thumbnailUrlsForWidth(yt, targetPx),
     ];
   }
 
@@ -702,6 +726,13 @@ class _CourseMediaThumbnailState extends State<CourseMediaThumbnail> {
     }
 
     if (_resolvedUrls.isEmpty || _failedAll) {
+      final video = _videoUrl;
+      if (video != null) {
+        return ClipRRect(
+          borderRadius: widget.borderRadius,
+          child: _previaDoVideo(video),
+        );
+      }
       return ClipRRect(
         borderRadius: widget.borderRadius,
         child: widget.fallback ?? _defaultFallback(),
@@ -724,8 +755,13 @@ class _CourseMediaThumbnailState extends State<CourseMediaThumbnail> {
                   return widget.fallback ?? _defaultFallback();
                 }
                 final url = urls[_urlIndex.clamp(0, urls.length - 1)];
+                // Capa do YouTube (sd/hq têm tarjas pretas embutidas) e quadro
+                // do vídeo: preenchem o 16:9 inteiro. Foto enviada: inteira.
+                final preencher = YoutubeUrlHelper.isYoutubeThumbUrl(url) ||
+                    _posterUrls.contains(url);
                 return CourseFramedImage(
                   url: url,
+                  cover: preencher && widget.fit == BoxFit.cover,
                   cacheWidth: px,
                   placeholder: _loadingSkeleton(),
                   onLoaded: () {
@@ -767,6 +803,51 @@ class _CourseMediaThumbnailState extends State<CourseMediaThumbnail> {
           ],
         ),
       ),
+    );
+  }
+
+  /// MP4 sem capa: quadro do próprio vídeo (padrão YouTube/Instagram), com
+  /// o mesmo degradê e botão play; chapéu/ícone só se não der.
+  Widget _previaDoVideo(Future<String?> videoUrl) {
+    final reserva = widget.fallback ?? _defaultFallback();
+    return FutureBuilder<String?>(
+      future: videoUrl,
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return _loadingSkeleton();
+        }
+        final url = snap.data;
+        if (url == null || url.isEmpty) return reserva;
+        return ColoredBox(
+          color: const Color(0xFF0F172A),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              CourseVideoFramePreview(
+                videoUrl: url,
+                fallback: reserva,
+                placeholder: _loadingSkeleton(),
+              ),
+              if (widget.showBottomGradient)
+                IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withValues(alpha: 0.35),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              if (widget.showPlayButton) Center(child: _playButton()),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -846,10 +927,16 @@ class CourseFramedImage extends StatelessWidget {
     this.placeholder,
     this.onLoaded,
     this.onError,
+    this.cover = false,
   });
 
   final String url;
   final int? cacheWidth;
+
+  /// `true`: preenche o quadro inteiro ([BoxFit.cover], alta qualidade) —
+  /// capa do YouTube e quadro de vídeo. `false`: imagem inteira + fundo
+  /// desfocado (foto enviada pelo admin).
+  final bool cover;
   final Widget? placeholder;
   final VoidCallback? onLoaded;
 
@@ -859,6 +946,27 @@ class CourseFramedImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ph = placeholder ?? const ColoredBox(color: Color(0xFF1E293B));
+    if (cover) {
+      return Image.network(
+        url,
+        fit: BoxFit.cover,
+        alignment: Alignment.center,
+        width: double.infinity,
+        height: double.infinity,
+        cacheWidth: cacheWidth,
+        filterQuality: FilterQuality.high,
+        gaplessPlayback: true,
+        loadingBuilder: (context, child, progress) {
+          if (progress == null) {
+            onLoaded?.call();
+            return child;
+          }
+          return ph;
+        },
+        errorBuilder: (_, __, ___) =>
+            onError?.call() ?? const SizedBox.shrink(),
+      );
+    }
     return Stack(
       fit: StackFit.expand,
       children: [

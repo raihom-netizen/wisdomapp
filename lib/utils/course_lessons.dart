@@ -13,6 +13,7 @@ class CourseLesson {
     this.youtubeId,
     this.mp4Url,
     this.storagePath,
+    this.posterUrl,
   });
 
   /// Chave estável (progresso por aula).
@@ -23,7 +24,20 @@ class CourseLesson {
   final String? mp4Url;
   final String? storagePath;
 
+  /// Quadro do vídeo gravado no envio (capa da aula na lista).
+  final String? posterUrl;
+
   bool get isYoutube => youtubeId != null;
+
+  /// Dados para a capa da aula ([CourseMediaThumbnail.fromData]): YouTube →
+  /// miniatura em alta; MP4 → quadro gravado ou prévia do próprio vídeo.
+  Map<String, dynamic> get thumbData => isYoutube
+      ? {'youtubeVideoId': youtubeId}
+      : {
+          if ((mp4Url ?? storagePath) != null) 'mp4Url': mp4Url ?? storagePath,
+          if (storagePath != null) 'mp4StoragePath': storagePath,
+          if (posterUrl != null) 'videoPosterUrl': posterUrl,
+        };
 
   String get sourceLabel => isYoutube ? 'YouTube' : 'Vídeo';
 }
@@ -65,6 +79,7 @@ class CourseLessons {
             : (CourseMediaUrlResolver.looksLikeStoragePath(e.url)
                 ? CourseMediaUrlResolver.normalizeStoragePath(e.url)
                 : null),
+        posterUrl: e.posterUrl,
       ));
     }
     return out;
@@ -112,7 +127,12 @@ class CourseLessons {
     final path = lesson.storagePath;
     if (path == null || path.isEmpty) return null;
     try {
-      return await FirebaseStorage.instance.ref(path).getDownloadURL();
+      // Com prazo: sem resposta do Storage o player mostra «indisponível»
+      // em vez de girar para sempre.
+      return await FirebaseStorage.instance
+          .ref(path)
+          .getDownloadURL()
+          .timeout(const Duration(seconds: 15));
     } catch (_) {
       return null;
     }
@@ -137,6 +157,7 @@ class CourseLessons {
           title: entries.length > 1 ? 'Aula ${i + 1}' : 'Vídeo do curso',
           mp4Url: entries[i].url,
           storagePath: entries[i].storagePath,
+          posterUrl: entries[i].posterUrl,
         ),
     ];
   }

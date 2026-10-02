@@ -236,6 +236,15 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
     final dicas = _filterAndSort(published, 'dica');
     final syncing = _cache.showInitialLoading;
 
+    // Carga falhou/passou do prazo e não há nada em cache: erro visível com
+    // «Tentar novamente» (antes a tela ficava vazia/girando).
+    if (!syncing && allDocs.isEmpty && _cache.lastError != null) {
+      return ColoredBox(
+        color: CourseYt.background(context),
+        child: _errorView(cfg, _cache.lastError),
+      );
+    }
+
     return RefreshIndicator(
       onRefresh: () => _cache.ensureLoaded(forceServer: true),
       color: CourseYt.red,
