@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../constants/admin_master_config.dart';
 import '../../constants/team_role_config.dart';
@@ -14,7 +16,11 @@ import '../../widgets/admin/admin_ui_kit.dart';
 
 /// «Promover usuário a admin» — SÓ o master vê (02/10/2026).
 ///
-/// Busca a conta por e-mail/nome (prefixo no servidor), escolhe o papel da
+/// Já abre com a LISTA de todos os usuários (paginada por e-mail com
+/// «Carregar mais» via [AdminUsersPager] — `.get()` com cursor, nunca escuta
+/// de milhares de docs), filtros rápidos por papel (a equipe vem de uma
+/// consulta só por `role`) e busca que filtra na hora e completa com o
+/// servidor. Busca a conta por e-mail/nome (prefixo no servidor), escolhe o papel da
 /// equipe ([TeamRoleConfig.creatableRoles]: Administrador, Suporte, Editor,
 /// Gestor, Sócio, Editor de conteúdo) e confirma; também rebaixa a usuário
 /// comum. Grava pelo callable `ctAdminSetUserRole` (confere o master pelo
@@ -27,41 +33,148 @@ class AdminPromoverAdminTab extends StatefulWidget {
   State<AdminPromoverAdminTab> createState() => _AdminPromoverAdminTabState();
 }
 
+enum _FiltroPapel { todos, admins, suporte, editores, editorConteudo, usuarios }
+
 class _AdminPromoverAdminTabState extends State<AdminPromoverAdminTab> {
   final _buscaCtrl = TextEditingController();
   Timer? _debounce;
   String _buscaFeita = '';
-  Future<List<AdminUserDoc>>? _resultado;
+  bool _buscandoServidor = false;
   final Set<String> _salvando = {};
+  final AdminUsersPager _pager = AdminUsersPager();
+  _FiltroPapel _filtro = _FiltroPapel.todos;
+
+  /// Equipe (quem tem `role` de painel) — poucos docs, uma consulta só.
+  List<AdminUserDoc> _equipe = const [];
+  bool _equipeCarregando = true;
+  Object? _equipeErro;
 
   static const _papeis = AdminTeamRoleService();
+
+  @override
+  void initState() {
+    super.initState();
+    _pager.addListener(_onPager);
+    unawaited(_pager.reload());
+    unawaited(_carregarEquipe());
+  }
+
+  void _onPager() {
+    if (mounted) setState(() {});
+  }
 
   @override
   void dispose() {
     _debounce?.cancel();
     _buscaCtrl.dispose();
+    _pager.removeListener(_onPager);
+    _pager.dispose();
     super.dispose();
   }
 
+  Future<void> _carregarEquipe() async {
+    setState(() {
+      _equipeCarregando = true;
+      _equipeErro = null;
+    });
+    try {
+      final snap = await AdminLoadGuard.comPrazo(
+        FirebaseFirestore.instance
+            .collection('users')
+            .where('role', whereIn: TeamRoleConfig.firestoreRoles.toList())
+            .limit(500)
+            .get(),
+        oQue: 'a equipe',
+      );
+      final docs = snap.docs.toList()
+        ..sort((a, b) => (a.data()['email'] ?? '')
+            .toString()
+            .toLowerCase()
+            .compareTo((b.data()['email'] ?? '').toString().toLowerCase()));
+      if (!mounted) return;
+      setState(() {
+        _equipe = docs;
+        _equipeCarregando = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _equipeErro = e;
+        _equipeCarregando = false;
+      });
+    }
+  }
+
   void _agendarBusca(String v) {
+    setState(() {}); // filtra na hora o que já está carregado
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 400), _buscar);
   }
 
-  void _buscar({bool forcar = false}) {
+  /// Completa a lista com a busca por prefixo no servidor (e-mail, nome,
+  /// CPF, UID) — quem ainda não apareceu nas páginas carregadas.
+  Future<void> _buscar({bool forcar = false}) async {
     final q = _buscaCtrl.text.trim();
     if (q.length < 2) {
-      setState(() {
-        _buscaFeita = '';
-        _resultado = null;
-      });
+      _buscaFeita = '';
       return;
     }
     if (!forcar && q == _buscaFeita) return;
-    setState(() {
-      _buscaFeita = q;
-      _resultado = adminSearchUsersServer(q, limit: 20);
-    });
+    _buscaFeita = q;
+    setState(() => _buscandoServidor = true);
+    try {
+      final extra = await adminSearchUsersServer(q, limit: 25);
+      if (!mounted) return;
+      _pager.merge(extra);
+    } catch (e) {
+      _snack(AdminLoadGuard.mensagem(e), erro: true);
+    } finally {
+      if (mounted) setState(() => _buscandoServidor = false);
+    }
+  }
+
+  bool _passaFiltro(Map<String, dynamic> d) {
+    final p = _papelAtual(d);
+    switch (_filtro) {
+      case _FiltroPapel.todos:
+        return true;
+      case _FiltroPapel.admins:
+        return p == TeamRole.master ||
+            p == TeamRole.admin ||
+            p == TeamRole.gestor ||
+            p == TeamRole.partner;
+      case _FiltroPapel.suporte:
+        return p == TeamRole.suporte;
+      case _FiltroPapel.editores:
+        return p == TeamRole.editor;
+      case _FiltroPapel.editorConteudo:
+        return p == TeamRole.editorConteudo;
+      case _FiltroPapel.usuarios:
+        return p == null;
+    }
+  }
+
+  /// Fonte da lista: equipe (consulta por papel) ou páginas de todos.
+  bool get _filtroDeEquipe =>
+      _filtro != _FiltroPapel.todos && _filtro != _FiltroPapel.usuarios;
+
+  List<AdminUserDoc> _visiveis() {
+    final base = _filtroDeEquipe ? _equipe : _pager.docs;
+    final q = _buscaCtrl.text.trim();
+    return base
+        .where((d) => adminUserHasCompleteEmail(d.data()))
+        .where((d) => _passaFiltro(d.data()))
+        .where((d) => q.isEmpty || adminUserMatchesSearch(d.data(), d.id, q))
+        .toList();
+  }
+
+  int _contar(_FiltroPapel f) {
+    if (f == _FiltroPapel.todos || f == _FiltroPapel.usuarios) return -1;
+    final antes = _filtro;
+    _filtro = f;
+    final n = _equipe.where((d) => _passaFiltro(d.data())).length;
+    _filtro = antes;
+    return n;
   }
 
   void _snack(String msg, {bool erro = false}) {
@@ -221,7 +334,8 @@ class _AdminPromoverAdminTabState extends State<AdminPromoverAdminTab> {
     try {
       await _papeis.definirPapel(uid: uid, role: papel, emailAlvo: email);
       _snack(sucesso);
-      _buscar(forcar: true);
+      await _pager.refreshOne(uid);
+      unawaited(_carregarEquipe());
     } catch (e) {
       _snack(AdminLoadGuard.mensagem(e), erro: true);
     } finally {
@@ -232,64 +346,212 @@ class _AdminPromoverAdminTabState extends State<AdminPromoverAdminTab> {
   @override
   Widget build(BuildContext context) {
     final pad = AdminPageShell.listPadding(context, top: 4);
-    return ListView(
-      padding: pad.copyWith(bottom: pad.bottom + 32),
-      children: [
-        const AdminHero(
-          titulo: 'Promover a admin',
-          subtitulo: 'Dê ou tire acesso ao Painel Admin. Só o master vê esta tela.',
-          icone: Icons.admin_panel_settings_rounded,
-          cores: [Color(0xFF78350F), Color(0xFFD97706), Color(0xFF7C3AED)],
-        ),
-        const SizedBox(height: 12),
-        AdminBusca(
-          controller: _buscaCtrl,
-          hint: 'Início do e-mail ou do nome (mín. 2 letras)…',
-          onChanged: _agendarBusca,
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Master é só o e-mail dos donos (${AdminMasterConfig.kMasterEmails.join(' e ')}) '
-          '— não dá para promover ninguém a master.',
-          style: TextStyle(fontSize: 12, color: AdminUi.apoioOf(context)),
-        ),
-        const SizedBox(height: 12),
-        if (_resultado == null)
-          const AdminVazio(
-            texto: 'Busque a conta pelo e-mail ou pelo nome.',
-            icone: Icons.person_search_rounded,
-          )
-        else
-          FutureBuilder<List<AdminUserDoc>>(
-            future: _resultado,
-            builder: (context, snap) {
-              if (snap.connectionState == ConnectionState.waiting) {
-                return const AdminCarregando(texto: 'Buscando…');
-              }
-              if (snap.hasError) {
-                return AdminErroCard(
-                  erro: snap.error,
-                  titulo: 'A busca falhou',
-                  onTentar: () => _buscar(forcar: true),
-                );
-              }
-              final docs = (snap.data ?? const <AdminUserDoc>[])
-                  .where((d) => adminUserHasCompleteEmail(d.data()))
-                  .toList();
-              if (docs.isEmpty) {
-                return const AdminVazio(
-                  texto: 'Nenhuma conta encontrada. A pessoa precisa ter '
-                      'entrado no app ao menos uma vez.',
-                  icone: Icons.search_off_rounded,
-                );
-              }
-              return Column(
-                children: [for (final d in docs) _linha(d)],
-              );
-            },
+    final docs = _visiveis();
+    final carregando =
+        _filtroDeEquipe ? _equipeCarregando : (_pager.loading && docs.isEmpty);
+    final erro = _filtroDeEquipe ? _equipeErro : _pager.error;
+    final total = _pager.total;
+    return RefreshIndicator(
+      onRefresh: () async {
+        await Future.wait([_pager.reload(), _carregarEquipe()]);
+      },
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: pad.copyWith(bottom: pad.bottom + 32),
+        children: [
+          const AdminHero(
+            titulo: 'Promover a admin',
+            subtitulo:
+                'Dê ou tire acesso ao Painel Admin. Só o master vê esta tela.',
+            icone: Icons.admin_panel_settings_rounded,
+            cores: [Color(0xFF78350F), Color(0xFFD97706), Color(0xFF7C3AED)],
           ),
-      ],
+          const SizedBox(height: 12),
+          AdminBusca(
+            controller: _buscaCtrl,
+            hint: 'Buscar por e-mail ou nome…',
+            onChanged: _agendarBusca,
+          ),
+          const SizedBox(height: 10),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final f in _FiltroPapel.values)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: _chipFiltro(f),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _resumoLista(docs.length, total),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AdminUi.apoioOf(context),
+                  ),
+                ),
+              ),
+              if (_buscandoServidor)
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              IconButton(
+                tooltip: 'Atualizar',
+                visualDensity: VisualDensity.compact,
+                onPressed: () {
+                  unawaited(_pager.reload());
+                  unawaited(_carregarEquipe());
+                },
+                icon: const Icon(Icons.refresh_rounded, size: 20),
+              ),
+            ],
+          ),
+          Text(
+            'Master é só o e-mail dos donos '
+            '(${AdminMasterConfig.kMasterEmails.join(' e ')}) — não dá para '
+            'promover ninguém a master.',
+            style: TextStyle(fontSize: 11.5, color: AdminUi.apoioOf(context)),
+          ),
+          const SizedBox(height: 12),
+          if (erro != null && docs.isEmpty)
+            AdminErroCard(
+              erro: erro,
+              titulo: 'Não deu para carregar os usuários',
+              onTentar: () {
+                if (_filtroDeEquipe) {
+                  unawaited(_carregarEquipe());
+                } else {
+                  unawaited(_pager.reload());
+                }
+              },
+            )
+          else if (carregando)
+            const AdminCarregando(texto: 'Carregando usuários…')
+          else if (docs.isEmpty)
+            AdminVazio(
+              texto: _buscaCtrl.text.trim().isNotEmpty
+                  ? 'Ninguém com esse e-mail ou nome nesta lista. '
+                      'A pessoa precisa ter entrado no app ao menos uma vez.'
+                  : 'Ninguém neste filtro.',
+              icone: Icons.search_off_rounded,
+            )
+          else ...[
+            for (final d in docs) _linha(d),
+            if (!_filtroDeEquipe && _pager.hasMore) ...[
+              const SizedBox(height: 6),
+              Center(
+                child: _pager.loading
+                    ? const Padding(
+                        padding: EdgeInsets.all(8),
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : OutlinedButton.icon(
+                        onPressed: () => unawaited(_pager.loadMore()),
+                        icon: const Icon(Icons.expand_more_rounded),
+                        label: const Text('Carregar mais'),
+                      ),
+              ),
+              if (_pager.error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    AdminLoadGuard.mensagem(_pager.error),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: 12, color: Colors.red.shade400),
+                  ),
+                ),
+            ],
+          ],
+        ],
+      ),
     );
+  }
+
+  String _resumoLista(int visiveis, int? total) {
+    if (_filtroDeEquipe) return '$visiveis na equipe neste filtro';
+    final carregados = _pager.docs.length;
+    final t = total == null ? '' : ' de $total';
+    if (_buscaCtrl.text.trim().isNotEmpty || _filtro == _FiltroPapel.usuarios) {
+      return '$visiveis encontrados · $carregados carregados$t';
+    }
+    return '$carregados usuários carregados$t';
+  }
+
+  Widget _chipFiltro(_FiltroPapel f) {
+    final (rotulo, icone, cor) = switch (f) {
+      _FiltroPapel.todos => ('Todos', Icons.people_alt_rounded, AdminUi.azul),
+      _FiltroPapel.admins => (
+          'Admins',
+          Icons.admin_panel_settings_rounded,
+          TeamRoleConfig.color(TeamRole.admin)
+        ),
+      _FiltroPapel.suporte => (
+          'Suporte',
+          TeamRoleConfig.icon(TeamRole.suporte),
+          TeamRoleConfig.color(TeamRole.suporte)
+        ),
+      _FiltroPapel.editores => (
+          'Editores',
+          TeamRoleConfig.icon(TeamRole.editor),
+          TeamRoleConfig.color(TeamRole.editor)
+        ),
+      _FiltroPapel.editorConteudo => (
+          'Editor de conteúdo',
+          TeamRoleConfig.icon(TeamRole.editorConteudo),
+          TeamRoleConfig.color(TeamRole.editorConteudo)
+        ),
+      _FiltroPapel.usuarios => ('Usuários', Icons.person_rounded, AdminUi.cinza),
+    };
+    final n = _equipeCarregando ? -1 : _contar(f);
+    final sel = _filtro == f;
+    return ChoiceChip(
+      selected: sel,
+      showCheckmark: false,
+      avatar: Icon(icone, size: 16, color: sel ? Colors.white : cor),
+      label: Text(n >= 0 ? '$rotulo · $n' : rotulo),
+      labelStyle: TextStyle(
+        fontWeight: FontWeight.w800,
+        fontSize: 12.5,
+        color: sel ? Colors.white : AdminUi.tintaOf(context),
+      ),
+      selectedColor: cor,
+      backgroundColor: AdminUi.cardOf(context),
+      side: BorderSide(color: sel ? cor : AdminUi.bordaOf(context)),
+      onSelected: (_) => setState(() => _filtro = f),
+    );
+  }
+
+  static DateTime? _quando(dynamic v) {
+    if (v is Timestamp) return v.toDate();
+    if (v is num && v > 0) {
+      return DateTime.fromMillisecondsSinceEpoch(v.toInt());
+    }
+    if (v is String) return DateTime.tryParse(v);
+    return null;
+  }
+
+  String _plano(Map<String, dynamic> d) {
+    final p = (d['plan'] ?? d['licensePlan'] ?? '').toString().trim();
+    return p.isEmpty ? 'free' : p;
+  }
+
+  String _ultimoAcesso(Map<String, dynamic> d) {
+    final tel = d['clientTelemetry'];
+    final dt = _quando(tel is Map ? tel['lastPingAt'] : null) ??
+        _quando(d['lastLoginAt']) ??
+        _quando(d['updatedAt']);
+    if (dt == null) return 'sem registro de acesso';
+    return 'último acesso ${DateFormat('dd/MM/yy HH:mm').format(dt)}';
   }
 
   Widget _linha(AdminUserDoc doc) {
@@ -340,13 +602,28 @@ class _AdminPromoverAdminTabState extends State<AdminPromoverAdminTab> {
                             ? context.appTextSecondary
                             : Colors.grey.shade700)),
                 const SizedBox(height: 4),
-                AdminSelo(
-                  dono
-                      ? 'Master (dono)'
-                      : papel == null
-                          ? 'Usuário comum'
-                          : TeamRoleConfig.label(papel),
-                  cor: dono ? TeamRoleConfig.color(TeamRole.master) : cor,
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    AdminSelo(
+                      dono
+                          ? 'Master (dono)'
+                          : papel == null
+                              ? 'Usuário comum'
+                              : TeamRoleConfig.label(papel),
+                      cor: dono ? TeamRoleConfig.color(TeamRole.master) : cor,
+                    ),
+                    AdminSelo(_plano(d),
+                        cor: AdminUi.teal,
+                        icone: Icons.workspace_premium_rounded),
+                    Text(
+                      _ultimoAcesso(d),
+                      style: TextStyle(
+                          fontSize: 11, color: AdminUi.apoioOf(context)),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -363,11 +640,18 @@ class _AdminPromoverAdminTabState extends State<AdminPromoverAdminTab> {
             Wrap(
               spacing: 4,
               children: [
-                FilledButton.tonalIcon(
-                  onPressed: () => _promover(doc),
-                  icon: const Icon(Icons.upgrade_rounded, size: 18),
-                  label: Text(papel == null ? 'Promover' : 'Trocar papel'),
-                ),
+                if (MediaQuery.sizeOf(context).width < 520)
+                  IconButton.filledTonal(
+                    tooltip: papel == null ? 'Promover' : 'Trocar papel',
+                    onPressed: () => _promover(doc),
+                    icon: const Icon(Icons.upgrade_rounded, size: 20),
+                  )
+                else
+                  FilledButton.tonalIcon(
+                    onPressed: () => _promover(doc),
+                    icon: const Icon(Icons.upgrade_rounded, size: 18),
+                    label: Text(papel == null ? 'Promover' : 'Trocar papel'),
+                  ),
                 if (papel != null)
                   IconButton(
                     tooltip: 'Remover do painel',
