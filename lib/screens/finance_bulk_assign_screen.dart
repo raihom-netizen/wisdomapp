@@ -19,6 +19,7 @@ import '../utils/keyboard_form_scaffold.dart';
 import '../utils/premium_upgrade.dart';
 import '../widgets/fast_text_field.dart';
 import '../widgets/finance_bank_brand_thumb.dart';
+import '../widgets/navy_back_app_bar.dart';
 
 enum _PeriodPreset { last30, last90, last365, custom }
 
@@ -789,11 +790,11 @@ class _FinanceBulkAssignScreenState extends State<FinanceBulkAssignScreen> {
       appBar: AppBar(
         title: const Text('Migrar lançamentos', style: TextStyle(fontWeight: FontWeight.w800)),
         elevation: 0,
-        leading: IconButton(
-          tooltip: 'Voltar',
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => Navigator.maybePop(context),
-        ),
+        backgroundColor: kAppNavyBar,
+        foregroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        leadingWidth: 118,
+        leading: const NavyBackButton(),
         actions: [
           IconButton(
             tooltip: 'Atualizar lista',

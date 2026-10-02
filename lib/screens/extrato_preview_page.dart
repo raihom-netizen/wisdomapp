@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../constants/currency_formats.dart';
 import '../theme/theme_context.dart';
 import '../utils/extrato_import.dart';
+import '../widgets/navy_back_app_bar.dart';
 
 /// Limite da descrição — o mesmo da ficha do lançamento no Controle Total.
 const int kExtratoDescricaoMax = 500;
@@ -94,6 +95,8 @@ class _ExtratoPreviewPageState extends State<ExtratoPreviewPage> {
     return Scaffold(
       backgroundColor: ctx.appScaffold,
       appBar: AppBar(
+        leadingWidth: 118,
+        leading: const NavyBackButton(),
         backgroundColor: _lote.fatura ? const Color(0xFF7C3AED) : const Color(0xFF0D9488),
         foregroundColor: Colors.white,
         title: Row(

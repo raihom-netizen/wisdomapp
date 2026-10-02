@@ -19,6 +19,7 @@ import '../models/finance_tip_bank_entry.dart';
 import '../utils/firestore_user_doc_id.dart';
 import '../widgets/finance_smart_tips_insight.dart';
 import '../widgets/skeleton_loader.dart';
+import '../widgets/navy_back_app_bar.dart';
 
 /// Painel completo: alertas automáticos + dicas personalizadas + educação (mesmas regras do bloco na tela).
 class FinanceAssistantInsightsPage extends StatefulWidget {
@@ -131,12 +132,7 @@ class _FinanceAssistantInsightsPageState extends State<FinanceAssistantInsightsP
       backgroundColor: context.isDarkMode
           ? context.appScaffold
           : const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: const Text('Assistente financeiro'),
-        backgroundColor: AppColors.deepBlueDark,
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
+      appBar: navyBackAppBar(context, titleText: 'Assistente financeiro'),
       body: RefreshIndicator(
         onRefresh: () async {
           final next = _loadPanel();

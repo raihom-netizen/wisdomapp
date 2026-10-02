@@ -17,6 +17,7 @@ import '../utils/finance_period_summary.dart';
 import '../utils/finance_transactions_realtime.dart';
 import '../utils/finance_fora_dos_totais.dart';
 import '../widgets/finance_premium_ui.dart';
+import '../widgets/navy_back_app_bar.dart';
 
 /// Full screen: distribuição de **despesas** por categoria (gráfico pizza + lista estilo fintech).
 ///
@@ -186,45 +187,42 @@ class _FinanceCategoriesFullscreenPageState
 
     return Scaffold(
       backgroundColor: ModernModuleUI.scaffoldBgOf(context),
+      // Barra azul-marinho + «← Voltar» branco (link direto volta ao início).
+      appBar: navyBackAppBar(
+        context,
+        toolbarHeight: 62,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Despesas por categoria',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                color: Colors.white,
+                letterSpacing: -0.3,
+              ),
+            ),
+            Text(
+              periodLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white70),
+            ),
+          ],
+        ),
+      ),
       body: SafeArea(
+        top: false,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-              child: Row(
-                children: [
-                  IconButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: Icon(Icons.arrow_back_rounded),
-                    tooltip: 'Voltar',
-                  ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Despesas por categoria',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w900,
-                            color: context.appDeepTitle,
-                            letterSpacing: -0.3,
-                          ),
-                        ),
-                        Text(
-                          periodLabel,
-                          style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: context.appTextSecondary),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
             Expanded(
               child: FutureBuilder<List<dynamic>>(
                 future: _bothFuture,

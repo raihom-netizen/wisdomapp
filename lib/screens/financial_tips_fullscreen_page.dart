@@ -5,6 +5,7 @@ import '../services/financial_tips_home_sync_service.dart';
 import '../theme/theme_context.dart';
 import '../utils/navigator_safe_pop.dart';
 import '../widgets/finance_tip_modern_card.dart';
+import '../widgets/navy_back_app_bar.dart';
 
 /// Módulo Dicas: últimos 3 dias + botão voltar (Início ou pop).
 class FinancialTipsFullscreenPage extends StatelessWidget {
@@ -124,17 +125,14 @@ class FinancialTipsFullscreenPage extends StatelessWidget {
           ? context.appScaffold
           : const Color(0xFFF0F4FF),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0B1B4B),
+        backgroundColor: kAppNavyBar,
         foregroundColor: Colors.white,
         title: const Text(
           'Dicas Financeiras',
           style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
         ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          tooltip: 'Voltar',
-          onPressed: handleReturn,
-        ),
+        leadingWidth: 118,
+        leading: NavyBackButton(onPressed: handleReturn),
       ),
       body: body,
     );

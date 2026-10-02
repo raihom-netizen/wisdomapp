@@ -99,6 +99,7 @@ import '../widgets/finance_fatura_em_aberto_hub.dart';
 import '../widgets/importar_extrato_card.dart';
 import '../utils/finance_account_balance_utils.dart';
 import '../utils/pdf_financeiro_super_extrato.dart';
+import '../widgets/navy_back_app_bar.dart';
 
 class FinanceScreen extends StatefulWidget {
   final String uid;
@@ -11983,40 +11984,8 @@ Widget buildFinancePreviewTopBar(BuildContext ctx) {
     padding: const EdgeInsets.fromLTRB(8, 12, 8, 4),
     child: Row(
       children: [
-        Material(
-          color: AppColors.primary.withValues(alpha: 0.08),
-          shape: const CircleBorder(),
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: () => Navigator.of(ctx).pop(),
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Icon(
-                Icons.arrow_back_rounded,
-                color: AppColors.primary,
-                size: 22,
-                semanticLabel: 'Voltar',
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 6),
-        TextButton(
-          onPressed: () => Navigator.of(ctx).pop(),
-          style: TextButton.styleFrom(
-            minimumSize: const Size(44, 44),
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-            foregroundColor: AppColors.primary,
-          ),
-          child: const Text(
-            'Voltar',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.2,
-            ),
-          ),
-        ),
+        // Pílula azul-marinho «← Voltar» — legível no claro e no escuro.
+        SheetBackButton(onPressed: () => Navigator.of(ctx).pop()),
         const Spacer(),
         Material(
           color: ctx.isDarkMode ? ctx.appSurfaceHigh : Colors.grey.shade100,

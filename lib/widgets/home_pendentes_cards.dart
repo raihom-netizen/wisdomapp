@@ -18,6 +18,7 @@ import '../utils/premium_upgrade.dart';
 import 'finance_confirm_payment_sheet.dart';
 import 'fixas_contas_page.dart';
 import 'fixas_visao_geral.dart';
+import 'navy_back_app_bar.dart';
 
 const _kAzulRec = Color(0xFF0EA5E9);
 const _kAzulRecEscuro = Color(0xFF0284C7);
@@ -736,6 +737,10 @@ class _ListaPendentesState extends State<_ListaPendentes> {
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
       children: [
         const _AlcaFolha(),
+        const Padding(
+          padding: EdgeInsets.only(top: 4, bottom: 2),
+          child: SheetBackButton(),
+        ),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Row(children: [

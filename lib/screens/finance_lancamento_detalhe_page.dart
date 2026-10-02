@@ -7,6 +7,7 @@ import '../theme/theme_context.dart';
 import '../utils/finance_transaction_historico.dart';
 import '../utils/firestore_user_doc_id.dart';
 import '../widgets/finance_pix_sheets.dart';
+import '../widgets/navy_back_app_bar.dart';
 
 const _kVerde = Color(0xFF059669);
 const _kVermelho = Color(0xFFDC2626);
@@ -144,6 +145,8 @@ class _FinanceLancamentoDetalhePageState extends State<FinanceLancamentoDetalheP
     return Scaffold(
       backgroundColor: context.appScaffold,
       appBar: AppBar(
+        leadingWidth: 118,
+        leading: const NavyBackButton(),
         title: const Text('Detalhe do lançamento'),
         backgroundColor: cor,
         foregroundColor: Colors.white,

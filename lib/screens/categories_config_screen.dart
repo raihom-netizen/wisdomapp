@@ -8,6 +8,7 @@ import '../constants/finance_category_visuals.dart';
 import '../services/user_categories_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/theme_context.dart';
+import '../widgets/navy_back_app_bar.dart';
 
 /// Edição de categorias (receitas e despesas) no módulo financeiro — padrão, renomear, excluir/ocultar.
 class CategoriesConfigScreen extends StatefulWidget {
@@ -218,18 +219,11 @@ class _CategoriesConfigScreenState extends State<CategoriesConfigScreen> with Si
         title: const Text('Categorias', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: -0.2)),
         elevation: 0,
         scrolledUnderElevation: 0,
-        backgroundColor: const Color(0xFF1A237E),
+        backgroundColor: kAppNavyBar,
         foregroundColor: Colors.white,
         centerTitle: true,
-        leading: IconButton(
-          tooltip: 'Retornar',
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => Navigator.maybePop(context),
-          style: IconButton.styleFrom(
-            foregroundColor: Colors.white,
-            minimumSize: const Size(48, 48),
-          ),
-        ),
+        leadingWidth: 118,
+        leading: const NavyBackButton(),
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

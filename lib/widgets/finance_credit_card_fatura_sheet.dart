@@ -32,6 +32,7 @@ import '../widgets/agenda_period_filter_bar.dart' show agendaParseBrDateInput;
 import '../widgets/fast_text_field.dart';
 import '../widgets/finance_transaction_list_tile.dart';
 import '../widgets/skeleton_loader.dart';
+import 'navy_back_app_bar.dart';
 
 /// Painel da fatura do cartão: lançamentos, seleção parcial e pagamento pelo banco de débito.
 class FinanceCreditCardFaturaSheet extends StatefulWidget {
@@ -1679,7 +1680,14 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
 
     return Scaffold(
       backgroundColor: context.isDarkMode ? context.appScaffold : Colors.white,
+      // Barra azul-marinho + «← Voltar» (antes a fatura em tela cheia não
+      // tinha botão de voltar).
+      appBar: navyBackAppBar(
+        context,
+        titleText: 'Fatura · ${widget.cardAccount.displayName}',
+      ),
       body: SafeArea(
+        top: false,
         child: _buildBody(vis: vis, nextClose: nextClose),
       ),
     );

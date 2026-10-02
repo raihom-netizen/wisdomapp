@@ -10,6 +10,7 @@ import '../utils/finance_transactions_realtime.dart';
 import '../utils/fixas_resumo.dart';
 import 'modern_module_ui.dart';
 import 'periodo_campos.dart';
+import 'navy_back_app_bar.dart';
 
 // «Quanto eu gasto (ou recebo) de fixa por mês?» — pedido do dono, 30/09/2026.
 //
@@ -357,6 +358,8 @@ class _FixasMesAMesPageState extends State<FixasMesAMesPage> {
     return Scaffold(
       backgroundColor: ModernModuleUI.scaffoldBgOf(context),
       appBar: AppBar(
+        leadingWidth: 118,
+        leading: const NavyBackButton(),
         elevation: 0,
         scrolledUnderElevation: 0,
         backgroundColor: Colors.transparent,

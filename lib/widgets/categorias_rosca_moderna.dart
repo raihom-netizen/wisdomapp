@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/currency_formats.dart';
 import '../theme/theme_context.dart';
 import '../utils/finance_line_opening.dart';
+import 'navy_back_app_bar.dart';
 
 /// Uma fatia do gráfico de categorias.
 class CategoriaFatia {
@@ -894,6 +895,8 @@ class _CategoriasTelaCheia extends StatelessWidget {
     return Scaffold(
       backgroundColor: context.appScaffold,
       appBar: AppBar(
+        leadingWidth: 118,
+        leading: const NavyBackButton(),
         foregroundColor: Colors.white,
         title: Text('$titulo por categoria', style: const TextStyle(fontWeight: FontWeight.w900)),
         flexibleSpace: const DecoratedBox(

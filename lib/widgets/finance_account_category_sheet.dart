@@ -246,15 +246,26 @@ class _FinanceAccountCategorySheetState extends State<FinanceAccountCategoryShee
       return Scaffold(
         backgroundColor: bg,
         appBar: AppBar(
-          backgroundColor: bg,
+          // Barra azul-marinho do app com texto branco: antes o tema deixava
+          // seta e título brancos sobre fundo claro (invisíveis).
+          backgroundColor: const Color(0xFF0D1B4C),
+          foregroundColor: Colors.white,
+          iconTheme: const IconThemeData(color: Colors.white),
+          actionsIconTheme: const IconThemeData(color: Colors.white),
           surfaceTintColor: Colors.transparent,
           elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back_rounded),
-            tooltip: 'Voltar',
-            onPressed: () => Navigator.of(context).maybePop(),
+          leadingWidth: 118,
+          leading: Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: TextButton.icon(
+              onPressed: () => Navigator.of(context).maybePop(),
+              icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+              label: const Text('Voltar',
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w800)),
+            ),
           ),
-          titleSpacing: 0,
+          titleSpacing: 4,
           title: Text(
             widget.account?.displayName ?? 'Todas as contas',
             maxLines: 1,

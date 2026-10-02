@@ -8,6 +8,7 @@ import '../services/pdf_launcher.dart';
 import '../services/relatorio_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/theme_context.dart';
+import '../widgets/navy_back_app_bar.dart';
 
 /// Tela de pré-visualização do relatório PDF: usuário vê o preview primeiro,
 /// pode ampliar/reduzir livremente (pinch ou botões), depois compartilhar, imprimir ou salvar.
@@ -137,19 +138,15 @@ class _ReportPreviewScreenState extends State<ReportPreviewScreen> {
       backgroundColor:
           context.isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
       appBar: AppBar(
-        leading: IconButton(
-          style: _iconBtnStyle,
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => Navigator.of(context).pop(),
-          tooltip: 'Voltar',
-        ),
+        leadingWidth: 118,
+        leading: const NavyBackButton(),
         title: Text(
           name.length > 40 ? '${name.substring(0, 37)}...' : name,
           style: const TextStyle(fontSize: 14),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        backgroundColor: AppColors.deepBlueDark,
+        backgroundColor: kAppNavyBar,
         foregroundColor: Colors.white,
         actions: isNarrow
             ? [narrowActionsMenu()]

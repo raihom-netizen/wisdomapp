@@ -5,6 +5,7 @@ import '../constants/date_time_formats.dart';
 import '../theme/app_colors.dart';
 import '../theme/theme_context.dart';
 import 'fast_text_field.dart';
+import 'navy_back_app_bar.dart';
 
 /// Decoração padrão de sheets financeiros premium (fundo suave + cantos).
 BoxDecoration financePremiumSheetDecoration({
@@ -142,28 +143,17 @@ class FinancePremiumSheetHeader extends StatelessWidget {
             ),
           ),
         ),
+        // «← Voltar» em pílula azul-marinho — visível no claro e no escuro.
+        if (onBack != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+            child: SheetBackButton(onPressed: onBack),
+          ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (onBack != null) ...[
-                Material(
-                  color: AppColors.primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(14),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(14),
-                    onTap: onBack,
-                    child: SizedBox(
-                      width: 48,
-                      height: 48,
-                      child: Icon(Icons.arrow_back_rounded,
-                          color: AppColors.primary, size: 22),
-                    ),
-                  ),
-                ),
-                SizedBox(width: 10),
-              ],
               Container(
                 width: 52,
                 height: 52,

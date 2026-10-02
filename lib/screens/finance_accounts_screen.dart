@@ -18,6 +18,7 @@ import '../widgets/modern_module_ui.dart';
 import '../utils/premium_upgrade.dart';
 import '../widgets/finance_bank_brand_thumb.dart';
 import '../widgets/finance_delete_account_dialog.dart';
+import '../widgets/navy_back_app_bar.dart';
 
 /// Aviso de lançamentos presos a bancos já excluídos, com limpeza confirmada.
 ///
@@ -41,16 +42,15 @@ class FinanceAccountsScreen extends StatelessWidget {
       appBar: AppBar(
         title: Text('Bancos e cartões', style: TextStyle(fontWeight: FontWeight.w800)),
         elevation: 0,
-        leading: IconButton(
-          tooltip: 'Voltar',
-          icon: Icon(Icons.arrow_back_rounded),
-          onPressed: () => Navigator.maybePop(context),
-          style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
-        ),
+        backgroundColor: kAppNavyBar,
+        foregroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        leadingWidth: 118,
+        leading: const NavyBackButton(),
         actions: [
           TextButton(
             onPressed: () => Navigator.maybePop(context),
-            child: Text('Cancelar', style: TextStyle(fontWeight: FontWeight.w700)),
+            child: Text('Cancelar', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.white)),
           ),
         ],
       ),
@@ -2334,14 +2334,11 @@ class _BankPickerScreenState extends State<_BankPickerScreen> {
     return Scaffold(
       backgroundColor: ModernModuleUI.scaffoldBgOf(context),
       appBar: AppBar(
-        backgroundColor: AppColors.deepBlueDark,
+        backgroundColor: kAppNavyBar,
         foregroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          tooltip: 'Voltar',
-          icon: Icon(Icons.arrow_back_rounded),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+        leadingWidth: 118,
+        leading: const NavyBackButton(),
         title: Text(
           'Selecionar instituição',
           style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),

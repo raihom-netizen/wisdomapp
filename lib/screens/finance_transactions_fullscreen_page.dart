@@ -27,6 +27,7 @@ import '../constants/date_time_formats.dart';
 import '../utils/firestore_user_doc_id.dart';
 import '../utils/date_picker_a11y.dart';
 import '../utils/keyboard_form_scaffold.dart';
+import '../widgets/navy_back_app_bar.dart';
 
 /// Ações de lançamento delegadas à tela principal do financeiro (editar, excluir, comprovante, etc.).
 class FinanceFullscreenHandlers {
@@ -395,7 +396,11 @@ class _FinanceTransactionsFullscreenPageState
   }
 
   void _popComFiltrosSincronizados() {
-    Navigator.of(context).pop(_captureFilterSnapshot());
+    navyPopOrGoHome(
+      context,
+      result: _captureFilterSnapshot(),
+      bypassPopScope: true,
+    );
   }
 
   CollectionReference<Map<String, dynamic>> _txRef() =>
@@ -612,59 +617,36 @@ class _FinanceTransactionsFullscreenPageState
       child: Scaffold(
         resizeToAvoidBottomInset: scaffoldKeyboardResizeToAvoidBottomInset(),
         backgroundColor: ModernModuleUI.scaffoldBgOf(context),
+        // Barra azul-marinho + «← Voltar» branco (antes: «X» sem texto).
+        appBar: navyBackAppBar(
+          context,
+          titleText: 'Lançamentos',
+          onBack: _popComFiltrosSincronizados,
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: TextButton.icon(
+                onPressed: _resetFilters,
+                style: TextButton.styleFrom(foregroundColor: Colors.white),
+                icon: const Icon(Icons.restart_alt_rounded,
+                    size: 20, color: Colors.white),
+                label: const Text(
+                  'Limpar',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                    color: Colors.white,
+                    letterSpacing: 0.15,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                  8, MediaQuery.paddingOf(context).top + 6, 8, 10),
-              child: Row(
-                children: [
-                  IconButton.filledTonal(
-                    onPressed: _popComFiltrosSincronizados,
-                    tooltip: 'Fechar',
-                    style: IconButton.styleFrom(
-                      foregroundColor: AppColors.primary,
-                      backgroundColor:
-                          AppColors.primary.withValues(alpha: 0.14),
-                      surfaceTintColor: Colors.transparent,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        side: BorderSide(
-                            color: AppColors.primary.withValues(alpha: 0.26),
-                            width: 1),
-                      ),
-                    ),
-                    icon: Icon(Icons.close_rounded, size: 24),
-                  ),
-                  SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      'Lançamentos',
-                      style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w900,
-                          color: context.appDeepTitle,
-                          letterSpacing: -0.2),
-                    ),
-                  ),
-                  FilledButton.tonalIcon(
-                    onPressed: _resetFilters,
-                    icon: Icon(Icons.restart_alt_rounded, size: 20),
-                    label: Text(
-                      'Limpar',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13,
-                        color: AppColors.primary,
-                        letterSpacing: 0.15,
-                      ),
-                    ),
-                    style: _toolbarTonalFilledStyle(),
-                  ),
-                ],
-              ),
-            ),
+            const SizedBox(height: 10),
             Expanded(
               child: SafeArea(
                 top: false,

@@ -13,6 +13,7 @@ import 'fixas_a_pagar_painel.dart';
 import 'fixas_mes_a_mes.dart';
 import 'fixas_totalizador_card.dart';
 import 'fixas_visao_geral.dart';
+import 'navy_back_app_bar.dart';
 
 const _kVermelho = Color(0xFFDC2626);
 const _kVerde = Color(0xFF16A34A);
@@ -95,14 +96,13 @@ class _FixasContasPageState extends State<FixasContasPage>
     final cor = receita ? _kVerde : _kVermelho;
     return Scaffold(
       backgroundColor: context.appScaffold,
-      appBar: AppBar(
-        leading: IconButton(
-          tooltip: 'Voltar',
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => Navigator.of(context).maybePop(),
-        ),
-        titleSpacing: 0,
+      // Barra azul-marinho + «← Voltar» branco (antes: seta/título brancos
+      // sobre fundo claro, invisíveis).
+      appBar: navyBackAppBar(
+        context,
         title: Text('Contas fixas — $mes',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontWeight: FontWeight.w900)),
         actions: [
           if (widget.onAbrirFinanceiro != null)
@@ -118,8 +118,9 @@ class _FixasContasPageState extends State<FixasContasPage>
         bottom: TabBar(
           controller: _tabs,
           indicatorColor: cor,
-          labelColor: cor,
-          unselectedLabelColor: context.appTextSecondary,
+          indicatorWeight: 3,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
           labelStyle: const TextStyle(fontWeight: FontWeight.w900),
           tabs: const [
             Tab(icon: Icon(Icons.event_note_rounded), text: 'Despesas fixas'),

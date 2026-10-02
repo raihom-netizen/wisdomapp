@@ -32,6 +32,7 @@ import '../widgets/finance_calendar_color_picker.dart';
 import '../widgets/fixed_flow_finance_account_field.dart';
 import '../widgets/fixed_pending_prefs_sheet.dart';
 import '../utils/fixed_flow_schedule.dart';
+import '../widgets/navy_back_app_bar.dart';
 
 const EdgeInsets _kFixedFlowKeyboardScrollPad =
     EdgeInsets.fromLTRB(0, 0, 0, 260);
@@ -1210,12 +1211,8 @@ class _ReceitasFixasScreenState extends State<ReceitasFixasScreen> {
           style: TextStyle(
               fontWeight: FontWeight.w900, fontSize: 19, letterSpacing: 0.2),
         ),
-        leading: IconButton(
-          tooltip: 'Voltar',
-          icon: Icon(Icons.arrow_back_rounded),
-          onPressed: () => Navigator.maybePop(context),
-          style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
-        ),
+        leadingWidth: 118,
+        leading: const NavyBackButton(),
         actions: [
           IconButton(
             tooltip: 'Exibição nas receitas pendentes',
