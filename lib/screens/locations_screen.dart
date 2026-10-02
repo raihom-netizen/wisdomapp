@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fa;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../models/shift_location.dart';
 import '../theme/app_colors.dart';
@@ -309,12 +310,16 @@ class _LocationsScreenState extends State<LocationsScreen> {
   Future<void> _clearCacheAndRetry() async {
     setState(() => _loadError = null);
     _sub?.cancel();
-    try {
-      await FirebaseFirestore.instance.terminate();
-    } catch (_) {}
-    try {
-      await FirebaseFirestore.instance.clearPersistence();
-    } catch (_) {}
+    // Web: sem terminate() — ele mata TODAS as escutas abertas do app
+    // (outros módulos ficavam girando para sempre). Lá não há cache em disco.
+    if (!kIsWeb) {
+      try {
+        await FirebaseFirestore.instance.terminate();
+      } catch (_) {}
+      try {
+        await FirebaseFirestore.instance.clearPersistence();
+      } catch (_) {}
+    }
     if (!mounted) return;
     _startListening();
     if (!mounted) return;

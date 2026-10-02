@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fa;
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show kDebugMode, compute;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb, compute;
 import 'package:flutter/material.dart';
 import '../widgets/fast_text_field.dart';
 import 'package:flutter/services.dart';
@@ -434,12 +434,16 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Limpando cache local…')),
       );
-      try {
-        await FirebaseFirestore.instance.terminate();
-      } catch (_) {}
-      try {
-        await FirebaseFirestore.instance.clearPersistence();
-      } catch (_) {}
+      // Web: sem terminate() — ele mata TODAS as escutas abertas do app
+      // (outros módulos ficavam girando para sempre). Lá não há cache em disco.
+      if (!kIsWeb) {
+        try {
+          await FirebaseFirestore.instance.terminate();
+        } catch (_) {}
+        try {
+          await FirebaseFirestore.instance.clearPersistence();
+        } catch (_) {}
+      }
       if (!mounted) return;
       setState(() {}); // refaz o StreamBuilder com novo `watch`
       ScaffoldMessenger.of(context).showSnackBar(

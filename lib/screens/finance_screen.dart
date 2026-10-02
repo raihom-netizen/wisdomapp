@@ -396,12 +396,16 @@ class _FinanceScreenState extends State<FinanceScreen>
       _mainPeriodLoadError = null;
       _mainPeriodLoading = true;
     });
-    try {
-      await FirebaseFirestore.instance.terminate();
-    } catch (_) {}
-    try {
-      await FirebaseFirestore.instance.clearPersistence();
-    } catch (_) {}
+    // Web: sem terminate() — ele mata TODAS as escutas abertas do app
+    // (outros módulos ficavam girando para sempre). Lá não há cache em disco.
+    if (!kIsWeb) {
+      try {
+        await FirebaseFirestore.instance.terminate();
+      } catch (_) {}
+      try {
+        await FirebaseFirestore.instance.clearPersistence();
+      } catch (_) {}
+    }
     await _onRetryLoadTransactions();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
