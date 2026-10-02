@@ -104,6 +104,34 @@ async function persistTokens(uid, tokens, emailHint) {
   return { accessToken, expiresAt, email, hasRefreshToken };
 }
 
+/** Erro do Google OAuth → mensagem clara para o app (sem expor segredos). */
+function googleOAuthHttpsError(e, acao) {
+  const raw = (e?.response?.data?.error || e?.message || "").toString();
+  console.warn(`googleCalendarOAuth (${acao}):`, raw);
+  if (raw.includes("invalid_grant")) {
+    return new functions.https.HttpsError(
+      "failed-precondition",
+      "A autorização do Google expirou ou foi revogada. Ative o Google Calendar de novo.",
+    );
+  }
+  if (raw.includes("redirect_uri_mismatch")) {
+    return new functions.https.HttpsError(
+      "failed-precondition",
+      "Configuração do Google OAuth (redirect) não confere. Avise o suporte.",
+    );
+  }
+  if (raw.includes("invalid_client") || raw.includes("unauthorized_client")) {
+    return new functions.https.HttpsError(
+      "failed-precondition",
+      "Cliente Google OAuth inválido no servidor. Avise o suporte.",
+    );
+  }
+  return new functions.https.HttpsError(
+    "unavailable",
+    `Não foi possível ${acao} no Google agora. Tente de novo em instantes.`,
+  );
+}
+
 async function refreshAccessTokenForUid(uid) {
   const snap = await privateOAuthRef(uid).get();
   const data = snap.data() || {};
@@ -117,7 +145,12 @@ async function refreshAccessTokenForUid(uid) {
 
   const oauth2 = oauth2Client(DEFAULT_REDIRECT_URI);
   oauth2.setCredentials({ refresh_token: refreshToken });
-  const { credentials } = await oauth2.refreshAccessToken();
+  let credentials;
+  try {
+    ({ credentials } = await oauth2.refreshAccessToken());
+  } catch (e) {
+    throw googleOAuthHttpsError(e, "renovar o acesso");
+  }
   const saved = await persistTokens(uid, credentials, data.connectedEmail || null);
   return saved;
 }
@@ -160,7 +193,12 @@ exports.ctGoogleCalendarExchangeCode = onCall(async (req) => {
   }
 
   const oauth2 = oauth2Client(redirectUri);
-  const { tokens } = await oauth2.getToken(code);
+  let tokens;
+  try {
+    ({ tokens } = await oauth2.getToken(code));
+  } catch (e) {
+    throw googleOAuthHttpsError(e, "concluir a autorização");
+  }
   if (!tokens.access_token) {
     throw new functions.https.HttpsError(
       "internal",

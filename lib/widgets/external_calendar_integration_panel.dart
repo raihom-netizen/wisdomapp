@@ -51,6 +51,18 @@ class _ExternalCalendarIntegrationPanelState
   String? _googleEmail;
   bool _hasRefreshToken = false;
   bool _appleEnabled = false;
+
+  /// Etapa mostrada no lugar do subtítulo enquanto conecta
+  /// («Conectando…», «Concluindo a conexão…», «Pedindo permissão…»).
+  String? _googleStage;
+  String? _appleStage;
+
+  /// Último erro (fica visível no cartão com «Tentar de novo»).
+  String? _googleError;
+  String? _appleError;
+
+  static const Duration _googleDeadline = Duration(seconds: 45);
+  static const Duration _appleDeadline = Duration(seconds: 90);
   Map<String, dynamic> _landingCfg = const {};
   StreamSubscription<GoogleCalendarEnableResult>? _oauthSub;
 
@@ -70,8 +82,19 @@ class _ExternalCalendarIntegrationPanelState
 
   Future<void> _bootstrapOAuthReturn() async {
     if (widget.userDocId.isEmpty) return;
-    final result =
-        await GoogleCalendarSyncService.completeWebOAuthReturnIfNeeded();
+    GoogleCalendarEnableResult? result;
+    try {
+      result = await GoogleCalendarSyncService.completeWebOAuthReturnIfNeeded()
+          .timeout(_googleDeadline);
+    } on TimeoutException {
+      result = GoogleCalendarEnableResult.fail(
+        'O Google demorou para concluir a conexão. Toque em «Tentar de novo».',
+      );
+    } catch (e) {
+      result = GoogleCalendarEnableResult.fail(
+        'Não foi possível concluir a conexão: ${e.toString().split('\n').first}',
+      );
+    }
     if (!mounted || result == null) return;
     await _finishGoogleEnable(result);
     widget.onGoogleChanged?.call();
@@ -96,7 +119,9 @@ class _ExternalCalendarIntegrationPanelState
       if (AppleCalendarSyncService.isPlatformSupported) {
         futures.add(AppleCalendarSyncService.readState(widget.userDocId));
       }
-      final results = await Future.wait(futures);
+      // Prazo: o cartão nunca fica só com o indicador girando.
+      final results =
+          await Future.wait(futures).timeout(const Duration(seconds: 15));
       if (!mounted) return;
       final g =
           results[1] as ({bool enabled, String? email, bool hasRefreshToken});
@@ -128,18 +153,34 @@ class _ExternalCalendarIntegrationPanelState
 
   bool get _googleOn => _googleOverride ?? _googleEnabled;
 
+  void _showRetrySnack(String msg, VoidCallback retry) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        duration: const Duration(seconds: 6),
+        action: SnackBarAction(label: 'Tentar de novo', onPressed: retry),
+      ),
+    );
+  }
+
   Future<void> _finishGoogleEnable(GoogleCalendarEnableResult res) async {
     if (!mounted) return;
     if (!res.ok) {
-      setState(() => _googleOverride = false);
+      setState(() {
+        _googleOverride = false;
+        _googleStage = null;
+      });
       if (res.cancelled) return;
       final msg = res.message?.trim().isNotEmpty == true
           ? res.message!.trim()
           : 'Não foi possível ativar o Google Calendar.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      setState(() => _googleError = msg);
+      _showRetrySnack(msg, () => _toggleGoogle(true));
       return;
     }
     setState(() {
+      _googleError = null;
+      _googleStage = null;
       _googleOverride = true;
       _googleEnabled = true;
       _googleEmail = res.email?.trim().isNotEmpty == true
@@ -160,15 +201,26 @@ class _ExternalCalendarIntegrationPanelState
 
   Future<void> _toggleGoogle(bool v) async {
     if (_googleBusy || widget.userDocId.isEmpty) return;
-    setState(() => _googleBusy = true);
+    setState(() {
+      _googleBusy = true;
+      _googleError = null;
+      _googleStage = v ? 'Conectando ao Google…' : 'Desligando…';
+    });
+    var redirecting = false;
     try {
       if (v) {
         final res =
-            await GoogleCalendarSyncService.tryEnableSilent(widget.userDocId);
+            await GoogleCalendarSyncService.tryEnableSilent(widget.userDocId)
+                .timeout(_googleDeadline);
         if (!mounted) return;
         if (res.needsInteractiveAuth) {
-          setState(() => _googleBusy = false);
+          setState(() {
+            _googleBusy = false;
+            _googleStage = null;
+          });
           if (kIsWeb) {
+            redirecting = true;
+            setState(() => _googleStage = 'Abrindo a autorização do Google…');
             GoogleCalendarAuthHelper.startWebOAuthRedirect(
               preferredEmail: res.email,
               enableUserDocId: widget.userDocId,
@@ -197,7 +249,8 @@ class _ExternalCalendarIntegrationPanelState
           await _finishGoogleEnable(res);
         }
       } else {
-        await GoogleCalendarSyncService.disable(widget.userDocId);
+        await GoogleCalendarSyncService.disable(widget.userDocId)
+            .timeout(const Duration(seconds: 20));
         if (mounted) {
           setState(() {
             _googleOverride = false;
@@ -207,23 +260,39 @@ class _ExternalCalendarIntegrationPanelState
       }
       widget.onGoogleChanged?.call();
     } catch (e) {
-      if (mounted && FirestoreWebGuard.isClientTerminatedError(e)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Atualize a página (F5) e tente de novo.')),
-        );
+      // Antes só o erro de «cliente encerrado» aparecia; os demais sumiam e
+      // o usuário ficava sem saber por que não ativou.
+      if (mounted) {
+        final msg = FirestoreWebGuard.isClientTerminatedError(e)
+            ? 'Atualize a página (F5) e tente de novo.'
+            : e is TimeoutException
+                ? 'O Google ou o servidor demorou para responder.'
+                : 'Não foi possível ${v ? 'ativar' : 'desligar'}: '
+                    '${e.toString().split('\n').first}';
+        setState(() => _googleError = msg);
+        _showRetrySnack(msg, () => _toggleGoogle(v));
       }
     } finally {
-      if (mounted) setState(() => _googleBusy = false);
+      if (mounted) {
+        setState(() {
+          _googleBusy = false;
+          if (!redirecting) _googleStage = null;
+        });
+      }
     }
   }
 
   Future<void> _toggleApple(bool v) async {
     if (_appleBusy || widget.userDocId.isEmpty) return;
-    setState(() => _appleBusy = true);
+    setState(() {
+      _appleBusy = true;
+      _appleError = null;
+      _appleStage = v ? 'Pedindo permissão do Calendário…' : 'Desligando…';
+    });
     try {
       if (v) {
-        final r = await AppleCalendarSyncService.enable(widget.userDocId);
+        final r = await AppleCalendarSyncService.enable(widget.userDocId)
+            .timeout(_appleDeadline);
         if (!mounted) return;
         if (r.ok) {
           setState(() => _appleEnabled = true);
@@ -236,17 +305,32 @@ class _ExternalCalendarIntegrationPanelState
             ),
           );
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(r.message ?? 'Não foi possível ativar.')),
-          );
+          final msg = r.message ?? 'Não foi possível ativar.';
+          setState(() => _appleError = msg);
+          _showRetrySnack(msg, () => _toggleApple(true));
         }
       } else {
-        await AppleCalendarSyncService.disable(widget.userDocId);
+        await AppleCalendarSyncService.disable(widget.userDocId)
+            .timeout(const Duration(seconds: 20));
         if (mounted) setState(() => _appleEnabled = false);
       }
       widget.onAppleChanged?.call();
+    } catch (e) {
+      if (mounted) {
+        final msg = e is TimeoutException
+            ? 'A permissão do Calendário não foi concluída. Confira em Ajustes › WISDOMAPP › Calendários.'
+            : 'Não foi possível ${v ? 'ativar' : 'desligar'}: '
+                '${e.toString().split('\n').first}';
+        setState(() => _appleError = msg);
+        _showRetrySnack(msg, () => _toggleApple(v));
+      }
     } finally {
-      if (mounted) setState(() => _appleBusy = false);
+      if (mounted) {
+        setState(() {
+          _appleBusy = false;
+          _appleStage = null;
+        });
+      }
     }
   }
 
@@ -498,11 +582,14 @@ class _ExternalCalendarIntegrationPanelState
                         color: _googleBlue, size: 22),
                   ),
                   title: 'Google Calendar',
-                  subtitle: _googleOn
-                      ? (_googleEmail != null && _googleEmail!.isNotEmpty
-                          ? 'Ativo · $_googleEmail · OAuth silencioso após 1ª autorização'
-                          : 'Ativo · web, Android e iPhone')
-                      : 'Gmail / Google — ideal na web e em qualquer aparelho',
+                  subtitle: _googleStage ??
+                      (_googleError != null
+                          ? '⚠ $_googleError'
+                          : _googleOn
+                              ? (_googleEmail != null && _googleEmail!.isNotEmpty
+                                  ? 'Ativo · $_googleEmail · OAuth silencioso após 1ª autorização'
+                                  : 'Ativo · web, Android e iPhone')
+                              : 'Gmail / Google — ideal na web e em qualquer aparelho'),
                   value: _googleOn,
                   busy: _googleBusy,
                   onChanged: _toggleGoogle,
@@ -526,9 +613,12 @@ class _ExternalCalendarIntegrationPanelState
                       ),
                     ),
                     title: 'Calendário Apple',
-                    subtitle: _appleEnabled
-                        ? 'Ativo · EventKit (nativo) — lê e grava no app Calendário'
-                        : 'iPhone/iPad · permissão iOS uma vez, depois silencioso',
+                    subtitle: _appleStage ??
+                        (_appleError != null
+                            ? '⚠ $_appleError'
+                            : _appleEnabled
+                                ? 'Ativo · EventKit (nativo) — lê e grava no app Calendário'
+                                : 'iPhone/iPad · permissão iOS uma vez, depois silencioso'),
                     value: _appleEnabled,
                     busy: _appleBusy,
                     onChanged: _toggleApple,

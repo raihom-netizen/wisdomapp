@@ -116,11 +116,14 @@ class GoogleCalendarSyncService {
           .collection('settings')
           .doc('google_calendar_integration');
 
+  /// Prazo das leituras pontuais da integração (nada de girar para sempre).
+  static const Duration _readDeadline = Duration(seconds: 10);
+
   static Future<bool> isEnabled(String uid) async {
     if (uid.isEmpty) return false;
     try {
       final snap = await FirestoreWebGuard.runFirestoreOpSafe(
-        () => _settingsRef(uid).get(),
+        () => _settingsRef(uid).get().timeout(_readDeadline),
       );
       return snap.data()?['enabled'] == true;
     } catch (_) {
@@ -154,7 +157,7 @@ class GoogleCalendarSyncService {
     }
     try {
       final snap = await FirestoreWebGuard.runFirestoreOpSafe(
-        () => _settingsRef(uid).get(),
+        () => _settingsRef(uid).get().timeout(_readDeadline),
       );
       final data = snap.data() ?? const <String, dynamic>{};
       final emailRaw = (data['connectedEmail'] ?? '').toString().trim();
@@ -175,7 +178,8 @@ class GoogleCalendarSyncService {
         () => FirebaseFirestore.instance
             .collection('landing_content')
             .doc('main')
-            .get(),
+            .get()
+            .timeout(_readDeadline),
       );
       return snap.data() ?? const <String, dynamic>{};
     } catch (_) {
@@ -205,9 +209,8 @@ class GoogleCalendarSyncService {
       return GoogleCalendarEnableResult.fail('Sessão inválida. Entre novamente.');
     }
     await completeWebOAuthReturnIfNeeded();
-    if (await _tryServerRefreshOnly(uid)) {
-      return _enableCore(uid, forceNewCredentials: false, skipSilent: false);
-    }
+    // _enableCore já tenta renovar pelo servidor — antes eram 2–3 chamadas
+    // em série à mesma function (até minutos com o interruptor girando).
     return _enableCore(uid, forceNewCredentials: false, skipSilent: false);
   }
 
@@ -249,7 +252,12 @@ class GoogleCalendarSyncService {
     GoogleCalendarAuthHelper.clearPendingWebEnableUserDocId();
     cleanGcalQueryFromBrowserUrl();
 
-    final result = await enable(uid, skipSilent: false);
+    final exchangeErr = GoogleCalendarOAuthBridge.lastExchangeError;
+    GoogleCalendarOAuthBridge.lastExchangeError = null;
+    var result = await enable(uid, skipSilent: false);
+    if (!result.ok && !result.cancelled && exchangeErr != null) {
+      result = GoogleCalendarEnableResult.fail(exchangeErr);
+    }
     GoogleCalendarOAuthReturn.notify(result);
     return result;
   }
@@ -273,7 +281,7 @@ class GoogleCalendarSyncService {
     await completeWebOAuthReturnIfNeeded();
     try {
       final snap = await FirestoreWebGuard.runFirestoreOpSafe(
-        () => _settingsRef(uid).get(),
+        () => _settingsRef(uid).get().timeout(_readDeadline),
       );
       final e = (snap.data()?['connectedEmail'] ?? '').toString().trim();
       if (e.isNotEmpty) _activeConnectedEmail = e;
@@ -311,7 +319,7 @@ class GoogleCalendarSyncService {
     if (!kIsWeb || uid.isEmpty) return false;
     try {
       final snap = await FirestoreWebGuard.runFirestoreOpSafe(
-        () => _settingsRef(uid).get(),
+        () => _settingsRef(uid).get().timeout(_readDeadline),
       );
       if (snap.data()?['hasRefreshToken'] != true) return false;
       final server = await GoogleCalendarOAuthBridge.refreshAccessToken();
@@ -342,7 +350,7 @@ class GoogleCalendarSyncService {
     String storedEmail = '';
     try {
       final settingsSnap = await FirestoreWebGuard.runFirestoreOpSafe(
-        () => _settingsRef(uid).get(),
+        () => _settingsRef(uid).get().timeout(_readDeadline),
       );
       storedEmail =
           (settingsSnap.data()?['connectedEmail'] ?? '').toString().trim();
@@ -411,7 +419,7 @@ class GoogleCalendarSyncService {
           'updatedAt': FieldValue.serverTimestamp(),
           'disabledAt': FieldValue.delete(),
           'disabledByUser': false,
-        }, SetOptions(merge: true));
+        }, SetOptions(merge: true)).timeout(const Duration(seconds: 15));
       });
 
       unawaited(
@@ -436,6 +444,11 @@ class GoogleCalendarSyncService {
           'Conexão com o banco foi encerrada. Atualize a página (F5) e tente de novo.',
         );
       }
+      if (e is TimeoutException) {
+        return GoogleCalendarEnableResult.fail(
+          'O Google ou o servidor demorou para responder. Tente de novo.',
+        );
+      }
       return GoogleCalendarEnableResult.fail(
         'Erro ao conectar: ${e.toString().split('\n').first}',
       );
@@ -451,7 +464,7 @@ class GoogleCalendarSyncService {
       final res = await http.get(
         uri,
         headers: {'Authorization': 'Bearer $token'},
-      );
+      ).timeout(const Duration(seconds: 12));
       if (res.statusCode >= 200 && res.statusCode < 300) return true;
       debugPrint(
         'GoogleCalendar _testCalendarAccess HTTP ${res.statusCode}: '
@@ -633,7 +646,7 @@ class GoogleCalendarSyncService {
     if (uid.isEmpty) return {};
     try {
       final snap = await FirestoreWebGuard.runFirestoreOpSafe(
-        () => _settingsRef(uid).get(),
+        () => _settingsRef(uid).get().timeout(_readDeadline),
       );
       final raw = snap.data()?['hiddenGoogleEventKeys'];
       if (raw is! List) return {};
@@ -781,12 +794,21 @@ class GoogleCalendarSyncService {
   /// Envia todos os compromissos locais sem `googleEventId` para o Google Calendar.
   static Future<int> syncAllLocalReminders({required String userDocId}) async {
     if (userDocId.isEmpty || !await isEnabled(userDocId)) return 0;
+    // Só a janela útil (−30 / +365 dias) — antes lia TODOS os lembretes.
+    final now = DateTime.now();
+    final from = DateTime(now.year, now.month, now.day)
+        .subtract(const Duration(days: 30));
+    final to = DateTime(now.year, now.month, now.day)
+        .add(const Duration(days: 366));
     final snap = await FirestoreWebGuard.runFirestoreOpSafe(
       () => FirebaseFirestore.instance
           .collection('users')
           .doc(userDocId)
           .collection('reminders')
-          .get(),
+          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(from))
+          .where('date', isLessThan: Timestamp.fromDate(to))
+          .get()
+          .timeout(const Duration(seconds: 30)),
     );
     var n = 0;
     for (final doc in snap.docs) {
