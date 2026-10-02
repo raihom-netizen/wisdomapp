@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'theme_context.dart';
+
 /// Padrão gráfico Gemini: moderno, premium, gráficos top.
 /// Cores suaves, bordas 20–24, sombras sutis, tipografia clara.
 class GeminiTheme {
@@ -241,11 +243,48 @@ class GeminiTheme {
     );
   }
 
-  static const Color _darkSurface = Color(0xFF1E293B);
-  static const Color _darkBackground = Color(0xFF0F172A);
-  static const Color _darkTextPrimary = Color(0xFFF8FAFC);
-  static const Color _darkTextSecondary = Color(0xFFCBD5E1);
-  static const Color _darkTextMuted = Color(0xFF94A3B8);
+  // ── Modo escuro ────────────────────────────────────────────
+  //
+  // O cinza neutro antigo (#121212 / #1E1E1E) deixava tudo chapado: card e
+  // fundo quase da mesma cor, e nada puxava o olho. A base agora é um preto
+  // levemente azulado (grafite), com cada nível de superfície um passo mais
+  // claro — é o que dá profundidade sem precisar de sombra.
+  //
+  // O DESTAQUE é verde fluorescente. Ele não substitui a cor da marca: o
+  // primário continua nos botões e no topo, e o neón marca o que está vivo
+  // — aba selecionada, campo em foco, chave ligada, barra de progresso e
+  // dinheiro que entrou.
+  //
+  // Atenção de contraste: o neón é claro demais para receber texto branco.
+  // Sobre ele usa-se SEMPRE [neonOn] (preto) — ver `neonOn`.
+
+  /// Verde fluorescente dos destaques do modo escuro.
+  static const Color neon = Color(0xFF39FF14);
+
+  /// Texto/ícone sobre o [neon]. Branco sobre neón é ilegível.
+  static const Color neonOn = Color(0xFF07130A);
+
+  /// Neón suavizado, para áreas grandes e textos longos (o puro cansa a vista).
+  static const Color neonSoft = Color(0xFF6EF57A);
+
+  static const Color _darkSurface = Color(0xFF161C24);
+  static const Color _darkSurfaceContainer = Color(0xFF1C242E);
+  static const Color _darkSurfaceContainerLow = Color(0xFF121820);
+  static const Color _darkSurfaceHigh = Color(0xFF232D39);
+  static const Color _darkBackground = Color(0xFF0B0F14);
+  static const Color _darkTextPrimary = Color(0xFFF4F7FA);
+  static const Color _darkTextSecondary = Color(0xFFA9B6C4);
+  static const Color _darkTextMuted = Color(0xFF7B8896);
+
+  /// Fundo do modo escuro — para quem precisa da cor fora do [ThemeData]
+  /// (barra do sistema, gradientes, PDF). Evita o #121212 solto no código.
+  static const Color darkBackground = _darkBackground;
+
+  /// Superfície de card no modo escuro.
+  static const Color darkSurface = _darkSurface;
+
+  /// Superfície elevada (campos, chips, cabeçalho de tabela).
+  static const Color darkSurfaceHigh = _darkSurfaceHigh;
 
   /// Tema escuro padrão (memoizado).
   static ThemeData get dark => _darkCache ??= darkWithPrimary(primary);
@@ -263,19 +302,35 @@ class GeminiTheme {
         onSecondary: Colors.white,
         surface: _darkSurface,
         onSurface: _darkTextPrimary,
-        surfaceContainerHighest: const Color(0xFF334155),
+        onSurfaceVariant: _darkTextSecondary,
+        surfaceContainerLowest: _darkBackground,
+        surfaceContainerLow: _darkSurfaceContainerLow,
+        surfaceContainer: _darkSurfaceContainer,
+        surfaceContainerHigh: _darkSurfaceHigh,
+        surfaceContainerHighest: _darkSurfaceHigh,
         error: error,
         onError: Colors.white,
       ),
-      textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme).copyWith(
-        displayLarge: GoogleFonts.inter(fontSize: 32, fontWeight: FontWeight.w800, color: _darkTextPrimary),
-        displayMedium: GoogleFonts.inter(fontSize: 26, fontWeight: FontWeight.w700, color: _darkTextPrimary),
-        headlineMedium: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.w700, color: _darkTextPrimary),
-        titleLarge: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w600, color: _darkTextPrimary),
-        titleMedium: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: _darkTextPrimary),
-        bodyLarge: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w500, color: _darkTextPrimary),
-        bodyMedium: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500, color: _darkTextSecondary),
-        labelLarge: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: _darkTextPrimary),
+      textTheme:
+          GoogleFonts.interTextTheme(ThemeData.dark().textTheme).copyWith(
+        displayLarge: GoogleFonts.inter(
+            fontSize: 32, fontWeight: FontWeight.w800, color: _darkTextPrimary),
+        displayMedium: GoogleFonts.inter(
+            fontSize: 26, fontWeight: FontWeight.w700, color: _darkTextPrimary),
+        headlineMedium: GoogleFonts.inter(
+            fontSize: 20, fontWeight: FontWeight.w700, color: _darkTextPrimary),
+        titleLarge: GoogleFonts.inter(
+            fontSize: 18, fontWeight: FontWeight.w600, color: _darkTextPrimary),
+        titleMedium: GoogleFonts.inter(
+            fontSize: 16, fontWeight: FontWeight.w600, color: _darkTextPrimary),
+        bodyLarge: GoogleFonts.inter(
+            fontSize: 16, fontWeight: FontWeight.w500, color: _darkTextPrimary),
+        bodyMedium: GoogleFonts.inter(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: _darkTextSecondary),
+        labelLarge: GoogleFonts.inter(
+            fontSize: 14, fontWeight: FontWeight.w600, color: _darkTextPrimary),
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: primaryColor,
@@ -283,7 +338,11 @@ class GeminiTheme {
         elevation: 0,
         scrolledUnderElevation: 1,
         centerTitle: false,
-        titleTextStyle: GoogleFonts.inter(fontSize: 19, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: 0.2),
+        titleTextStyle: GoogleFonts.inter(
+            fontSize: 19,
+            fontWeight: FontWeight.w800,
+            color: Colors.white,
+            letterSpacing: 0.2),
         iconTheme: const IconThemeData(color: Colors.white, size: 24),
       ),
       iconTheme: const IconThemeData(size: 24, opacity: 1),
@@ -291,7 +350,8 @@ class GeminiTheme {
       cardTheme: CardThemeData(
         elevation: 0,
         color: _darkSurface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(cardRadius)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(cardRadius)),
         clipBehavior: Clip.antiAlias,
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -300,8 +360,10 @@ class GeminiTheme {
           foregroundColor: Colors.white,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(buttonRadius)),
-          textStyle: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 15),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(buttonRadius)),
+          textStyle:
+              GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 15),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
@@ -310,21 +372,34 @@ class GeminiTheme {
           foregroundColor: Colors.white,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(buttonRadius)),
-          textStyle: GoogleFonts.inter(fontWeight: FontWeight.w800, fontSize: 15, letterSpacing: 0.5),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(buttonRadius)),
+          textStyle: GoogleFonts.inter(
+              fontWeight: FontWeight.w800, fontSize: 15, letterSpacing: 0.5),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: const Color(0xFF334155),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(inputRadius), borderSide: BorderSide.none),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(inputRadius), borderSide: BorderSide.none),
+        fillColor: _darkSurfaceHigh,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(inputRadius),
+            borderSide: BorderSide.none),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(inputRadius),
+            borderSide: BorderSide.none),
+        // Campo em foco em neón: num fundo grafite ele diz na hora onde o
+        // cursor está, coisa que o azul do primário não fazia.
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(inputRadius),
-          borderSide: BorderSide(color: primaryColor, width: 2),
+          borderSide: const BorderSide(color: neon, width: 2),
         ),
-        labelStyle: const TextStyle(color: _darkTextSecondary, fontWeight: FontWeight.w500),
+        labelStyle: const TextStyle(
+            color: _darkTextSecondary, fontWeight: FontWeight.w500),
+        floatingLabelStyle: const TextStyle(
+            color: neonSoft, fontWeight: FontWeight.w700),
+        prefixIconColor: _darkTextMuted,
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: primaryColor,
@@ -332,16 +407,18 @@ class GeminiTheme {
         elevation: 4,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
-      bottomNavigationBarTheme: BottomNavigationBarThemeData(
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: _darkSurface,
-        selectedItemColor: primaryColor,
+        selectedItemColor: neon,
         unselectedItemColor: _darkTextMuted,
         type: BottomNavigationBarType.fixed,
         elevation: 0,
-        selectedIconTheme: IconThemeData(size: 24, color: primaryColor),
+        selectedIconTheme: IconThemeData(size: 24, color: neon),
         unselectedIconTheme: IconThemeData(size: 24, color: _darkTextMuted),
+        selectedLabelStyle: TextStyle(fontWeight: FontWeight.w800),
       ),
-      dividerTheme: const DividerThemeData(color: Color(0xFF475569), thickness: 1),
+      dividerTheme:
+          const DividerThemeData(color: Color(0xFF2A3541), thickness: 1),
       materialTapTargetSize: MaterialTapTargetSize.padded,
       iconButtonTheme: IconButtonThemeData(
         style: IconButton.styleFrom(
@@ -352,6 +429,136 @@ class GeminiTheme {
       listTileTheme: const ListTileThemeData(
         minLeadingWidth: 40,
         minVerticalPadding: 12,
+      ),
+      canvasColor: _darkBackground,
+      dialogTheme: DialogThemeData(
+        backgroundColor: _darkSurface,
+        surfaceTintColor: Colors.transparent,
+        titleTextStyle: GoogleFonts.inter(
+          fontSize: 18,
+          fontWeight: FontWeight.w800,
+          color: _darkTextPrimary,
+        ),
+        contentTextStyle: GoogleFonts.inter(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: _darkTextSecondary,
+        ),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: _darkSurface,
+        surfaceTintColor: Colors.transparent,
+        modalBackgroundColor: _darkSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: _darkSurface,
+        surfaceTintColor: Colors.transparent,
+        textStyle: GoogleFonts.inter(color: _darkTextPrimary, fontSize: 14),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: _darkSurfaceHigh,
+        // Selecionado em neón lavado: dá para ver qual está marcado sem o
+        // chip sumir do fundo, que era a queixa dos filtros no escuro.
+        selectedColor: Color.alphaBlend(
+            neon.withValues(alpha: 0.26), _darkSurfaceHigh),
+        disabledColor: _darkSurfaceHigh.withValues(alpha: 0.5),
+        labelStyle: GoogleFonts.inter(color: _darkTextPrimary, fontSize: 13),
+        secondaryLabelStyle:
+            GoogleFonts.inter(color: _darkTextSecondary, fontSize: 13),
+        side: BorderSide(color: _darkTextMuted.withValues(alpha: 0.30)),
+        checkmarkColor: neon,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      dataTableTheme: DataTableThemeData(
+        headingRowColor: WidgetStateProperty.all(_darkSurfaceHigh),
+        dataRowColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? primaryColor.withValues(alpha: 0.18)
+              : _darkSurface,
+        ),
+        dividerThickness: 1,
+        headingTextStyle: GoogleFonts.inter(
+          fontWeight: FontWeight.w800,
+          fontSize: 12,
+          color: _darkTextPrimary,
+        ),
+        dataTextStyle: GoogleFonts.inter(
+          fontWeight: FontWeight.w500,
+          fontSize: 13,
+          color: _darkTextSecondary,
+        ),
+      ),
+      tabBarTheme: TabBarThemeData(
+        labelColor: _darkTextPrimary,
+        unselectedLabelColor: _darkTextMuted,
+        indicatorColor: neon,
+        labelStyle: GoogleFonts.inter(fontWeight: FontWeight.w800, fontSize: 14),
+        dividerColor: _darkTextMuted.withValues(alpha: 0.18),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: _darkTextPrimary,
+          side: BorderSide(color: _darkTextMuted.withValues(alpha: 0.45)),
+        ),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? neon
+              : _darkTextMuted,
+        ),
+        trackColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? neon.withValues(alpha: 0.32)
+              : _darkSurfaceHigh,
+        ),
+        trackOutlineColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? neon.withValues(alpha: 0.55)
+              : _darkTextMuted.withValues(alpha: 0.35),
+        ),
+      ),
+      // Progresso, marcação e seleção: tudo que significa «isto está ativo»
+      // fala a mesma língua visual.
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        color: neon,
+        linearTrackColor: _darkSurfaceHigh,
+        circularTrackColor: _darkSurfaceHigh,
+      ),
+      checkboxTheme: CheckboxThemeData(
+        fillColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected) ? neon : Colors.transparent,
+        ),
+        checkColor: WidgetStateProperty.all(neonOn),
+        side: BorderSide(color: _darkTextMuted.withValues(alpha: 0.6), width: 1.6),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      ),
+      radioTheme: RadioThemeData(
+        fillColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected) ? neon : _darkTextMuted,
+        ),
+      ),
+      sliderTheme: SliderThemeData(
+        activeTrackColor: neon,
+        inactiveTrackColor: _darkSurfaceHigh,
+        thumbColor: neon,
+        overlayColor: neon.withValues(alpha: 0.16),
+      ),
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: neon,
+        selectionColor: neon.withValues(alpha: 0.28),
+        selectionHandleColor: neon,
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: _darkSurfaceHigh,
+        contentTextStyle: GoogleFonts.inter(
+            color: _darkTextPrimary, fontSize: 14, fontWeight: FontWeight.w600),
+        actionTextColor: neon,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     );
   }
@@ -379,6 +586,54 @@ class GeminiTheme {
           blurRadius: 10,
           offset: const Offset(0, 2),
         ),
+      ],
+    );
+  }
+
+  static Color surfaceOf(BuildContext context) =>
+      context.isDarkMode ? _darkSurface : surface;
+
+  static Color textPrimaryOf(BuildContext context) =>
+      context.isDarkMode ? _darkTextPrimary : textPrimary;
+
+  static Color textSecondaryOf(BuildContext context) =>
+      context.isDarkMode ? _darkTextSecondary : textSecondary;
+
+  static Color textMutedOf(BuildContext context) =>
+      context.isDarkMode ? _darkTextMuted : textMuted;
+
+  /// Card alinhado ao tema ativo (claro/escuro).
+  static BoxDecoration cardDecorationOf(
+    BuildContext context, {
+    Color? color,
+    List<Color>? gradientColors,
+    double radius = cardRadius,
+  }) {
+    final dark = context.isDarkMode;
+    final bg = color ?? (dark ? _darkSurface : surface);
+    return BoxDecoration(
+      color: gradientColors == null ? bg : null,
+      gradient: gradientColors != null
+          ? LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: gradientColors,
+            )
+          : null,
+      borderRadius: BorderRadius.circular(radius),
+      boxShadow: [
+        BoxShadow(
+          color: (dark ? Colors.black : primary)
+              .withValues(alpha: dark ? 0.35 : 0.06),
+          blurRadius: dark ? 18 : 20,
+          offset: const Offset(0, 8),
+        ),
+        if (!dark)
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
       ],
     );
   }

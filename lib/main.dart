@@ -27,6 +27,8 @@ import 'screens/biometric_gate_screen.dart';
 import 'services/biometric_auth_service.dart';
 import 'services/auth_service.dart';
 import 'services/app_session_cache.dart';
+import 'services/app_theme_controller.dart';
+import 'services/app_theme_preferences.dart';
 import 'services/delegate_access_service.dart';
 import 'services/home_start_module_cache.dart';
 import 'services/notification_center_store.dart';
@@ -262,6 +264,8 @@ void main() async {
   // Web: só o essencial antes do 1º frame (boot leve como Controle Total).
   await Future.wait<void>([
     LoginPreferences.warmUpForStartup(),
+    AppThemePreferences.warmUpForStartup(),
+    AppThemeController.instance.warmUp(),
     DelegateAccessService.loadFromPrefs(),
     AppSessionCache.warmUp(),
     BiometricStartupCache.warmUpEnabledHint(),
@@ -593,6 +597,7 @@ class _ControleTotalAppState extends State<ControleTotalApp> {
   @override
   void initState() {
     super.initState();
+    AppThemeController.instance.addListener(_onThemeChanged);
     PushNotificationService.setScaffoldMessengerKey(_scaffoldMessengerKey);
     DelegateAccessService.onDelegateAccessRevoked = (message) {
       final messenger = _scaffoldMessengerKey.currentState;
@@ -619,12 +624,22 @@ class _ControleTotalAppState extends State<ControleTotalApp> {
   }
 
   @override
+  void dispose() {
+    AppThemeController.instance.removeListener(_onThemeChanged);
+    super.dispose();
+  }
+
+  void _onThemeChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = GeminiTheme.light;
     final darkTheme = GeminiTheme.dark;
 
-    /// Tema somente claro (modo escuro removido das configurações).
-    const themeMode = ThemeMode.light;
+    /// Claro/Escuro manual (padrão Controle Total): Configurações › Aparência do app.
+    final themeMode = AppThemeController.instance.themeMode;
 
     return MaterialApp(
       navigatorKey: NotificationNavigator.navigatorKey,

@@ -1,14 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'app_colors.dart';
-
-// Cores do destaque «neón» e superfícies escuras (porte do Controle Total —
-// o GeminiTheme do WISDOMAPP não as define; ficam locais a esta extensão).
-const Color _kNeon = Color(0xFF39FF14);
-const Color _kNeonOn = Color(0xFF07130A);
-const Color _kNeonSoft = Color(0xFF6EF57A);
-const Color _kDarkSurface = Color(0xFF1E293B);
-const Color _kDarkBackground = Color(0xFF0F172A);
+import 'gemini_theme.dart';
 
 /// Tokens de cor derivados do [Theme] — use em vez de branco/cinza fixos no modo escuro.
 extension AppThemeContext on BuildContext {
@@ -72,14 +65,14 @@ extension AppThemeContext on BuildContext {
   /// Use para o que está ATIVO: aba escolhida, filtro marcado, barra de
   /// progresso, dinheiro que entrou. Sobre ele, texto em [appNeonOn].
   Color get appNeon =>
-      isDarkMode ? _kNeon : const Color(0xFF15803D);
+      isDarkMode ? GeminiTheme.neon : const Color(0xFF15803D);
 
   /// Texto/ícone sobre [appNeon].
-  Color get appNeonOn => isDarkMode ? _kNeonOn : Colors.white;
+  Color get appNeonOn => isDarkMode ? GeminiTheme.neonOn : Colors.white;
 
   /// Neón suavizado, para texto longo e áreas grandes.
   Color get appNeonSoft =>
-      isDarkMode ? _kNeonSoft : const Color(0xFF15803D);
+      isDarkMode ? GeminiTheme.neonSoft : const Color(0xFF15803D);
 
   /// Valores R$ no módulo Escalas — verde fluorescente no escuro para destaque.
   Color get appScalesMoneyValue =>
@@ -90,7 +83,7 @@ extension AppThemeContext on BuildContext {
 
   /// Superfície escura de cards de módulo (gráficos, KPIs).
   Color get appDarkModuleSurface =>
-      isDarkMode ? _kDarkSurface : appSurface;
+      isDarkMode ? GeminiTheme.darkSurface : appSurface;
 
   /// Superfície suave (empty states, campos secundários).
   Color get appMutedSurface => appChipIdleBg;
@@ -149,7 +142,7 @@ extension AppThemeContext on BuildContext {
       // puxar a tela para o azul, que competia com os destaques neón.
       ? const [
           Color(0xFF111A22),
-          _kDarkBackground,
+          GeminiTheme.darkBackground,
           Color(0xFF0A1710),
         ]
       : const [
@@ -262,7 +255,7 @@ extension AppThemeContext on BuildContext {
         colors: [
           accent.withValues(alpha: 0.16),
           appDarkModuleSurface,
-          _kDarkBackground,
+          GeminiTheme.darkBackground,
         ],
         stops: const [0.0, 0.14, 0.38],
       ),

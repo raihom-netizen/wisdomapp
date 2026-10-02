@@ -32,6 +32,7 @@ import '../utils/home_shell_layout.dart';
 import '../services/delegate_access_service.dart';
 import '../services/ios_payments_gate.dart';
 import '../services/user_settings_docs_cache.dart';
+import '../widgets/app_theme_mode_card.dart';
 
 class _BiometricSwitchTile extends StatefulWidget {
   const _BiometricSwitchTile();
@@ -930,6 +931,8 @@ class SettingsScreen extends StatelessWidget {
               const SizedBox(height: 20),
             ],
             _sectionTitle('APARÊNCIA'),
+            const AppThemeModeCard(),
+            const SizedBox(height: 14),
             _PlanningSettingsSection(
               uid: _docUid,
               blocked: _blocked,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'app_colors.dart';
+import 'theme_context.dart';
 
 /// Urgência visual: 🔴 urgente · 🟡 hoje · 🔵 informativo · 🟢 concluído
 enum AgendaUrgencyTier {
@@ -130,6 +131,40 @@ class AgendaModernUI {
           ),
       };
 
+  /// Card moderno alinhado ao tema ativo (claro/escuro) — padrão Controle Total.
+  static BoxDecoration modernCardDecorationOf(
+    BuildContext context, {
+    required Color accent,
+    AgendaUrgencyTier? urgency,
+    bool elevated = true,
+  }) {
+    final dark = context.isDarkMode;
+    final border = urgency != null
+        ? styleFor(urgency).color.withValues(alpha: dark ? 0.55 : 0.45)
+        : accent.withValues(alpha: dark ? 0.35 : 0.18);
+    return BoxDecoration(
+      color: context.appSurface,
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: border, width: urgency != null ? 2 : 1.5),
+      boxShadow: elevated
+          ? [
+              BoxShadow(
+                color: (dark ? Colors.black : accent)
+                    .withValues(alpha: dark ? 0.4 : 0.1),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+              if (!dark)
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+            ]
+          : null,
+    );
+  }
+
   static BoxDecoration modernCardDecoration({
     required Color accent,
     AgendaUrgencyTier? urgency,
@@ -156,6 +191,61 @@ class AgendaModernUI {
               ),
             ]
           : null,
+    );
+  }
+
+  /// Cabeçalho de seção alinhado ao tema ativo (claro/escuro).
+  static Widget sectionHeaderOf(
+    BuildContext context, {
+    required String title,
+    required IconData icon,
+    required Color color,
+    String? subtitle,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 15,
+                    color: context.isDarkMode
+                        ? context.appTextPrimary
+                        : AppColors.deepBlueDark,
+                  ),
+                ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.3,
+                      color: context.appTextMuted,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
