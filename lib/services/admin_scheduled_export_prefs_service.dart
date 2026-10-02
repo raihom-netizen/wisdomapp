@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/admin_load_guard.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 /// Preferências de exportação programada (execução server-side futura).
@@ -20,12 +21,12 @@ class AdminScheduledExportPrefsService {
     required String frequency, // daily | weekly | monthly
   }) async {
     final user = _auth.currentUser;
-    await _db.doc(docPath).set({
+    await AdminLoadGuard.comPrazo(_db.doc(docPath).set({
       'enabled': enabled,
       'email': email.trim(),
       'frequency': frequency,
       'updatedAt': FieldValue.serverTimestamp(),
       if (user != null) 'updatedBy': user.uid,
-    }, SetOptions(merge: true));
+    }, SetOptions(merge: true)), oQue: 'a gravação');
   }
 }

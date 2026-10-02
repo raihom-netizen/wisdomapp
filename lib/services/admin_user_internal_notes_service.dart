@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/admin_load_guard.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 /// Notas internas visíveis só no painel admin (campo no doc `users/{uid}`).
@@ -16,12 +17,12 @@ class AdminUserInternalNotesService {
 
   Future<void> saveNote(String uid, String note) async {
     final admin = _auth.currentUser;
-    await _db.collection('users').doc(uid).set({
+    await AdminLoadGuard.comPrazo(_db.collection('users').doc(uid).set({
       'adminInternalNote': note.trim(),
       'adminInternalNoteUpdatedAt': FieldValue.serverTimestamp(),
       if (admin != null) 'adminInternalNoteBy': admin.uid,
       if (admin?.email != null && admin!.email!.trim().isNotEmpty)
         'adminInternalNoteByEmail': admin.email!.trim(),
-    }, SetOptions(merge: true));
+    }, SetOptions(merge: true)), oQue: 'a gravação');
   }
 }

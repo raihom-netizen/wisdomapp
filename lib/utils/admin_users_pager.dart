@@ -127,11 +127,14 @@ class AdminUsersPager extends ChangeNotifier {
   /// Relê um usuário (depois de editar no card) e troca na lista.
   Future<void> refreshOne(String uid) async {
     try {
-      final snap = await FirebaseFirestore.instance
-          .collection('users')
-          .where(FieldPath.documentId, isEqualTo: uid)
-          .limit(1)
-          .get();
+      final snap = await AdminLoadGuard.comPrazo(
+        FirebaseFirestore.instance
+            .collection('users')
+            .where(FieldPath.documentId, isEqualTo: uid)
+            .limit(1)
+            .get(),
+        oQue: 'o usuário',
+      );
       final i = _docs.indexWhere((d) => d.id == uid);
       if (snap.docs.isEmpty) {
         if (i >= 0) {

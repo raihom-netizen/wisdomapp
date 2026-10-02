@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/admin_load_guard.dart';
 
 import '../models/user_profile.dart';
 import 'admin_audit_service.dart';
@@ -78,7 +79,7 @@ class AdminUserPlanApplyService {
       } else {
         clearPartnership();
       }
-      await ref.update(updates);
+      await AdminLoadGuard.comPrazo(ref.update(updates), oQue: 'a gravação');
     }
 
     final afterMap = <String, dynamic>{'plan': np};

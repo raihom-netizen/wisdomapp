@@ -271,10 +271,10 @@ class _AdminFinancialTipsPageState extends State<AdminFinancialTipsPage>
 
   Future<void> _toggleField(String docId, String field, bool value) async {
     try {
-      await _col.doc(docId).set(
+      await AdminLoadGuard.comPrazo(_col.doc(docId).set(
         {field: value, 'updatedAt': FieldValue.serverTimestamp()},
         SetOptions(merge: true),
-      );
+      ), oQue: 'a gravação');
       InsightsEngine.clearTipsCache();
     } catch (e) {
       if (mounted) {
@@ -448,7 +448,7 @@ class _AdminFinancialTipsPageState extends State<AdminFinancialTipsPage>
       ),
     );
     if (ok != true || !mounted) return;
-    await _col.doc(id).delete();
+    await AdminLoadGuard.comPrazo(_col.doc(id).delete(), oQue: 'a gravação');
     InsightsEngine.clearTipsCache();
     _selectedIds.remove(id);
     setState(() {});
@@ -516,7 +516,7 @@ class _AdminFinancialTipsPageState extends State<AdminFinancialTipsPage>
         );
       }
       if (!silent) {
-        final snap = await _col.get();
+        final snap = await AdminLoadGuard.comPrazo(_col.get(), oQue: 'as dicas');
         await _maybeAutoSync(snap.docs, silent: false);
       }
     } catch (e) {

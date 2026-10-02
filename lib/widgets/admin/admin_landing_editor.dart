@@ -365,13 +365,13 @@ class _AdminLandingEditorState extends State<AdminLandingEditor> {
     final playUrl = _ctrls['divPlayStoreUrl']?.text.trim() ?? '';
     if (playUrl.startsWith('http://') || playUrl.startsWith('https://')) {
       try {
-        await FirebaseFirestore.instance
+        await AdminLoadGuard.comPrazo(FirebaseFirestore.instance
             .collection('app_config')
             .doc('version')
             .set({
           'apkDownloadUrl': playUrl,
           'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+        }, SetOptions(merge: true)), oQue: 'a gravação');
       } catch (_) {
         // Só o atalho de atualização do app; os textos já foram salvos.
       }

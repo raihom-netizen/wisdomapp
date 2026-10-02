@@ -788,12 +788,12 @@ class _AdminPremiumProMonitorTabState extends State<AdminPremiumProMonitorTab> {
                       if (newPlan == 'free') {
                         await BillingService().setUserToFree(uid);
                       } else {
-                        await r.doc.reference.update({
+                        await AdminLoadGuard.comPrazo(r.doc.reference.update({
                           'plan': newPlan,
                           'planStatus': 'active',
                           'updatedAt': FieldValue.serverTimestamp(),
                           'removedByAdminAt': FieldValue.delete(),
-                        });
+                        }), oQue: 'a gravação');
                       }
                       await AdminAuditService().logAdminAction(
                         action: alterarPlano,
@@ -905,11 +905,11 @@ class _AdminPremiumProMonitorTabState extends State<AdminPremiumProMonitorTab> {
     final endOfDay = DateTime(picked.year, picked.month, picked.day, 23, 59, 59);
     final graceEnd = endOfDay.add(const Duration(days: UserProfile.licenseGracePeriodDays));
     final before = licenseExpiresAt != null ? <String, dynamic>{'licenseExpiresAt': licenseExpiresAt.toIso8601String()} : <String, dynamic>{};
-    await doc.reference.update({
+    await AdminLoadGuard.comPrazo(doc.reference.update({
       'licenseExpiresAt': Timestamp.fromDate(endOfDay),
       'licenseValidUntilIncludingGrace': Timestamp.fromDate(graceEnd),
       'updatedAt': FieldValue.serverTimestamp(),
-    });
+    }), oQue: 'a gravação');
     await AdminAuditService().logAdminAction(
       action: alterarVencimento,
       targetUserId: doc.id,

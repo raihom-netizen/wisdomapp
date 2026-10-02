@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/admin_load_guard.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/user_profile.dart';
@@ -313,10 +314,10 @@ class AdminPainelGeralData {
   static Future<void> salvarCustos(List<AdminCusto> custos) async {
     final ref = _custosRef();
     if (ref == null) return;
-    await ref.set({
+    await AdminLoadGuard.comPrazo(ref.set({
       'itens': custos.map((c) => c.toJson()).toList(),
       'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    }, SetOptions(merge: true)), oQue: 'a gravação');
   }
 
   static DateTime? _data(Object? v) {

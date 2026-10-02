@@ -696,7 +696,7 @@ class _Usuario360DetailState extends State<_Usuario360Detail> {
 
     setState(() => _sendingPush = true);
     try {
-      await FirebaseFirestore.instance
+      await AdminLoadGuard.comPrazo(FirebaseFirestore.instance
           .collection('users')
           .doc(widget.uid)
           .collection('notifications')
@@ -706,7 +706,7 @@ class _Usuario360DetailState extends State<_Usuario360Detail> {
         if (url.isNotEmpty) 'url': url,
         'fromAdmin': true,
         'createdAt': FieldValue.serverTimestamp(),
-      });
+      }), oQue: 'a gravação');
       if (mounted) {
         _refreshUsage();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -790,8 +790,12 @@ class _Usuario360DetailState extends State<_Usuario360Detail> {
     final userData = userSnap.data() ?? {};
     final pid = (userData['partnershipId'] ?? '').toString().trim();
     if (pid.isNotEmpty) {
-      final pSnap = await db.collection('partnerships').doc(pid).get();
-      if (pSnap.exists) partnership = pSnap.data();
+      try {
+        final pSnap = await db.collection('partnerships').doc(pid).get();
+        if (pSnap.exists) partnership = pSnap.data();
+      } catch (_) {
+        // Convênio é só detalhe: sem ele o 360 abre igual.
+      }
     }
 
     return _UsageBundle(

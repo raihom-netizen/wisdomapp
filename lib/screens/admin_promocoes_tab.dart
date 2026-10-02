@@ -1250,7 +1250,7 @@ class _PromoEditorDialogState extends State<_PromoEditorDialog> {
       final totalRecipients = er['total'] ?? sent + failed;
       final scope =
           targetUids != null ? '${targetUids.length} na lista' : 'toda a base (filtro servidor)';
-      await FirebaseFirestore.instance.collection('promotions').doc(pid).set({
+      await AdminLoadGuard.comPrazo(FirebaseFirestore.instance.collection('promotions').doc(pid).set({
         'lastEmailBroadcast': {
           'at': FieldValue.serverTimestamp(),
           'sent': sent,
@@ -1258,7 +1258,7 @@ class _PromoEditorDialogState extends State<_PromoEditorDialog> {
           'total': totalRecipients,
           'recipientMode': targetUids != null ? 'selected' : 'all',
         },
-      }, SetOptions(merge: true));
+      }, SetOptions(merge: true)), oQue: 'a gravação');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -1376,7 +1376,7 @@ class _PromoEditorDialogState extends State<_PromoEditorDialog> {
       } else {
         payload['validUntil'] = FieldValue.delete();
       }
-      await ref.set(payload, SetOptions(merge: true));
+      await AdminLoadGuard.comPrazo(ref.set(payload, SetOptions(merge: true)), oQue: 'a gravação');
       if (!mounted) return;
 
       final scaffold = ScaffoldMessenger.maybeOf(context);
@@ -1976,7 +1976,7 @@ class _PromoListBroadcastDialogState extends State<_PromoListBroadcastDialog> {
       final sent = er['sent'] ?? 0;
       final failed = er['failed'] ?? 0;
       final totalRecipients = er['total'] ?? sent + failed;
-      await FirebaseFirestore.instance.collection('promotions').doc(widget.promoId).set({
+      await AdminLoadGuard.comPrazo(FirebaseFirestore.instance.collection('promotions').doc(widget.promoId).set({
         'lastEmailBroadcast': {
           'at': FieldValue.serverTimestamp(),
           'sent': sent,
@@ -1984,7 +1984,7 @@ class _PromoListBroadcastDialogState extends State<_PromoListBroadcastDialog> {
           'total': totalRecipients,
           'recipientMode': 'all',
         },
-      }, SetOptions(merge: true));
+      }, SetOptions(merge: true)), oQue: 'a gravação');
       if (!mounted) return;
       final messenger = ScaffoldMessenger.maybeOf(context);
       Navigator.of(context).pop();

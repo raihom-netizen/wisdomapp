@@ -1074,10 +1074,12 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
     }
 
     try {
-      final existing = await _courseFirestoreOp(() => FirebaseFirestore.instance
-          .collection('course_videos')
-          .doc(docId)
-          .get());
+      final existing = await AdminLoadGuard.comPrazo(
+          _courseFirestoreOp(() => FirebaseFirestore.instance
+              .collection('course_videos')
+              .doc(docId)
+              .get()),
+          oQue: 'o curso');
       final existingData = existing.data() ?? {};
 
       if (removeVideos) {
@@ -1349,10 +1351,12 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       if (ok != true) return;
     }
     try {
-      final snap = await _courseFirestoreOp(() => FirebaseFirestore.instance
-          .collection('course_videos')
-          .doc(docId)
-          .get());
+      final snap = await AdminLoadGuard.comPrazo(
+          _courseFirestoreOp(() => FirebaseFirestore.instance
+              .collection('course_videos')
+              .doc(docId)
+              .get()),
+          oQue: 'o curso');
       await CourseMediaStorageCleanup.deleteForCourseDoc(
         docId,
         data: snap.data(),

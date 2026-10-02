@@ -1068,7 +1068,7 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
     String submissionId,
   ) async {
     try {
-      await FirebaseFirestore.instance
+      await AdminLoadGuard.comPrazo(FirebaseFirestore.instance
           .collection('partnerships')
           .doc(partnershipId)
           .collection('submissions')
@@ -1081,7 +1081,7 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
               'updatedAt': FieldValue.serverTimestamp(),
             },
             SetOptions(merge: true),
-          );
+          ), oQue: 'a gravação');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -1103,7 +1103,7 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
   Future<void> _saveCsvSourceUrl(String partnershipId, String url) async {
     final trimmed = url.trim();
     try {
-      await FirebaseFirestore.instance
+      await AdminLoadGuard.comPrazo(FirebaseFirestore.instance
           .collection('partnerships')
           .doc(partnershipId)
           .set(
@@ -1123,7 +1123,7 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
               'updatedAt': FieldValue.serverTimestamp(),
             },
             SetOptions(merge: true),
-          );
+          ), oQue: 'a gravação');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -1150,7 +1150,7 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
     int contractDurationMonths = 12,
   }) async {
     try {
-      await FirebaseFirestore.instance
+      await AdminLoadGuard.comPrazo(FirebaseFirestore.instance
           .collection('partnerships')
           .doc(partnershipId)
           .set(
@@ -1162,7 +1162,7 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
           'updatedAt': FieldValue.serverTimestamp(),
         },
         SetOptions(merge: true),
-      );
+      ), oQue: 'a gravação');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -1192,7 +1192,7 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
     bool silentErrors = false,
   }) async {
     try {
-      await FirebaseFirestore.instance
+      await AdminLoadGuard.comPrazo(FirebaseFirestore.instance
           .collection('partnerships')
           .doc(partnershipId)
           .set(
@@ -1202,7 +1202,7 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
           'updatedAt': FieldValue.serverTimestamp(),
         },
         SetOptions(merge: true),
-      );
+      ), oQue: 'a gravação');
       if (!mounted) return false;
       if (showSuccessSnack) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1274,7 +1274,7 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
           : imported != null
               ? 'Importação manual concluída (importados/atualizados: $imported).'
               : 'Importação manual concluída.';
-      await FirebaseFirestore.instance
+      await AdminLoadGuard.comPrazo(FirebaseFirestore.instance
           .collection('partnerships')
           .doc(partnershipId)
           .set(
@@ -1285,7 +1285,7 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
               'csvImportFlowUpdatedAt': FieldValue.serverTimestamp(),
             },
             SetOptions(merge: true),
-          );
+          ), oQue: 'a gravação');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -1298,7 +1298,7 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
     } catch (e) {
       final friendly = _friendlyCsvSyncError(e);
       try {
-        await FirebaseFirestore.instance
+        await AdminLoadGuard.comPrazo(FirebaseFirestore.instance
             .collection('partnerships')
             .doc(partnershipId)
             .set(
@@ -1309,7 +1309,7 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
                 'csvImportFlowUpdatedAt': FieldValue.serverTimestamp(),
               },
               SetOptions(merge: true),
-            );
+            ), oQue: 'a gravação');
       } catch (_) {}
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1354,7 +1354,7 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
               ' Remoção automática (quem saiu do CSV): ${mm ?? 0} membro(s), ${mu ?? 0} usuário(s) ajustado(s).';
         }
       }
-      await FirebaseFirestore.instance
+      await AdminLoadGuard.comPrazo(FirebaseFirestore.instance
           .collection('partnerships')
           .doc(partnershipId)
           .set(
@@ -1365,7 +1365,7 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
               'csvImportFlowUpdatedAt': FieldValue.serverTimestamp(),
             },
             SetOptions(merge: true),
-          );
+          ), oQue: 'a gravação');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -1378,7 +1378,7 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
     } catch (e) {
       final friendly = _friendlyCsvSyncError(e);
       try {
-        await FirebaseFirestore.instance
+        await AdminLoadGuard.comPrazo(FirebaseFirestore.instance
             .collection('partnerships')
             .doc(partnershipId)
             .set(
@@ -1389,7 +1389,7 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
                 'csvImportFlowUpdatedAt': FieldValue.serverTimestamp(),
               },
               SetOptions(merge: true),
-            );
+            ), oQue: 'a gravação');
       } catch (_) {}
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1448,13 +1448,13 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
 
   Future<void> _dismissCsvAdminReview(String partnershipId) async {
     try {
-      await FirebaseFirestore.instance
+      await AdminLoadGuard.comPrazo(FirebaseFirestore.instance
           .collection('partnerships')
           .doc(partnershipId)
           .set(
             {'csvPendingAdminReview': false},
             SetOptions(merge: true),
-          );
+          ), oQue: 'a gravação');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -4148,13 +4148,13 @@ class _PartnershipUsersPanelState extends State<PartnershipUsersPanel> {
 
   Future<void> _inactivateOneUser(String uid) async {
     try {
-      await FirebaseFirestore.instance.collection('users').doc(uid).set(
+      await AdminLoadGuard.comPrazo(FirebaseFirestore.instance.collection('users').doc(uid).set(
         {
           'planStatus': 'canceled',
           'updatedAt': FieldValue.serverTimestamp(),
         },
         SetOptions(merge: true),
-      );
+      ), oQue: 'a gravação');
       if (!mounted) return;
       setState(() => _localRefreshNonce++);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -4281,7 +4281,7 @@ class _PartnershipUsersPanelState extends State<PartnershipUsersPanel> {
       return;
     }
     try {
-      await FirebaseFirestore.instance.collection('users').doc(uid).set(
+      await AdminLoadGuard.comPrazo(FirebaseFirestore.instance.collection('users').doc(uid).set(
         {
           'name': nameCtrl.text.trim(),
           'email': emailNorm,
@@ -4291,7 +4291,7 @@ class _PartnershipUsersPanelState extends State<PartnershipUsersPanel> {
           'updatedAt': FieldValue.serverTimestamp(),
         },
         SetOptions(merge: true),
-      );
+      ), oQue: 'a gravação');
       if (!mounted) return;
       setState(() => _localRefreshNonce++);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -4362,7 +4362,7 @@ class _PartnershipUsersPanelState extends State<PartnershipUsersPanel> {
     if (picked == null || !mounted) return;
 
     try {
-      await FirebaseFirestore.instance.collection('users').doc(uid).set(
+      await AdminLoadGuard.comPrazo(FirebaseFirestore.instance.collection('users').doc(uid).set(
         {
           'licenseExpiresAt': Timestamp.fromDate(
             DateTime(picked.year, picked.month, picked.day, 23, 59, 59),
@@ -4370,7 +4370,7 @@ class _PartnershipUsersPanelState extends State<PartnershipUsersPanel> {
           'updatedAt': FieldValue.serverTimestamp(),
         },
         SetOptions(merge: true),
-      );
+      ), oQue: 'a gravação');
       if (!mounted) return;
       setState(() => _localRefreshNonce++);
       ScaffoldMessenger.of(context).showSnackBar(

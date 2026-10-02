@@ -851,7 +851,7 @@ class _AdminScreenState extends State<AdminScreen> {
     var sent = 0;
     for (final uid in uids.take(25)) {
       try {
-        await FirebaseFirestore.instance
+        await AdminLoadGuard.comPrazo(FirebaseFirestore.instance
             .collection('users')
             .doc(uid)
             .collection('notifications')
@@ -861,7 +861,7 @@ class _AdminScreenState extends State<AdminScreen> {
           'fromAdmin': true,
           'bulk': true,
           'createdAt': FieldValue.serverTimestamp(),
-        });
+        }), oQue: 'a gravação');
         sent++;
       } catch (e) {
         debugPrint('Lote notificação $uid: $e');
@@ -876,7 +876,20 @@ class _AdminScreenState extends State<AdminScreen> {
 
   Future<void> _openScheduledExportPrefs() async {
     final svc = AdminScheduledExportPrefsService();
-    final existing = await svc.load();
+    final Map<String, dynamic>? existing;
+    try {
+      existing = await AdminLoadGuard.comPrazo(svc.load(),
+          oQue: 'a exportação programada');
+    } catch (e) {
+      // Antes o erro sumia e o botão parecia não fazer nada.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(AdminLoadGuard.mensagem(e)),
+          backgroundColor: AppColors.error,
+        ));
+      }
+      return;
+    }
     final emailCtrl = TextEditingController(
       text: (existing?['email'] ?? widget.profile.email ?? '').toString(),
     );
@@ -930,11 +943,24 @@ class _AdminScreenState extends State<AdminScreen> {
             ),
             FilledButton(
               onPressed: () async {
-                await svc.save(
-                  enabled: enabled,
-                  email: emailCtrl.text,
-                  frequency: frequency,
-                );
+                try {
+                  await AdminLoadGuard.comPrazo(
+                    svc.save(
+                      enabled: enabled,
+                      email: emailCtrl.text,
+                      frequency: frequency,
+                    ),
+                    oQue: 'a gravação',
+                  );
+                } catch (e) {
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                      content: Text('Não salvou: ${AdminLoadGuard.mensagem(e)}'),
+                      backgroundColor: AppColors.error,
+                    ));
+                  }
+                  return;
+                }
                 if (ctx.mounted) Navigator.pop(ctx);
               },
               child: const Text('Guardar'),
@@ -1568,9 +1594,9 @@ class _AdminScreenState extends State<AdminScreen> {
               final ref =
                   FirebaseFirestore.instance.collection('public_downloads');
               if (doc == null) {
-                await ref.add(data);
+                await AdminLoadGuard.comPrazo(ref.add(data), oQue: 'a gravação');
               } else {
-                await doc.reference.set(data, SetOptions(merge: true));
+                await AdminLoadGuard.comPrazo(doc.reference.set(data, SetOptions(merge: true)), oQue: 'a gravação');
               }
               if (context.mounted) Navigator.pop(context);
             },
@@ -3524,11 +3550,11 @@ class _AdminScreenState extends State<AdminScreen> {
       final after = <String, dynamic>{
         'licenseExpiresAt': endOfDay.toIso8601String()
       };
-      await doc.reference.update({
+      await AdminLoadGuard.comPrazo(doc.reference.update({
         'licenseExpiresAt': Timestamp.fromDate(endOfDay),
         'licenseValidUntilIncludingGrace': Timestamp.fromDate(graceEnd),
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      }), oQue: 'a gravação');
       unawaited(_usersPager.refreshOne(uid));
       await AdminAuditService().logAdminAction(
         action: alterarVencimento,
@@ -5748,7 +5774,7 @@ class _AdminScreenState extends State<AdminScreen> {
                         IconButton(
                           icon: const Icon(Icons.delete_outline_rounded),
                           onPressed: () async {
-                            await doc.reference.delete();
+                            await AdminLoadGuard.comPrazo(doc.reference.delete(), oQue: 'a gravação');
                           },
                         ),
                       ],
@@ -6621,7 +6647,7 @@ class _MercadoPagoTabContentState extends State<_MercadoPagoTabContent> {
     String webhookUrl,
     String webhookSecret,
   ) async {
-    await FirebaseFirestore.instance
+    await AdminLoadGuard.comPrazo(FirebaseFirestore.instance
         .collection('settings')
         .doc('mercadopago')
         .set({
@@ -6632,7 +6658,7 @@ class _MercadoPagoTabContentState extends State<_MercadoPagoTabContent> {
       'webhook_url': webhookUrl,
       'webhook_secret': webhookSecret,
       'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    }, SetOptions(merge: true)), oQue: 'a gravação');
   }
 
   void _restoreDefaults() {
@@ -9353,7 +9379,7 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
               isValidHttpUrl(promoUrlIos));
       final savedAndroid = useAppStoreButtons ? storeAndroid : promoUrlAndroid;
       final savedIos = useAppStoreButtons ? storeIos : promoUrlIos;
-      await FirebaseFirestore.instance.doc('system/config').set({
+      await AdminLoadGuard.comPrazo(FirebaseFirestore.instance.doc('system/config').set({
         'manutencao': false,
         'maintenanceMessage': msg,
         'maintenanceDate':
@@ -9376,7 +9402,7 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
             ? _recipients.map((e) => e.uid).toList()
             : [],
         'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      }, SetOptions(merge: true)), oQue: 'a gravação');
       await AdminAuditService().logAdminAction(
         action: enviarManutencao,
         targetUserId: 'system',
@@ -9428,7 +9454,7 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
     if (confirm != true || !mounted) return;
     setState(() => _saving = true);
     try {
-      await FirebaseFirestore.instance.doc('system/config').set({
+      await AdminLoadGuard.comPrazo(FirebaseFirestore.instance.doc('system/config').set({
         'manutencao': false,
         'maintenanceMessage': '',
         'maintenanceDate': '',
@@ -9442,7 +9468,7 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
         'maintenancePromoFirestoreId': '',
         'maintenanceTargetUids': [],
         'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      }, SetOptions(merge: true)), oQue: 'a gravação');
       _messageCtrl.clear();
       _promoUrlAndroidCtrl.clear();
       _promoUrlIosCtrl.clear();
@@ -10182,11 +10208,11 @@ class _EmailConfigTabContentState extends State<_EmailConfigTabContent> {
     }
     setState(() => _saving = true);
     try {
-      await FirebaseFirestore.instance.collection('settings').doc('email').set({
+      await AdminLoadGuard.comPrazo(FirebaseFirestore.instance.collection('settings').doc('email').set({
         'user': user,
         'appPassword': pass,
         'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      }, SetOptions(merge: true)), oQue: 'a gravação');
       if (mounted) {
         setState(() => _saving = false);
         _appPasswordCtrl.clear();

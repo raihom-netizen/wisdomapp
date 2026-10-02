@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import '../../utils/admin_load_guard.dart';
 
 import '../../constants/currency_formats.dart';
 import '../../models/finance_tip_bank_entry.dart';
@@ -221,9 +222,11 @@ class _EditorBodyState extends State<_EditorBody> {
       };
 
       if (widget.existing == null) {
-        await widget.col.add(payload);
+        await AdminLoadGuard.comPrazo(widget.col.add(payload), oQue: 'a gravação');
       } else {
-        await widget.existing!.reference.set(payload, SetOptions(merge: true));
+        await AdminLoadGuard.comPrazo(
+            widget.existing!.reference.set(payload, SetOptions(merge: true)),
+            oQue: 'a gravação');
       }
       InsightsEngine.clearTipsCache();
       if (mounted) Navigator.pop(context, true);
