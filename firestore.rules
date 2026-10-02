@@ -6,19 +6,41 @@ service cloud.firestore {
     function isSignedIn() {
       return request.auth != null;
     }
+    // Perfil de quem está logado (o get é cacheado por requisição).
+    function meuPerfil() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    function meuPapel() {
+      return meuPerfil().get('role', '');
+    }
+    // ============================================================
+    // Papéis do Painel Admin (02/10/2026):
+    //  - MASTER = SÓ os e-mails dos donos, verificados no token
+    //    (isDonoPorEmail). `role: 'master'` no doc NÃO dá master: vale
+    //    como «admin» comum.
+    //  - admin = role admin/master; o nível vem de `adminLevel`
+    //    (suporte | editor | vazio = administrador).
+    //  - Só o master (ou o Admin SDK, ex. ctAdminSetUserRole) muda
+    //    role/adminLevel/adminCapability/isAdmin de qualquer perfil.
+    // ============================================================
     function isAdmin() {
-      return isSignedIn() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      return isSignedIn() && meuPapel() in ['admin', 'master'];
     }
     function isMaster() {
-      return isSignedIn() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'master';
+      return isDonoPorEmail();
+    }
+    // Admin que gere usuários/licenças: master, administrador ou suporte —
+    // o nível «editor» (divulgação/escala) e os overrides só-leitura/
+    // financeiro não editam perfis nem dados de usuários.
+    function isAdminGerente() {
+      return isMaster() || (
+        isAdmin()
+        && !(meuPerfil().get('adminLevel', '') in ['editor'])
+        && !(meuPerfil().get('adminCapability', '') in ['readonly', 'leitura', 'finance', 'financeiro'])
+      );
     }
     function isPartner() {
-      return isSignedIn() && (
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'partner'
-        || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'socio'
-      );
+      return isSignedIn() && meuPapel() in ['partner', 'socio'];
     }
     function isAdminOrMaster() {
       return isAdmin() || isMaster();
@@ -27,23 +49,20 @@ service cloud.firestore {
       return isAdminOrMaster() || isPartner() || isGestor();
     }
     function isGestor() {
-      return isSignedIn() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'gestor';
+      return isSignedIn() && meuPapel() == 'gestor';
     }
+    // Antes: só raihom@ e SEM conferir e-mail verificado. Agora = master.
     function isSystemManager() {
-      return isSignedIn() && request.auth.token.email == 'raihom@gmail.com';
+      return isMaster();
     }
     // Editor de conteúdo (02/10/2026): só Cursos (vídeos, via callable +
     // Storage) e Dicas financeiras. Não lê usuários, pagamentos, logs nem
     // métricas — NÃO entra em isAdminPanelReader nem em canEditPublicContent.
     function isContentEditor() {
-      return isSignedIn() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'editor_conteudo';
+      return isSignedIn() && meuPapel() == 'editor_conteudo';
     }
     function canEditPublicContent() {
-      return isAdmin() || isGestor() || isSystemManager()
-        || (isSignedIn() &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'master');
+      return isAdmin() || isGestor() || isMaster();
     }
     function isOwner(userId) {
       return request.auth.uid == userId;
@@ -82,6 +101,21 @@ service cloud.firestore {
       ];
     }
 
+    // Campos de PAPEL no painel: só o master (ou o servidor) mexe.
+    function camposDePapel() {
+      return ['role', 'adminLevel', 'adminCapability', 'isAdmin'];
+    }
+    // Ninguém vira master gravando o perfil (master é só e-mail de dono):
+    // `role` não pode PASSAR a ser master/superadmin e `adminCapability`
+    // não pode virar master/super. Quem já tinha fica como estava.
+    function naoViraMaster() {
+      let antes = resource == null ? {} : resource.data;
+      let depois = request.resource.data;
+      return (depois.get('role', '') == antes.get('role', '')
+              || !(depois.get('role', '') in ['master', 'superadmin', 'super_admin']))
+        && (depois.get('adminCapability', '') == antes.get('adminCapability', '')
+              || !(depois.get('adminCapability', '') in ['master', 'super', 'superadmin']));
+    }
     // Índice de compartilhamento ativo para o e-mail de quem está logado
     // (sub-login de outro titular) — libera criar o perfil como 'delegate'.
     function delegateIndexAtivoParaMim() {
@@ -207,13 +241,13 @@ service cloud.firestore {
         (authEmailKey() == emailKey && authEmailVerified())
         || resource == null
         || resource.data.get('principalUid', '') == request.auth.uid
-        || isAdmin()
+        || isAdminGerente()
       );
       // Titular cria/atualiza o índice de um e-mail que, NO MESMO LOTE, está
       // na própria lista (getAfter) — assim a lista de 4 é o teto real. Não
       // pode tomar o índice de outra conta nem autorizar o próprio e-mail.
       allow create: if isSignedIn() && (
-        isAdmin()
+        isAdminGerente()
         || (
           request.resource.data.get('principalUid', '') == request.auth.uid
           && emailKey != authEmailKey()
@@ -223,7 +257,7 @@ service cloud.firestore {
         )
       );
       allow update: if isSignedIn() && (
-        isAdmin()
+        isAdminGerente()
         || (
           resource.data.get('principalUid', '') == request.auth.uid
           && request.resource.data.get('principalUid', '') == request.auth.uid
@@ -242,12 +276,12 @@ service cloud.firestore {
         )
       );
       allow delete: if isSignedIn() && (
-        resource.data.get('principalUid', '') == request.auth.uid || isAdmin()
+        resource.data.get('principalUid', '') == request.auth.uid || isAdminGerente()
       );
     }
 
     match /cpf_index/{cpf} {
-      allow read: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow read: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdminGerente());
       allow create, update: if isSignedIn() && request.resource.data.uid == request.auth.uid;
     }
     match /public_downloads/{docId} {
@@ -267,7 +301,8 @@ service cloud.firestore {
     // Configuração pública do projeto MP (não sensível): pode ser lida pelo app/site.
     match /mp_project_config/{docId} {
       allow read: if true;
-      allow write: if isAdmin() || isSystemManager();
+      // Mercado Pago é só do master (02/10/2026).
+      allow write: if isMaster();
     }
     // Segredos do MP (access token, client secret, assinatura webhook, receiver IDs):
     // somente backend (Admin SDK) deve ler/escrever.
@@ -276,6 +311,37 @@ service cloud.firestore {
     }
     match /settings/{docId} {
       allow read, write: if isAdminOrMaster() || isSystemManager();
+    }
+    // Manutenção / aviso global (system/config). Não tinha regra: o app lia
+    // e o painel gravava e tudo dava permission-denied calado. Leitura aberta
+    // (o app checa o modo manutenção); gravar = só master. Qualquer usuário
+    // logado pode só LIMPAR o aviso vencido (o app faz isso no dia seguinte):
+    // apenas os campos de manutenção, todos vazios.
+    match /system/{docId} {
+      allow read: if true;
+      allow write: if isMaster()
+        || (isSignedIn() && docId == 'config' && limpezaManutencaoVencida());
+    }
+    function limpezaManutencaoVencida() {
+      let campos = ['maintenanceMessage', 'maintenanceDate', 'maintenanceTime',
+        'maintenancePromoUrl', 'maintenancePromoUrlAndroid', 'maintenancePromoUrlIos',
+        'maintenancePromoLabel', 'maintenancePromoUseOfficialSite',
+        'maintenancePromoFirestoreId', 'maintenanceTargetUids'];
+      let d = request.resource.data;
+      let mudou = resource == null
+        ? d.keys()
+        : d.diff(resource.data).affectedKeys();
+      return mudou.hasOnly(campos)
+        && d.get('maintenanceMessage', '') == ''
+        && d.get('maintenanceDate', '') == ''
+        && d.get('maintenanceTime', '') == ''
+        && d.get('maintenancePromoUrl', '') == ''
+        && d.get('maintenancePromoUrlAndroid', '') == ''
+        && d.get('maintenancePromoUrlIos', '') == ''
+        && d.get('maintenancePromoLabel', '') == ''
+        && d.get('maintenancePromoUseOfficialSite', false) == false
+        && d.get('maintenancePromoFirestoreId', '') == ''
+        && d.get('maintenanceTargetUids', []).size() == 0;
     }
     match /partnerships/{partnershipId} {
       allow read, write: if isAdminOrMaster() || isSystemManager();
@@ -295,6 +361,26 @@ service cloud.firestore {
     match /course_videos/{videoId} {
       allow read: if isSignedIn();
       allow create, update, delete: if canEditPublicContent();
+      // Comentários por aula (02/10/2026): qualquer logado lê; cria só em
+      // nome próprio, texto 1..1000; ninguém edita; apaga o autor ou quem
+      // modera conteúdo (admin/gestor/master/editor de conteúdo).
+      match /comments/{commentId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn()
+          && request.resource.data.keys().hasOnly(
+               ['lessonKey', 'authorUid', 'authorName', 'text', 'createdAt', 'createdAtMs'])
+          && request.resource.data.authorUid == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() >= 1
+          && request.resource.data.text.size() <= 1000
+          && request.resource.data.lessonKey is string;
+        allow update: if false;
+        allow delete: if isSignedIn() && (
+          resource.data.authorUid == request.auth.uid
+          || canEditPublicContent()
+          || isContentEditor()
+          || isMaster());
+      }
     }
     // Métricas de cursos/dicas: usuário autentica grava o próprio viewer + incrementos;
     // painel admin/gestor lê agregados e lista de quem assistiu.
@@ -331,19 +417,29 @@ service cloud.firestore {
       // Sub-login autorizado lê o perfil do titular (licença, plano, nome) para
       // abrir o painel com os dados dele. Gravar o perfil continua só do dono.
       allow read: if isSignedIn() && (canAccessUserData(userId) || isAdminPanelReader());
-      allow create: if isAdmin() || isDonoPorEmail()
+      // Master cria perfil com papel (Novo membro da equipe) — nunca master.
+      // Admin/suporte só cria perfil SEM campos de papel.
+      allow create: if (isMaster() && naoViraMaster())
+        || (isAdminGerente()
+            && !request.resource.data.keys().hasAny(camposDePapel()))
         || (isSignedIn() && isOwner(userId)
             && validDelegateList(request.resource.data)
             && perfilNovoValido(request.resource.data));
       // Dono do perfil muda nome, e-mail, preferências, telemetria, lista de
       // autorizados… mas NUNCA os campos de camposProtegidosPerfil().
-      allow update: if isAdmin() || isDonoPorEmail()
+      // Admin/suporte mexe em plano/licença, mas NÃO em role/adminLevel/
+      // adminCapability/isAdmin (de ninguém, nem o próprio) — só o master.
+      allow update: if (isMaster() && naoViraMaster())
+        || (isAdminGerente()
+            && !request.resource.data.diff(resource.data).affectedKeys()
+                  .hasAny(camposDePapel()))
         || (isOwner(userId)
             && (!request.resource.data.diff(resource.data).affectedKeys()
                    .hasAny(camposProtegidosPerfil())
                 || reescritaDoCadastro())
             && validDelegateList(request.resource.data));
-      allow delete: if isAdmin() || isDonoPorEmail();
+      // Excluir usuário = só master.
+      allow delete: if isMaster();
     }
     // Escalas e configurações (Horas extras, etc.): dono ou e-mail autorizado. Bloqueio de licença é no app.
     match /users/{userId}/scales/{scaleId} {
@@ -354,7 +450,7 @@ service cloud.firestore {
     }
     // Add-on Open Finance: leitura de entitlements; escrita só Cloud Functions.
     match /users/{userId}/bank_connection_entitlements/{docId} {
-      allow read: if isSignedIn() && (canAccessUserData(userId) || isAdmin());
+      allow read: if isSignedIn() && (canAccessUserData(userId) || isAdminGerente());
       allow create, update, delete: if false;
     }
     match /users/{userId}/entitlement_payments/{docId} {
@@ -373,7 +469,7 @@ service cloud.firestore {
       allow read, write: if isSignedIn() && (
         (request.auth.uid == userId
           && !(sub in ['private', 'entitlement_payments', 'bank_connection_entitlements']))
-        || isAdmin());
+        || isAdminGerente());
     }
     // Sub-login (e-mail autorizado pelo titular): demais dados do titular —
     // financeiro, agenda, objetivos, metas, tokens de push… `{sub}` exige ao

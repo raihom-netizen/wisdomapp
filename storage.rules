@@ -58,7 +58,9 @@ service firebase.storage {
 
     function isSystemManager() {
 
-      return isSignedIn() && request.auth.token.email == 'raihom@gmail.com';
+      // Donos (master) só com e-mail VERIFICADO no token (02/10/2026).
+      return isSignedIn() && request.auth.token.get('email_verified', false) == true
+        && request.auth.token.get('email', '') in ['raihom@gmail.com', 'isabelle.krdoso@gmail.com'];
 
     }
 
