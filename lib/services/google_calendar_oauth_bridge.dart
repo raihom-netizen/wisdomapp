@@ -50,6 +50,9 @@ class GoogleCalendarOAuthBridge {
         'code': code.trim(),
         'redirectUri': GoogleOAuthConfig.oauthRedirectUri,
       });
+      // Reautorizou: volta a renovar o token normalmente.
+      precisaReautorizar = false;
+      _ultimaFalha = null;
       return _parseTokenResponse(res.data);
     } catch (e, st) {
       debugPrint('GoogleCalendarOAuthBridge.exchangeCode: $e\n$st');
@@ -58,13 +61,41 @@ class GoogleCalendarOAuthBridge {
     }
   }
 
-  static Future<GoogleCalendarServerToken?> refreshAccessToken() async {
+  /// Sem refresh token no servidor (nunca autorizou ou foi revogado): parar de
+  /// tentar até o usuário reautorizar — antes o app chamava a function várias
+  /// vezes por segundo (cada tela/sync pedia um token novo).
+  static bool precisaReautorizar = false;
+  static Future<GoogleCalendarServerToken?>? _refreshEmAndamento;
+  static DateTime? _ultimaFalha;
+
+  static Future<GoogleCalendarServerToken?> refreshAccessToken() {
+    if (precisaReautorizar) return Future.value(null);
+    final falha = _ultimaFalha;
+    if (falha != null &&
+        DateTime.now().difference(falha) < const Duration(seconds: 60)) {
+      return Future.value(null);
+    }
+    return _refreshEmAndamento ??= _refreshAgora().whenComplete(() {
+      _refreshEmAndamento = null;
+    });
+  }
+
+  static Future<GoogleCalendarServerToken?> _refreshAgora() async {
     try {
       final res = await _fn
           .httpsCallable('ctGoogleCalendarRefreshAccessToken', options: _opts)
-          .call<Map<String, dynamic>>({});
+          .call<Map<String, dynamic>>({})
+          .timeout(const Duration(seconds: 20));
+      _ultimaFalha = null;
       return _parseTokenResponse(res.data);
     } catch (e, st) {
+      _ultimaFalha = DateTime.now();
+      final msg = e.toString();
+      if (msg.contains('failed-precondition') ||
+          msg.contains('Refresh token ausente') ||
+          msg.contains('invalid_grant')) {
+        precisaReautorizar = true;
+      }
       debugPrint('GoogleCalendarOAuthBridge.refresh: $e\n$st');
       return null;
     }
