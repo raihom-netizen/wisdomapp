@@ -4,9 +4,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/course_certificate_service.dart';
 import '../services/course_progress_service.dart';
 import '../utils/course_lessons.dart';
+import '../utils/course_share.dart';
 import '../widgets/course_media_preview.dart';
+import '../widgets/course_video/course_comments_section.dart';
+import '../widgets/course_video/course_video_controller.dart';
 import '../widgets/course_video/course_video_player_shell.dart';
 import '../widgets/course/course_yt_palette.dart';
 
@@ -101,8 +105,43 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
   @override
   void dispose() {
     _sub?.cancel();
+    // Grava os últimos segundos assistidos (a gravação normal é espaçada).
+    unawaited(_svc.flush(_courseId));
     super.dispose();
   }
+
+  /// Carga horária (min): a informada pelo admin ou a soma das aulas.
+  int get _workloadMinutes {
+    final declared = CourseLessons.declaredMinutes(widget.data);
+    if (declared != null) return declared;
+    var secs = 0.0;
+    for (final k in _keys) {
+      final d = _progress.lesson(k).durationSeconds;
+      if (d <= 0) return 0;
+      secs += d;
+    }
+    return (secs / 60).ceil();
+  }
+
+  Future<void> _openCertificate() async {
+    final keys = _keys.toList();
+    if (!_progress.isCompleted(keys)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('O certificado sai quando todas as aulas estiverem concluídas.'),
+      ));
+      return;
+    }
+    await CourseCertificateService.openCertificate(
+      context,
+      uid: widget.uid,
+      courseId: _courseId,
+      courseTitle: _title,
+      lessonCount: keys.length,
+      workloadMinutes: _workloadMinutes,
+    );
+  }
+
+  void _share() => CourseShare.share(context, widget.data);
 
   Future<void> _loadLessons() async {
     var lessons = CourseLessons.fromData(widget.data);
@@ -237,7 +276,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         fullscreenDialog: true,
-        builder: (_) => _CourseFullscreenPlayer(
+        builder: (_) => CourseFullscreenPlayer(
           title: '${lesson.title} · $_title',
           posterData: _posterData,
           youtubeVideoId: lesson.youtubeId,
@@ -247,6 +286,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         ),
       ),
     );
+    unawaited(_svc.flush(_courseId));
     if (!mounted) return;
     // Volta mostrando a capa; o «Continuar» retoma da posição salva.
     setState(() {
@@ -288,6 +328,11 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
             onPressed: () => _svc.toggleLike(_courseId, title: _title, type: 'curso'),
           ),
           IconButton(
+            tooltip: 'Compartilhar curso',
+            icon: const Icon(Icons.share_rounded),
+            onPressed: _share,
+          ),
+          IconButton(
             tooltip: 'Tela cheia',
             icon: const Icon(Icons.fullscreen_rounded),
             onPressed: _openFullscreen,
@@ -296,9 +341,15 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
             iconColor: fg,
             onSelected: (v) {
               if (v == 'reset') _reset();
+              if (v == 'share') _share();
+              if (v == 'cert') _openCertificate();
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'reset', child: Text('Recomeçar o curso')),
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'share', child: Text('Compartilhar curso')),
+              if (_progress.isCompleted(_keys))
+                const PopupMenuItem(
+                    value: 'cert', child: Text('Certificado de conclusão')),
+              const PopupMenuItem(value: 'reset', child: Text('Recomeçar o curso')),
             ],
           ),
         ],
@@ -314,8 +365,23 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         _player(),
         _header(),
         _lessonsSection(),
+        _commentsSection(),
         _descriptionSection(),
       ],
+    );
+  }
+
+  /// Comentários da aula aberta.
+  Widget _commentsSection() {
+    final lesson = _lesson;
+    if (_loadingLessons || lesson == null || _courseId.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return CourseCommentsSection(
+      courseId: _courseId,
+      lessonKey: lesson.key,
+      uid: widget.uid,
+      lessonTitle: lesson.title,
     );
   }
 
@@ -337,6 +403,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                   ),
                   _header(),
                   _descriptionSection(),
+                  _commentsSection(),
                 ],
               ),
             ),
@@ -527,6 +594,28 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
               ),
             ],
           ),
+          if (completed) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _openCertificate,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _kGreen,
+                  side: const BorderSide(color: _kGreen, width: 1.4),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                icon: const Icon(Icons.workspace_premium_rounded),
+                label: const Text(
+                  'Baixar certificado de conclusão',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -793,15 +882,20 @@ class _Badge extends StatelessWidget {
   }
 }
 
-/// Player em tela cheia (paisagem no celular; volta ao normal ao sair).
-class _CourseFullscreenPlayer extends StatefulWidget {
-  const _CourseFullscreenPlayer({
+/// Player em tela cheia (paisagem + modo imersivo no celular; volta ao normal
+/// ao sair). Usado pela tela do curso e pela tela de assistir.
+class CourseFullscreenPlayer extends StatefulWidget {
+  const CourseFullscreenPlayer({
+    super.key,
     required this.title,
     required this.posterData,
     this.youtubeVideoId,
     this.mp4Url,
     this.startAt = 0,
     this.onProgress,
+    this.controller,
+    this.accent = _kRed,
+    this.accent2 = CourseYt.redDark,
   });
 
   final String title;
@@ -811,11 +905,16 @@ class _CourseFullscreenPlayer extends StatefulWidget {
   final double startAt;
   final void Function(double position, double duration)? onProgress;
 
+  /// Mantém a velocidade escolhida e informa a posição ao voltar.
+  final CourseVideoController? controller;
+  final Color accent;
+  final Color accent2;
+
   @override
-  State<_CourseFullscreenPlayer> createState() => _CourseFullscreenPlayerState();
+  State<CourseFullscreenPlayer> createState() => _CourseFullscreenPlayerState();
 }
 
-class _CourseFullscreenPlayerState extends State<_CourseFullscreenPlayer> {
+class _CourseFullscreenPlayerState extends State<CourseFullscreenPlayer> {
   bool get _isMobile =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
@@ -865,8 +964,9 @@ class _CourseFullscreenPlayerState extends State<_CourseFullscreenPlayer> {
                 autoplay: true,
                 startAtSeconds: widget.startAt,
                 onProgress: widget.onProgress,
-                accent: _kRed,
-                accent2: CourseYt.redDark,
+                controller: widget.controller,
+                accent: widget.accent,
+                accent2: widget.accent2,
               ),
             ),
           ),

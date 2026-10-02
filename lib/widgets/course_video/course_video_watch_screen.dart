@@ -1,10 +1,19 @@
+import 'dart:async';
+
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
+import '../../screens/course_detail_screen.dart' show CourseFullscreenPlayer;
+import '../../services/course_progress_service.dart';
+import '../../utils/course_lessons.dart';
 import '../../utils/course_media_url_resolver.dart';
+import '../../utils/course_share.dart';
 import '../../utils/youtube_url_helper.dart';
 import '../course/course_yt_palette.dart';
 import '../course_media_preview.dart';
+import 'course_comments_section.dart';
+import 'course_video_controller.dart';
 import 'course_video_player_shell.dart';
 
 /// Abre vídeo de curso com UI estilo YouTube (player + lista relacionada).
@@ -85,6 +94,67 @@ class CourseVideoWatchScreen extends StatefulWidget {
 class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
   var _descExpanded = false;
 
+  /// Velocidade/pausa e última posição do player desta tela.
+  final _videoCtrl = CourseVideoController();
+  final _progressSvc = CourseProgressService.instance;
+
+  /// Parâmetros do player fixados ao (re)abrir — nunca mudam no meio da
+  /// reprodução (trocar remontaria o vídeo).
+  var _autoplay = true;
+  double _startAt = 0;
+  int _playNonce = 0;
+
+  String get _courseId => (widget.data['id'] ?? '').toString();
+
+  String? get _uid {
+    final bound = _progressSvc.boundUid;
+    if (bound != null && bound.isNotEmpty) return bound;
+    try {
+      return FirebaseAuth.instance.currentUser?.uid;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Aula tocada aqui (mesma chave da tela do curso — progresso único).
+  String? get _lessonKey =>
+      CourseLessons.lessonKeyFor(widget.data, mp4Url: _mp4Url);
+
+  @override
+  void initState() {
+    super.initState();
+    final uid = _uid;
+    if (uid != null && uid.isNotEmpty && _courseId.isNotEmpty) {
+      unawaited(_progressSvc.bindUser(uid));
+      // Retoma de onde parou (mesma regra da tela do curso).
+      final key = _lessonKey;
+      if (key != null) {
+        final lp = _progressSvc.of(_courseId).lesson(key);
+        if (lp.canResume) _startAt = lp.positionSeconds;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_courseId.isNotEmpty) unawaited(_progressSvc.flush(_courseId));
+    _videoCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onProgress(double position, double duration) {
+    final key = _lessonKey;
+    if (_courseId.isEmpty || key == null) return;
+    unawaited(_progressSvc.recordLessonProgress(
+      _courseId,
+      key,
+      positionSeconds: position,
+      durationSeconds: duration,
+      title: _title,
+      type: (widget.data['type'] ?? 'curso').toString(),
+    ));
+  }
+
   String get _title => (widget.data['title'] ?? 'Vídeo').toString();
 
   String get _description {
@@ -125,20 +195,43 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
     );
   }
 
+  /// Tela cheia de verdade: paisagem + modo imersivo (mesmo player da tela do
+  /// curso), começando no ponto atual; ao voltar, o player de baixo retoma
+  /// de onde a tela cheia parou.
   Future<void> _openFullscreen() async {
+    final from = _videoCtrl.position > 0 ? _videoCtrl.position : _startAt;
+    // Fecha o player de baixo para não tocar dois ao mesmo tempo.
+    setState(() {
+      _autoplay = false;
+      _startAt = from;
+      _playNonce++;
+    });
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         fullscreenDialog: true,
-        builder: (_) => _CourseVideoFullscreenPage(
-          youtubeVideoId: _youtubeId,
-          mp4Url: _mp4Url,
+        builder: (_) => CourseFullscreenPlayer(
           title: _title,
           posterData: widget.data,
+          youtubeVideoId: _youtubeId,
+          mp4Url: _mp4Url,
+          startAt: from,
+          onProgress: _onProgress,
+          controller: _videoCtrl,
           accent: _accent,
+          accent2: _accent.withValues(alpha: 0.72),
         ),
       ),
     );
+    if (_courseId.isNotEmpty) unawaited(_progressSvc.flush(_courseId));
+    if (!mounted) return;
+    setState(() {
+      _startAt = _videoCtrl.position > 0 ? _videoCtrl.position : from;
+      _autoplay = true;
+      _playNonce++;
+    });
   }
+
+  void _shareCurrent() => CourseShare.share(context, widget.data);
 
   @override
   Widget build(BuildContext context) {
@@ -169,6 +262,11 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
             ),
             actions: [
               IconButton(
+                tooltip: 'Compartilhar',
+                icon: const Icon(Icons.share_rounded),
+                onPressed: _shareCurrent,
+              ),
+              IconButton(
                 tooltip: 'Tela cheia',
                 icon: const Icon(Icons.fullscreen_rounded),
                 onPressed: _openFullscreen,
@@ -189,12 +287,17 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
                         fit: StackFit.expand,
                         children: [
                           CourseVideoPlayerShell(
+                            key: ValueKey('watch-shell-$_playNonce'),
                             embedKey: ValueKey(
-                                '${_youtubeId ?? ''}|${_mp4Url ?? ''}'),
+                                '${_youtubeId ?? ''}|${_mp4Url ?? ''}|$_playNonce'),
                             posterData: widget.data,
                             youtubeVideoId: _youtubeId,
                             mp4Url: _mp4Url,
-                            autoplay: true,
+                            autoplay: _autoplay,
+                            startAtSeconds: _startAt,
+                            courseId: _courseId.isEmpty ? null : _courseId,
+                            onProgress: _onProgress,
+                            controller: _videoCtrl,
                             accent: _accent,
                             accent2: _accent.withValues(alpha: 0.72),
                           ),
@@ -253,7 +356,7 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
                   ],
                   const SizedBox(height: 10),
                   // Speed controls
-                  _SpeedControlBar(accent: _accent),
+                  _SpeedControlBar(accent: _accent, controller: _videoCtrl),
                   const SizedBox(height: 12),
                   // Channel info
                   Row(
@@ -382,6 +485,21 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
               ),
             ),
           ),
+          if (_courseId.isNotEmpty &&
+              (_uid ?? '').isNotEmpty &&
+              _lessonKey != null)
+            SliverToBoxAdapter(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 760),
+                  child: CourseCommentsSection(
+                    courseId: _courseId,
+                    lessonKey: _lessonKey!,
+                    uid: _uid!,
+                  ),
+                ),
+              ),
+            ),
           if (related.isNotEmpty) ...[
             SliverToBoxAdapter(
               child: Padding(
@@ -411,50 +529,6 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
           ],
           const SliverToBoxAdapter(child: SizedBox(height: 24)),
         ],
-      ),
-    );
-  }
-}
-
-class _CourseVideoFullscreenPage extends StatelessWidget {
-  const _CourseVideoFullscreenPage({
-    this.youtubeVideoId,
-    this.mp4Url,
-    required this.title,
-    this.posterData,
-    this.accent = const Color(0xFF2563EB),
-  });
-
-  final String? youtubeVideoId;
-  final String? mp4Url;
-  final String title;
-  final Map<String, dynamic>? posterData;
-  final Color accent;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-      ),
-      body: SafeArea(
-        child: Center(
-          child: AspectRatio(
-            aspectRatio: 16 / 9,
-            child: CourseVideoPlayerShell(
-              embedKey: ValueKey('fs-${youtubeVideoId ?? ''}|${mp4Url ?? ''}'),
-              posterData: posterData,
-              youtubeVideoId: youtubeVideoId,
-              mp4Url: mp4Url,
-              autoplay: true,
-              accent: accent,
-              accent2: accent.withValues(alpha: 0.72),
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -531,8 +605,35 @@ class _RelatedVideoTile extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(Icons.more_vert_rounded,
-                  color: CourseYt.textMuted(context), size: 20),
+              PopupMenuButton<String>(
+                tooltip: 'Mais opções',
+                icon: Icon(Icons.more_vert_rounded,
+                    color: CourseYt.textMuted(context), size: 20),
+                onSelected: (v) {
+                  if (v == 'play') onTap();
+                  if (v == 'share') CourseShare.share(context, data);
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    value: 'play',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.play_arrow_rounded),
+                      title: Text('Assistir agora'),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'share',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.share_rounded),
+                      title: Text('Compartilhar'),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -541,19 +642,56 @@ class _RelatedVideoTile extends StatelessWidget {
   }
 }
 
-/// Barra de controle de velocidade estilo YouTube.
+/// Barra de velocidade estilo YouTube — aplica de verdade no player
+/// (YouTube: `setPlaybackRate`; MP4: `playbackRate`) via [controller].
 class _SpeedControlBar extends StatefulWidget {
-  const _SpeedControlBar({required this.accent});
+  const _SpeedControlBar({required this.accent, required this.controller});
   final Color accent;
+  final CourseVideoController controller;
 
   @override
   State<_SpeedControlBar> createState() => _SpeedControlBarState();
 }
 
 class _SpeedControlBarState extends State<_SpeedControlBar> {
-  double _speed = 1.0;
+  double get _speed => widget.controller.playbackRate;
 
   static const _speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onCtrl);
+  }
+
+  @override
+  void didUpdateWidget(covariant _SpeedControlBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.controller, widget.controller)) {
+      oldWidget.controller.removeListener(_onCtrl);
+      widget.controller.addListener(_onCtrl);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onCtrl);
+    super.dispose();
+  }
+
+  void _onCtrl() {
+    if (mounted) setState(() {});
+  }
+
+  void _pick(double s) {
+    widget.controller.setPlaybackRate(s);
+    if (!widget.controller.hasTarget && s != 1.0) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Velocidade ${_speedLabel(s)} — vale quando o vídeo tocar.'),
+        duration: const Duration(seconds: 2),
+      ));
+    }
+  }
 
   String _speedLabel(double s) {
     if (s == 1.0) return 'Normal';
@@ -593,7 +731,7 @@ class _SpeedControlBarState extends State<_SpeedControlBar> {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 2),
                       child: GestureDetector(
-                        onTap: () => setState(() => _speed = s),
+                        onTap: () => _pick(s),
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 4),

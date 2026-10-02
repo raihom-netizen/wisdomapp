@@ -23,6 +23,7 @@ import '../services/course_analytics_service.dart';
 import '../services/youtube_oembed_service.dart';
 import '../utils/admin_load_guard.dart';
 import '../widgets/admin/course_admin_analytics_panel.dart';
+import '../widgets/admin/course_comments_moderation_sheet.dart';
 import '../widgets/admin/course_content_sheet_header.dart';
 import '../theme/app_colors.dart';
 import '../theme/theme_context.dart';
@@ -4481,6 +4482,13 @@ class _VideoGridCard extends StatelessWidget {
                             'Editar',
                           ),
                           _actionIcon(
+                            Icons.forum_outlined,
+                            Colors.white.withValues(alpha: 0.5),
+                            () => showCourseCommentsModeration(context,
+                                data: data),
+                            'Comentários',
+                          ),
+                          _actionIcon(
                             published
                                 ? Icons.visibility_off_outlined
                                 : Icons.visibility_rounded,
@@ -4712,6 +4720,9 @@ class _CompactCourseRow extends StatelessWidget {
                     onSelected: (v) {
                       if (v == 'pub') onTogglePublished(!published);
                       if (v == 'edit') onEdit();
+                      if (v == 'comments') {
+                        showCourseCommentsModeration(context, data: data);
+                      }
                       if (v == 'del') onDelete();
                     },
                     itemBuilder: (_) => [
@@ -4720,6 +4731,8 @@ class _CompactCourseRow extends StatelessWidget {
                         child: Text(published ? 'Ocultar' : 'Publicar'),
                       ),
                       const PopupMenuItem(value: 'edit', child: Text('Editar')),
+                      const PopupMenuItem(
+                          value: 'comments', child: Text('Comentários')),
                       const PopupMenuItem(value: 'del', child: Text('Excluir')),
                     ],
                   ),
@@ -4737,6 +4750,14 @@ class _CompactCourseRow extends StatelessWidget {
                     visualDensity: VisualDensity.compact,
                     onPressed: onEdit,
                     icon: const Icon(Icons.edit_rounded, color: Colors.white70),
+                  ),
+                  IconButton(
+                    tooltip: 'Comentários (moderar)',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () =>
+                        showCourseCommentsModeration(context, data: data),
+                    icon: const Icon(Icons.forum_outlined,
+                        color: Colors.white70),
                   ),
                   IconButton(
                     tooltip: 'Excluir',
