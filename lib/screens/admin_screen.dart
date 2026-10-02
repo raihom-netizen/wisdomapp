@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide showDatePicker;
+import '../widgets/shell_scroll_to_top_fab.dart';
 import '../widgets/fast_text_field.dart';
 import 'package:flutter/services.dart';
 import '../models/user_profile.dart';
@@ -1743,7 +1744,11 @@ class _AdminScreenState extends State<AdminScreen> {
           left: false,
           right: false,
           child: isMobile
-              ? _buildContent(brandBlue, brandTeal)
+              ? ScrollToTopArea(
+                  resetToken: _selectedItem,
+                  bottom: 16,
+                  child: _buildContent(brandBlue, brandTeal),
+                )
               : Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -1772,13 +1777,18 @@ class _AdminScreenState extends State<AdminScreen> {
                           : null,
                     ),
                     Expanded(
-                      child: _selectedItem == AdminMenuItem.convenios
-                          ? _buildContent(brandBlue, brandTeal)
-                          : SelectableRegion(
-                              focusNode: _contentFocusNode,
-                              selectionControls: materialTextSelectionControls,
-                              child: _buildContent(brandBlue, brandTeal),
-                            ),
+                      child: ScrollToTopArea(
+                        resetToken: _selectedItem,
+                        bottom: 16,
+                        child: _selectedItem == AdminMenuItem.convenios
+                            ? _buildContent(brandBlue, brandTeal)
+                            : SelectableRegion(
+                                focusNode: _contentFocusNode,
+                                selectionControls:
+                                    materialTextSelectionControls,
+                                child: _buildContent(brandBlue, brandTeal),
+                              ),
+                      ),
                     ),
                   ],
                 ),

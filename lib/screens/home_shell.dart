@@ -36,6 +36,7 @@ import '../theme/theme_context.dart';
 import '../services/push_notification_service.dart';
 import '../services/widget_data_service.dart';
 import '../models/user_profile.dart';
+import '../widgets/shell_scroll_to_top_fab.dart';
 import '../widgets/user_menu_lateral.dart';
 import '../services/home_start_module_cache.dart';
 import '../services/user_profile_startup_cache.dart';
@@ -940,10 +941,21 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     );
   }
 
+  /// Módulos + botão verde «voltar ao topo» (canto inferior direito, acima do
+  /// rodapé) — mesmo padrão do Controle Total.
   Widget _moduleIndexedStack(UserProfile profile) {
-    if (_preferSingleActiveModule) {
-      return _moduleSingleActive(profile);
-    }
+    return ScrollToTopArea(
+      controller: _idx >= 0 && _idx < _kShellModuleCount
+          ? _shellModuleScrollControllers[_idx]
+          : null,
+      resetToken: _idx,
+      child: _preferSingleActiveModule
+          ? _moduleSingleActive(profile)
+          : _moduleIndexedStackRaw(profile),
+    );
+  }
+
+  Widget _moduleIndexedStackRaw(UserProfile profile) {
     return IndexedStack(
       index: _idx,
       sizing: StackFit.expand,
