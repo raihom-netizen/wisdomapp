@@ -403,6 +403,12 @@ function compactTitleDetail(value, max = 42) {
 
 
 
+/** Emoji escolhido no compromisso (`commitmentSymbol` = `emoji:🎂`); ícone → "". */
+function emojiDoCompromisso(d) {
+  const s = String((d && d.commitmentSymbol) || "");
+  return s.startsWith("emoji:") && s.length > 6 ? s.slice(6) : "";
+}
+
 function reminderContext(d, eventAt, leadMin) {
 
   const type = (d.type || "compromisso").toString().toLowerCase();
@@ -446,6 +452,8 @@ function reminderContext(d, eventAt, leadMin) {
     numeroOcorrencia: oco,
 
     cliente: (d.cliente || d.notes || "").toString().trim(),
+
+    emoji: emojiDoCompromisso(d),
 
     confirmed,
 
@@ -499,7 +507,7 @@ function buildCompromissoBody(ctx, now) {
 
   const titulo = ctx.eventTitle || "Compromisso";
 
-  const lines = [`📅 ${dateStr} · 🕒 ${startHm}`, `📝 ${titulo}`];
+  const lines = [`📅 ${dateStr} · 🕒 ${startHm}`, `${ctx.emoji || "📝"} ${titulo}`];
 
   if (ctx.cliente) lines.push(`👤 Cliente: ${ctx.cliente}`);
 
@@ -562,7 +570,7 @@ function buildCompromissoPush(ctx, userName, now) {
   const detail = compactTitleDetail(ctx.eventTitle || "Compromisso");
 
   const title = detail && detail !== "Compromisso"
-    ? `${leadTitlePrefix(ctx.leadMin)} — Compromisso: ${detail}`
+    ? `${leadTitlePrefix(ctx.leadMin)} — Compromisso: ${ctx.emoji ? `${ctx.emoji} ` : ""}${detail}`
     : buildPushTitle(ctx.leadMin, "compromisso");
 
   const body = prependPushGreeting(buildCompromissoBody(ctx, now), userName);

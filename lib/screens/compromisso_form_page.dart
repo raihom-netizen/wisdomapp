@@ -26,6 +26,9 @@ import '../widgets/compromisso_schedule_personalize_sheet.dart';
 import '../widgets/multi_date_month_picker_dialog.dart';
 import '../utils/compromisso_schedule_dates.dart';
 import '../utils/premium_upgrade.dart';
+import '../constants/commitment_symbols.dart';
+import '../utils/compromisso_share.dart';
+import '../widgets/commitment_symbol_picker.dart';
 
 /// Resultado ao salvar compromisso (novo ou edição).
 class CompromissoFormResult {
@@ -46,6 +49,7 @@ class CompromissoFormResult {
     List<DateTime>? targetDates,
     bool despertador = false,
     this.despertar = DespertarItem.desligado,
+    this.commitmentSymbol,
   })  : linkLocalizacao = linkLocalizacao.trim(),
         contatoWhatsApp = contatoWhatsApp.trim(),
         // Série anual não tem «Despertar no horário».
@@ -62,6 +66,23 @@ class CompromissoFormResult {
   /// `despertar` no reminder. Nasce desligado. Vale também para a série
   /// anual (todas as ocorrências). Ver [DespertarItem].
   final DespertarItem despertar;
+
+  /// Emoji ou ícone escolhido (`emoji:🎂` / `icon:cake`); null = automático
+  /// pelo título. Gravado em `commitmentSymbol` no reminder E no espelho
+  /// `scales/agenda_*` (igual ao Controle Total). Ver [CommitmentSymbol].
+  final String? commitmentSymbol;
+
+  /// Doc NOVO: só grava quando o usuário escolheu.
+  Map<String, dynamic> get camposSimboloNovo {
+    final s = (commitmentSymbol ?? '').trim();
+    return {if (s.isNotEmpty) kCommitmentSymbolField: s};
+  }
+
+  /// Edição (update/merge): grava ou apaga (volta ao automático pelo título).
+  Map<String, dynamic> get camposSimboloEdicao {
+    final s = (commitmentSymbol ?? '').trim();
+    return {kCommitmentSymbolField: s.isEmpty ? FieldValue.delete() : s};
+  }
 
   final String title;
   final String notes;
@@ -155,6 +176,9 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
   /// «Despertar» por item — nasce desligado no cadastro novo.
   DespertarItem _despertar = DespertarItem.desligado;
 
+  /// Emoji/ícone do compromisso (null = automático pelo título).
+  CommitmentSymbol? _symbol;
+
   static TimeOfDay _addOneHour(TimeOfDay t) {
     final m = t.hour * 60 + t.minute + 60;
     final h = (m ~/ 60) % 24;
@@ -200,6 +224,7 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
           (data['yearlyRepeatTemplateId'] ?? '').toString().trim().isNotEmpty;
       _despertador = compromissoTemDespertador(data);
       _despertar = DespertarItem.doDocumento(data);
+      _symbol = CommitmentSymbol.fromData(data);
       _selectedDates = [
         DateTime(_date.year, _date.month, _date.day),
       ];
@@ -583,6 +608,105 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
         targetDates: _selectedDates,
         despertador: _despertador,
         despertar: _despertar,
+        commitmentSymbol: _symbol?.raw,
+      ),
+    );
+  }
+
+  /// Compartilhar (detalhe/edição): usa o que está na tela agora.
+  Future<void> _compartilhar(BuildContext ctx) async {
+    final data = <String, dynamic>{
+      'title': _titleCtrl.text.trim(),
+      'date': _date,
+      'time': _fmtHHmm(_time),
+      'endTime': _fmtHHmm(_endTime),
+      'linkLocalizacao': _linkLocalizacaoCtrl.text.trim(),
+      'notes': _notesCtrl.text.trim(),
+      if (_symbol != null) kCommitmentSymbolField: _symbol!.raw,
+    };
+    await shareCompromisso(ctx, data);
+  }
+
+  static String _fmtHHmm(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  Future<void> _abrirSeletorSimbolo() async {
+    final pick = await showCommitmentSymbolPicker(
+      context,
+      atual: _symbol,
+      title: _titleCtrl.text,
+      cor: _colorFromHex(_colorHex),
+    );
+    if (pick == null || !mounted) return;
+    setState(() => _symbol = pick.symbol);
+  }
+
+  /// Emoji ou ícone moderno do compromisso — aparece no card do resumo do dia,
+  /// no espelho de Escalas e no texto compartilhado. Vazio = pelo título.
+  Widget _buildSymbolCard(Color pickedFill) {
+    return Container(
+      decoration: context.appPanelDecoration(radius: 14),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: pickedFill.withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: pickedFill.withValues(alpha: 0.45)),
+              ),
+              child: ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _titleCtrl,
+                builder: (_, v, __) => commitmentSymbolWidget(
+                  symbol: _symbol,
+                  title: v.text,
+                  size: 22,
+                  color: pickedFill,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Emoji ou ícone',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w800,
+                      color: context.appTextPrimary,
+                    ),
+                  ),
+                  Text(
+                    _symbol == null
+                        ? 'Automático pelo título'
+                        : 'Escolhido por você',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: context.appTextSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            OutlinedButton.icon(
+              onPressed: _abrirSeletorSimbolo,
+              icon: const Icon(Icons.emoji_emotions_rounded, size: 16),
+              label: const Text('Escolher'),
+              style: OutlinedButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                textStyle: const TextStyle(
+                    fontWeight: FontWeight.w900, fontSize: 12.5),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -657,6 +781,16 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
           onPressed: () => Navigator.of(context).maybePop(),
           style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
         ),
+        actions: [
+          if (widget.isEdit)
+            Builder(
+              builder: (ctx) => IconButton(
+                tooltip: 'Compartilhar',
+                icon: const Icon(Icons.share_rounded),
+                onPressed: () => _compartilhar(ctx),
+              ),
+            ),
+        ],
       ),
       bottomNavigationBar: KeyboardAwareFormBar(
         standaloneFullPageForm: true,
@@ -856,6 +990,8 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
                   const SizedBox(height: 10),
                   _despertadorTile(),
                 ],
+                const SizedBox(height: 10),
+                _buildSymbolCard(pickedFill),
                 const SizedBox(height: 10),
                 _buildColorCard(pickedFill, onPicked),
                 const SizedBox(height: 10),

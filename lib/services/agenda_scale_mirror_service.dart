@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../constants/commitment_symbols.dart';
+
 /// Cor padrão sugerida para audiências (dourado metálico — "Old Gold" clássico).
 /// Visual premium que destaca audiências no calendário em telas Full HD.
 const String kAgendaAudienciaDefaultColor = '#D4AF37';
@@ -76,6 +78,7 @@ class AgendaScaleMirrorService {
     FieldValue? magicGeneratedAt,
     String? sourceOverride,
     String? lancamentoOrigemOverride,
+    String? commitmentSymbol,
   }) async {
     if (userDocId.isEmpty || agendaId.isEmpty) return;
     final fallbackColor = type == AgendaMirrorType.audiencia
@@ -124,6 +127,12 @@ class AgendaScaleMirrorService {
       'createdByLancamentoExpresso': createdByLancamentoExpresso,
       'updatedAt': FieldValue.serverTimestamp(),
     };
+    // Emoji/ícone do compromisso: null = não mexe; vazio = volta ao automático.
+    if (commitmentSymbol != null) {
+      payload[kCommitmentSymbolField] = commitmentSymbol.trim().isEmpty
+          ? FieldValue.delete()
+          : commitmentSymbol.trim();
+    }
     if (createdByMagic) {
       payload['createdByMagic'] = true;
       if (magicBatchId != null && magicBatchId.trim().isNotEmpty) {

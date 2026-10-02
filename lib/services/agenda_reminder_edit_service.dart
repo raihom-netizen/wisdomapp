@@ -58,6 +58,7 @@ class AgendaReminderEditService {
         colorHex: result.colorHex,
         yearlyRepeatWeekdays: result.yearlyRepeatWeekdays,
         despertar: result.despertar.toMap(),
+        commitmentSymbol: result.commitmentSymbol ?? '',
       );
       return 'Compromisso anual atualizado — calendário limpo nas datas antigas, anos futuros recriados e notificações reprogramadas automaticamente.';
     }
@@ -128,6 +129,10 @@ class AgendaReminderEditService {
     payload.addAll((wasYearly || detachedYearlyInstance)
         ? camposDespertadorNovo(result.despertador)
         : camposDespertadorEdicao(result.despertador));
+    // Emoji/ícone: doc novo só leva quando escolhido; edição grava ou apaga.
+    payload.addAll((wasYearly || detachedYearlyInstance)
+        ? result.camposSimboloNovo
+        : result.camposSimboloEdicao);
     if (wasYearly || detachedYearlyInstance) {
       payload['type'] = 'compromisso';
       payload['status'] = 'EM_ABERTO';
@@ -149,6 +154,7 @@ class AgendaReminderEditService {
       endHHmm: endTimeStrSave,
       colorHex: result.colorHex,
       notes: result.notes,
+      commitmentSymbol: result.commitmentSymbol ?? '',
     );
     await AgendaNotificationRescheduleHelper.afterReminderSave(
       userDocId: userDocId,

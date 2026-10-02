@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../constants/commitment_symbols.dart';
 import '../models/despertar_item.dart';
 import '../utils/agenda_delivery_reset.dart';
 
@@ -457,6 +458,7 @@ class YearlyCommitmentRepeatService {
     String? notificationDeliveryMode,
     List<int>? yearlyRepeatWeekdays,
     Map<String, dynamic>? despertar,
+    String? commitmentSymbol,
   }) async {
     final ref = _reminders(userDocId).doc();
 
@@ -490,6 +492,9 @@ class YearlyCommitmentRepeatService {
     );
     // «Despertar» por item: o da série vale para todas as ocorrências.
     if (despertar != null) template[DespertarItem.campo] = despertar;
+    // Emoji/ícone da série — copiado para cada ocorrência e espelho.
+    final simbolo = (commitmentSymbol ?? '').trim();
+    if (simbolo.isNotEmpty) template[kCommitmentSymbolField] = simbolo;
 
     await ref.set(template);
 
@@ -569,6 +574,7 @@ class YearlyCommitmentRepeatService {
     String? notificationDeliveryMode,
     List<int>? yearlyRepeatWeekdays,
     Map<String, dynamic>? despertar,
+    String? commitmentSymbol,
   }) async {
     Map<String, dynamic>? templateBefore;
 
@@ -626,6 +632,12 @@ class YearlyCommitmentRepeatService {
     template['notificationDeliveryMode'] = FieldValue.delete();
     // «Despertar» por item: o da série vale para todas as ocorrências.
     if (despertar != null) template[DespertarItem.campo] = despertar;
+    // Emoji/ícone: null = não mexe; vazio = volta ao automático pelo título.
+    if (commitmentSymbol != null) {
+      final simbolo = commitmentSymbol.trim();
+      template[kCommitmentSymbolField] =
+          simbolo.isEmpty ? FieldValue.delete() : simbolo;
+    }
 
     if (planChanged) {
       await _clearAllInstancesFromCalendar(
@@ -994,6 +1006,11 @@ class YearlyCommitmentRepeatService {
     if (despertarSerie != null) {
       payload[DespertarItem.campo] = despertarSerie.toMap();
     }
+    // Emoji/ícone da série (FieldValue no modelo = removido → remove aqui).
+    final simboloSerie = templateData[kCommitmentSymbolField];
+    final simbolo = simboloSerie is String ? simboloSerie.trim() : '';
+    payload[kCommitmentSymbolField] =
+        simbolo.isEmpty ? FieldValue.delete() : simbolo;
 
     final instAfterPlan = instBefore != null
         ? (Map<String, dynamic>.from(instBefore)..addAll(payload))
@@ -1031,6 +1048,7 @@ class YearlyCommitmentRepeatService {
       notes: notes,
       createdByLancamentoExpresso:
           (templateData['source'] ?? '').toString() == 'lancamento_expresso',
+      commitmentSymbol: simbolo,
     );
   }
 

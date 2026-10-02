@@ -50,6 +50,7 @@ class CompromissoReminderService {
         colorHex: result.colorHex,
         yearlyRepeatWeekdays: result.yearlyRepeatWeekdays,
         despertar: result.despertar.toMap(),
+        commitmentSymbol: result.commitmentSymbol,
       );
       return (docId: id, googleSynced: false, created: 1);
     }
@@ -71,6 +72,7 @@ class CompromissoReminderService {
       // «Despertar» por item (nasce desligado) e «⏰ Despertar no horário».
       ...camposDespertadorNovo(result.despertador),
       ...result.despertar.campos,
+      ...result.camposSimboloNovo,
     });
 
     await AgendaScaleMirrorService.upsert(
@@ -83,6 +85,7 @@ class CompromissoReminderService {
       endHHmm: endTimeStr,
       colorHex: result.colorHex,
       notes: result.notes,
+      commitmentSymbol: result.commitmentSymbol ?? '',
     );
 
     unawaited(AgendaNotificationRescheduleHelper.afterReminderSave(
@@ -168,6 +171,7 @@ class CompromissoReminderService {
           // «Despertar» por item (nasce desligado) e «⏰ Despertar no horário».
           ...camposDespertadorNovo(result.despertador),
           ...result.despertar.campos,
+          ...result.camposSimboloNovo,
           'batchGroupTitle': result.title,
         });
         createdRefs.add((ref: ref, day: day));
@@ -191,6 +195,7 @@ class CompromissoReminderService {
           endHHmm: endTimeStr,
           colorHex: result.colorHex,
           notes: result.notes,
+          commitmentSymbol: result.commitmentSymbol ?? '',
         );
         unawaited(AgendaNotificationRescheduleHelper.afterReminderSave(
           userDocId: userDocId,
@@ -279,6 +284,7 @@ class CompromissoReminderService {
       // «Despertar» por item (nasce desligado) e «⏰ Despertar no horário».
       ...camposDespertadorNovo(result.despertador),
       ...result.despertar.campos,
+      ...result.camposSimboloNovo,
     });
 
     await AgendaScaleMirrorService.upsert(
@@ -291,6 +297,7 @@ class CompromissoReminderService {
       endHHmm: endTimeStr,
       colorHex: result.colorHex,
       notes: result.notes,
+      commitmentSymbol: result.commitmentSymbol ?? '',
     );
 
     unawaited(AgendaNotificationRescheduleHelper.afterReminderSave(
