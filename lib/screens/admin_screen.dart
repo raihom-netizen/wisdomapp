@@ -1280,8 +1280,13 @@ class _AdminScreenState extends State<AdminScreen> {
       final uSamp = await _parteResumo(
           Future.wait<QuerySnapshot<Map<String, dynamic>>>([
             firestoreQueryGetReliable(usersQuery.limit(_kAdminUsersSizeSample)),
+            // Sem o filtro email > '' (exigia índice createdAt+email): último
+            // cadastro só por createdAt (índice simples, automático).
             firestoreQueryGetReliable(
-              usersQuery.orderBy('createdAt', descending: true).limit(1),
+              FirebaseFirestore.instance
+                  .collection('users')
+                  .orderBy('createdAt', descending: true)
+                  .limit(1),
             ),
           ]),
           'o tamanho da base');
