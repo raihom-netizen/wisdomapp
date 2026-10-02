@@ -702,6 +702,7 @@
             el.setAttribute("role", "alert");
             el.style.cssText = "position:fixed;left:50%;top:max(12px,env(safe-area-inset-top));" +
               "transform:translateX(-50%);z-index:2147483647;max-width:min(92vw,460px);" +
+              "height:auto;max-height:none;bottom:auto;right:auto;width:auto;display:block;box-sizing:border-box;line-height:1.35;" +
               "padding:12px 16px;border-radius:14px;background:#0A1F56;color:#fff;" +
               "font:600 14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;" +
               "box-shadow:0 8px 28px rgba(0,0,0,.35);border:1px solid rgba(212,175,55,.6);text-align:center";
@@ -719,7 +720,7 @@
         shown = true;
         var last = 0;
         try { last = parseInt(sessionStorage.getItem(KEY) || "0", 10) || 0; } catch (e) {}
-        if (Date.now() - last < 120000) {
+        if (Date.now() - last < 30000) {
           banner("A conexão com o banco travou de novo. Toque para recarregar.", true);
           return;
         }

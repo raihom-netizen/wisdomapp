@@ -154,7 +154,11 @@ Future<void> _configureFirebaseCore() async {
     try {
       FirebaseFirestore.instance.settings = const Settings(
         persistenceEnabled: false,
-        webExperimentalForceLongPolling: true,
+        // 02/10/2026: long-polling FORÇADO é gatilho conhecido do assert ca9/b815
+        // (firebase-js-sdk #10310) mesmo no SDK 12.x — auto-detecção usa o
+        // WebChannel normal e só cai p/ long-polling quando a rede exige.
+        webExperimentalForceLongPolling: false,
+        webExperimentalAutoDetectLongPolling: true,
       );
     } catch (e, st) {
       debugPrint(
