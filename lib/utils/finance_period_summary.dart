@@ -68,11 +68,18 @@ class FinancePeriodSummary {
     double inc = 0;
     double exp = 0;
     var n = 0;
+    // Sem categoria, este cálculo é a RESERVA do servidor (que caiu): mesma
+    // regra dele — «Todos» soma só o pago e depósito/resgate de meta fica fora
+    // de receitas/despesas. Antes o número mudava conforme o caminho (ex.:
+    // receita paga 1.000 + receita pendente 400 → servidor 1.000, reserva 1.400).
+    final statusEfetivo =
+        canUseServer && statusFilter == 'all' ? 'paid' : statusFilter;
     for (final doc in docs) {
       final d = doc.data();
-      if (statusFilter != 'all') {
-        if ((d['status'] ?? 'paid').toString() != statusFilter) continue;
+      if (statusEfetivo != 'all') {
+        if ((d['status'] ?? 'paid').toString() != statusEfetivo) continue;
       }
+      if (canUseServer && d['goalReserve'] == true) continue;
       final effective = FinanceLineOpening.effectiveDateTimeFromMap(d);
       if (effective == null || effective.isBefore(f) || effective.isAfter(t)) continue;
       if (typeFilter == 'income' && (d['type'] ?? 'expense').toString() != 'income') continue;

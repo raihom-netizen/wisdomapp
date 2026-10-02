@@ -382,6 +382,10 @@ class _FinanceAccountCategorySheetState extends State<FinanceAccountCategoryShee
                     double inc = 0, exp = 0;
                     for (final doc in raw) {
                       final d = doc.data();
+                      // Depósito/resgate de meta: reserva, não receita nem
+                      // despesa (mesma regra do Financeiro); o saldo abaixo
+                      // continua contando.
+                      if (d['goalReserve'] == true) continue;
                       final amt = (d['amount'] ?? 0).toDouble();
                       if (d['type'] == 'income') inc += amt;
                       if (d['type'] == 'expense') exp += amt.abs();

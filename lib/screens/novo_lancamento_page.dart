@@ -295,7 +295,17 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
       _loadingCategories = false;
     });
 
-    final accounts = await FinanceAccountsService().listOnce(widget.uid);
+    // Contas da sessão primeiro (abre na hora); servidor com prazo. Sem
+    // resposta, segue sem conta escolhida — a pessoa escolhe no campo.
+    List<FinanceAccount> accounts =
+        FinanceAccountsService.peekLastKnown(widget.uid) ?? const <FinanceAccount>[];
+    if (accounts.isEmpty) {
+      try {
+        accounts = await FinanceAccountsService().listOnce(widget.uid);
+      } catch (e) {
+        debugPrint('NovoLancamentoPage: contas não carregaram: $e');
+      }
+    }
     if (!mounted) return;
     _accounts = accounts;
 
@@ -494,8 +504,14 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
     var financeAid = (_selectedFinanceAccountId ?? '').trim();
     // Conta não é mais obrigatória — lança sem vínculo se não houver.
     if (financeAid.isEmpty && !_isIncome) {
-      final list = await FinanceAccountsService().listOnce(widget.uid);
-      if (list.isNotEmpty) financeAid = list.first.id;
+      try {
+        final list = _accounts.isNotEmpty
+            ? _accounts
+            : await FinanceAccountsService().listOnce(widget.uid);
+        if (list.isNotEmpty) financeAid = list.first.id;
+      } catch (_) {
+        // Sem conta: lança sem vínculo (como já era permitido).
+      }
     }
 
     if (_isEditing) {
