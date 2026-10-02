@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../constants/currency_formats.dart';
 import '../constants/finance_category_visuals.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 
 /// Entrada ordenada para gráficos por categoria.
 typedef FinanceCategoryEntry = ({String category, double value});
@@ -59,7 +60,7 @@ class FinanceCategoryPiePanel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.isDarkMode ? context.appDarkModuleSurface : Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: _accent.withValues(alpha: 0.18)),
         boxShadow: [
@@ -104,10 +105,10 @@ class FinanceCategoryPiePanel extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w900,
                         fontSize: 14.5,
-                        color: Color(0xFF0F172A),
+                        color: context.isDarkMode ? context.appTextPrimary : const Color(0xFF0F172A),
                       ),
                     ),
                     if (subtitle != null && subtitle!.trim().isNotEmpty)
@@ -116,7 +117,7 @@ class FinanceCategoryPiePanel extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade600,
+                          color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600,
                         ),
                       ),
                   ],
@@ -126,13 +127,13 @@ class FinanceCategoryPiePanel extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           if (total <= 0)
-            _emptyState()
+            _emptyState(context)
           else
             LayoutBuilder(
               builder: (context, c) {
                 final stacked = c.maxWidth < 380;
-                final chart = _donut(total: total, visible: visible);
-                final legend = _legend(total: total, visible: visible);
+                final chart = _donut(context, total: total, visible: visible);
+                final legend = _legend(context, total: total, visible: visible);
                 if (stacked) {
                   return Column(
                     children: [
@@ -157,7 +158,7 @@ class FinanceCategoryPiePanel extends StatelessWidget {
     );
   }
 
-  Widget _emptyState() {
+  Widget _emptyState(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
       decoration: BoxDecoration(
@@ -173,7 +174,7 @@ class FinanceCategoryPiePanel extends StatelessWidget {
             'Sem lançamentos por categoria',
             style: TextStyle(
               fontWeight: FontWeight.w700,
-              color: Colors.grey.shade700,
+              color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
             ),
           ),
         ],
@@ -181,7 +182,7 @@ class FinanceCategoryPiePanel extends StatelessWidget {
     );
   }
 
-  Widget _donut({required double total, required List<FinanceCategoryEntry> visible}) {
+  Widget _donut(BuildContext context, {required double total, required List<FinanceCategoryEntry> visible}) {
     final sections = visible.asMap().entries.map((e) {
       final entry = e.value;
       final pct = entry.value / total;
@@ -237,7 +238,7 @@ class FinanceCategoryPiePanel extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
-                  color: Colors.grey.shade600,
+                  color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600,
                 ),
               ),
             ],
@@ -247,7 +248,7 @@ class FinanceCategoryPiePanel extends StatelessWidget {
     );
   }
 
-  Widget _legend({required double total, required List<FinanceCategoryEntry> visible}) {
+  Widget _legend(BuildContext context, {required double total, required List<FinanceCategoryEntry> visible}) {
     final rows = visible.take(maxLegendRows).toList();
     final maxVal = rows.isEmpty ? 1.0 : rows.map((e) => e.value).reduce(math.max);
 
@@ -282,10 +283,10 @@ class FinanceCategoryPiePanel extends StatelessWidget {
                             entry.category,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w800,
-                              color: Color(0xFF1E293B),
+                              color: context.isDarkMode ? context.appTextPrimary : const Color(0xFF1E293B),
                             ),
                           ),
                         ),

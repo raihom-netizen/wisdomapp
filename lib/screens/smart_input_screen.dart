@@ -23,6 +23,7 @@ import '../services/smart_category_hints_service.dart';
 import '../services/smart_input_pdf_text_service.dart';
 import '../services/user_categories_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/date_picker_a11y.dart';
 import '../utils/keyboard_form_scaffold.dart';
 import '../utils/premium_upgrade.dart';
@@ -1292,7 +1293,9 @@ class _SmartInputScreenState extends State<SmartInputScreen> {
       },
       child: Scaffold(
         resizeToAvoidBottomInset: scaffoldKeyboardResizeToAvoidBottomInset(),
-        backgroundColor: const Color(0xFFF1F5F9),
+        backgroundColor: context.isDarkMode
+            ? context.appScaffold
+            : const Color(0xFFF1F5F9),
         extendBodyBehindAppBar: false,
         appBar: AppBar(
           elevation: 0,
@@ -2177,8 +2180,12 @@ class _LancExpressoInicioStyleHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
     return Container(
-      decoration: BoxDecoration(
+      decoration: isDark
+          ? context.appPanelDecoration(
+              radius: 20, borderAccent: AppColors.primary)
+          : BoxDecoration(
         borderRadius: BorderRadius.circular(20),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -2236,7 +2243,9 @@ class _LancExpressoInicioStyleHeader extends StatelessWidget {
                       style: TextStyle(
                         fontWeight: FontWeight.w900,
                         fontSize: 16,
-                        color: Colors.grey.shade900,
+                        color: isDark
+                            ? context.appTextPrimary
+                            : Colors.grey.shade900,
                         letterSpacing: -0.2,
                       ),
                     ),
@@ -2245,7 +2254,9 @@ class _LancExpressoInicioStyleHeader extends StatelessWidget {
                       'Linguagem natural: «compra supermercado 100 reais». Categorias coloridas após gerar. Ajuste conta e confirme.',
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.grey.shade600,
+                        color: isDark
+                            ? context.appTextSecondary
+                            : Colors.grey.shade600,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -2267,9 +2278,13 @@ class _PremiumGuideCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isDark = context.isDarkMode;
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: BoxDecoration(
+      decoration: isDark
+          ? context.appPanelDecoration(
+              radius: 16, borderAccent: AppColors.accent)
+          : BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         gradient: LinearGradient(
           colors: [
@@ -2288,17 +2303,22 @@ class _PremiumGuideCard extends StatelessWidget {
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primary.withValues(alpha: 0.16),
-                  blurRadius: 8,
-                  offset: const Offset(0, 3),
-                ),
-              ],
+              color: isDark
+                  ? AppColors.primary.withValues(alpha: 0.22)
+                  : Colors.white,
+              boxShadow: isDark
+                  ? null
+                  : [
+                      BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.16),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
             ),
-            child: const Icon(Icons.tips_and_updates_rounded,
-                size: 18, color: AppColors.deepBlue),
+            child: Icon(Icons.tips_and_updates_rounded,
+                size: 18,
+                color: isDark ? AppColors.accent : AppColors.deepBlue),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -2336,15 +2356,19 @@ class _ModernActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
+    final isDark = context.isDarkMode;
     final fg = emphasize
         ? Colors.white
-        : (csvAccent ? const Color(0xFF0D9488) : AppColors.deepBlue);
+        : (csvAccent
+            ? const Color(0xFF0D9488)
+            : (isDark ? AppColors.accent : AppColors.deepBlue));
     final borderColor = emphasize
         ? Colors.transparent
         : (csvAccent
-            ? const Color(0xFF0D9488).withValues(alpha: 0.45)
-            : AppColors.deepBlue.withValues(alpha: 0.25));
-    final bg = emphasize ? null : Colors.white;
+            ? const Color(0xFF0D9488).withValues(alpha: isDark ? 0.65 : 0.45)
+            : AppColors.deepBlue.withValues(alpha: isDark ? 0.45 : 0.25));
+    final bg =
+        emphasize ? null : (isDark ? context.appSurfaceHigh : Colors.white);
     return AnimatedOpacity(
       duration: const Duration(milliseconds: 180),
       opacity: enabled ? 1 : 0.5,
@@ -2428,10 +2452,12 @@ class _PremiumGhostCtaButton extends StatelessWidget {
               child: Center(
                 child: Text(
                   label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 15,
-                    color: AppColors.deepBlue,
+                    color: context.isDarkMode
+                        ? AppColors.accent
+                        : AppColors.deepBlue,
                     letterSpacing: 0.15,
                   ),
                 ),
@@ -2502,7 +2528,10 @@ class _HintCard extends StatelessWidget {
   Widget build(BuildContext context) {
     // Mesma linguagem do card do início: branco + borda + sombra leve
     return Container(
-      decoration: BoxDecoration(
+      decoration: context.isDarkMode
+          ? context.appPanelDecoration(
+              radius: 20, borderAccent: AppColors.primary)
+          : BoxDecoration(
         borderRadius: BorderRadius.circular(20),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -2777,7 +2806,7 @@ class _ConfirmCard extends StatelessWidget {
               ),
               if (isPending) ...[
                 const SizedBox(height: 8),
-                _buildAddToCalendarToggle(),
+                _buildAddToCalendarToggle(context),
                 if (addToCalendar) ...[
                   const SizedBox(height: 8),
                   _buildCalendarColorButton(context),
@@ -3003,7 +3032,7 @@ class _ConfirmCard extends StatelessWidget {
   }
 
   /// Toggle «Mostrar no calendário» (Agenda/Escala) — visível só quando pendente.
-  Widget _buildAddToCalendarToggle() {
+  Widget _buildAddToCalendarToggle(BuildContext context) {
     final accent = isIncome ? const Color(0xFF2E7D32) : const Color(0xFFE53935);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -3022,7 +3051,7 @@ class _ConfirmCard extends StatelessWidget {
             color: accent,
           ),
           const SizedBox(width: 10),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -3031,12 +3060,16 @@ class _ConfirmCard extends StatelessWidget {
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 13,
-                    color: Color(0xFF1A237E),
+                    color: context.appDeepTitle,
                   ),
                 ),
                 Text(
                   'Agenda/Escala',
-                  style: TextStyle(fontSize: 11.5, color: Colors.black54),
+                  style: TextStyle(
+                      fontSize: 11.5,
+                      color: context.isDarkMode
+                          ? context.appTextSecondary
+                          : Colors.black54),
                 ),
               ],
             ),

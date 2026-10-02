@@ -17,6 +17,7 @@ import '../services/functions_service.dart';
 import '../services/smart_category_hints_service.dart';
 import '../services/user_categories_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/date_picker_a11y.dart';
 import '../utils/firestore_user_doc_id.dart';
 import '../utils/premium_upgrade.dart';
@@ -1236,7 +1237,9 @@ class _SmartInputBatchPreviewScreenState extends State<SmartInputBatchPreviewScr
     return PopScope(
       canPop: true,
       child: Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
+      backgroundColor: context.isDarkMode
+          ? context.appScaffold
+          : const Color(0xFFF1F5F9),
       appBar: AppBar(
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -1406,7 +1409,7 @@ class _SummaryBar extends StatelessWidget {
               padding: const EdgeInsets.only(top: 4),
               child: Text(
                 '$duplicateHints possível duplicado — confira.',
-                style: TextStyle(color: Colors.orange.shade900, fontWeight: FontWeight.w700, fontSize: 11),
+                style: TextStyle(color: context.isDarkMode ? Colors.orange.shade300 : Colors.orange.shade900, fontWeight: FontWeight.w700, fontSize: 11),
               ),
             ),
           if (suspiciousCount > 0)
@@ -1414,7 +1417,7 @@ class _SummaryBar extends StatelessWidget {
               padding: const EdgeInsets.only(top: 4),
               child: Text(
                 '$suspiciousCount linha(s) com baixa confiança — revise antes de gravar.',
-                style: TextStyle(color: Colors.red.shade800, fontWeight: FontWeight.w700, fontSize: 11),
+                style: TextStyle(color: context.isDarkMode ? Colors.red.shade300 : Colors.red.shade800, fontWeight: FontWeight.w700, fontSize: 11),
               ),
             ),
           if (uncategorizedCount > 0)
@@ -1422,7 +1425,7 @@ class _SummaryBar extends StatelessWidget {
               padding: const EdgeInsets.only(top: 4),
               child: Text(
                 '$uncategorizedCount sem categoria — corrija antes de gravar.',
-                style: TextStyle(color: Colors.orange.shade800, fontWeight: FontWeight.w700, fontSize: 11),
+                style: TextStyle(color: context.isDarkMode ? Colors.orange.shade300 : Colors.orange.shade800, fontWeight: FontWeight.w700, fontSize: 11),
               ),
             ),
         ],

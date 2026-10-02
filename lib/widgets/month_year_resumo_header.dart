@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 
 /// Mês/ano em destaque nos cards «Controle de horas» / «Resumo de horas no mês».
 class MonthYearResumoHeader extends StatelessWidget {
@@ -38,7 +39,11 @@ class MonthYearResumoHeader extends StatelessWidget {
         ? (compact ? 18.0 : 20.0)
         : (compact ? 15.0 : 16.0);
     final mesColor =
-        isCurrentMonth ? accentWhenCurrent : const Color(0xFF37474F);
+        isCurrentMonth
+            ? accentWhenCurrent
+            : (context.isDarkMode
+                ? context.appTextSecondary
+                : const Color(0xFF37474F));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

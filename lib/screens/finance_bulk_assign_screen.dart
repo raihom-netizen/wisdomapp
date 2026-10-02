@@ -11,6 +11,7 @@ import '../models/finance_account.dart';
 import '../models/user_profile.dart';
 import '../services/finance_accounts_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/debounced_text_controller.dart';
 import '../utils/firestore_user_doc_id.dart';
 import '../utils/finance_transactions_hub.dart';
@@ -539,7 +540,7 @@ class _FinanceBulkAssignScreenState extends State<FinanceBulkAssignScreen> {
       initialValue: value != null && items.any((a) => a.id == value) ? value : null,
       decoration: InputDecoration(
         filled: true,
-        fillColor: Colors.white,
+        fillColor: context.isDarkMode ? context.appInputFill : Colors.white,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       ),
@@ -576,21 +577,35 @@ class _FinanceBulkAssignScreenState extends State<FinanceBulkAssignScreen> {
     if (n == 0) {
       return Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF0FDF4),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFF16A34A).withValues(alpha: 0.35)),
-        ),
+        decoration: context.isDarkMode
+            ? context.appPanelDecoration(
+                radius: 16,
+                borderAccent: AppColors.financeReceita,
+              )
+            : BoxDecoration(
+                color: const Color(0xFFF0FDF4),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFF16A34A).withValues(alpha: 0.35)),
+              ),
         child: Row(
           children: [
-            Icon(Icons.check_circle_rounded, color: Colors.green.shade700, size: 26),
+            Icon(Icons.check_circle_rounded,
+                color: context.isDarkMode
+                    ? AppColors.financeReceita
+                    : Colors.green.shade700,
+                size: 26),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
                 _modo == _MigracaoModo.semConta
                     ? 'Nenhum lançamento sem banco neste período ($periodo).'
                     : 'Nenhum lançamento do banco de origem neste período/filtro.',
-                style: TextStyle(fontSize: 13, height: 1.35, color: Colors.grey.shade800),
+                style: TextStyle(
+                    fontSize: 13,
+                    height: 1.35,
+                    color: context.isDarkMode
+                        ? context.appTextPrimary
+                        : Colors.grey.shade800),
               ),
             ),
           ],
@@ -599,26 +614,43 @@ class _FinanceBulkAssignScreenState extends State<FinanceBulkAssignScreen> {
     }
 
     final st = _stats();
-    final gradient = _modo == _MigracaoModo.semConta
-        ? const [Color(0xFFFFF7ED), Color(0xFFFFEDD5)]
-        : const [Color(0xFFEEF2FF), Color(0xFFDBEAFE)];
+    final gradient = context.isDarkMode
+        ? [
+            AppColors.primary.withValues(alpha: 0.22),
+            context.appSurfaceHigh,
+          ]
+        : _modo == _MigracaoModo.semConta
+            ? const [Color(0xFFFFF7ED), Color(0xFFFFEDD5)]
+            : const [Color(0xFFEEF2FF), Color(0xFFDBEAFE)];
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(colors: gradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+        border: Border.all(
+            color: AppColors.primary
+                .withValues(alpha: context.isDarkMode ? 0.45 : 0.25)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             '$n lançamento(s) encontrado(s)',
-            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+              fontSize: 16,
+              color: context.isDarkMode ? context.appTextPrimary : null,
+            ),
           ),
           const SizedBox(height: 4),
-          Text(periodo, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Colors.grey.shade800)),
+          Text(periodo,
+              style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: context.isDarkMode
+                      ? context.appTextPrimary
+                      : Colors.grey.shade800)),
           const SizedBox(height: 10),
           Text(
             '• ${st.nInc} receita(s) · ${CurrencyFormats.formatBRL(st.sumInc)}',
@@ -631,7 +663,12 @@ class _FinanceBulkAssignScreenState extends State<FinanceBulkAssignScreen> {
           const SizedBox(height: 8),
           Text(
             'Todos já vêm marcados — desmarque os que não quiser mover.',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
+            style: TextStyle(
+                fontSize: 12,
+                color: context.isDarkMode
+                    ? context.appTextSecondary
+                    : Colors.grey.shade700,
+                fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -659,10 +696,14 @@ class _FinanceBulkAssignScreenState extends State<FinanceBulkAssignScreen> {
         child: Container(
           margin: const EdgeInsets.only(bottom: 10),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.isDarkMode ? context.appDarkModuleSurface : Colors.white,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: checked ? accent : Colors.grey.shade300,
+              color: checked
+                  ? accent
+                  : (context.isDarkMode
+                      ? context.appChipIdleBorder
+                      : Colors.grey.shade300),
               width: checked ? 2 : 1,
             ),
             boxShadow: [
@@ -709,7 +750,12 @@ class _FinanceBulkAssignScreenState extends State<FinanceBulkAssignScreen> {
                     const SizedBox(height: 4),
                     Text(
                       _txSubtitle(d),
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: context.isDarkMode
+                              ? context.appTextSecondary
+                              : Colors.grey.shade600,
+                          fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
@@ -735,7 +781,9 @@ class _FinanceBulkAssignScreenState extends State<FinanceBulkAssignScreen> {
     final nSel = _checkedIds.where(visibleIds.contains).length;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4FBF6),
+      backgroundColor: context.isDarkMode
+          ? context.appScaffold
+          : const Color(0xFFF4FBF6),
       resizeToAvoidBottomInset: scaffoldKeyboardResizeToAvoidBottomInset(),
       appBar: AppBar(
         title: const Text('Migrar lançamentos', style: TextStyle(fontWeight: FontWeight.w800)),
@@ -771,11 +819,11 @@ class _FinanceBulkAssignScreenState extends State<FinanceBulkAssignScreen> {
                       const SizedBox(height: 14),
                       _buildResumoCard(),
                       const SizedBox(height: 16),
-                      Text('Tipo de lançamento', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: AppColors.primary)),
+                      Text('Tipo de lançamento', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: context.isDarkMode ? AppColors.accent : AppColors.primary)),
                       const SizedBox(height: 8),
                       _buildTipoFilter(),
                       const SizedBox(height: 16),
-                      Text('Período', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: AppColors.primary)),
+                      Text('Período', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: context.isDarkMode ? AppColors.accent : AppColors.primary)),
                       const SizedBox(height: 8),
                       Wrap(
                         spacing: 8,
@@ -864,7 +912,7 @@ class _FinanceBulkAssignScreenState extends State<FinanceBulkAssignScreen> {
                       ],
                       const SizedBox(height: 18),
                       if (_modo == _MigracaoModo.transferirBanco) ...[
-                        Text('Banco de origem', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: AppColors.primary)),
+                        Text('Banco de origem', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: context.isDarkMode ? AppColors.accent : AppColors.primary)),
                         const SizedBox(height: 8),
                         accounts.isEmpty
                             ? const Text('Cadastre contas em Bancos e cartões.')
@@ -880,7 +928,7 @@ class _FinanceBulkAssignScreenState extends State<FinanceBulkAssignScreen> {
                               ),
                         const SizedBox(height: 16),
                       ],
-                      Text('Banco de destino', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: AppColors.primary)),
+                      Text('Banco de destino', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: context.isDarkMode ? AppColors.accent : AppColors.primary)),
                       const SizedBox(height: 8),
                       accounts.isEmpty
                           ? const Text('Cadastre ao menos uma conta em Bancos e cartões.')
@@ -898,7 +946,9 @@ class _FinanceBulkAssignScreenState extends State<FinanceBulkAssignScreen> {
                           hintText: 'Buscar descrição, categoria, valor…',
                           prefixIcon: const Icon(Icons.search_rounded),
                           filled: true,
-                          fillColor: Colors.white,
+                          fillColor: context.isDarkMode
+                              ? context.appInputFill
+                              : Colors.white,
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                         ),
                       ),
@@ -930,7 +980,12 @@ class _FinanceBulkAssignScreenState extends State<FinanceBulkAssignScreen> {
                       else ...[
                         Text(
                           '${filtered.length} na lista • $nSel selecionado(s)',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.grey.shade800),
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: context.isDarkMode
+                                  ? context.appTextPrimary
+                                  : Colors.grey.shade800),
                         ),
                         const SizedBox(height: 8),
                         if (filtered.isEmpty)
@@ -941,7 +996,10 @@ class _FinanceBulkAssignScreenState extends State<FinanceBulkAssignScreen> {
                                   ? 'Selecione o banco de origem para listar os lançamentos.'
                                   : 'Nenhum lançamento neste filtro. Amplie o período ou mude o tipo.',
                               textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.grey.shade700),
+                              style: TextStyle(
+                                  color: context.isDarkMode
+                                      ? context.appTextSecondary
+                                      : Colors.grey.shade700),
                             ),
                           )
                         else

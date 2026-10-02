@@ -4,6 +4,7 @@ import 'package:fl_chart/fl_chart.dart';
 import '../constants/app_strings.dart';
 import '../constants/currency_formats.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 
 /// Gráfico de pizza genérico (metas, admin, etc.) — visual alinhado ao financeiro.
 class AppPieChart extends StatelessWidget {
@@ -28,9 +29,10 @@ class AppPieChart extends StatelessWidget {
 
     if (visible.isEmpty || total <= 0) {
       return _shell(
+        context,
         title: title,
         subtitle: subtitle,
-        child: _emptyState(),
+        child: _emptyState(context),
       );
     }
 
@@ -53,6 +55,7 @@ class AppPieChart extends StatelessWidget {
     }).toList();
 
     return _shell(
+      context,
       title: title,
       subtitle: subtitle,
       child: LayoutBuilder(
@@ -91,7 +94,7 @@ class AppPieChart extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
-                        color: Colors.grey.shade600,
+                        color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600,
                       ),
                     ),
                   ],
@@ -126,10 +129,10 @@ class AppPieChart extends StatelessWidget {
                             s.label,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w800,
-                              color: Color(0xFF1E293B),
+                              color: context.isDarkMode ? context.appTextPrimary : const Color(0xFF1E293B),
                             ),
                           ),
                           const SizedBox(height: 2),
@@ -181,7 +184,7 @@ class AppPieChart extends StatelessWidget {
     );
   }
 
-  Widget _emptyState() {
+  Widget _emptyState(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
       decoration: BoxDecoration(
@@ -194,14 +197,15 @@ class AppPieChart extends StatelessWidget {
           'Sem dados para exibir',
           style: TextStyle(
             fontWeight: FontWeight.w700,
-            color: Colors.grey.shade700,
+            color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
           ),
         ),
       ),
     );
   }
 
-  Widget _shell({
+  Widget _shell(
+    BuildContext context, {
     required String title,
     required Widget child,
     String? subtitle,
@@ -209,9 +213,9 @@ class AppPieChart extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.isDarkMode ? context.appDarkModuleSurface : Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: context.appChipIdleBorder),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
@@ -225,10 +229,10 @@ class AppPieChart extends StatelessWidget {
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.w900,
               fontSize: 14.5,
-              color: Color(0xFF0F172A),
+              color: context.isDarkMode ? context.appTextPrimary : const Color(0xFF0F172A),
             ),
           ),
           if (subtitle != null && subtitle.trim().isNotEmpty) ...[
@@ -238,7 +242,7 @@ class AppPieChart extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w600,
-                color: Colors.grey.shade600,
+                color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600,
               ),
             ),
           ],

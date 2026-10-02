@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../services/fixed_expense_service.dart';
 import '../services/fixed_income_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/finance_smart_tips_composer.dart';
 import 'finance_premium_ui.dart';
 
@@ -203,7 +204,7 @@ class FinanceSmartTipsInsightBlock extends StatelessWidget {
                                 fontWeight: FontWeight.w900,
                                 fontSize: 14,
                                 letterSpacing: -0.2,
-                                color: AppColors.textPrimary,
+                                color: context.appTextPrimary,
                               ),
                             ),
                             Text(
@@ -211,7 +212,7 @@ class FinanceSmartTipsInsightBlock extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: 11.5,
                                 fontWeight: FontWeight.w600,
-                                color: AppColors.textMuted,
+                                color: context.appTextMuted,
                               ),
                             ),
                             if (narrow && onOpenAssistantPanel != null) ...[
@@ -244,7 +245,7 @@ class FinanceSmartTipsInsightBlock extends StatelessWidget {
                       fontSize: 12.5,
                       height: 1.4,
                       fontWeight: FontWeight.w500,
-                      color: AppColors.textSecondary,
+                      color: context.appTextSecondary,
                     ),
                   ),
                 )
@@ -261,7 +262,7 @@ class FinanceSmartTipsInsightBlock extends StatelessWidget {
                     fontSize: 10.5,
                     height: 1.35,
                     fontWeight: FontWeight.w500,
-                    color: AppColors.textMuted.withValues(alpha: 0.95),
+                    color: context.appTextMuted.withValues(alpha: 0.95),
                   ),
                 ),
               ],
@@ -398,11 +399,14 @@ class _SmartTipTile extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Colors.white,
-            accent.withValues(alpha: 0.04),
+            context.isDarkMode ? context.appDarkModuleSurface : Colors.white,
+            context.isDarkMode
+                ? Color.alphaBlend(
+                    accent.withValues(alpha: 0.10), context.appDarkModuleSurface)
+                : accent.withValues(alpha: 0.04),
           ],
         ),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: context.appChipIdleBorder),
         boxShadow: [
           BoxShadow(
             color: accent.withValues(alpha: 0.08),
@@ -450,7 +454,7 @@ class _SmartTipTile extends StatelessWidget {
                 fontSize: 13.5,
                 fontWeight: FontWeight.w900,
                 height: 1.25,
-                color: AppColors.textPrimary,
+                color: context.appTextPrimary,
               ),
             ),
             const SizedBox(height: 6),
@@ -460,7 +464,7 @@ class _SmartTipTile extends StatelessWidget {
                 fontSize: 12.5,
                 height: 1.42,
                 fontWeight: FontWeight.w500,
-                color: AppColors.textSecondary,
+                color: context.appTextSecondary,
               ),
             ),
           ],
@@ -496,7 +500,9 @@ class FinanceSmartTipsCompactBar extends StatelessWidget {
                 end: Alignment.centerRight,
                 colors: [
                   AppColors.amber.withValues(alpha: 0.1),
-                  Colors.white,
+                  context.isDarkMode
+                      ? context.appDarkModuleSurface
+                      : Colors.white,
                 ],
               ),
               border: Border.all(color: AppColors.amber.withValues(alpha: 0.24)),
@@ -535,7 +541,7 @@ class FinanceSmartTipsCompactBar extends StatelessWidget {
                       style: TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 13.5,
-                        color: AppColors.textPrimary,
+                        color: context.appTextPrimary,
                       ),
                     ),
                   ),
@@ -580,7 +586,8 @@ Future<void> showFinanceSmartTipsPreviewSheet({
       maxChildSize: 0.95,
       expand: false,
       builder: (_, scrollCtrl) => Container(
-        decoration: financePremiumSheetDecoration(surfaceTint: AppColors.amber),
+        decoration: financePremiumSheetDecoration(
+            surfaceTint: AppColors.amber, context: ctx),
         child: Column(
           children: [
             FinancePremiumSheetHeader(
@@ -591,7 +598,7 @@ Future<void> showFinanceSmartTipsPreviewSheet({
                 Colors.amber.shade700,
                 AppColors.accent,
               ],
-              titleColor: AppColors.textPrimary,
+              titleColor: ctx.appTextPrimary,
               onBack: () => Navigator.pop(ctx),
             ),
             Expanded(

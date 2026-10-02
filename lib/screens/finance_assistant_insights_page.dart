@@ -8,6 +8,7 @@ import '../models/user_profile.dart';
 import '../services/fixed_expense_service.dart';
 import '../services/fixed_income_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/finance_assistant_insights_engine.dart';
 import '../utils/finance_period_summary.dart';
 import '../utils/finance_smart_tips_composer.dart';
@@ -127,7 +128,9 @@ class _FinanceAssistantInsightsPageState extends State<FinanceAssistantInsightsP
         '${DateTimeFormats.dateBR.format(widget.from)} a ${DateTimeFormats.dateBR.format(widget.to)}';
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: context.isDarkMode
+          ? context.appScaffold
+          : const Color(0xFFF8FAFC),
       appBar: AppBar(
         title: const Text('Assistente financeiro'),
         backgroundColor: AppColors.deepBlueDark,
@@ -148,7 +151,10 @@ class _FinanceAssistantInsightsPageState extends State<FinanceAssistantInsightsP
               physics: const AlwaysScrollableScrollPhysics(),
               padding: EdgeInsets.fromLTRB(24, 48, 24, 24 + MediaQuery.paddingOf(context).bottom),
               children: [
-                Icon(Icons.error_outline_rounded, size: 48, color: Colors.grey.shade400),
+                Icon(Icons.error_outline_rounded, size: 48,
+                    color: context.isDarkMode
+                        ? context.appTextMuted
+                        : Colors.grey.shade400),
                 const SizedBox(height: 16),
                 Text('Erro ao carregar: ${snap.error}', textAlign: TextAlign.center),
               ],
@@ -161,7 +167,12 @@ class _FinanceAssistantInsightsPageState extends State<FinanceAssistantInsightsP
               children: [
                 Text(
                   'A carregar assistente…',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: Colors.grey.shade800),
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                      color: context.isDarkMode
+                          ? context.appTextPrimary
+                          : Colors.grey.shade800),
                 ),
                 const SizedBox(height: 20),
                 const SkeletonListLoader(itemCount: 6, itemHeight: 72),
@@ -326,7 +337,9 @@ class _FinanceAssistantInsightsPageState extends State<FinanceAssistantInsightsP
                 style: TextStyle(
                   fontWeight: FontWeight.w900,
                   fontSize: 15,
-                  color: Colors.grey.shade900,
+                  color: context.isDarkMode
+                      ? context.appTextPrimary
+                      : Colors.grey.shade900,
                   letterSpacing: -0.2,
                 ),
               ),
@@ -335,14 +348,21 @@ class _FinanceAssistantInsightsPageState extends State<FinanceAssistantInsightsP
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                  ),
+                  decoration: context.isDarkMode
+                      ? context.appPanelDecoration(radius: 14)
+                      : BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
                   child: Text(
                     'Nenhum alerta automático para este período — ótimo sinal ou poucos dados.',
-                    style: TextStyle(fontSize: 13, color: Colors.grey.shade700, height: 1.35),
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: context.isDarkMode
+                            ? context.appTextSecondary
+                            : Colors.grey.shade700,
+                        height: 1.35),
                   ),
                 )
               else
@@ -356,17 +376,27 @@ class _FinanceAssistantInsightsPageState extends State<FinanceAssistantInsightsP
                 style: TextStyle(
                   fontWeight: FontWeight.w900,
                   fontSize: 15,
-                  color: Colors.grey.shade900,
+                  color: context.isDarkMode
+                      ? context.appTextPrimary
+                      : Colors.grey.shade900,
                   letterSpacing: -0.2,
                 ),
               ),
               Text(
                 'Personalizadas aos seus lançamentos + educação financeira',
-                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Colors.grey.shade600),
+                style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: context.isDarkMode
+                        ? context.appTextSecondary
+                        : Colors.grey.shade600),
               ),
               const SizedBox(height: 10),
               if (tips.isEmpty)
-                Text('Sem dicas neste momento.', style: TextStyle(color: Colors.grey.shade600))
+                Text('Sem dicas neste momento.', style: TextStyle(
+                        color: context.isDarkMode
+                            ? context.appTextSecondary
+                            : Colors.grey.shade600))
               else
                 ...tips.map((t) => Padding(
                       padding: const EdgeInsets.only(bottom: 10),
@@ -378,19 +408,31 @@ class _FinanceAssistantInsightsPageState extends State<FinanceAssistantInsightsP
                 style: TextStyle(
                   fontWeight: FontWeight.w900,
                   fontSize: 15,
-                  color: Colors.grey.shade900,
+                  color: context.isDarkMode
+                      ? context.appTextPrimary
+                      : Colors.grey.shade900,
                   letterSpacing: -0.2,
                 ),
               ),
               Text(
                 'Coleção ${InsightsEngine.kFinancialTipsCollection}: dicas e condições editáveis no painel (sem novo release do app).',
-                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Colors.grey.shade600),
+                style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: context.isDarkMode
+                        ? context.appTextSecondary
+                        : Colors.grey.shade600),
               ),
               const SizedBox(height: 10),
               if (fireTips.isEmpty)
                 Text(
                   'Nenhuma dica remota aplicável — cadastre documentos em financial_tips ou ajuste condições.',
-                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600, height: 1.35),
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: context.isDarkMode
+                          ? context.appTextSecondary
+                          : Colors.grey.shade600,
+                      height: 1.35),
                 )
               else
                 ...fireTips.map((f) => Padding(
@@ -403,17 +445,27 @@ class _FinanceAssistantInsightsPageState extends State<FinanceAssistantInsightsP
                 style: TextStyle(
                   fontWeight: FontWeight.w900,
                   fontSize: 15,
-                  color: Colors.grey.shade900,
+                  color: context.isDarkMode
+                      ? context.appTextPrimary
+                      : Colors.grey.shade900,
                   letterSpacing: -0.2,
                 ),
               ),
               Text(
                 'Conteúdo local priorizado pelo seu comportamento no período (complementa as regras remotas).',
-                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Colors.grey.shade600),
+                style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: context.isDarkMode
+                        ? context.appTextSecondary
+                        : Colors.grey.shade600),
               ),
               const SizedBox(height: 10),
               if (bankTips.isEmpty)
-                Text('Nenhuma dica do banco para exibir.', style: TextStyle(color: Colors.grey.shade600))
+                Text('Nenhuma dica do banco para exibir.', style: TextStyle(
+                        color: context.isDarkMode
+                            ? context.appTextSecondary
+                            : Colors.grey.shade600))
               else
                 ...bankTips.map((e) => Padding(
                       padding: const EdgeInsets.only(bottom: 10),
@@ -437,14 +489,20 @@ class _AssistantAlertCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = insight.accentColor;
     return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        color: Colors.white,
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(color: c.withValues(alpha: 0.12), blurRadius: 12, offset: const Offset(0, 4)),
-        ],
-      ),
+      decoration: context.isDarkMode
+          ? context.appNeonCardDecoration(
+              radius: 16,
+              borderAccent: c,
+              borderAlpha: 0.18,
+            )
+          : BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              color: Colors.white,
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+              boxShadow: [
+                BoxShadow(color: c.withValues(alpha: 0.12), blurRadius: 12, offset: const Offset(0, 4)),
+              ],
+            ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
         child: Row(
@@ -465,11 +523,11 @@ class _AssistantAlertCard extends StatelessWidget {
                 children: [
                   Text(
                     insight.title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w900,
                       fontSize: 14,
                       height: 1.25,
-                      color: AppColors.textPrimary,
+                      color: context.appTextPrimary,
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -479,7 +537,9 @@ class _AssistantAlertCard extends StatelessWidget {
                       fontSize: 13,
                       height: 1.42,
                       fontWeight: FontWeight.w500,
-                      color: Colors.grey.shade800,
+                      color: context.isDarkMode
+                          ? context.appTextPrimary
+                          : Colors.grey.shade800,
                     ),
                   ),
                 ],
@@ -502,14 +562,20 @@ class _FirestoreTipInsightTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = insight.cor;
     return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        color: Colors.white,
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(color: c.withValues(alpha: 0.12), blurRadius: 12, offset: const Offset(0, 4)),
-        ],
-      ),
+      decoration: context.isDarkMode
+          ? context.appNeonCardDecoration(
+              radius: 16,
+              borderAccent: c,
+              borderAlpha: 0.18,
+            )
+          : BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              color: Colors.white,
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+              boxShadow: [
+                BoxShadow(color: c.withValues(alpha: 0.12), blurRadius: 12, offset: const Offset(0, 4)),
+              ],
+            ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
         child: Row(
@@ -550,11 +616,11 @@ class _FirestoreTipInsightTile extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     insight.titulo,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w900,
                       fontSize: 14,
                       height: 1.25,
-                      color: AppColors.textPrimary,
+                      color: context.appTextPrimary,
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -564,7 +630,9 @@ class _FirestoreTipInsightTile extends StatelessWidget {
                       fontSize: 13,
                       height: 1.42,
                       fontWeight: FontWeight.w500,
-                      color: Colors.grey.shade800,
+                      color: context.isDarkMode
+                          ? context.appTextPrimary
+                          : Colors.grey.shade800,
                     ),
                   ),
                 ],
@@ -609,14 +677,20 @@ class _BankTipTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = entry.color;
     return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        color: Colors.white,
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(color: c.withValues(alpha: 0.1), blurRadius: 12, offset: const Offset(0, 4)),
-        ],
-      ),
+      decoration: context.isDarkMode
+          ? context.appNeonCardDecoration(
+              radius: 16,
+              borderAccent: c,
+              borderAlpha: 0.16,
+            )
+          : BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              color: Colors.white,
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+              boxShadow: [
+                BoxShadow(color: c.withValues(alpha: 0.1), blurRadius: 12, offset: const Offset(0, 4)),
+              ],
+            ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
         child: Row(
@@ -657,11 +731,11 @@ class _BankTipTile extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     entry.titulo,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w900,
                       fontSize: 14,
                       height: 1.25,
-                      color: AppColors.textPrimary,
+                      color: context.appTextPrimary,
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -671,7 +745,9 @@ class _BankTipTile extends StatelessWidget {
                       fontSize: 13,
                       height: 1.42,
                       fontWeight: FontWeight.w500,
-                      color: Colors.grey.shade800,
+                      color: context.isDarkMode
+                          ? context.appTextPrimary
+                          : Colors.grey.shade800,
                     ),
                   ),
                 ],
@@ -702,11 +778,14 @@ class _ComposerTipTile extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Colors.white,
-            accent.withValues(alpha: 0.04),
+            context.isDarkMode ? context.appDarkModuleSurface : Colors.white,
+            context.isDarkMode
+                ? Color.alphaBlend(
+                    accent.withValues(alpha: 0.10), context.appDarkModuleSurface)
+                : accent.withValues(alpha: 0.04),
           ],
         ),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: context.appChipIdleBorder),
         boxShadow: [
           BoxShadow(
             color: accent.withValues(alpha: 0.08),
@@ -750,21 +829,21 @@ class _ComposerTipTile extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               tip.title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13.5,
                 fontWeight: FontWeight.w900,
                 height: 1.25,
-                color: AppColors.textPrimary,
+                color: context.appTextPrimary,
               ),
             ),
             const SizedBox(height: 6),
             Text(
               tip.body,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12.5,
                 height: 1.42,
                 fontWeight: FontWeight.w500,
-                color: AppColors.textSecondary,
+                color: context.appTextSecondary,
               ),
             ),
           ],

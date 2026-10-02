@@ -331,10 +331,10 @@ class _FinanceCategoriesFullscreenPageState
                           child: Container(
                             padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: context.appSurface,
                               borderRadius: BorderRadius.circular(22),
                               border:
-                                  Border.all(color: const Color(0xFFE2E8F0)),
+                                  Border.all(color: context.appChipIdleBorder),
                               boxShadow: [
                                 BoxShadow(
                                   color: AppColors.deepBlueDark
@@ -460,10 +460,10 @@ class _FinanceCategoriesFullscreenPageState
                                           },
                                     child: Ink(
                                       decoration: BoxDecoration(
-                                        color: Colors.white,
+                                        color: context.appSurface,
                                         borderRadius: BorderRadius.circular(18),
                                         border: Border.all(
-                                            color: const Color(0xFFE2E8F0)),
+                                            color: context.appChipIdleBorder),
                                         boxShadow: [
                                           BoxShadow(
                                             color: Colors.black
@@ -514,7 +514,11 @@ class _FinanceCategoriesFullscreenPageState
                                                       value: pct / 100,
                                                       minHeight: 6,
                                                       backgroundColor:
-                                                          Colors.grey.shade200,
+                                                          context.isDarkMode
+                                                              ? context
+                                                                  .appSurfaceHigh
+                                                              : Colors.grey
+                                                                  .shade200,
                                                       color: accent.withValues(
                                                           alpha: 0.85),
                                                     ),

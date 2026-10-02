@@ -300,7 +300,7 @@ Future<bool> showFinanceTransactionEditDialog({
                               gradient: LinearGradient(
                                 colors: [
                                   editAccent.withValues(alpha: 0.12),
-                                  Colors.white
+                                  context.appSurface
                                 ],
                               ),
                               border: Border.all(
@@ -334,7 +334,7 @@ Future<bool> showFinanceTransactionEditDialog({
                           ),
                           SizedBox(height: 6),
                           Material(
-                            color: Colors.white,
+                            color: context.appSurface,
                             borderRadius: BorderRadius.circular(14),
                             child: InkWell(
                               borderRadius: BorderRadius.circular(14),
@@ -788,7 +788,9 @@ Future<bool> showFinanceTransactionEditDialog({
                                   children: [
                                     Icon(Icons.savings_rounded,
                                         size: 18,
-                                        color: GoalDepositUi.greenDark),
+                                        color: context.isDarkMode
+                                            ? context.appNeonSoft
+                                            : GoalDepositUi.greenDark),
                                     SizedBox(width: 8),
                                     Expanded(
                                       child: Text(
@@ -797,7 +799,9 @@ Future<bool> showFinanceTransactionEditDialog({
                                         style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w700,
-                                          color: GoalDepositUi.greenDark,
+                                          color: context.isDarkMode
+                                              ? context.appNeonSoft
+                                              : GoalDepositUi.greenDark,
                                           height: 1.35,
                                         ),
                                       ),

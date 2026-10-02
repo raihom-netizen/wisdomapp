@@ -36,6 +36,7 @@ class AppBarChart extends StatelessWidget {
   Widget build(BuildContext context) {
     if (values.isEmpty || labels.isEmpty) {
       return _chartShell(
+        context,
         title: title,
         child: SizedBox(height: height * 0.5, child: Center(child: Text('Sem dados'))),
       );
@@ -45,6 +46,7 @@ class AppBarChart extends StatelessWidget {
     final leftReserved = _leftAxisReservedSize(maxY);
 
     return _chartShell(
+      context,
       title: title,
       child: SizedBox(
         height: height,
@@ -121,7 +123,7 @@ class AppBarChart extends StatelessWidget {
             gridData: FlGridData(
               show: true,
               drawVerticalLine: false,
-              getDrawingHorizontalLine: (v) => FlLine(color: Colors.grey.shade200, strokeWidth: 1),
+              getDrawingHorizontalLine: (v) => FlLine(color: context.isDarkMode ? context.appBorderSubtle : Colors.grey.shade200, strokeWidth: 1),
             ),
             borderData: FlBorderData(show: false),
             barGroups: values.asMap().entries.map((e) {
@@ -149,13 +151,13 @@ class AppBarChart extends StatelessWidget {
     );
   }
 
-  Widget _chartShell({required String title, required Widget child}) {
+  Widget _chartShell(BuildContext context, {required String title, required Widget child}) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.isDarkMode ? context.appDarkModuleSurface : Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: context.appChipIdleBorder),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
@@ -167,7 +169,7 @@ class AppBarChart extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+          Text(title, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: context.isDarkMode ? context.appTextPrimary : null)),
           SizedBox(height: 14),
           child,
         ],

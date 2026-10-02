@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/user_profile.dart';
 import '../screens/escolha_plano_page.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import 'keyed_stream_builder.dart';
 
 /// Garante que o fluxo Pluggy/Open Finance **não** abre para quem não tem
@@ -87,7 +88,9 @@ class _OpenFinanceUnavailableScaffold extends StatelessWidget {
               style: TextStyle(
                 fontSize: 14,
                 height: 1.4,
-                color: Colors.grey.shade800,
+                color: context.isDarkMode
+                    ? context.appTextPrimary
+                    : Colors.grey.shade800,
                 fontWeight: FontWeight.w500,
               ),
             ),

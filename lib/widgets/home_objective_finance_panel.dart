@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../models/user_profile.dart';
+import '../theme/theme_context.dart';
 import '../utils/firestore_user_doc_id.dart';
 import '../widgets/create_financial_goal_dialog.dart';
 import '../widgets/goal_52_weeks_objective_card.dart';
@@ -123,7 +124,9 @@ class _HomeObjectiveFinancePanelState extends State<HomeObjectiveFinancePanel> {
                   style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
                 ),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF4F46E5),
+                  foregroundColor: context.isDarkMode
+                      ? const Color(0xFFA5B4FC)
+                      : const Color(0xFF4F46E5),
                   side: const BorderSide(color: Color(0xFF6366F1), width: 1.5),
                   padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),

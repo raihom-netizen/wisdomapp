@@ -7,6 +7,7 @@ import '../constants/default_categories.dart';
 import '../constants/finance_category_visuals.dart';
 import '../services/user_categories_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 
 /// Edição de categorias (receitas e despesas) no módulo financeiro — padrão, renomear, excluir/ocultar.
 class CategoriesConfigScreen extends StatefulWidget {
@@ -184,14 +185,14 @@ class _CategoriesConfigScreenState extends State<CategoriesConfigScreen> with Si
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
+      return Scaffold(
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              CircularProgressIndicator(strokeWidth: 3, color: AppColors.primary),
-              SizedBox(height: 16),
-              Text('A carregar categorias…', style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+              const CircularProgressIndicator(strokeWidth: 3, color: AppColors.primary),
+              const SizedBox(height: 16),
+              Text('A carregar categorias…', style: TextStyle(fontWeight: FontWeight.w600, color: context.appTextSecondary)),
             ],
           ),
         ),
@@ -199,7 +200,9 @@ class _CategoriesConfigScreenState extends State<CategoriesConfigScreen> with Si
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F4F9),
+      backgroundColor: context.isDarkMode
+          ? context.appScaffold
+          : const Color(0xFFF0F4F9),
       appBar: AppBar(
         title: const Text('Categorias', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: -0.2)),
         elevation: 0,
@@ -224,7 +227,12 @@ class _CategoriesConfigScreenState extends State<CategoriesConfigScreen> with Si
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: Container(
               padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-              decoration: BoxDecoration(
+              decoration: context.isDarkMode
+                  ? context.appPanelDecoration(
+                      radius: 18,
+                      borderAccent: AppColors.accent,
+                    )
+                  : BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
                     const Color(0xFFE3F2FD),
@@ -257,17 +265,23 @@ class _CategoriesConfigScreenState extends State<CategoriesConfigScreen> with Si
                       ),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.auto_awesome_rounded, color: Color(0xFF1A237E), size: 22),
+                    child: Icon(
+                      Icons.auto_awesome_rounded,
+                      color: context.isDarkMode
+                          ? AppColors.accent
+                          : const Color(0xFF1A237E),
+                      size: 22,
+                    ),
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'Edite, oculte categorias padrão ou crie categorias personalizadas.',
                       style: TextStyle(
                         fontSize: 13.5,
                         height: 1.35,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
+                        color: context.appTextPrimary,
                       ),
                     ),
                   ),
@@ -392,23 +406,31 @@ class _CategoriesConfigScreenState extends State<CategoriesConfigScreen> with Si
         children: [
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFF1A237E).withValues(alpha: 0.12)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
+            decoration: context.isDarkMode
+                ? context.appPanelDecoration(radius: 16)
+                : BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFF1A237E).withValues(alpha: 0.12)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
             child: Row(
               children: [
                 Icon(
                   isIncome ? Icons.savings_rounded : Icons.receipt_long_rounded,
-                  color: isIncome ? const Color(0xFF2E7D32) : const Color(0xFFC62828),
+                  color: isIncome
+                      ? (context.isDarkMode
+                          ? const Color(0xFF4ADE80)
+                          : const Color(0xFF2E7D32))
+                      : (context.isDarkMode
+                          ? const Color(0xFFFCA5A5)
+                          : const Color(0xFFC62828)),
                   size: 26,
                 ),
                 const SizedBox(width: 12),
@@ -432,10 +454,10 @@ class _CategoriesConfigScreenState extends State<CategoriesConfigScreen> with Si
                     list.isEmpty
                         ? 'Nenhuma categoria listada ainda'
                         : '${list.length} ${list.length == 1 ? 'categoria' : 'categorias'}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w900,
-                      color: AppColors.textPrimary,
+                      color: context.appTextPrimary,
                       letterSpacing: -0.2,
                     ),
                   ),
@@ -463,19 +485,19 @@ class _CategoriesConfigScreenState extends State<CategoriesConfigScreen> with Si
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
               ),
-              child: const Text(
+              child: Text(
                 'Categorias padrão ocultas — pode repor abaixo',
                 style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.deepBlue,
+                  color: context.isDarkMode ? AppColors.accent : AppColors.deepBlue,
                 ),
               ),
             ),
             const SizedBox(height: 8),
             for (final name in hidden) ...[
               Material(
-                color: const Color(0xFFF8FAFC),
+                color: context.appChipIdleBg,
                 borderRadius: BorderRadius.circular(16),
                 child: InkWell(
                   onTap: () => unawaited(_restoreDefault(isIncome, name)),
@@ -488,7 +510,11 @@ class _CategoriesConfigScreenState extends State<CategoriesConfigScreen> with Si
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.visibility_off_rounded, color: Colors.grey.shade500, size: 22),
+                        Icon(Icons.visibility_off_rounded,
+                            color: context.isDarkMode
+                                ? context.appTextMuted
+                                : Colors.grey.shade500,
+                            size: 22),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
@@ -496,7 +522,7 @@ class _CategoriesConfigScreenState extends State<CategoriesConfigScreen> with Si
                             style: TextStyle(
                               fontWeight: FontWeight.w800,
                               fontSize: 15,
-                              color: AppColors.textSecondary,
+                              color: context.appTextSecondary,
                               decoration: TextDecoration.lineThrough,
                               decorationColor: AppColors.primary.withValues(alpha: 0.4),
                             ),
@@ -505,7 +531,9 @@ class _CategoriesConfigScreenState extends State<CategoriesConfigScreen> with Si
                         FilledButton.tonal(
                           style: FilledButton.styleFrom(
                             backgroundColor: AppColors.primary.withValues(alpha: 0.14),
-                            foregroundColor: AppColors.deepBlue,
+                            foregroundColor: context.isDarkMode
+                                ? AppColors.accent
+                                : AppColors.deepBlue,
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
@@ -547,6 +575,7 @@ class _CategoryTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final vis = financeCategoryVisualFor(name, isIncome: isIncome);
     const narrowMaxWidth = 400.0;
+    final isDark = context.isDarkMode;
 
     final leading = Container(
       width: 48,
@@ -578,8 +607,8 @@ class _CategoryTile extends StatelessWidget {
       children: [
         Text(
           name,
-          style: const TextStyle(
-            color: AppColors.textPrimary,
+          style: TextStyle(
+            color: context.appTextPrimary,
             fontWeight: FontWeight.w900,
             fontSize: 16,
             height: 1.2,
@@ -594,7 +623,13 @@ class _CategoryTile extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: isDefault ? const Color(0xFFE8EAF6) : const Color(0xFFE0F2F1),
+                color: isDefault
+                    ? (isDark
+                        ? const Color(0xFF3949AB).withValues(alpha: 0.28)
+                        : const Color(0xFFE8EAF6))
+                    : (isDark
+                        ? const Color(0xFF00695C).withValues(alpha: 0.28)
+                        : const Color(0xFFE0F2F1)),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
@@ -602,7 +637,9 @@ class _CategoryTile extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
-                  color: isDefault ? const Color(0xFF3949AB) : const Color(0xFF00695C),
+                  color: isDefault
+                      ? (isDark ? const Color(0xFF93C5FD) : const Color(0xFF3949AB))
+                      : (isDark ? const Color(0xFF6EE7B7) : const Color(0xFF00695C)),
                   letterSpacing: 0.2,
                 ),
               ),
@@ -616,19 +653,27 @@ class _CategoryTile extends StatelessWidget {
       tooltip: 'Editar nome',
       onTap: onEdit,
       icon: Icons.edit_rounded,
-      background: const Color(0xFFE3F2FD),
-      foreground: const Color(0xFF1565C0),
+      background: isDark
+          ? const Color(0xFF1565C0).withValues(alpha: 0.22)
+          : const Color(0xFFE3F2FD),
+      foreground: isDark ? const Color(0xFF93C5FD) : const Color(0xFF1565C0),
     );
     final removeBtn = _RoundIcon(
       tooltip: isDefault ? 'Ocultar' : 'Excluir',
       onTap: onRemove,
       icon: isDefault ? Icons.visibility_off_rounded : Icons.delete_outline_rounded,
-      background: isDefault ? const Color(0xFFE8EAF6) : AppColors.error.withValues(alpha: 0.12),
-      foreground: isDefault ? const Color(0xFF3949AB) : AppColors.error,
+      background: isDefault
+          ? (isDark
+              ? const Color(0xFF3949AB).withValues(alpha: 0.22)
+              : const Color(0xFFE8EAF6))
+          : AppColors.error.withValues(alpha: isDark ? 0.22 : 0.12),
+      foreground: isDefault
+          ? (isDark ? const Color(0xFF93C5FD) : const Color(0xFF3949AB))
+          : AppColors.error,
     );
 
     return Material(
-      color: Colors.white,
+      color: isDark ? context.appDarkModuleSurface : Colors.white,
       elevation: 0,
       shadowColor: Colors.transparent,
       borderRadius: BorderRadius.circular(16),
@@ -638,10 +683,14 @@ class _CategoryTile extends StatelessWidget {
         child: Ink(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFF1A237E).withValues(alpha: 0.1)),
+            border: Border.all(
+              color: isDark
+                  ? vis.color.withValues(alpha: 0.42)
+                  : const Color(0xFF1A237E).withValues(alpha: 0.1),
+            ),
             boxShadow: [
               BoxShadow(
-                color: vis.color.withValues(alpha: 0.08),
+                color: vis.color.withValues(alpha: isDark ? 0.16 : 0.08),
                 blurRadius: 12,
                 offset: const Offset(0, 3),
               ),

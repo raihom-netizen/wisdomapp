@@ -14,6 +14,7 @@ import '../services/functions_service.dart';
 import '../constants/currency_formats.dart';
 import '../constants/app_strings.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/date_picker_a11y.dart';
 import '../utils/firestore_user_doc_id.dart';
 
@@ -384,7 +385,7 @@ class _NewBudgetFlowScreenState extends State<NewBudgetFlowScreen> {
       body: SafeArea(
         child: Column(
         children: [
-          LinearProgressIndicator(value: (_step + 1) / 4, backgroundColor: Colors.grey.shade200, valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary)),
+          LinearProgressIndicator(value: (_step + 1) / 4, backgroundColor: context.isDarkMode ? context.appChipIdleBorder : Colors.grey.shade200, valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary)),
           Expanded(
             child: _step == 0 ? _buildStepClient() : _step == 1 ? _buildStepService() : _step == 2 ? _buildStepPayment() : _buildStepGenerate(),
           ),
@@ -430,7 +431,7 @@ class _NewBudgetFlowScreenState extends State<NewBudgetFlowScreen> {
       children: [
         Text('Dados do cliente', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
-        Text('Preencha para identificar o cliente no orçamento.', style: TextStyle(color: AppColors.textMuted)),
+        Text('Preencha para identificar o cliente no orçamento.', style: TextStyle(color: context.appTextMuted)),
         const SizedBox(height: 20),
         FastTextField(
           controller: _clientNameCtrl,
@@ -503,7 +504,7 @@ class _NewBudgetFlowScreenState extends State<NewBudgetFlowScreen> {
       children: [
         Text('Descrição do serviço', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
-        Text('Digite tudo que vai fazer e o valor. Use a IA ou um modelo.', style: TextStyle(color: AppColors.textMuted)),
+        Text('Digite tudo que vai fazer e o valor. Use a IA ou um modelo.', style: TextStyle(color: context.appTextMuted)),
         if (_templatesLoaded && _templates.isNotEmpty) ...[
           const SizedBox(height: 16),
           const Text('Usar modelo', style: TextStyle(fontWeight: FontWeight.w700)),
@@ -550,7 +551,7 @@ class _NewBudgetFlowScreenState extends State<NewBudgetFlowScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        Text('Este recurso utiliza IA e está sujeito a erros. Revise os dados.', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+        Text('Este recurso utiliza IA e está sujeito a erros. Revise os dados.', style: TextStyle(fontSize: 11, color: context.appTextMuted)),
         const SizedBox(height: 12),
         FilledButton.icon(
           onPressed: _iaLoading ? null : _transformWithIA,
@@ -692,7 +693,7 @@ class _NewBudgetFlowScreenState extends State<NewBudgetFlowScreen> {
         Text('Pagamento: ${_paymentSelected.join(', ')}'),
         Text('Válido até: ${_dueDays != null ? 'em $_dueDays dias' : '${_dueDate.day.toString().padLeft(2, '0')}/${_dueDate.month.toString().padLeft(2, '0')}/${_dueDate.year}'}'),
         const SizedBox(height: 24),
-        Text('O sistema usará a IA e os dados do prestador para criar um PDF com cabeçalho, tabela de itens e rodapé do WISDOMAPP.', style: TextStyle(fontSize: 13, color: AppColors.textMuted)),
+        Text('O sistema usará a IA e os dados do prestador para criar um PDF com cabeçalho, tabela de itens e rodapé do WISDOMAPP.', style: TextStyle(fontSize: 13, color: context.appTextMuted)),
       ],
     );
   }

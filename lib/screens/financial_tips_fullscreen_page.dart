@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/financial_tips_catalog_service.dart';
 import '../services/financial_tips_home_sync_service.dart';
+import '../theme/theme_context.dart';
 import '../widgets/finance_tip_modern_card.dart';
 
 /// Módulo Dicas: últimos 3 dias + botão voltar (Início ou pop).
@@ -44,7 +45,9 @@ class FinancialTipsFullscreenPage extends StatelessWidget {
           'Últimos ${FinancialTipsCatalogService.kModuleHistoryDays} dias — '
           'cada dia traz uma dica diferente, alternando conforme a programação do app.',
           style: TextStyle(
-            color: Colors.grey.shade800,
+            color: context.isDarkMode
+                ? context.appTextPrimary
+                : Colors.grey.shade800,
             fontWeight: FontWeight.w600,
             height: 1.45,
           ),
@@ -67,7 +70,9 @@ class FinancialTipsFullscreenPage extends StatelessWidget {
                         size: 18,
                         color: entry.isToday
                             ? const Color(0xFFD97706)
-                            : Colors.grey.shade600,
+                            : (context.isDarkMode
+                                ? context.appTextMuted
+                                : Colors.grey.shade600),
                       ),
                       const SizedBox(width: 8),
                       Text(
@@ -75,9 +80,11 @@ class FinancialTipsFullscreenPage extends StatelessWidget {
                         style: TextStyle(
                           fontWeight: FontWeight.w900,
                           fontSize: 15,
-                          color: entry.isToday
-                              ? const Color(0xFF0B1B4B)
-                              : Colors.grey.shade800,
+                          color: context.isDarkMode
+                              ? context.appTextPrimary
+                              : (entry.isToday
+                                  ? const Color(0xFF0B1B4B)
+                                  : Colors.grey.shade800),
                         ),
                       ),
                     ],
@@ -98,7 +105,9 @@ class FinancialTipsFullscreenPage extends StatelessWidget {
 
     if (embeddedInShell) {
       return Container(
-        color: const Color(0xFFF0F4FF),
+        color: context.isDarkMode
+            ? context.appScaffold
+            : const Color(0xFFF0F4FF),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -110,7 +119,9 @@ class FinancialTipsFullscreenPage extends StatelessWidget {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F4FF),
+      backgroundColor: context.isDarkMode
+          ? context.appScaffold
+          : const Color(0xFFF0F4FF),
       appBar: AppBar(
         backgroundColor: const Color(0xFF0B1B4B),
         foregroundColor: Colors.white,

@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import '../core/wisdom_media_upload.dart';
 import '../models/budget_provider.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 
 class BudgetProviderScreen extends StatefulWidget {
   final String uid;
@@ -215,7 +216,7 @@ class _BudgetProviderScreenState extends State<BudgetProviderScreen> {
                         const SizedBox(height: 6),
                         Text(
                           'Se quiser, adicione sua logo para aparecer no cabe├ºalho dos PDFs. Deixe em branco para n├úo usar logo.',
-                          style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                          style: TextStyle(fontSize: 13, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700),
                         ),
                         const SizedBox(height: 12),
                         OutlinedButton.icon(

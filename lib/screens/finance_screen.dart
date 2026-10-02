@@ -1401,12 +1401,12 @@ class _FinanceScreenState extends State<FinanceScreen>
       labelStyle: TextStyle(
         fontWeight: FontWeight.w700,
         fontSize: 13,
-        color: AppColors.textPrimary.withValues(alpha: 0.9),
+        color: context.appTextPrimary.withValues(alpha: 0.9),
       ),
       prefixIcon: Icon(icon,
           size: 20, color: AppColors.primary.withValues(alpha: 0.85)),
       filled: true,
-      fillColor: const Color(0xFFF8FAFC),
+      fillColor: context.appChipIdleBg,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
         borderSide:
@@ -2831,7 +2831,7 @@ class _FinanceScreenState extends State<FinanceScreen>
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Colors.white,
+      backgroundColor: context.appSurface,
       builder: (ctx) {
         return _FinanceReportsPremiumSheet(
           screenFrom: _from,
@@ -4336,7 +4336,7 @@ class _FinanceScreenState extends State<FinanceScreen>
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appSurface,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.primary.withValues(alpha: 0.12)),
         boxShadow: [
@@ -4373,12 +4373,12 @@ class _FinanceScreenState extends State<FinanceScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Saldos por conta',
                       style: TextStyle(
                           fontWeight: FontWeight.w900,
                           fontSize: 16,
-                          color: Color(0xFF1A237E)),
+                          color: context.appDeepTitle),
                     ),
                     if (_mainPeriodServerPagingActive &&
                         _mainPeriodHasMoreServer)
@@ -4389,14 +4389,18 @@ class _FinanceScreenState extends State<FinanceScreen>
                           style: TextStyle(
                               fontSize: 11,
                               height: 1.3,
-                              color: Colors.orange.shade900,
+                              color: context.isDarkMode
+                                  ? Colors.orange.shade300
+                                  : Colors.orange.shade900,
                               fontWeight: FontWeight.w600),
                         ),
                       ),
                     if (semContaCount > 0) ...[
                       const SizedBox(height: 6),
                       Material(
-                        color: const Color(0xFFFFF7ED),
+                        color: context.isDarkMode
+                            ? context.appAccentSurface(Colors.orange)
+                            : const Color(0xFFFFF7ED),
                         borderRadius: BorderRadius.circular(20),
                         child: InkWell(
                           borderRadius: BorderRadius.circular(20),
@@ -4429,7 +4433,9 @@ class _FinanceScreenState extends State<FinanceScreen>
                                   style: TextStyle(
                                       fontWeight: FontWeight.w800,
                                       fontSize: 12,
-                                      color: Colors.orange.shade900),
+                                      color: context.isDarkMode
+                                          ? Colors.orange.shade300
+                                          : Colors.orange.shade900),
                                 ),
                                 Icon(Icons.chevron_right_rounded,
                                     size: 18, color: Colors.orange.shade800),
@@ -4491,7 +4497,7 @@ class _FinanceScreenState extends State<FinanceScreen>
             'Toque em Todas as contas ou num banco/cartão para ver gráficos e lançamentos. Segure e arraste um banco para reordenar — Todas as contas fica sempre primeiro.',
             style: TextStyle(
                 fontSize: 12,
-                color: AppColors.textMuted,
+                color: context.appTextMuted,
                 fontWeight: FontWeight.w500,
                 height: 1.35),
           ),
@@ -4520,9 +4526,12 @@ class _FinanceScreenState extends State<FinanceScreen>
               width: double.infinity,
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
+                color: context.appChipIdleBg,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.grey.shade300),
+                border: Border.all(
+                    color: context.isDarkMode
+                        ? context.appChipIdleBorder
+                        : Colors.grey.shade300),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -4810,7 +4819,7 @@ class _FinanceScreenState extends State<FinanceScreen>
             await showModalBottomSheet<void>(
               context: sheetContext,
               isScrollControlled: true,
-              backgroundColor: Colors.white,
+              backgroundColor: sheetContext.appSurface,
               builder: (_) => FinanceInsightSheet(
                 uid: firestoreUserDocIdForAppShell(widget.uid),
                 initialScope: FinanceInsightScope.expense,
@@ -4871,7 +4880,9 @@ class _FinanceScreenState extends State<FinanceScreen>
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: Colors.amber.shade50,
+          color: context.isDarkMode
+              ? context.appAccentSurface(Colors.amber)
+              : Colors.amber.shade50,
           borderRadius: BorderRadius.circular(14),
           border:
               Border.all(color: Colors.amber.shade800.withValues(alpha: 0.28)),
@@ -4893,7 +4904,11 @@ class _FinanceScreenState extends State<FinanceScreen>
                   '$title — faça o deploy dos índices do Firestore (p.ex. `firebase deploy --only firestore:indexes`). '
                   '${kDebugMode ? (err?.toString() ?? '') : ''}',
                   style: TextStyle(
-                      fontSize: 11, color: Colors.brown.shade900, height: 1.3),
+                      fontSize: 11,
+                      color: context.isDarkMode
+                          ? Colors.amber.shade100
+                          : Colors.brown.shade900,
+                      height: 1.3),
                 ),
               ),
             ],
@@ -5343,7 +5358,7 @@ class _FinanceScreenState extends State<FinanceScreen>
                     style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
-                        color: AppColors.textPrimary,
+                        color: context.appTextPrimary,
                         height: 1.45)),
               ],
             ),
@@ -5359,7 +5374,7 @@ class _FinanceScreenState extends State<FinanceScreen>
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Colors.white,
+      backgroundColor: context.appSurface,
       builder: (ctx) => DraggableScrollableSheet(
         initialChildSize: 0.6,
         minChildSize: 0.3,
@@ -5462,10 +5477,10 @@ class _FinanceScreenState extends State<FinanceScreen>
                 children: [
                   Text(
                     cat.isNotEmpty ? cat : 'Receita',
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary),
+                        color: context.appTextPrimary),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -5474,14 +5489,14 @@ class _FinanceScreenState extends State<FinanceScreen>
                         style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w500,
-                            color: AppColors.textSecondary),
+                            color: context.appTextSecondary),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis),
                   Text(dateStr,
                       style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w500,
-                          color: AppColors.textMuted)),
+                          color: context.appTextMuted)),
                 ],
               ),
             ),
@@ -5660,7 +5675,7 @@ class _FinanceScreenState extends State<FinanceScreen>
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Colors.white,
+      backgroundColor: context.appSurface,
       builder: (ctx) => DraggableScrollableSheet(
         initialChildSize: 0.6,
         minChildSize: 0.3,
@@ -5763,10 +5778,10 @@ class _FinanceScreenState extends State<FinanceScreen>
                 children: [
                   Text(
                     cat.isNotEmpty ? cat : 'Despesa',
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary),
+                        color: context.appTextPrimary),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -5775,14 +5790,14 @@ class _FinanceScreenState extends State<FinanceScreen>
                         style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w500,
-                            color: AppColors.textSecondary),
+                            color: context.appTextSecondary),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis),
                   Text(dateStr,
                       style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w500,
-                          color: AppColors.textMuted)),
+                          color: context.appTextMuted)),
                 ],
               ),
             ),
@@ -6012,10 +6027,10 @@ class _FinanceScreenState extends State<FinanceScreen>
                 const SizedBox(width: 8),
                 Text(
                   day == null ? 'Sem data' : DateTimeFormats.dateBR.format(day),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
+                    color: context.appTextPrimary,
                     letterSpacing: 0.2,
                   ),
                 ),
@@ -6424,9 +6439,9 @@ class _FinanceScreenState extends State<FinanceScreen>
             borderRadius: BorderRadius.circular(22),
             color: selected
                 ? accent.withValues(alpha: 0.12)
-                : const Color(0xFFF8FAFC),
+                : context.appChipIdleBg,
             border: Border.all(
-              color: selected ? accent : const Color(0xFFE2E8F0),
+              color: selected ? accent : context.appChipIdleBorder,
               width: selected ? 2 : 1,
             ),
             boxShadow: selected
@@ -6443,14 +6458,14 @@ class _FinanceScreenState extends State<FinanceScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(icon,
-                  size: 17, color: selected ? accent : AppColors.textMuted),
+                  size: 17, color: selected ? accent : context.appTextMuted),
               const SizedBox(width: 6),
               Text(
                 label,
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 12.5,
-                  color: selected ? accent : AppColors.textSecondary,
+                  color: selected ? accent : context.appTextSecondary,
                 ),
               ),
             ],
@@ -6488,9 +6503,9 @@ class _FinanceScreenState extends State<FinanceScreen>
                     end: Alignment.bottomRight,
                   )
                 : null,
-            color: selected ? null : Colors.white,
+            color: selected ? null : context.appSurface,
             border: Border.all(
-              color: selected ? Colors.transparent : const Color(0xFFE2E8F0),
+              color: selected ? Colors.transparent : context.appChipIdleBorder,
             ),
             boxShadow: selected
                 ? [
@@ -6507,7 +6522,9 @@ class _FinanceScreenState extends State<FinanceScreen>
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w800,
-              color: selected ? Colors.white : AppColors.primary,
+              color: selected
+                  ? Colors.white
+                  : (context.isDarkMode ? context.appNeon : AppColors.primary),
             ),
           ),
         ),
@@ -6542,7 +6559,7 @@ class _FinanceScreenState extends State<FinanceScreen>
                   style: TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 13,
-                      color: AppColors.textPrimary),
+                      color: context.appTextPrimary),
                 ),
               ),
               TextButton(
@@ -6662,7 +6679,7 @@ class _FinanceScreenState extends State<FinanceScreen>
                                 fontSize: 12.5,
                                 height: 1.4,
                                 fontWeight: FontWeight.w500,
-                                color: AppColors.textPrimary,
+                                color: context.appTextPrimary,
                               ),
                             ),
                           ),
@@ -6698,7 +6715,7 @@ class _FinanceScreenState extends State<FinanceScreen>
                                 fontSize: 12.5,
                                 height: 1.4,
                                 fontWeight: FontWeight.w500,
-                                color: AppColors.textPrimary,
+                                color: context.appTextPrimary,
                               ),
                             ),
                           ),
@@ -6727,7 +6744,7 @@ class _FinanceScreenState extends State<FinanceScreen>
                   minHeight: 3,
                   borderRadius: BorderRadius.circular(2),
                   color: AppColors.primary,
-                  backgroundColor: AppColors.textMuted.withValues(alpha: 0.12),
+                  backgroundColor: context.appTextMuted.withValues(alpha: 0.12),
                 ),
               );
             }
@@ -6824,7 +6841,7 @@ class _FinanceScreenState extends State<FinanceScreen>
                   style: TextStyle(
                     fontWeight: FontWeight.w900,
                     fontSize: 15,
-                    color: AppColors.textPrimary,
+                    color: context.appTextPrimary,
                     letterSpacing: -0.2,
                   ),
                 ),
@@ -6943,11 +6960,11 @@ class _FinanceScreenState extends State<FinanceScreen>
                       colors: [accent, Color.lerp(accent, Colors.white, 0.22)!],
                     )
                   : null,
-              color: selected ? null : const Color(0xFFF8FAFC),
+              color: selected ? null : context.appChipIdleBg,
               border: Border.all(
                 color: selected
                     ? accent.withValues(alpha: 0.55)
-                    : const Color(0xFFE2E8F0),
+                    : context.appChipIdleBorder,
                 width: selected ? 1.5 : 1,
               ),
               boxShadow: selected
@@ -6965,7 +6982,7 @@ class _FinanceScreenState extends State<FinanceScreen>
               children: [
                 Icon(icon,
                     size: 20,
-                    color: selected ? Colors.white : AppColors.textMuted),
+                    color: selected ? Colors.white : context.appTextMuted),
                 const SizedBox(height: 4),
                 Text(
                   label,
@@ -6973,7 +6990,7 @@ class _FinanceScreenState extends State<FinanceScreen>
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 12.5,
-                    color: selected ? Colors.white : AppColors.textPrimary,
+                    color: selected ? Colors.white : context.appTextPrimary,
                   ),
                 ),
               ],
@@ -7177,7 +7194,7 @@ class _FinanceScreenState extends State<FinanceScreen>
                               padding: const EdgeInsets.symmetric(
                                   vertical: 12, horizontal: 14),
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: context.appSurface,
                                 borderRadius:
                                     BorderRadius.circular(16),
                                 border: Border.all(
@@ -7236,11 +7253,11 @@ class _FinanceScreenState extends State<FinanceScreen>
                                       _filtrosPainelAberto
                                           ? 'Recolher filtros'
                                           : 'Filtros e pesquisa',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                           fontWeight:
                                               FontWeight.w800,
-                                          color: AppColors
-                                              .textPrimary,
+                                          color: context
+                                              .appTextPrimary,
                                           fontSize: 14,
                                           letterSpacing: 0.1),
                                     ),
@@ -7288,7 +7305,7 @@ class _FinanceScreenState extends State<FinanceScreen>
                       padding: const EdgeInsets.fromLTRB(
                           14, 14, 14, 12),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: context.appSurface,
                         borderRadius: BorderRadius.circular(18),
                         border: Border.all(
                             color: AppColors.primary
@@ -7324,7 +7341,7 @@ class _FinanceScreenState extends State<FinanceScreen>
                                 style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w900,
-                                    color: AppColors.textPrimary,
+                                    color: context.appTextPrimary,
                                     letterSpacing: 0.2),
                               ),
                             ],
@@ -7562,7 +7579,7 @@ class _FinanceScreenState extends State<FinanceScreen>
                         'Sem contas cadastradas. Use Bancos e cartões para criar contas e filtrar por banco aqui.',
                         style: TextStyle(
                             fontSize: 11.5,
-                            color: AppColors.textMuted,
+                            color: context.appTextMuted,
                             height: 1.35),
                       ),
                     ],
@@ -7742,7 +7759,10 @@ class _FinanceScreenState extends State<FinanceScreen>
   @override
   Widget build(BuildContext context) {
     if (!widget.isShellVisible) {
-      return const ColoredBox(color: Color(0xFFF5F7FA));
+      return ColoredBox(
+          color: context.isDarkMode
+              ? context.appScaffold
+              : const Color(0xFFF5F7FA));
     }
     final isNarrow = MediaQuery.sizeOf(context).width < 720;
     // Sem pesquisa/categoria/conta: lista pode usar [where] + paginação no Firestore (menos dados).
@@ -7872,7 +7892,9 @@ class _FinanceScreenState extends State<FinanceScreen>
                                         textAlign: TextAlign.center,
                                         style: TextStyle(
                                             fontSize: 13,
-                                            color: Colors.grey.shade600,
+                                            color: context.isDarkMode
+                                                ? context.appTextSecondary
+                                                : Colors.grey.shade600,
                                             height: 1.35),
                                       ),
                                       const SizedBox(height: 14),
@@ -7880,11 +7902,15 @@ class _FinanceScreenState extends State<FinanceScreen>
                                         constraints:
                                             const BoxConstraints(maxWidth: 480),
                                         decoration: BoxDecoration(
-                                          color: Colors.grey.shade100,
+                                          color: context.isDarkMode
+                                              ? context.appSurfaceHigh
+                                              : Colors.grey.shade100,
                                           borderRadius:
                                               BorderRadius.circular(10),
                                           border: Border.all(
-                                              color: Colors.grey.shade300),
+                                              color: context.isDarkMode
+                                                  ? context.appChipIdleBorder
+                                                  : Colors.grey.shade300),
                                         ),
                                         child: Theme(
                                           data: Theme.of(context).copyWith(
@@ -7907,7 +7933,9 @@ class _FinanceScreenState extends State<FinanceScreen>
                                                 _mainPeriodLoadError.toString(),
                                                 style: TextStyle(
                                                   fontSize: 11,
-                                                  color: Colors.grey.shade700,
+                                                  color: context.isDarkMode
+                                                      ? context.appTextSecondary
+                                                      : Colors.grey.shade700,
                                                   fontFamily: 'monospace',
                                                 ),
                                               ),
@@ -8104,7 +8132,9 @@ class _FinanceScreenState extends State<FinanceScreen>
                                             textAlign: TextAlign.center,
                                             style: TextStyle(
                                                 fontSize: 16,
-                                                color: Colors.grey.shade700),
+                                                color: context.isDarkMode
+                                                    ? context.appTextSecondary
+                                                    : Colors.grey.shade700),
                                           ),
                                           const SizedBox(height: 8),
                                           Text(
@@ -8112,7 +8142,9 @@ class _FinanceScreenState extends State<FinanceScreen>
                                             textAlign: TextAlign.center,
                                             style: TextStyle(
                                                 fontSize: 14,
-                                                color: Colors.grey.shade600),
+                                                color: context.isDarkMode
+                                                    ? context.appTextMuted
+                                                    : Colors.grey.shade600),
                                           ),
                                           const SizedBox(height: 24),
                                           Row(
@@ -8259,7 +8291,7 @@ class _FinanceScreenState extends State<FinanceScreen>
                                               style: TextStyle(
                                                   fontSize: 12,
                                                   color:
-                                                      AppColors.textSecondary),
+                                                      context.appTextSecondary),
                                             ),
                                           ],
                                         ),
@@ -8361,7 +8393,7 @@ class _FinanceScreenState extends State<FinanceScreen>
                                           textAlign: TextAlign.center,
                                           style: TextStyle(
                                               fontSize: 14,
-                                              color: AppColors.textMuted,
+                                              color: context.appTextMuted,
                                               fontWeight: FontWeight.w600),
                                         ),
                                       ),
@@ -8370,9 +8402,9 @@ class _FinanceScreenState extends State<FinanceScreen>
                                         padding: const EdgeInsets.fromLTRB(
                                             12, 8, 12, 8),
                                         child: Material(
-                                          color: Colors.white,
+                                          color: context.appSurface,
                                           elevation: 2,
-                                          surfaceTintColor: Colors.white,
+                                          surfaceTintColor: context.appSurface,
                                           shadowColor: AppColors.deepBlueDark
                                               .withValues(alpha: 0.12),
                                           borderRadius:
@@ -8393,12 +8425,12 @@ class _FinanceScreenState extends State<FinanceScreen>
                                                     hasMoreTx
                                                         ? '${docsVisible.length} de ${gridDocs.length} lançamentos'
                                                         : '${gridDocs.length} lançamento(s)',
-                                                    style: const TextStyle(
+                                                    style: TextStyle(
                                                         fontSize: 13,
                                                         fontWeight:
                                                             FontWeight.w800,
-                                                        color: AppColors
-                                                            .textPrimary),
+                                                        color: context
+                                                            .appTextPrimary),
                                                   ),
                                                 ),
                                                 if (!_gridSelectionMode) ...[
@@ -8911,9 +8943,10 @@ class _PendingListSheetContentState extends State<_PendingListSheetContent> {
     final width = MediaQuery.sizeOf(context).width;
     final useTwoRowHeader = width < 420 || _selectionMode;
     return Container(
-      decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      decoration: BoxDecoration(
+          color: context.appSurface,
+          borderRadius:
+              const BorderRadius.vertical(top: Radius.circular(24))),
       child: SafeArea(
         top: false,
         child: Column(
@@ -8924,7 +8957,9 @@ class _PendingListSheetContentState extends State<_PendingListSheetContent> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
+                    color: context.isDarkMode
+                        ? context.appChipIdleBorder
+                        : Colors.grey.shade300,
                     borderRadius: BorderRadius.circular(2))),
             // Topo do preview: «Voltar» (esquerda) + X (direita).
             buildFinancePreviewTopBar(context),
@@ -8953,10 +8988,10 @@ class _PendingListSheetContentState extends State<_PendingListSheetContent> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(widget.title,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                         fontSize: 18,
                                         fontWeight: FontWeight.w800,
-                                        color: AppColors.textPrimary),
+                                        color: context.appTextPrimary),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis),
                                 if (_items.isNotEmpty)
@@ -8991,10 +9026,10 @@ class _PendingListSheetContentState extends State<_PendingListSheetContent> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(widget.title,
-                                style: const TextStyle(
+                                style: TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.w800,
-                                    color: AppColors.textPrimary),
+                                    color: context.appTextPrimary),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis),
                             if (_items.isNotEmpty)
@@ -9021,7 +9056,10 @@ class _PendingListSheetContentState extends State<_PendingListSheetContent> {
                           const SizedBox(height: 12),
                           Text(widget.emptyMessage,
                               style: TextStyle(
-                                  fontSize: 14, color: Colors.grey.shade600)),
+                                  fontSize: 14,
+                                  color: context.isDarkMode
+                                      ? context.appTextMuted
+                                      : Colors.grey.shade600)),
                         ],
                       ),
                     )
@@ -9048,7 +9086,9 @@ class _PendingListSheetContentState extends State<_PendingListSheetContent> {
                               child: Text(widget.emptyMessage,
                                   style: TextStyle(
                                       fontSize: 14,
-                                      color: Colors.grey.shade600)),
+                                      color: context.isDarkMode
+                                          ? context.appTextMuted
+                                          : Colors.grey.shade600)),
                             ),
                           );
                         }
@@ -9623,7 +9663,7 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet>
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: Colors.white,
+      color: context.appSurface,
       child: SafeArea(
         top: false,
         child: DraggableScrollableSheet(
@@ -9631,8 +9671,8 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet>
           maxChildSize: 0.96,
           minChildSize: 0.62,
           builder: (context, controller) => Container(
-            decoration:
-                financePremiumSheetDecoration(surfaceTint: _accentColor),
+            decoration: financePremiumSheetDecoration(
+                surfaceTint: _accentColor, context: context),
             child: FutureBuilder<List<Map<String, dynamic>>>(
               future: _docsFuture,
               builder: (context, snap) {
@@ -9852,7 +9892,10 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet>
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 12, vertical: 10),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFF0FDF4),
+                                  color: context.isDarkMode
+                                      ? context.appAccentSurface(
+                                          const Color(0xFF166534))
+                                      : const Color(0xFFF0FDF4),
                                   borderRadius: BorderRadius.circular(14),
                                   border: Border.all(
                                       color: const Color(0xFF166534)
@@ -9861,7 +9904,10 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet>
                                 child: Row(
                                   children: [
                                     Icon(Icons.filter_alt_rounded,
-                                        size: 20, color: Colors.green.shade800),
+                                        size: 20,
+                                        color: context.isDarkMode
+                                            ? context.appNeonSoft
+                                            : Colors.green.shade800),
                                     const SizedBox(width: 10),
                                     Expanded(
                                       child: Text(
@@ -9869,7 +9915,9 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet>
                                         style: TextStyle(
                                           fontWeight: FontWeight.w800,
                                           fontSize: 13,
-                                          color: Colors.green.shade900,
+                                          color: context.isDarkMode
+                                              ? context.appNeonSoft
+                                              : Colors.green.shade900,
                                           height: 1.25,
                                         ),
                                       ),
@@ -9883,10 +9931,10 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet>
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 14, vertical: 4),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFF8FAFC),
+                                color: context.appChipIdleBg,
                                 borderRadius: BorderRadius.circular(16),
                                 border:
-                                    Border.all(color: const Color(0xFFE2E8F0)),
+                                    Border.all(color: context.appChipIdleBorder),
                               ),
                               child: FastTextField(
                                 controller: _searchCtrl,
@@ -9925,7 +9973,7 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet>
                                 style: TextStyle(
                                     fontWeight: FontWeight.w900,
                                     fontSize: 12,
-                                    color: AppColors.textSecondary),
+                                    color: context.appTextSecondary),
                               ),
                             ),
                             const SizedBox(height: 6),
@@ -9986,7 +10034,7 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet>
                                   style: TextStyle(
                                       fontWeight: FontWeight.w900,
                                       fontSize: 12,
-                                      color: AppColors.textSecondary),
+                                      color: context.appTextSecondary),
                                 ),
                               ),
                               const SizedBox(height: 6),
@@ -10028,7 +10076,7 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet>
                             Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: context.appSurface,
                                 borderRadius: BorderRadius.circular(16),
                                 border: Border.all(
                                     color: _accentColor.withValues(alpha: 0.2)),
@@ -10113,12 +10161,12 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet>
                                 _financeInsightChip(
                                   'Itens',
                                   '${rowsVisible.length}${hasMoreRows ? ' de ${rows.length}' : ''}',
-                                  AppColors.textSecondary,
+                                  context.appTextSecondary,
                                 ),
                                 _financeInsightChip(
                                   'Período anterior ($previousLabel)',
                                   CurrencyFormats.formatBRLTight(previousTotal),
-                                  AppColors.textMuted,
+                                  context.appTextMuted,
                                 ),
                                 _financeInsightChip(
                                   'Comparativo',
@@ -10160,10 +10208,10 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet>
                               Container(
                                 padding: const EdgeInsets.all(10),
                                 decoration: BoxDecoration(
-                                  color: Colors.white,
+                                  color: context.appSurface,
                                   borderRadius: BorderRadius.circular(14),
                                   border: Border.all(
-                                      color: const Color(0xFFE2E8F0)),
+                                      color: context.appChipIdleBorder),
                                 ),
                                 child: Wrap(
                                   spacing: 8,
@@ -10185,10 +10233,10 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet>
                             Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: context.appSurface,
                                 borderRadius: BorderRadius.circular(14),
                                 border:
-                                    Border.all(color: const Color(0xFFE2E8F0)),
+                                    Border.all(color: context.appChipIdleBorder),
                               ),
                               child: Row(
                                 children: [
@@ -10241,10 +10289,10 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet>
                             Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: context.appSurface,
                                 borderRadius: BorderRadius.circular(14),
                                 border:
-                                    Border.all(color: const Color(0xFFE2E8F0)),
+                                    Border.all(color: context.appChipIdleBorder),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -10303,8 +10351,12 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet>
                                                     Container(
                                                       height: 10,
                                                       decoration: BoxDecoration(
-                                                        color: Colors
-                                                            .grey.shade200,
+                                                        color: context
+                                                                .isDarkMode
+                                                            ? context
+                                                                .appSurfaceHigh
+                                                            : Colors
+                                                                .grey.shade200,
                                                         borderRadius:
                                                             BorderRadius
                                                                 .circular(99),
@@ -10379,10 +10431,10 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet>
                               Container(
                                 padding: const EdgeInsets.all(14),
                                 decoration: BoxDecoration(
-                                  color: Colors.white,
+                                  color: context.appSurface,
                                   borderRadius: BorderRadius.circular(14),
                                   border: Border.all(
-                                      color: const Color(0xFFE2E8F0)),
+                                      color: context.appChipIdleBorder),
                                 ),
                                 child: const Text(
                                     'Sem lançamentos para este preview.'),
@@ -10471,7 +10523,7 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet>
           minimumSize: const Size.fromHeight(52),
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
           foregroundColor: _accentColor,
-          backgroundColor: Colors.white,
+          backgroundColor: context.appSurface,
         ),
       ),
     );
@@ -10492,15 +10544,15 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet>
         });
         unawaited(_loadUserCategoryNames());
       },
-      backgroundColor: Colors.white,
-      selectedColor: Colors.white,
+      backgroundColor: context.appSurface,
+      selectedColor: context.appSurface,
       surfaceTintColor: Colors.transparent,
       shadowColor: Colors.transparent,
       elevation: 0,
       pressElevation: 0,
       labelStyle: TextStyle(
         fontWeight: FontWeight.w600,
-        color: selected ? color : AppColors.textSecondary,
+        color: selected ? color : context.appTextSecondary,
       ),
       side: BorderSide(
           color: color.withValues(alpha: selected ? 0.85 : 0.35),
@@ -10520,15 +10572,15 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet>
         }
         _applyPeriodFilter(label);
       },
-      backgroundColor: Colors.white,
-      selectedColor: Colors.white,
+      backgroundColor: context.appSurface,
+      selectedColor: context.appSurface,
       surfaceTintColor: Colors.transparent,
       shadowColor: Colors.transparent,
       elevation: 0,
       pressElevation: 0,
       labelStyle: TextStyle(
         fontWeight: FontWeight.w600,
-        color: selected ? _accentColor : AppColors.textSecondary,
+        color: selected ? _accentColor : context.appTextSecondary,
       ),
       side: BorderSide(
           color: _accentColor.withValues(alpha: selected ? 0.85 : 0.35),
@@ -10541,7 +10593,7 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet>
       constraints: const BoxConstraints(minWidth: 108),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appSurface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: color.withValues(alpha: 0.28)),
         boxShadow: [
@@ -10556,10 +10608,10 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet>
         children: [
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: AppColors.textSecondary),
+                color: context.appTextSecondary),
           ),
           const SizedBox(height: 4),
           FittedBox(
@@ -10694,7 +10746,7 @@ class _FinanceReportsPremiumSheetState
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight)
                   : null,
-              color: sel ? null : Colors.white,
+              color: sel ? null : context.appSurface,
               border: Border.all(
                   color: accent.withValues(alpha: sel ? 0 : 0.55),
                   width: sel ? 0 : 2),
@@ -10746,10 +10798,11 @@ class _FinanceReportsPremiumSheetState
       expand: false,
       builder: (context, scrollController) {
         return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-            boxShadow: [
+          decoration: BoxDecoration(
+            color: context.appSurface,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(22)),
+            boxShadow: const [
               BoxShadow(
                   color: Color(0x33000000),
                   blurRadius: 24,
@@ -10765,7 +10818,9 @@ class _FinanceReportsPremiumSheetState
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
+                      color: context.isDarkMode
+                          ? context.appChipIdleBorder
+                          : Colors.grey.shade300,
                       borderRadius: BorderRadius.circular(2)),
                 ),
               ),
@@ -10788,7 +10843,7 @@ class _FinanceReportsPremiumSheetState
                   TextButton(
                     onPressed: () => Navigator.pop(context),
                     style: TextButton.styleFrom(
-                      foregroundColor: AppColors.textSecondary,
+                      foregroundColor: context.appTextSecondary,
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 6),
                     ),
@@ -10836,7 +10891,9 @@ class _FinanceReportsPremiumSheetState
                           'Escolha o período e, se quiser, filtre por categoria. O PDF usa o mesmo filtro Pago/Pendente/Todos da tela.',
                           style: TextStyle(
                               fontSize: 13,
-                              color: Colors.grey.shade700,
+                              color: context.isDarkMode
+                                  ? context.appTextSecondary
+                                  : Colors.grey.shade700,
                               height: 1.35),
                         ),
                       ],
@@ -10909,7 +10966,9 @@ class _FinanceReportsPremiumSheetState
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF0FDF4),
+                  color: context.isDarkMode
+                      ? context.appAccentSurface(AppColors.primary)
+                      : const Color(0xFFF0FDF4),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                       color: AppColors.primary.withValues(alpha: 0.2)),
@@ -10957,7 +11016,7 @@ class _FinanceReportsPremiumSheetState
                     initialValue: _categoryChoice,
                     decoration: InputDecoration(
                       filled: true,
-                      fillColor: const Color(0xFFF8FAFC),
+                      fillColor: context.appChipIdleBg,
                       border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14)),
                       contentPadding: const EdgeInsets.symmetric(
@@ -11010,7 +11069,7 @@ class _FinanceReportsPremiumSheetState
                     width: double.infinity,
                     padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
+                      color: context.appChipIdleBg,
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
                           color: AppColors.primary.withValues(alpha: 0.18)),
@@ -11061,7 +11120,7 @@ class _FinanceReportsPremiumSheetState
                           'Será salvo como: $fname.pdf (e $fname.csv)',
                           style: TextStyle(
                               fontSize: 12,
-                              color: AppColors.textMuted,
+                              color: context.appTextMuted,
                               fontWeight: FontWeight.w500),
                         ),
                       ],
@@ -11075,7 +11134,7 @@ class _FinanceReportsPremiumSheetState
                 style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
-                    color: AppColors.textSecondary),
+                    color: context.appTextSecondary),
               ),
               const SizedBox(height: 12),
               FilledButton.icon(
@@ -11149,7 +11208,8 @@ class _PremiumSaldoPeriodoCard extends StatelessWidget {
   final double curExpense;
   final double curBalance;
 
-  static Widget _metricLine({
+  static Widget _metricLine(
+    BuildContext context, {
     required String label,
     required String value,
     required Color accent,
@@ -11179,7 +11239,7 @@ class _PremiumSaldoPeriodoCard extends StatelessWidget {
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.2,
-                    color: AppColors.textMuted,
+                    color: context.appTextMuted,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -11200,7 +11260,8 @@ class _PremiumSaldoPeriodoCard extends StatelessWidget {
     );
   }
 
-  Widget _periodPanel({
+  Widget _periodPanel(
+    BuildContext context, {
     required String badge,
     required String dateLine,
     required Color badgeTint,
@@ -11212,9 +11273,9 @@ class _PremiumSaldoPeriodoCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.92),
+        color: context.appSurface.withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: context.appChipIdleBorder),
         boxShadow: [
           BoxShadow(
             color: AppColors.deepBlueDark.withValues(alpha: 0.06),
@@ -11260,22 +11321,25 @@ class _PremiumSaldoPeriodoCard extends StatelessWidget {
               fontSize: 11.5,
               height: 1.3,
               fontWeight: FontWeight.w500,
-              color: AppColors.textSecondary,
+              color: context.appTextSecondary,
             ),
           ),
           _metricLine(
+            context,
             label: 'Receitas',
             value: CurrencyFormats.formatBRL(income),
             accent: AppColors.financeReceita,
             icon: Icons.south_west_rounded,
           ),
           _metricLine(
+            context,
             label: 'Despesas',
             value: CurrencyFormats.formatBRL(expense),
             accent: AppColors.financeDespesa,
             icon: Icons.north_east_rounded,
           ),
           _metricLine(
+            context,
             label: 'Saldo',
             value: CurrencyFormats.formatBRL(balance),
             accent: balance >= 0
@@ -11298,6 +11362,7 @@ class _PremiumSaldoPeriodoCard extends StatelessWidget {
     final curDates = 'Mesmo filtro da tela · totais do período selecionado';
 
     final left = _periodPanel(
+      context,
       badge: 'PERÍODO ANTERIOR',
       dateLine: prevDates,
       badgeTint: AppColors.secondary,
@@ -11306,6 +11371,7 @@ class _PremiumSaldoPeriodoCard extends StatelessWidget {
       balance: prevBalance,
     );
     final right = _periodPanel(
+      context,
       badge: 'PERÍODO ATUAL',
       dateLine: curDates,
       badgeTint: AppColors.accent,
@@ -11321,13 +11387,19 @@ class _PremiumSaldoPeriodoCard extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFFF0F4FF),
-            Colors.white,
-            AppColors.accent.withValues(alpha: 0.06),
-          ],
+          colors: context.isDarkMode
+              ? [
+                  context.appDarkModuleSurface,
+                  context.appSurface,
+                  AppColors.accent.withValues(alpha: 0.10),
+                ]
+              : [
+                  const Color(0xFFF0F4FF),
+                  Colors.white,
+                  AppColors.accent.withValues(alpha: 0.06),
+                ],
         ),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: context.appChipIdleBorder),
         boxShadow: [
           BoxShadow(
             color: AppColors.primary.withValues(alpha: 0.10),
@@ -11394,7 +11466,7 @@ class _PremiumSaldoPeriodoCard extends StatelessWidget {
                                 fontSize: 16,
                                 fontWeight: FontWeight.w900,
                                 letterSpacing: -0.3,
-                                color: AppColors.textPrimary,
+                                color: context.appTextPrimary,
                               ),
                             ),
                             const SizedBox(height: 4),
@@ -11404,7 +11476,7 @@ class _PremiumSaldoPeriodoCard extends StatelessWidget {
                                 fontSize: 11.5,
                                 height: 1.35,
                                 fontWeight: FontWeight.w500,
-                                color: AppColors.textMuted,
+                                color: context.appTextMuted,
                               ),
                             ),
                           ],
@@ -11429,7 +11501,7 @@ class _PremiumSaldoPeriodoCard extends StatelessWidget {
                         children: [
                           Expanded(child: left),
                           const SizedBox(width: 12),
-                          Container(width: 1, color: const Color(0xFFE2E8F0)),
+                          Container(width: 1, color: context.appChipIdleBorder),
                           const SizedBox(width: 12),
                           Expanded(child: right),
                         ],
@@ -11528,7 +11600,7 @@ class _WhereMoneyExpenseCard extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: context.appSurface,
                         borderRadius: BorderRadius.circular(10),
                         border:
                             Border.all(color: accent.withValues(alpha: 0.28)),
@@ -11541,10 +11613,10 @@ class _WhereMoneyExpenseCard extends StatelessWidget {
                         categoryName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                             fontWeight: FontWeight.w800,
                             fontSize: 13,
-                            color: AppColors.textPrimary),
+                            color: context.appTextPrimary),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -11600,7 +11672,7 @@ class _WhereMoneyExpenseCard extends StatelessWidget {
                       style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.textMuted),
+                          color: context.appTextMuted),
                     ),
                     const SizedBox(width: 4),
                     Icon(Icons.arrow_forward_ios_rounded,
@@ -11653,7 +11725,7 @@ class _FinanceKpiCard extends StatelessWidget {
           Text(
             title,
             style: TextStyle(
-                color: AppColors.textSecondary,
+                color: context.appTextSecondary,
                 fontWeight: FontWeight.w500,
                 fontSize: 12),
           ),
@@ -11663,7 +11735,7 @@ class _FinanceKpiCard extends StatelessWidget {
               'Toque para detalhar',
               style: TextStyle(
                   fontSize: 11,
-                  color: AppColors.textMuted,
+                  color: context.appTextMuted,
                   fontWeight: FontWeight.w500),
             ),
           ],
@@ -11735,17 +11807,17 @@ Widget buildFinancePreviewTopBar(BuildContext ctx) {
         ),
         const Spacer(),
         Material(
-          color: Colors.grey.shade100,
+          color: ctx.isDarkMode ? ctx.appSurfaceHigh : Colors.grey.shade100,
           shape: const CircleBorder(),
           child: InkWell(
             customBorder: const CircleBorder(),
             onTap: () => Navigator.of(ctx).pop(),
-            child: const Padding(
-              padding: EdgeInsets.all(8),
+            child: Padding(
+              padding: const EdgeInsets.all(8),
               child: Icon(
                 Icons.close_rounded,
                 size: 22,
-                color: Color(0xFF1A237E),
+                color: ctx.appDeepTitle,
                 semanticLabel: 'Fechar',
               ),
             ),

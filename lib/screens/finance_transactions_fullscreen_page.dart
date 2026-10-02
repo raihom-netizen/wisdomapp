@@ -139,14 +139,14 @@ Widget _financeFilterChip({
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon,
-                size: 17, color: selected ? accent : AppColors.textMuted),
+                size: 17, color: selected ? accent : context.appTextMuted),
             SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
                 fontWeight: FontWeight.w800,
                 fontSize: 12.5,
-                color: selected ? accent : AppColors.textSecondary,
+                color: selected ? accent : context.appTextSecondary,
               ),
             ),
           ],
@@ -203,7 +203,9 @@ Widget _financePeriodChip({
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w800,
-            color: selected ? Colors.white : AppColors.primary,
+            color: selected
+                ? Colors.white
+                : (context.isDarkMode ? context.appNeon : AppColors.primary),
           ),
         ),
       ),
@@ -771,7 +773,7 @@ class _FinanceTransactionsFullscreenPageState
                               ],
                             ),
                             border: Border.all(
-                                color: const Color(0xFFE2E8F0), width: 1),
+                                color: context.appChipIdleBorder, width: 1),
                             boxShadow: [
                               BoxShadow(
                                 color: AppColors.deepBlueDark

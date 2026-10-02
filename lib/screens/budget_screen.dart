@@ -9,6 +9,7 @@ import 'package:pdf/pdf.dart';
 import '../models/user_profile.dart';
 import '../services/functions_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../constants/currency_formats.dart';
 import '../utils/date_picker_a11y.dart';
 import '../constants/app_business_rules.dart';
@@ -850,7 +851,9 @@ class _ProjectionTab extends StatelessWidget {
                         leading: const Icon(Icons.insights),
                         title: RichText(
                           text: TextSpan(
-                            style: DefaultTextStyle.of(context).style.copyWith(color: Colors.black87),
+                            style: DefaultTextStyle.of(context).style.copyWith(
+                              color: context.isDarkMode ? context.appTextPrimary : Colors.black87,
+                            ),
                             children: [
                               const TextSpan(text: 'Saldo previsto: '),
                               TextSpan(

@@ -1157,7 +1157,11 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
         textCapitalization: textCapitalization,
         onChanged: onChanged,
         decoration: InputDecoration(
-          icon: Icon(icon, color: AppColors.deepBlueDark, size: 22),
+          icon: Icon(icon,
+              color: context.isDarkMode
+                  ? context.appTextSecondary
+                  : AppColors.deepBlueDark,
+              size: 22),
           labelText: label,
           hintText: hint,
           border: InputBorder.none,
@@ -1267,7 +1271,10 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(Icons.edit_note_rounded,
-                      color: Color(0xFF0D47A1), size: 24),
+                      color: context.isDarkMode
+                          ? const Color(0xFF93C5FD)
+                          : const Color(0xFF0D47A1),
+                      size: 24),
                 ),
               ),
               Expanded(
@@ -1426,7 +1433,9 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
                         tooltip: 'Limpar categoria',
                         visualDensity: VisualDensity.compact,
                         style: IconButton.styleFrom(
-                          foregroundColor: Colors.grey.shade600,
+                          foregroundColor: context.isDarkMode
+                              ? context.appTextMuted
+                              : Colors.grey.shade600,
                           minimumSize: const Size(40, 40),
                         ),
                         onPressed: () {

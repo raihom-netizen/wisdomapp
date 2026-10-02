@@ -454,7 +454,7 @@ class FinanceTransactionListTile extends StatelessWidget {
                                   Icons.attach_file_rounded,
                                   size: 20,
                                   color: profile.temAcessoPremium
-                                      ? AppColors.textSecondary
+                                      ? context.appTextSecondary
                                       : Colors.grey,
                                 ),
                                 onPressed: profile.temAcessoPremium

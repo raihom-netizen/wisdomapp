@@ -194,7 +194,10 @@ class FinancePremiumSheetHeader extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w900,
-                        color: titleColor ?? const Color(0xFF0F172A),
+                        color: titleColor ??
+                            (context.isDarkMode
+                                ? context.appTextPrimary
+                                : const Color(0xFF0F172A)),
                         height: 1.15,
                       ),
                     ),
@@ -470,6 +473,7 @@ class FinancePremiumTypeToggle extends StatelessWidget {
             icon: Icons.arrow_downward_rounded,
             colors: const [Color(0xFF15803D), Color(0xFF22C55E)],
             onTap: () => onChanged(true),
+            dark: context.isDarkMode,
           ),
           _chip(
             label: 'Despesa',
@@ -477,6 +481,7 @@ class FinancePremiumTypeToggle extends StatelessWidget {
             icon: Icons.arrow_upward_rounded,
             colors: const [Color(0xFFB91C1C), Color(0xFFEF4444)],
             onTap: () => onChanged(false),
+            dark: context.isDarkMode,
           ),
         ],
       ),
@@ -489,6 +494,7 @@ class FinancePremiumTypeToggle extends StatelessWidget {
     required IconData icon,
     required List<Color> colors,
     required VoidCallback onTap,
+    bool dark = false,
   }) {
     return Expanded(
       child: GestureDetector(
@@ -520,12 +526,16 @@ class FinancePremiumTypeToggle extends StatelessWidget {
             children: [
               Icon(icon,
                   size: 18,
-                  color: selected ? Colors.white : Colors.grey.shade600),
+                  color: selected
+                      ? Colors.white
+                      : (dark ? Colors.grey.shade400 : Colors.grey.shade600)),
               SizedBox(width: 6),
               Text(
                 label,
                 style: TextStyle(
-                  color: selected ? Colors.white : Colors.grey.shade700,
+                  color: selected
+                      ? Colors.white
+                      : (dark ? Colors.grey.shade300 : Colors.grey.shade700),
                   fontWeight: FontWeight.w900,
                   fontSize: 15,
                 ),
@@ -560,10 +570,12 @@ Future<T?> showFinancePremiumEditDialog<T>({
         child: DecoratedBox(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(24),
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [Color(0xFFF8FAFC), Colors.white],
+              colors: ctx.isDarkMode
+                  ? [ctx.appSurfaceHigh, ctx.appSurface]
+                  : const [Color(0xFFF8FAFC), Colors.white],
             ),
             boxShadow: [
               BoxShadow(
