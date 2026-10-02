@@ -21,12 +21,13 @@ const Map<int, String> kHomeDefaultStartModuleLabels = {
   7: 'Cursos',
 };
 
-/// Índices legados (Início, Calculadora) não são opção do seletor (rótulo cai em
-/// Financeiro). Calculadora removida em 02/10/2026: o [HomeShell] abre no Início
-/// quando a preferência gravada ainda é 4.
+/// Índices legados (Início, Calculadora, Minhas Anotações) não são opção do
+/// seletor (rótulo cai em Financeiro). Calculadora (4) e Minhas Anotações (8)
+/// removidas em 02/10/2026: o [HomeShell] abre no Início quando a preferência
+/// gravada ainda é 4 ou 8.
 int normalizeHomeStartModuleIndex(int idx) {
   if (kHomeDefaultStartModuleLabels.containsKey(idx)) return idx;
-  if (idx == 0 || idx == 4) return 1;
+  if (idx == 0 || idx == 4 || idx == 8) return 1;
   return 1;
 }
 

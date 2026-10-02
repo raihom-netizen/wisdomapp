@@ -101,7 +101,7 @@ void mostrarAvisoLicencaVencida(BuildContext context) {
           textAlign: TextAlign.center,
           style: TextStyle(color: Color(0xFFD32F2F), fontWeight: FontWeight.w800)),
       content: const Text(
-        'Sua licença está vencida. Você pode visualizar os módulos, mas não pode lançar, editar ou remover dados em Financeiro, Agenda, Cursos, Relatórios, Anotações e Configurações.\n\nRenove agora para voltar a usar o WISDOMAPP por completo.',
+        'Sua licença está vencida. Você pode visualizar os módulos, mas não pode lançar, editar ou remover dados em Financeiro, Agenda, Cursos, Relatórios e Configurações.\n\nRenove agora para voltar a usar o WISDOMAPP por completo.',
       ),
       actions: [
         TextButton(

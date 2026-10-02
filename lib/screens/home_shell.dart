@@ -45,10 +45,8 @@ import '../utils/admin_panel_launch.dart';
 import 'dashboard_screen.dart';
 import 'finance_screen.dart';
 import 'meta_financeira_screen.dart';
-import 'calculator_screen.dart';
 import 'reports_screen.dart';
 import 'wisdom_agenda_screen.dart';
-import 'anotacoes_screen.dart';
 import '../widgets/onboarding_tour.dart';
 import '../widgets/premium_global_message_host.dart';
 import '../widgets/shell_keyboard_bottom_pad.dart';
@@ -78,9 +76,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   String? _telemetryPingScheduledForUid;
   static const int _kShellModuleCount = 10;
 
-  /// Calculadora (índice 4) fora da navegação desde 02/10/2026: o índice continua
-  /// reservado (não desloca os outros módulos), mas qualquer pedido cai no Início.
-  static const int _kHiddenCalculatorModuleIndex = 4;
+  /// Módulos removidos em 02/10/2026: Calculadora (4) e Minhas Anotações (8).
+  /// Os índices continuam reservados (não deslocam os outros módulos), mas
+  /// qualquer pedido (atalho, widget, preferência, link) cai no Início.
+  static const Set<int> _kRemovedModuleIndices = {4, 8};
 
   /// Mesmos módulos do rodapé de acesso rápido (menu abre fullscreen com os mesmos dados).
   static const Set<int> _footerQuickAccessModuleIndices = {0, 1, 2, 3, 7};
@@ -225,11 +224,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     'Financeiro',
     'Objetivos Financeiros',
     'Agenda',
-    'Calculadora',
+    'Início', // 4: Calculadora removida (índice reservado)
     'Dicas Financeiras',
     'Relatórios',
     'Cursos em Vídeo',
-    'Minhas Anotações',
+    'Início', // 8: Minhas Anotações removida (índice reservado)
     'Configurações',
   ];
 
@@ -560,7 +559,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   void _setModuleIndex(int i, {VoidCallback? alsoInSetState}) {
     if (!mounted || i < 0 || i >= _kShellModuleCount) return;
-    if (i == _kHiddenCalculatorModuleIndex) {
+    if (_kRemovedModuleIndices.contains(i)) {
       _setModuleIndex(0, alsoInSetState: alsoInSetState);
       return;
     }
@@ -654,8 +653,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           .get(const GetOptions(source: Source.serverAndCache));
       final data = snap.data() ?? <String, dynamic>{};
       final raw = data[kHomeDefaultStartModuleField];
-      if (raw is num && raw.toInt() == _kHiddenCalculatorModuleIndex) {
-        // Tela inicial era a Calculadora (removida): abre no Início.
+      if (raw is num && _kRemovedModuleIndices.contains(raw.toInt())) {
+        // Tela inicial era a Calculadora ou Minhas Anotações (removidas): abre no Início.
         await HomeStartModuleCache.clear();
         if (mounted && _idx != 0) _setModuleIndex(0);
         return;
@@ -887,17 +886,19 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                   index: 1,
                   accent: const Color(0xFF14B8A6),
                 ),
-                quickButton(
-                  icon: Icons.flag_rounded,
-                  label: 'Objetivo',
-                  index: 2,
-                  accent: const Color(0xFFEC4899),
-                ),
+                // Ordem visual (pedido do dono 02/10/2026): Agenda antes de Objetivo;
+                // cada botão continua abrindo o mesmo índice do shell.
                 quickButton(
                   icon: Icons.calendar_month_rounded,
                   label: 'Agenda',
                   index: 3,
                   accent: const Color(0xFF6366F1),
+                ),
+                quickButton(
+                  icon: Icons.flag_rounded,
+                  label: 'Objetivo',
+                  index: 2,
+                  accent: const Color(0xFFEC4899),
                 ),
                 quickButton(
                   icon: Icons.ondemand_video_rounded,
@@ -1015,12 +1016,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           shellScrollController: _shellModuleScrollControllers[3],
           onNavigateTo: onNav,
         );
-      case 4:
-        return CalculatorScreen(
-          uid: _userDocId,
-          profile: profile,
-          onNavigateTo: onNav,
-        );
+      case 4: // Calculadora removida (02/10/2026) — nunca materializa.
+      case 8: // Minhas Anotações removida (02/10/2026) — nunca materializa.
+        return const SizedBox.shrink();
       case 5:
         return WisdomDashboardScreen(
           uid: _userDocId,
@@ -1039,12 +1037,6 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         return CursosVideosScreen(
           uid: _userDocId,
           shellScrollController: _shellModuleScrollControllers[7],
-        );
-      case 8:
-        return AnotacoesScreen(
-          uid: _userDocId,
-          profile: profile,
-          onNavigateTo: onNav,
         );
       case 9:
         return SettingsScreen(
@@ -1537,8 +1529,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           );
         }
 
-        // Índices: 0=Início, 1=Financeiro, 2=(legado→Financeiro), 3=Agenda, 4=Calculadora,
-        // 5=Dicas, 6=Relatórios, 7=Cursos, 8=Minhas Anotações, 9=Configurações
+        // Índices: 0=Início, 1=Financeiro, 2=Objetivos, 3=Agenda, 4=(removido→Início),
+        // 5=Dicas, 6=Relatórios, 7=Cursos, 8=(removido→Início), 9=Configurações
         // [IndexedStack] mantém estado dos módulos já abertos; só materializamos índices visitados ([_materializedModuleIndices]).
 
         // Lado mais curto: usa pico na orientação atual para o IME não alternar mobile/tablet a cada frame.
@@ -2044,16 +2036,12 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         return const Color(0xFFEC4899);
       case 3:
         return const Color(0xFFA5B4FC);
-      case 4:
-        return const Color(0xFFFDBA74);
       case 5:
         return const Color(0xFFC4B5FD);
       case 6:
         return const Color(0xFF86EFAC);
       case 7:
         return const Color(0xFF22D3EE);
-      case 8:
-        return const Color(0xFF7DD3FC);
       case 9:
         return const Color(0xFFCBD5E1);
       default:
@@ -2065,10 +2053,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     const items = [
       (0, Icons.home_rounded, 'Início'),
       (1, Icons.account_balance_wallet_rounded, 'Financeiro'),
-      (2, Icons.flag_rounded, 'Objetivos Financeiros'),
       (3, Icons.event_note_rounded, 'Agenda'),
-      (5, Icons.lightbulb_outline_rounded, 'Dicas Financeiras'),
+      (2, Icons.flag_rounded, 'Objetivos Financeiros'),
       (7, Icons.ondemand_video_rounded, 'Cursos em Vídeo'),
+      (5, Icons.lightbulb_outline_rounded, 'Dicas Financeiras'),
     ];
     return Drawer(
       backgroundColor: AppColors.deepBlueDark,

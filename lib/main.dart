@@ -162,7 +162,7 @@ Future<void> _configureFirebaseCore() async {
   }
 
   try {
-    // Cache offline: Financeiro, Escalas, Calculadora (Firestore), Agenda (reminders)
+    // Cache offline: Financeiro, Escalas (Firestore), Agenda (reminders)
     // ficam em fila local e sincronizam quando a rede voltar.
     // Android: cache LIMITADO (100 MB) — o cache ilimitado deixava o SQLite crescer
     // sem teto e gerava I/O de disco/jank em aparelhos com armazenamento mais lento.
@@ -762,7 +762,7 @@ class _AuthLoadingScreen extends StatelessWidget {
       return const WisdomappBrandedLoading(
         message: 'Sem internet — a restaurar sessão neste aparelho…',
         submessage:
-            'Financeiro, Escalas, Calculadora e Agenda gravam localmente e sincronizam quando voltar a rede.',
+            'Financeiro, Escalas e Agenda gravam localmente e sincronizam quando voltar a rede.',
       );
     }
     if (delegateLinkHint) {

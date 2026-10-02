@@ -1329,7 +1329,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  /// Atalho premium: **Dicas · Orçamentos domésticos** — mesmo fluxo que Links em Minhas Anotações (navegador).
+  /// Atalho premium: **Dicas · Orçamentos domésticos** — abre no navegador.
   Widget _buildDicasOrcamentosDomesticosPremiumCard(BuildContext context) {
     final w = MediaQuery.sizeOf(context).width;
     final compactCta = w < 380;
@@ -1503,7 +1503,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            'Toque para abrir no navegador — como os links em Minhas Anotações.',
+                            'Toque para abrir no navegador.',
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(

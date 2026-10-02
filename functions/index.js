@@ -4548,7 +4548,7 @@ async function runLicenseReminderEmails() {
 <p>Sua licença do <strong>Controle Total</strong> vence em <strong>${dias} dias</strong>.</p>
 <div class="alert"><strong>📅 Data de vencimento:</strong> ${dd}/${mm}/${yyyy}</div>
 <p>Renove seu plano pelo app para manter todas as funcionalidades:</p>
-<ul><li>Controle financeiro</li><li>Escalas e plantões</li><li>Calculadora de horas extras</li><li>Agenda e compromissos</li></ul>
+<ul><li>Controle financeiro</li><li>Escalas e plantões</li><li>Agenda e compromissos</li></ul>
 <p><a href="${APP_DOMAIN}/escolha-plano" class="btn">Renovar licença</a></p>`;
     const html = buildEmailBase("⚠️ Renovação da licença", body);
     const res = await sendEmailHtml(email, `Controle Total — Licença vence em ${dias} dias`, html);

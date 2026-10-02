@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../services/delegate_access_service.dart';
 import '../services/ios_payments_gate.dart';
 import '../theme/app_colors.dart';
-import '../constants/anotacoes_module_icons.dart';
 import 'home_start_module_picker.dart';
 import 'keyed_stream_builder.dart';
 
@@ -76,31 +75,30 @@ class UserMenuLateral extends StatelessWidget {
                     _planosTile(context, isCollapsed),
                     const SizedBox(height: 8),
                   ],
-                  _tile(9, Icons.settings_rounded, 'Configurações', isCollapsed,
-                      accent: const Color(0xFFCBD5E1),
-                      subtitle: 'Backup, notificações e preferências'),
-                  const SizedBox(height: 12),
+                  // Ordem (pedido do dono 02/10/2026): Início, Financeiro, Agenda,
+                  // Objetivos, Cursos e depois os demais. Índices do shell inalterados.
                   _tile(0, Icons.home_rounded, 'Início', isCollapsed,
                       accent: const Color(0xFF93C5FD)),
                   _tile(1, Icons.account_balance_wallet_rounded, 'Financeiro',
                       isCollapsed,
                       accent: const Color(0xFF5EEAD4)),
-                  _tile(2, Icons.flag_rounded, 'Objetivos Financeiros',
-                      isCollapsed,
-                      accent: const Color(0xFFEC4899)),
                   _tile(3, Icons.calendar_month_rounded, kAgendaModuleDisplayName,
                       isCollapsed,
                       accent: const Color(0xFF22D3EE)),
+                  _tile(2, Icons.flag_rounded, 'Objetivos Financeiros',
+                      isCollapsed,
+                      accent: const Color(0xFFEC4899)),
+                  _tile(7, Icons.ondemand_video_rounded, 'Cursos em Vídeo',
+                      isCollapsed,
+                      accent: const Color(0xFF38BDF8)),
                   _tile(5, Icons.menu_book_rounded, 'Dicas Financeiras',
                       isCollapsed,
                       accent: const Color(0xFFC4B5FD)),
                   _tile(6, Icons.assessment_rounded, 'Relatórios', isCollapsed,
                       accent: const Color(0xFF86EFAC)),
-                  _tile(7, Icons.ondemand_video_rounded, 'Cursos em Vídeo',
-                      isCollapsed,
-                      accent: const Color(0xFF38BDF8)),
-                  _tile(8, AnotacoesModuleIcons.nav, 'Minhas Anotações', isCollapsed,
-                      accent: const Color(0xFF7DD3FC)),
+                  _tile(9, Icons.settings_rounded, 'Configurações', isCollapsed,
+                      accent: const Color(0xFFCBD5E1),
+                      subtitle: 'Backup, notificações e preferências'),
                   _homeStartDefaultTile(context, isCollapsed),
                   const SizedBox(height: 24),
                 ],
