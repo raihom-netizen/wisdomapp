@@ -101,6 +101,19 @@ class YearlyCommitmentRepeatService {
     return out.toList()..sort();
   }
 
+  /// Datas excluídas (yyyy-MM-dd) — séries por dia da semana têm várias
+  /// ocorrências no ano: apagar uma só não pode excluir o ANO inteiro.
+  static Set<String> excludedDatesFromData(Map<String, dynamic> data) {
+    final raw = data['yearlyRepeatExcludedDates'];
+    if (raw is! List) return {};
+    return raw.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toSet();
+  }
+
+  static String excludedDateKey(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  static final RegExp _instanceDayIdRe = RegExp(r'_y(\d{4})m(\d{2})d(\d{2})$');
+
   static Set<int> excludedYearsFromData(Map<String, dynamic> data) {
     final raw = data['yearlyRepeatExcludedYears'];
 
@@ -622,6 +635,8 @@ class YearlyCommitmentRepeatService {
       yearlyRepeatWeekdays: yearlyRepeatWeekdays,
       excludedYears:
           templateBefore != null ? excludedYearsFromData(templateBefore) : null,
+      excludedDates:
+          templateBefore != null ? excludedDatesFromData(templateBefore) : null,
     );
 
     if (weekdays.isEmpty) {
@@ -719,7 +734,34 @@ class YearlyCommitmentRepeatService {
         ? instanceYearFromData(data, docId: instanceReminderDocId)
         : null;
 
-    if (templateId != null && year != null) {
+    // Série por dia da semana (id …_yAAAAmMMdDD): exclui só AQUELA data.
+    // Antes excluía o ano inteiro e a próxima sincronização apagava todas as
+    // ocorrências do ano.
+    final dayMatch = _instanceDayIdRe.firstMatch(instanceReminderDocId);
+    DateTime? instanceDay;
+    if (dayMatch != null) {
+      instanceDay = DateTime(
+        int.parse(dayMatch.group(1)!),
+        int.parse(dayMatch.group(2)!),
+        int.parse(dayMatch.group(3)!),
+      );
+    } else if (data != null && weekdaysFromData(data).isNotEmpty) {
+      final raw = data['date'];
+      if (raw is Timestamp) {
+        final d = raw.toDate();
+        instanceDay = DateTime(d.year, d.month, d.day);
+      }
+    }
+
+    if (templateId != null && instanceDay != null) {
+      try {
+        await _reminders(userDocId).doc(templateId).set({
+          'yearlyRepeatExcludedDates':
+              FieldValue.arrayUnion([excludedDateKey(instanceDay)]),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      } catch (_) {}
+    } else if (templateId != null && year != null) {
       try {
         await _reminders(userDocId).doc(templateId).set({
           'yearlyRepeatExcludedYears': FieldValue.arrayUnion([year]),
@@ -862,6 +904,8 @@ class YearlyCommitmentRepeatService {
 
     final excluded = excludedYearsFromData(templateData);
 
+    final excludedDates = excludedDatesFromData(templateData);
+
     final now = DateTime.now();
 
     final y0 = minInstanceYear ?? (now.year - _yearsBack);
@@ -881,6 +925,8 @@ class YearlyCommitmentRepeatService {
       );
 
       for (final date in dates) {
+        if (excludedDates.contains(excludedDateKey(date))) continue;
+
         final instId = instanceDocId(
           templateId,
           y,
@@ -1181,6 +1227,7 @@ class YearlyCommitmentRepeatService {
     DateTime? date,
     List<int>? yearlyRepeatWeekdays,
     Set<int>? excludedYears,
+    Set<String>? excludedDates,
   }) {
     final d = date ?? anchorDate(DateTime.now().year, month, day);
 
@@ -1213,6 +1260,10 @@ class YearlyCommitmentRepeatService {
 
     if (isTemplate && excludedYears != null && excludedYears.isNotEmpty) {
       payload['yearlyRepeatExcludedYears'] = excludedYears.toList()..sort();
+    }
+
+    if (isTemplate && excludedDates != null && excludedDates.isNotEmpty) {
+      payload['yearlyRepeatExcludedDates'] = excludedDates.toList()..sort();
     }
 
     if (isTemplate) {
