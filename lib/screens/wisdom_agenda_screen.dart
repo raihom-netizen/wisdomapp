@@ -297,6 +297,45 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
 
   void _retryStream() => setState(() => _streamGeneration++);
 
+  // ── Streams guardados no State ────────────────────────────────────────────
+  // Antes eram criados dentro do build(): cada setState (tocar num dia, trocar
+  // aba) cancelava e reabria 6 listeners — inclusive a consulta de até 2500
+  // lembretes. Agora só recriam ao trocar de usuário, de ANO focado ou em
+  // «Tentar novamente».
+  String? _streamsUid;
+  int? _streamsGeneration;
+  int? _remindersStreamYear;
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _incomePendingStream;
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _expensePendingStream;
+  Stream<Map<String, dynamic>>? _incomePrefsStream;
+  Stream<Map<String, dynamic>>? _expensePrefsStream;
+  Stream<List<FinanceAccount>>? _accountsStream;
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _remindersStream;
+
+  void _ensureAgendaStreams() {
+    final uid = _userDocId;
+    final gen = _streamGeneration;
+    final all = _streamsUid != uid ||
+        _streamsGeneration != gen ||
+        _incomePendingStream == null;
+    if (all) {
+      _streamsUid = uid;
+      _streamsGeneration = gen;
+      _incomePendingStream =
+          financeTransactionsPendingSnapshots(uid: uid, type: 'income');
+      _expensePendingStream =
+          financeTransactionsPendingSnapshots(uid: uid, type: 'expense');
+      _incomePrefsStream = FixedIncomePreferencesService().watch(uid);
+      _expensePrefsStream = FixedExpensePreferencesService().watch(uid);
+      _accountsStream = FinanceAccountsService().streamAccounts(uid);
+    }
+    final year = _focusedDay.year;
+    if (all || _remindersStreamYear != year || _remindersStream == null) {
+      _remindersStreamYear = year;
+      _remindersStream = _remindersPeriodStream();
+    }
+  }
+
   Future<void> _loadCalendarWeekStart() async {
     final value = await AgendaCalendarWeekStartPreferences.load(_userDocId);
     if (!mounted || value == _calendarWeekStart) return;
@@ -5320,26 +5359,23 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
         .toSet();
     final isNarrow = MediaQuery.sizeOf(context).width < 520;
 
-    // ignore: unused_local_variable — força rebuild ao tocar em «Tentar novamente»
-    final _ = _streamGeneration;
+    // Recria só ao trocar de usuário/ano ou em «Tentar novamente».
+    _ensureAgendaStreams();
 
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream:
-          financeTransactionsPendingSnapshots(uid: _userDocId, type: 'income'),
+      stream: _incomePendingStream,
       builder: (context, incomePendingSnap) {
         return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: financeTransactionsPendingSnapshots(
-              uid: _userDocId, type: 'expense'),
+          stream: _expensePendingStream,
           builder: (context, expensePendingSnap) {
             return StreamBuilder<Map<String, dynamic>>(
-              stream: FixedIncomePreferencesService().watch(_userDocId),
+              stream: _incomePrefsStream,
               builder: (context, incomePrefsSnap) {
                 return StreamBuilder<Map<String, dynamic>>(
-                  stream: FixedExpensePreferencesService().watch(_userDocId),
+                  stream: _expensePrefsStream,
                   builder: (context, expensePrefsSnap) {
                     return StreamBuilder<List<FinanceAccount>>(
-                      stream:
-                          FinanceAccountsService().streamAccounts(_userDocId),
+                      stream: _accountsStream,
                       builder: (context, accSnap) {
                         final ccIds =
                             FinanceAccountBalanceUtils.creditCardAccountIds(
@@ -5420,7 +5456,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                             QuerySnapshot<Map<String, dynamic>>>(
                           key: ValueKey(
                               'agenda-rem-${_focusedDay.year}-$_streamGeneration'),
-                          stream: _remindersPeriodStream(),
+                          stream: _remindersStream,
                           builder: (context, snap) {
                             return _buildAgendaBody(
                               context,
