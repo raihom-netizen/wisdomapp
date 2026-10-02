@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart' hide showDatePicker;
 import '../theme/theme_context.dart';
+import '../widgets/despertar_item_card.dart';
 import '../widgets/fast_text_field.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -21,6 +22,7 @@ import '../utils/finance_line_opening.dart';
 import '../utils/finance_transaction_status_resolver.dart';
 import '../utils/finance_transactions_hub.dart';
 import '../utils/firestore_user_doc_id.dart';
+import '../models/despertar_item.dart';
 import '../models/finance_account.dart';
 import '../widgets/fixed_flow_finance_account_field.dart';
 import '../widgets/brl_amount_text_field.dart';
@@ -116,6 +118,10 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
   /// Padrão: DESLIGADO (regra do dono 01/10/2026) — a pessoa liga se quiser.
   bool _addToCalendar = false;
 
+  /// «Despertar» da conta PENDENTE (padrão desligado): o aviso de vencimento
+  /// chega como despertador. Paga não desperta.
+  DespertarItem _despertar = DespertarItem.desligado;
+
   /// Última descrição aplicada automaticamente (categoria + mês/ano). Se o usuário editar o campo, zera e não sobrescreve ao mudar só a data.
   String? _lastAutoDescription;
   bool _settingDescProgrammatically = false;
@@ -199,6 +205,7 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
     // Reflete o gravado: só ligado com opt-in explícito (ausente = desligado).
     _addToCalendar =
         st == 'pending' && FinanceCalendarColorPicker.calendarioLigado(d);
+    _despertar = DespertarItem.doDocumento(d);
 
     final receipt = Map<String, dynamic>.from(d['receipt'] ?? {});
     final receiptName = (receipt['name'] ?? '').toString();
@@ -539,6 +546,7 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
           _calendarColorHex != null &&
           _calendarColorHex!.isNotEmpty)
         'calendarColorHex': _calendarColorHex,
+      if (parceladoReal || _status == 'pending') ..._despertar.campos,
     };
     if (hasValidReceipt) {
       result['receipt'] = {
@@ -596,6 +604,7 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
 
     updateData['addToCalendar'] = _status == 'pending' && _addToCalendar;
     updateData['hideFromCalendar'] = _status == 'pending' && !_addToCalendar;
+    if (_status == 'pending') updateData.addAll(_despertar.campos);
     if (_status == 'pending' &&
         _addToCalendar &&
         _calendarColorHex != null &&
@@ -998,6 +1007,14 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
                           builder: (_, __) => _buildInstallmentsField(),
                         ),
                         if (_status == 'pending') ...[
+                          SizedBox(height: 14),
+                          DespertarItemCard(
+                            value: _despertar,
+                            descricaoItem: _isIncome
+                                ? 'esta conta a receber (enquanto pendente)'
+                                : 'esta conta a pagar (enquanto pendente)',
+                            onChanged: (v) => setState(() => _despertar = v),
+                          ),
                           SizedBox(height: 14),
                           _buildAddToCalendarToggle(),
                           if (_addToCalendar) ...[

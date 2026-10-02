@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 
 import '../constants/currency_formats.dart';
 import '../constants/finance_category_visuals.dart';
+import '../models/despertar_item.dart';
 import '../models/finance_account.dart';
 import '../models/user_profile.dart';
 import '../screens/anexo_viewer_screen.dart';
@@ -28,6 +29,7 @@ import '../utils/fifty_two_weeks_plan.dart';
 import '../utils/premium_upgrade.dart';
 import '../utils/receipt_attachment_utils.dart';
 import 'brl_amount_text_field.dart';
+import 'despertar_item_card.dart';
 import 'fast_text_field.dart';
 import 'finance_calendar_color_picker.dart';
 import 'finance_category_picker.dart';
@@ -134,6 +136,8 @@ Future<bool> showFinanceTransactionEditDialog({
   var addToCalendar = status == 'pending' &&
       FinanceCalendarColorPicker.calendarioLigado(current);
   String? calendarColorHex = current['calendarColorHex']?.toString();
+  // «Despertar» da conta pendente (padrão desligado; paga não desperta).
+  var despertar = DespertarItem.doDocumento(current);
   DateTime date = (current['date'] is Timestamp)
       ? (current['date'] as Timestamp).toDate()
       : DateTime.now();
@@ -576,6 +580,14 @@ Future<bool> showFinanceTransactionEditDialog({
                             }),
                           ),
                           if (status == 'pending') ...[
+                            SizedBox(height: 12),
+                            DespertarItemCard(
+                              value: despertar,
+                              descricaoItem: type == 'income'
+                                  ? 'esta conta a receber (enquanto pendente)'
+                                  : 'esta conta a pagar (enquanto pendente)',
+                              onChanged: (v) => setState(() => despertar = v),
+                            ),
                             SizedBox(height: 12),
                             Container(
                               padding: const EdgeInsets.symmetric(
@@ -1075,6 +1087,7 @@ Future<bool> showFinanceTransactionEditDialog({
   }
 
   if (status == 'pending') {
+    updateData.addAll(despertar.campos);
     updateData['addToCalendar'] = addToCalendar;
     updateData['hideFromCalendar'] = !addToCalendar;
     if (addToCalendar &&

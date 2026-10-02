@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 
 import '../constants/currency_formats.dart';
 import '../utils/finance_line_opening.dart';
+import '../models/despertar_item.dart';
 import '../utils/finance_transaction_datetime.dart';
 import '../utils/finance_transactions_hub.dart';
 import '../utils/firestore_user_doc_id.dart';
@@ -163,6 +164,10 @@ class TransactionSaveService {
     putStr('scaleClosureDedupKey');
     putStr('scaleClosureGroupId');
     putStr('scaleClosureEmployerType');
+    // «Despertar» da conta pendente (padrão desligado; ver [DespertarItem]) —
+    // o servidor (agenda_despertar_item.js) lê este campo do lançamento.
+    final despertar = DespertarItem.fromData(data);
+    if (despertar != null) o[DespertarItem.campo] = despertar.toMap();
     return o;
   }
 
