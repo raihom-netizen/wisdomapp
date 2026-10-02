@@ -9,6 +9,7 @@ import '../../constants/app_business_rules.dart';
 import '../../constants/currency_formats.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/theme_context.dart';
+import '../../utils/admin_load_guard.dart';
 import '../../utils/date_picker_a11y.dart';
 import '../../widgets/fast_text_field.dart';
 import '../../widgets/module_header_premium.dart';
@@ -25,9 +26,17 @@ class AdminPartnerReceiptsTab extends StatefulWidget {
 }
 
 class _AdminPartnerReceiptsTabState extends State<AdminPartnerReceiptsTab> {
-  /// Escuta guardada (antes `.snapshots()` dentro do build).
-  late final Stream<QuerySnapshot<Map<String, dynamic>>> _paymentsStream =
-      FirebaseFirestore.instance.collection('mp_payments').limit(500).snapshots();
+  /// Escuta guardada (antes `.snapshots()` dentro do build), com prazo para
+  /// o 1º dado — sem resposta vira erro com «Tentar de novo».
+  late Stream<QuerySnapshot<Map<String, dynamic>>> _paymentsStream =
+      _novaEscuta();
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> _novaEscuta() =>
+      AdminLoadGuard.primeiroDadoComPrazo(
+        FirebaseFirestore.instance.collection('mp_payments').limit(500).snapshots(),
+        prazo: AdminLoadGuard.longo,
+        oQue: 'os pagamentos',
+      );
 
   final _searchFilterCtrl = TextEditingController();
   Timer? _searchDebounce;
@@ -76,7 +85,16 @@ class _AdminPartnerReceiptsTabState extends State<AdminPartnerReceiptsTab> {
       final refs = batch
           .map((uid) => FirebaseFirestore.instance.collection('users').doc(uid))
           .toList();
-      final snaps = await Future.wait(refs.map((r) => r.get()));
+      final List<DocumentSnapshot<Map<String, dynamic>>> snaps;
+      try {
+        snaps = await AdminLoadGuard.comPrazo(
+          Future.wait(refs.map((r) => r.get())),
+          oQue: 'os nomes dos pagadores',
+        );
+      } catch (e) {
+        debugPrint('Recebimentos sócio: nomes não carregaram: $e');
+        break;
+      }
       for (var j = 0; j < batch.length; j++) {
         final d = snaps[j].data();
         if (d == null) continue;
@@ -303,12 +321,10 @@ class _AdminPartnerReceiptsTabState extends State<AdminPartnerReceiptsTab> {
           stream: _paymentsStream,
           builder: (context, snap) {
             if (snap.hasError) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text('Erro ao carregar pagamentos.',
-                      style: TextStyle(color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700)),
-                ),
+              return AdminErroCard(
+                erro: snap.error,
+                titulo: 'Não foi possível carregar os pagamentos',
+                onTentar: () => setState(() => _paymentsStream = _novaEscuta()),
               );
             }
             if (!snap.hasData) {

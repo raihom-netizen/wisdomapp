@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
@@ -14,7 +16,14 @@ class MpAdminConfigService {
 
   Future<MpAdminConfigSnapshot> load() async {
     try {
-      final res = await _fn.httpsCallable('ctGetMpAdminConfig').call();
+      // Prazo próprio (25 s): sem ele a callable usava os 70 s padrão e o
+      // prazo da tela (60 s) estourava antes de cair na leitura do Firestore.
+      final res = await _fn
+          .httpsCallable(
+            'ctGetMpAdminConfig',
+            options: HttpsCallableOptions(timeout: const Duration(seconds: 25)),
+          )
+          .call();
       final data = Map<String, dynamic>.from(res.data as Map);
       if (data['ok'] == true) {
         return _fromCallable(data);
@@ -26,22 +35,23 @@ class MpAdminConfigService {
   }
 
   Future<MpAdminConfigSnapshot> _loadFromFirestore() async {
-    final ownerSnap = await FirebaseFirestore.instance
-        .collection('settings')
-        .doc('mercadopago')
-        .get();
-    final partnerSnap = await FirebaseFirestore.instance
-        .collection('settings')
-        .doc('mercadopago_partner')
-        .get();
-    final projectSnap = await FirebaseFirestore.instance
-        .collection('mp_project_config')
-        .doc('main')
-        .get();
-    final pricesSnap = await FirebaseFirestore.instance
-        .collection('app_config')
-        .doc('mp_checkout_prices')
-        .get();
+    final db = FirebaseFirestore.instance;
+    // Em paralelo e com prazo: leitura parada vira erro visível na tela.
+    final snaps = await Future.wait([
+      db.collection('settings').doc('mercadopago').get(),
+      db.collection('settings').doc('mercadopago_partner').get(),
+      db.collection('mp_project_config').doc('main').get(),
+      db.collection('app_config').doc('mp_checkout_prices').get(),
+    ]).timeout(
+      const Duration(seconds: 25),
+      onTimeout: () => throw TimeoutException(
+        'O servidor não respondeu a tempo ao carregar a configuração do Mercado Pago.',
+      ),
+    );
+    final ownerSnap = snaps[0];
+    final partnerSnap = snaps[1];
+    final projectSnap = snaps[2];
+    final pricesSnap = snaps[3];
 
     final owner = ownerSnap.data() ?? {};
     final partner = partnerSnap.data() ?? {};
@@ -125,7 +135,12 @@ class MpAdminConfigService {
     required MpAdminConfigSnapshot config,
     required bool syncLandingTexts,
   }) async {
-    final res = await _fn.httpsCallable('ctSaveMpAdminConfig').call<Map<String, dynamic>>({
+    final res = await _fn
+        .httpsCallable(
+          'ctSaveMpAdminConfig',
+          options: HttpsCallableOptions(timeout: const Duration(seconds: 60)),
+        )
+        .call<Map<String, dynamic>>({
       'owner': {
         'publicKey': config.ownerPublicKey,
         'accessToken': config.ownerAccessToken,

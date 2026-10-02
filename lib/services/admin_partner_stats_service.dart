@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+
+import '../utils/admin_load_guard.dart';
 
 /// Indicadores do painel sócio (Johnathan Tarley) — somente leitura.
 class AdminPartnerStats {
@@ -60,10 +63,13 @@ class AdminPartnerStatsService {
 
   Future<double> _loadPartnerSharePercent() async {
     try {
-      final snap = await FirebaseFirestore.instance
-          .collection('mp_project_config')
-          .doc('default')
-          .get();
+      final snap = await AdminLoadGuard.comPrazo(
+        FirebaseFirestore.instance
+            .collection('mp_project_config')
+            .doc('default')
+            .get(),
+        oQue: 'o percentual do sócio',
+      );
       final split = snap.data()?['split'];
       if (split is Map) {
         final pct = split['partnerSharePercent'] ?? split['partner_share_percent'];
@@ -94,7 +100,7 @@ class AdminPartnerStatsService {
 
     try {
       final users = FirebaseFirestore.instance.collection('users');
-      final counts = await Future.wait<AggregateQuerySnapshot>([
+      final counts = await AdminLoadGuard.comPrazo(Future.wait<AggregateQuerySnapshot>([
         users.count().get(),
         users
             .where('plan', whereIn: [
@@ -117,13 +123,13 @@ class AdminPartnerStatsService {
                 isLessThanOrEqualTo: Timestamp.fromDate(end7Eod))
             .count()
             .get(),
-      ]);
+      ]), oQue: 'a contagem de usuários');
       totalUsers = counts[0].count ?? 0;
       totalPremiums = counts[1].count ?? 0;
       licensesExpired = counts[2].count ?? 0;
       licensesExpiring7d = counts[3].count ?? 0;
     } catch (e) {
-      falhas.add('contagem de usuários e licenças: $e'.split('\n').first);
+      falhas.add('contagem de usuários e licenças: ${AdminLoadGuard.mensagem(e)}');
     }
 
     final partnerSharePercent = await _loadPartnerSharePercent();
@@ -151,20 +157,28 @@ class AdminPartnerStatsService {
     try {
       QuerySnapshot<Map<String, dynamic>> mpSnap;
       try {
-        mpSnap = await FirebaseFirestore.instance
-            .collection('mp_payments')
-            .where('status', isEqualTo: 'approved')
-            .where('dateApprovedAt',
-                isGreaterThanOrEqualTo: Timestamp.fromDate(periodStart))
-            .orderBy('dateApprovedAt', descending: true)
-            .limit(800)
-            .get();
-      } catch (_) {
-        mpSnap = await FirebaseFirestore.instance
-            .collection('mp_payments')
-            .where('status', isEqualTo: 'approved')
-            .limit(2000)
-            .get();
+        mpSnap = await AdminLoadGuard.comPrazo(
+          FirebaseFirestore.instance
+              .collection('mp_payments')
+              .where('status', isEqualTo: 'approved')
+              .where('dateApprovedAt',
+                  isGreaterThanOrEqualTo: Timestamp.fromDate(periodStart))
+              .orderBy('dateApprovedAt', descending: true)
+              .limit(800)
+              .get(),
+          oQue: 'os recebimentos',
+        );
+      } catch (e) {
+        if (e is TimeoutException) rethrow;
+        mpSnap = await AdminLoadGuard.comPrazo(
+          FirebaseFirestore.instance
+              .collection('mp_payments')
+              .where('status', isEqualTo: 'approved')
+              .limit(2000)
+              .get(),
+          prazo: AdminLoadGuard.longo,
+          oQue: 'os recebimentos',
+        );
       }
 
       for (final d in mpSnap.docs) {
@@ -217,7 +231,7 @@ class AdminPartnerStatsService {
         }
       }
     } catch (e) {
-      falhas.add('recebimentos do Mercado Pago: $e'.split('\n').first);
+      falhas.add('recebimentos do Mercado Pago: ${AdminLoadGuard.mensagem(e)}');
     }
 
     return AdminPartnerStats(

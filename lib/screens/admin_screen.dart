@@ -445,7 +445,11 @@ class _AdminScreenState extends State<AdminScreen> {
     }
     _partnershipMetricsLoading = true;
     try {
-      final metrics = await _fetchPartnershipMetrics();
+      final metrics = await AdminLoadGuard.comPrazo(
+        _fetchPartnershipMetrics(),
+        prazo: AdminLoadGuard.longo,
+        oQue: 'as métricas dos convênios',
+      );
       if (!mounted) return;
       setState(() => _overlayPartnershipMetrics = metrics);
     } catch (e) {
@@ -1017,6 +1021,12 @@ class _AdminScreenState extends State<AdminScreen> {
   /// calado). O Resumo mostra um aviso com «Tentar de novo».
   final List<String> _statsFalhas = [];
 
+  /// Prazo de CADA parte do Resumo: uma parte travada vira aviso só dela
+  /// (antes uma consulta parada segurava o Resumo inteiro até o prazo total).
+  static Future<T> _parteResumo<T>(Future<T> f, String oQue) =>
+      AdminLoadGuard.comPrazo(f,
+          prazo: const Duration(seconds: 25), oQue: oQue);
+
   void _statsFalhou(String parte, Object e) {
     debugPrint('Resumo admin — $parte: $e');
     _statsFalhas.add('$parte: ${AdminLoadGuard.mensagem(e)}');
@@ -1037,7 +1047,7 @@ class _AdminScreenState extends State<AdminScreen> {
     List<Map<String, dynamic>> usersSample = [];
     List<QueryDocumentSnapshot<Map<String, dynamic>>> docsForLicenses = [];
     try {
-      final uCounts = await Future.wait<AggregateQuerySnapshot>([
+      final uCounts = await _parteResumo(Future.wait<AggregateQuerySnapshot>([
         usersQuery.count().get(),
         usersQuery.where('role', isEqualTo: 'admin').count().get(),
         usersQuery.where('role', isEqualTo: 'master').count().get(),
@@ -1051,23 +1061,26 @@ class _AdminScreenState extends State<AdminScreen> {
             ])
             .count()
             .get(),
-      ]);
+      ]), 'a contagem de usuários');
       totalUsers = uCounts[0].count ?? 0;
       admins = (uCounts[1].count ?? 0) + (uCounts[2].count ?? 0);
       premiums = uCounts[3].count ?? 0;
       try {
         // `count()` com desigualdade num campo só (sem ler documentos). Antes
         // o fallback lia até 5000 usuários para contar convênios.
-        final pw = await FirebaseFirestore.instance
-            .collection('users')
-            .where('partnershipId', isGreaterThan: '')
-            .count()
-            .get();
+        final pw = await _parteResumo(
+            FirebaseFirestore.instance
+                .collection('users')
+                .where('partnershipId', isGreaterThan: '')
+                .count()
+                .get(),
+            'os usuários com convênio');
         usersWithPartnership = pw.count ?? 0;
       } catch (e) {
         _statsFalhou('usuários com convênio', e);
       }
-      final sampleSnap = await firestoreQueryGetReliable(usersQuery.limit(6));
+      final sampleSnap = await _parteResumo(
+          firestoreQueryGetReliable(usersQuery.limit(6)), 'a amostra de usuários');
       usersSample = sampleSnap.docs.map((d) => d.data()).toList();
       docsForLicenses = [];
     } catch (e) {
@@ -1078,9 +1091,10 @@ class _AdminScreenState extends State<AdminScreen> {
 
     if (!_adminPreferLightStatsIO) {
       try {
-        partnershipMetrics.addAll(await _fetchPartnershipMetrics());
+        partnershipMetrics.addAll(await _parteResumo(
+            _fetchPartnershipMetrics(), 'as métricas dos convênios'));
       } catch (e) {
-        debugPrint('Métricas convênios (resumo admin): $e');
+        _statsFalhou('métricas dos convênios', e);
       }
     }
 
@@ -1111,22 +1125,27 @@ class _AdminScreenState extends State<AdminScreen> {
     try {
       QuerySnapshot<Map<String, dynamic>> mpSnap;
       try {
-        mpSnap = await firestoreQueryGetReliable(
-          FirebaseFirestore.instance
-              .collection('mp_payments')
-              .where('status', isEqualTo: 'approved')
-              .where('dateApprovedAt',
-                  isGreaterThanOrEqualTo: Timestamp.fromDate(periodStart))
-              .orderBy('dateApprovedAt', descending: true)
-              .limit(_kAdminMpPaymentsLimit),
-        );
-      } catch (_) {
-        mpSnap = await firestoreQueryGetReliable(
-          FirebaseFirestore.instance
-              .collection('mp_payments')
-              .where('status', isEqualTo: 'approved')
-              .limit(_adminPreferLightStatsIO ? 500 : 2000),
-        );
+        mpSnap = await _parteResumo(
+            firestoreQueryGetReliable(
+              FirebaseFirestore.instance
+                  .collection('mp_payments')
+                  .where('status', isEqualTo: 'approved')
+                  .where('dateApprovedAt',
+                      isGreaterThanOrEqualTo: Timestamp.fromDate(periodStart))
+                  .orderBy('dateApprovedAt', descending: true)
+                  .limit(_kAdminMpPaymentsLimit),
+            ),
+            'os recebimentos');
+      } catch (e) {
+        if (e is TimeoutException) rethrow;
+        mpSnap = await _parteResumo(
+            firestoreQueryGetReliable(
+              FirebaseFirestore.instance
+                  .collection('mp_payments')
+                  .where('status', isEqualTo: 'approved')
+                  .limit(_adminPreferLightStatsIO ? 500 : 2000),
+            ),
+            'os recebimentos');
       }
       final allForLast = <Map<String, dynamic>>[];
       for (final d in mpSnap.docs) {
@@ -1231,12 +1250,14 @@ class _AdminScreenState extends State<AdminScreen> {
     final series = List<double>.filled(nTxBuckets, 0);
 
     try {
-      final uSamp = await Future.wait<QuerySnapshot<Map<String, dynamic>>>([
-        firestoreQueryGetReliable(usersQuery.limit(_kAdminUsersSizeSample)),
-        firestoreQueryGetReliable(
-          usersQuery.orderBy('createdAt', descending: true).limit(1),
-        ),
-      ]);
+      final uSamp = await _parteResumo(
+          Future.wait<QuerySnapshot<Map<String, dynamic>>>([
+            firestoreQueryGetReliable(usersQuery.limit(_kAdminUsersSizeSample)),
+            firestoreQueryGetReliable(
+              usersQuery.orderBy('createdAt', descending: true).limit(1),
+            ),
+          ]),
+          'o tamanho da base');
       final usersSampleForSize = uSamp[0];
       final latestUser = uSamp[1];
       if (usersSampleForSize.docs.isNotEmpty && totalUsers > 0) {
@@ -1262,17 +1283,22 @@ class _AdminScreenState extends State<AdminScreen> {
           .collectionGroup('transactions')
           .where('date',
               isGreaterThanOrEqualTo: Timestamp.fromDate(sinceDayTx));
-      final cSnap = await baseTx.count().get();
+      final cSnap =
+          await _parteResumo(baseTx.count().get(), 'os lançamentos');
       txCount30d = cSnap.count ?? 0;
       if (txCount30d != 0) {
-        final latestTxSnap = await firestoreQueryGetReliable(
-          baseTx.orderBy('date', descending: true).limit(1),
-        );
-        final txDetailSnap = await firestoreQueryGetReliable(
-          baseTx
-              .orderBy('date', descending: true)
-              .limit(_kAdminTxMaxDetailDocs),
-        );
+        final latestTxSnap = await _parteResumo(
+            firestoreQueryGetReliable(
+              baseTx.orderBy('date', descending: true).limit(1),
+            ),
+            'o último lançamento');
+        final txDetailSnap = await _parteResumo(
+            firestoreQueryGetReliable(
+              baseTx
+                  .orderBy('date', descending: true)
+                  .limit(_kAdminTxMaxDetailDocs),
+            ),
+            'os lançamentos do período');
         if (latestTxSnap.docs.isNotEmpty) {
           final ts0 = latestTxSnap.docs.first.data()['date'];
           if (ts0 is Timestamp) latestTransactionAt = ts0.toDate();
@@ -1363,7 +1389,7 @@ class _AdminScreenState extends State<AdminScreen> {
         FirebaseFirestore.instance.collection('users'));
 
     try {
-      final licAggs = await Future.wait<AggregateQuerySnapshot>([
+      final licAggs = await _parteResumo(Future.wait<AggregateQuerySnapshot>([
         licQ
             .where('licenseExpiresAt',
                 isLessThan: Timestamp.fromDate(startOfToday))
@@ -1376,19 +1402,21 @@ class _AdminScreenState extends State<AdminScreen> {
                 isLessThanOrEqualTo: Timestamp.fromDate(end7Eod))
             .count()
             .get(),
-      ]);
+      ]), 'as licenças');
       licensesExpired = licAggs[0].count ?? 0;
       licensesExpiring7d = licAggs[1].count ?? 0;
       licenseExpiryHorizonCounts = List<int>.filled(nLicBuckets, 0);
       try {
-        final horizonSnap = await firestoreQueryGetReliable(
-          licQ
-              .where('licenseExpiresAt',
-                  isGreaterThanOrEqualTo: Timestamp.fromDate(startOfToday))
-              .where('licenseExpiresAt',
-                  isLessThanOrEqualTo: Timestamp.fromDate(horizonEndEod))
-              .limit(_kAdminLicenseHorizonLimit),
-        );
+        final horizonSnap = await _parteResumo(
+            firestoreQueryGetReliable(
+              licQ
+                  .where('licenseExpiresAt',
+                      isGreaterThanOrEqualTo: Timestamp.fromDate(startOfToday))
+                  .where('licenseExpiresAt',
+                      isLessThanOrEqualTo: Timestamp.fromDate(horizonEndEod))
+                  .limit(_kAdminLicenseHorizonLimit),
+            ),
+            'os vencimentos');
         for (final doc in horizonSnap.docs) {
           final expRaw = doc.data()['licenseExpiresAt'];
           if (expRaw is! Timestamp) continue;
@@ -2965,10 +2993,10 @@ class _AdminScreenState extends State<AdminScreen> {
       if (onlyUids != null && onlyUids.isNotEmpty) {
         final rows = <String>['nome;email;plano;vencimento_licenca'];
         for (final uid in onlyUids.take(100)) {
-          final snap = await FirebaseFirestore.instance
-              .collection('users')
-              .doc(uid)
-              .get();
+          final snap = await AdminLoadGuard.comPrazo(
+            FirebaseFirestore.instance.collection('users').doc(uid).get(),
+            oQue: 'o usuário $uid',
+          );
           if (!snap.exists) continue;
           final d = snap.data() ?? {};
           final name = (d['name'] ?? '').toString().replaceAll(';', ',');
@@ -3001,7 +3029,11 @@ class _AdminScreenState extends State<AdminScreen> {
         Query<Map<String, dynamic>> q =
             FirebaseFirestore.instance.collection('users');
         const csvLimit = 5000;
-        final snap = await q.limit(csvLimit).get();
+        final snap = await AdminLoadGuard.comPrazo(
+          q.limit(csvLimit).get(),
+          prazo: AdminLoadGuard.longo,
+          oQue: 'os usuários para exportar',
+        );
         docs = snap.docs;
         if (snap.docs.length >= csvLimit && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -7540,7 +7572,18 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
       final refs = batch
           .map((uid) => FirebaseFirestore.instance.collection('users').doc(uid))
           .toList();
-      final snaps = await Future.wait(refs.map((r) => r.get()));
+      // Nomes são só enriquecimento: com prazo, e se falhar a lista sai com
+      // o que veio do Mercado Pago (antes a lista inteira ficava girando).
+      final List<DocumentSnapshot<Map<String, dynamic>>> snaps;
+      try {
+        snaps = await AdminLoadGuard.comPrazo(
+          Future.wait(refs.map((r) => r.get())),
+          oQue: 'os nomes dos pagadores',
+        );
+      } catch (e) {
+        debugPrint('Recebimentos: nomes dos pagadores não carregaram: $e');
+        break;
+      }
       for (var j = 0; j < batch.length; j++) {
         final d = snaps[j].data();
         if (d == null) continue;
@@ -8488,7 +8531,7 @@ class _MaintenanceRegistryPickerDialogState
           .orderBy(FieldPath.documentId)
           .limit(_pageSize);
       if (_lastDoc != null) q = q.startAfterDocument(_lastDoc!);
-      final snap = await q.get();
+      final snap = await AdminLoadGuard.comPrazo(q.get(), oQue: 'os usuários');
       if (!mounted) return;
       for (final d in snap.docs) {
         final m = d.data();
@@ -8505,7 +8548,7 @@ class _MaintenanceRegistryPickerDialogState
       if (_rows.length >= _maxRows) _exhausted = true;
     } catch (e) {
       if (mounted) {
-        _loadError = e.toString().split('\n').first;
+        _loadError = AdminLoadGuard.mensagem(e);
       }
     } finally {
       if (mounted) {
@@ -8794,9 +8837,18 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
   /// Carrega os dados uma única vez (sem listener) para evitar lentidão e travamentos.
   Future<void> _loadConfigOnce() async {
     try {
-      final snap = await FirebaseFirestore.instance.doc('system/config').get();
+      final snap = await AdminLoadGuard.comPrazo(
+        FirebaseFirestore.instance.doc('system/config').get(),
+        oQue: 'a configuração de manutenção',
+      );
       final d = snap.data();
-      if (d == null || !mounted) return;
+      if (!mounted) return;
+      if (d == null) {
+        // Sem documento ainda: abre com os padrões (antes o `return` pulava o
+        // `_loaded = true` e a tela girava para sempre).
+        setState(() => _loaded = true);
+        return;
+      }
       final msg = (d['maintenanceMessage'] ?? '').toString();
       if (msg.isNotEmpty) _messageCtrl.text = msg;
       final dateStr = (d['maintenanceDate'] ?? '').toString();
@@ -8855,8 +8907,11 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
           _recipients.clear();
           for (final uid in uids) {
             try {
-              final u =
-                  await FirebaseFirestore.instance.doc('users/$uid').get();
+              final u = await AdminLoadGuard.comPrazo(
+                FirebaseFirestore.instance.doc('users/$uid').get(),
+                prazo: const Duration(seconds: 10),
+                oQue: 'o destinatário',
+              );
               final ud = u.data();
               final name = (ud?['name'] ?? '').toString().trim();
               final em = (ud?['email'] ?? '').toString().trim();
@@ -8911,11 +8966,14 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
     }
     setState(() => _lookingUpUser = true);
     try {
-      final q = await FirebaseFirestore.instance
-          .collection('users')
-          .where('email', isEqualTo: email)
-          .limit(5)
-          .get();
+      final q = await AdminLoadGuard.comPrazo(
+        FirebaseFirestore.instance
+            .collection('users')
+            .where('email', isEqualTo: email)
+            .limit(5)
+            .get(),
+        oQue: 'o usuário',
+      );
       if (!mounted) return;
       if (q.docs.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -8958,7 +9016,10 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
     }
     setState(() => _lookingUpUser = true);
     try {
-      final snap = await FirebaseFirestore.instance.doc('users/$uid').get();
+      final snap = await AdminLoadGuard.comPrazo(
+        FirebaseFirestore.instance.doc('users/$uid').get(),
+        oQue: 'o usuário',
+      );
       if (!mounted) return;
       if (!snap.exists) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -10069,10 +10130,10 @@ class _EmailConfigTabContentState extends State<_EmailConfigTabContent> {
 
   Future<void> _loadConfig() async {
     try {
-      final snap = await FirebaseFirestore.instance
-          .collection('settings')
-          .doc('email')
-          .get();
+      final snap = await AdminLoadGuard.comPrazo(
+        FirebaseFirestore.instance.collection('settings').doc('email').get(),
+        oQue: 'a configuração de e-mail',
+      );
       final d = snap.data();
       if (d != null && mounted) {
         final user = (d['user'] ?? d['email'] ?? '').toString().trim();

@@ -16,6 +16,7 @@ import '../services/admin_audit_service.dart';
 import '../services/billing_service.dart';
 import '../services/logs_service.dart';
 import '../models/user_profile.dart';
+import '../utils/admin_load_guard.dart';
 import '../utils/admin_responsive.dart';
 import 'keyed_stream_builder.dart';
 import '../services/functions_service.dart';
@@ -158,7 +159,23 @@ Future<Set<String>> _unionUserIdsPartnershipOrPlan(
 /// Usuários vinculados ao convênio; opcionalmente só com [createdAt] nos últimos [periodDays] (0 = todo o período).
 /// [partnershipPlanCode]: quando não é plano varejo (ex.: premium_assego), conta também usuários com o mesmo
 /// [plan] no documento, além de [partnershipId] — alinhado a alterações manuais no painel Usuários.
+///
+/// Com prazo (02/10/2026): sem resposta do servidor vira erro visível em vez
+/// de métrica girando para sempre.
 Future<int> countUsersPartnershipInPeriod(
+  FirebaseFirestore fs,
+  String partnershipId,
+  int periodDays, {
+  String? partnershipPlanCode,
+}) =>
+    AdminLoadGuard.comPrazo(
+      _countUsersPartnershipInPeriodSemPrazo(fs, partnershipId, periodDays,
+          partnershipPlanCode: partnershipPlanCode),
+      prazo: AdminLoadGuard.longo,
+      oQue: 'os usuários do convênio',
+    );
+
+Future<int> _countUsersPartnershipInPeriodSemPrazo(
   FirebaseFirestore fs,
   String partnershipId,
   int periodDays, {
@@ -290,9 +307,16 @@ Future<List<DocumentSnapshot<Map<String, dynamic>>>> _listUserDocsPartnershipDat
   final ids = await _unionUserIdsPartnershipDateRange(fs, partnershipId, effective, start, end);
   final sorted = ids.toList()..sort();
   final out = <DocumentSnapshot<Map<String, dynamic>>>[];
-  for (final id in sorted.take(limit)) {
-    final doc = await fs.collection('users').doc(id).get();
-    if (doc.exists) out.add(doc);
+  // Em lotes paralelos de 30 (antes 1 leitura por vez — até 500 seguidas, e a
+  // tela do convênio ficava minutos carregando).
+  final alvo = sorted.take(limit).toList();
+  const lote = 30;
+  for (var i = 0; i < alvo.length; i += lote) {
+    final docs = await Future.wait(alvo
+        .skip(i)
+        .take(lote)
+        .map((id) => fs.collection('users').doc(id).get()));
+    out.addAll(docs.where((d) => d.exists));
   }
   return out;
 }
@@ -366,6 +390,8 @@ class PartnershipsAdminModule extends StatefulWidget {
 }
 
 class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
+  /// Muda a cada «Tentar de novo» da lista de convênios (recria a escuta).
+  int _convTentativa = 0;
   final _idCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
   final _daysCtrl = TextEditingController(text: '365');
@@ -1453,23 +1479,33 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
     try {
       final fs = FirebaseFirestore.instance;
       final base = fs.collection('partnerships').doc(partnershipId);
-      final members =
-          await base.collection('members').where('active', isEqualTo: true).count().get();
-      final usersCount = await countUsersPartnershipInPeriod(
-        fs,
-        partnershipId,
-        0,
-        partnershipPlanCode: partnershipPlanCode,
-      );
-      final subs = await base.collection('submissions').count().get();
       final since = Timestamp.fromDate(
         DateTime.now().subtract(const Duration(days: 7)),
       );
-      final subs7d = await base
-          .collection('submissions')
-          .where('createdAt', isGreaterThan: since)
-          .count()
-          .get();
+      // As 4 leituras em paralelo e com prazo (antes em fila, sem prazo).
+      final r = await AdminLoadGuard.comPrazo(
+        Future.wait<Object>([
+          base.collection('members').where('active', isEqualTo: true).count().get(),
+          countUsersPartnershipInPeriod(
+            fs,
+            partnershipId,
+            0,
+            partnershipPlanCode: partnershipPlanCode,
+          ),
+          base.collection('submissions').count().get(),
+          base
+              .collection('submissions')
+              .where('createdAt', isGreaterThan: since)
+              .count()
+              .get(),
+        ]),
+        prazo: AdminLoadGuard.longo,
+        oQue: 'o relatório do convênio',
+      );
+      final members = r[0] as AggregateQuerySnapshot;
+      final usersCount = r[1] as int;
+      final subs = r[2] as AggregateQuerySnapshot;
+      final subs7d = r[3] as AggregateQuerySnapshot;
       final line =
           'id;$name;membros_ativos;usuarios_app;submissoes_total;submissoes_7d\n'
           '$partnershipId;"$name";${members.count};$usersCount;${subs.count};${subs7d.count}\n';
@@ -1482,7 +1518,7 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Erro ao montar relatório: $e'),
+          content: Text('Erro ao montar relatório: ${AdminLoadGuard.mensagem(e)}'),
           backgroundColor: AppColors.error,
         ),
       );
@@ -1491,13 +1527,16 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
 
   Future<void> _copyMembersEmailsSample(String partnershipId) async {
     try {
-      final snap = await FirebaseFirestore.instance
-          .collection('partnerships')
-          .doc(partnershipId)
-          .collection('members')
-          .orderBy('email')
-          .limit(800)
-          .get();
+      final snap = await AdminLoadGuard.comPrazo(
+        FirebaseFirestore.instance
+            .collection('partnerships')
+            .doc(partnershipId)
+            .collection('members')
+            .orderBy('email')
+            .limit(800)
+            .get(),
+        oQue: 'os membros',
+      );
       final emails = snap.docs
           .map((d) => (d.data()['email'] ?? '').toString().trim().toLowerCase())
           .where((e) => e.contains('@'))
@@ -1741,21 +1780,42 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
           ),
           const SizedBox(height: 12),
           KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            streamKey: 'partnerships-by-name',
-            create: () => FirebaseFirestore.instance
-                .collection('partnerships')
-                .orderBy('name')
-                .snapshots(),
+            streamKey: 'partnerships-by-name-$_convTentativa',
+            create: () => AdminLoadGuard.primeiroDadoComPrazo(
+              FirebaseFirestore.instance
+                  .collection('partnerships')
+                  .orderBy('name')
+                  .snapshots(),
+              oQue: 'os convênios',
+            ),
             builder: (context, snap) {
               final docs = snap.data?.docs ?? [];
               if (snap.hasError) {
                 return _partnershipAdminPremiumCard(
                   title: 'Erro ao carregar convênios',
                   headerIcon: Icons.error_outline_rounded,
-                  child: Text(
-                    '${snap.error}',
-                    style: TextStyle(color: Colors.red.shade800, fontSize: 13, height: 1.35),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        AdminLoadGuard.mensagem(snap.error),
+                        style: TextStyle(color: Colors.red.shade800, fontSize: 13, height: 1.35),
+                      ),
+                      const SizedBox(height: 8),
+                      FilledButton.icon(
+                        onPressed: () => setState(() => _convTentativa++),
+                        icon: const Icon(Icons.refresh_rounded, size: 18),
+                        label: const Text('Tentar de novo'),
+                      ),
+                    ],
                   ),
+                );
+              }
+              // Ainda carregando: não dizer «Nenhum convênio cadastrado».
+              if (!snap.hasData) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: LinearProgressIndicator(minHeight: 3),
                 );
               }
               if (docs.isEmpty) {
@@ -3202,16 +3262,20 @@ class _PartnershipMetricsRowState extends State<_PartnershipMetricsRow> {
   Future<List<dynamic>> _loadMetrics() {
     final fs = FirebaseFirestore.instance;
     final base = fs.collection('partnerships').doc(widget.partnershipId);
-    return Future.wait([
-      base.collection('members').where('active', isEqualTo: true).count().get(),
-      countUsersPartnershipInPeriod(
-        fs,
-        widget.partnershipId,
-        0,
-        partnershipPlanCode: widget.partnershipPlanCode,
-      ),
-      base.collection('submissions').count().get(),
-    ]);
+    return AdminLoadGuard.comPrazo(
+      Future.wait([
+        base.collection('members').where('active', isEqualTo: true).count().get(),
+        countUsersPartnershipInPeriod(
+          fs,
+          widget.partnershipId,
+          0,
+          partnershipPlanCode: widget.partnershipPlanCode,
+        ),
+        base.collection('submissions').count().get(),
+      ]),
+      prazo: AdminLoadGuard.longo,
+      oQue: 'as métricas do convênio',
+    );
   }
 
   @override
@@ -3240,9 +3304,20 @@ class _PartnershipMetricsRowState extends State<_PartnershipMetricsRow> {
           return const LinearProgressIndicator(minHeight: 3);
         }
         if (snap.hasError || snap.data == null || snap.data!.length < 3) {
-          return Text(
-            'Não foi possível carregar métricas.',
-            style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+          return Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                'Não foi possível carregar métricas. '
+                '${AdminLoadGuard.mensagem(snap.error)}',
+                style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+              ),
+              TextButton(
+                onPressed: () =>
+                    setState(() => _metricsFuture = _loadMetrics()),
+                child: const Text('Tentar de novo'),
+              ),
+            ],
           );
         }
         final mem = (snap.data![0] as AggregateQuerySnapshot).count ?? 0;
@@ -5268,14 +5343,18 @@ class _PartnershipUsersPanelState extends State<PartnershipUsersPanel> {
             const SizedBox(height: 8),
             KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               streamKey: 'users-with-partnership',
-              create: () => fs
-                  .collection('users')
-                  .where('partnershipId', isNotEqualTo: '')
-                  .limit(500)
-                  .snapshots(),
+              create: () => AdminLoadGuard.primeiroDadoComPrazo(
+                fs
+                    .collection('users')
+                    .where('partnershipId', isNotEqualTo: '')
+                    .limit(500)
+                    .snapshots(),
+                prazo: AdminLoadGuard.longo,
+                oQue: 'os usuários com convênio',
+              ),
               builder: (context, snap) {
                 if (snap.hasError) {
-                  return Text('Erro: ${snap.error}');
+                  return Text('Erro: ${AdminLoadGuard.mensagem(snap.error)}');
                 }
                 if (!snap.hasData) {
                   return const LinearProgressIndicator(minHeight: 3);
@@ -5318,23 +5397,38 @@ class _PartnershipUsersPanelState extends State<PartnershipUsersPanel> {
           const SizedBox(height: 8),
           KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             streamKey: pid,
-            create: () => fs
-                .collection('users')
-                .where('partnershipId', isEqualTo: pid)
-                .limit(400)
-                .snapshots(),
+            create: () => AdminLoadGuard.primeiroDadoComPrazo(
+              fs
+                  .collection('users')
+                  .where('partnershipId', isEqualTo: pid)
+                  .limit(400)
+                  .snapshots(),
+              oQue: 'os usuários do convênio',
+            ),
             builder: (context, byPidSnap) {
+              if (byPidSnap.hasError) {
+                return Text(
+                  'Erro: ${AdminLoadGuard.mensagem(byPidSnap.error)}',
+                  style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+                );
+              }
+              if (!byPidSnap.hasData) {
+                return const LinearProgressIndicator(minHeight: 3);
+              }
               final byPidDocs = byPidSnap.data?.docs ?? const [];
               if (!includePlanQuery) {
                 return _usersListFromDocs(byPidDocs);
               }
               return KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 streamKey: planCode,
-                create: () => fs
-                    .collection('users')
-                    .where('plan', isEqualTo: planCode)
-                    .limit(400)
-                    .snapshots(),
+                create: () => AdminLoadGuard.primeiroDadoComPrazo(
+                  fs
+                      .collection('users')
+                      .where('plan', isEqualTo: planCode)
+                      .limit(400)
+                      .snapshots(),
+                  oQue: 'os usuários do plano',
+                ),
                 builder: (context, byPlanSnap) {
                   final byPlanDocs = byPlanSnap.data?.docs ?? const [];
                   final all = <QueryDocumentSnapshot<Map<String, dynamic>>>[
@@ -5401,13 +5495,22 @@ class _ConsolidadoConveniosCardState extends State<_ConsolidadoConveniosCard> {
             ? (data['revenuePerUser'] as num).toDouble()
             : 0.0;
         final planCode = (data['planCode'] ?? 'premium_assego').toString();
-        final userCount = await countUsersPartnershipInPeriod(
-          fs,
-          id,
-          periodDays,
-          partnershipPlanCode: planCode,
-        );
-        final memberCount = await _countMembersPartnershipInPeriod(fs, id, periodDays);
+        // As duas contagens em paralelo (antes uma depois da outra).
+        final contagens = await Future.wait<int>([
+          countUsersPartnershipInPeriod(
+            fs,
+            id,
+            periodDays,
+            partnershipPlanCode: planCode,
+          ),
+          AdminLoadGuard.comPrazo(
+            _countMembersPartnershipInPeriod(fs, id, periodDays),
+            prazo: AdminLoadGuard.longo,
+            oQue: 'os membros do convênio',
+          ),
+        ]);
+        final userCount = contagens[0];
+        final memberCount = contagens[1];
         final qtdBase = userCount > 0 ? userCount : memberCount;
         final totalCost = qtdBase * costPerUser;
         final totalRevenue = qtdBase * revenuePerUser;
@@ -5470,9 +5573,19 @@ class _ConsolidadoConveniosCardState extends State<_ConsolidadoConveniosCard> {
               return const LinearProgressIndicator(minHeight: 3);
             }
             if (snap.hasError || snap.data == null) {
-              return Text(
-                'Não foi possível carregar o consolidado dos convênios.',
-                style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+              return Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    'Não foi possível carregar o consolidado dos convênios. '
+                    '${AdminLoadGuard.mensagem(snap.error)}',
+                    style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() => _rowsFuture = _loadRows()),
+                    child: const Text('Tentar de novo'),
+                  ),
+                ],
               );
             }
             final rows = snap.data!;
@@ -5645,6 +5758,42 @@ class _PartnershipFinancialPanelState extends State<_PartnershipFinancialPanel> 
   late DateTime _rangeStart;
   late DateTime _rangeEnd;
   bool _saving = false;
+
+  /// Financeiro do período guardado (antes `Future.wait` direto no build: a
+  /// cada rebuild — salvar, digitar — relia até 500 usuários do convênio).
+  Future<List<Object?>>? _financeiroFuture;
+  String _financeiroKey = '';
+
+  Future<List<Object?>> _financeiroDoPeriodo(FirebaseFirestore fs,
+      {bool forcar = false}) {
+    final key = '${widget.partnershipId}|${widget.partnershipPlanCode}|'
+        '$_rangeStart|$_rangeEnd';
+    if (forcar || _financeiroFuture == null || key != _financeiroKey) {
+      _financeiroKey = key;
+      _financeiroFuture = AdminLoadGuard.comPrazo(
+        Future.wait<Object?>([
+          _countUsersPartnershipDateRange(
+            fs,
+            widget.partnershipId,
+            widget.partnershipPlanCode,
+            _rangeStart,
+            _rangeEnd,
+          ),
+          _listUserDocsPartnershipDateRange(
+            fs,
+            widget.partnershipId,
+            widget.partnershipPlanCode,
+            _rangeStart,
+            _rangeEnd,
+            500,
+          ),
+        ]),
+        prazo: AdminLoadGuard.longo,
+        oQue: 'o financeiro do convênio',
+      );
+    }
+    return _financeiroFuture!;
+  }
 
   static const double _kMbEstimativaPorUsuario = 0.35;
 
@@ -5923,23 +6072,7 @@ class _PartnershipFinancialPanelState extends State<_PartnershipFinancialPanel> 
                 ),
                 const Divider(height: 28),
                 FutureBuilder<List<Object?>>(
-                  future: Future.wait<Object?>([
-                    _countUsersPartnershipDateRange(
-                      fs,
-                      widget.partnershipId,
-                      widget.partnershipPlanCode,
-                      _rangeStart,
-                      _rangeEnd,
-                    ),
-                    _listUserDocsPartnershipDateRange(
-                      fs,
-                      widget.partnershipId,
-                      widget.partnershipPlanCode,
-                      _rangeStart,
-                      _rangeEnd,
-                      500,
-                    ),
-                  ]),
+                  future: _financeiroDoPeriodo(fs),
                   builder: (context, snap) {
                     if (snap.connectionState != ConnectionState.done) {
                       return const Padding(
@@ -5950,10 +6083,22 @@ class _PartnershipFinancialPanelState extends State<_PartnershipFinancialPanel> 
                     if (snap.hasError || snap.data == null) {
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: Text(
-                          'Não foi possível carregar o financeiro deste convênio.',
-                          style: TextStyle(
-                              fontSize: 12, color: Colors.red.shade700),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Não foi possível carregar o financeiro deste convênio. '
+                              '${AdminLoadGuard.mensagem(snap.error)}',
+                              style: TextStyle(
+                                  fontSize: 12, color: Colors.red.shade700),
+                            ),
+                            TextButton.icon(
+                              onPressed: () => setState(
+                                  () => _financeiroDoPeriodo(fs, forcar: true)),
+                              icon: const Icon(Icons.refresh_rounded, size: 18),
+                              label: const Text('Tentar de novo'),
+                            ),
+                          ],
                         ),
                       );
                     }

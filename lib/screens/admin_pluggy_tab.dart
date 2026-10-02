@@ -7,6 +7,8 @@ import '../theme/app_colors.dart';
 import '../theme/theme_context.dart';
 import '../widgets/module_header_premium.dart';
 import '../widgets/admin/admin_page_shell.dart';
+import '../widgets/admin/admin_ui_kit.dart';
+import '../utils/admin_load_guard.dart';
 
 /// Painel Admin: credenciais Pluggy em `app_config/pluggy` (Client ID / Secret, webhook opcional).
 ///
@@ -38,6 +40,17 @@ class _AdminPluggyTabState extends State<AdminPluggyTab> {
   bool _saving = false;
   bool _testingToken = false;
   String? _lastTestMessage;
+
+  /// Escuta guardada no State com prazo para o 1º dado (antes `_doc.snapshots()`
+  /// direto no build: escuta nova a cada rebuild e, sem resposta, os campos
+  /// ficavam vazios sem aviso).
+  late Stream<DocumentSnapshot<Map<String, dynamic>>> _docStream = _novaEscuta();
+
+  Stream<DocumentSnapshot<Map<String, dynamic>>> _novaEscuta() =>
+      AdminLoadGuard.primeiroDadoComPrazo(
+        _doc.snapshots(),
+        oQue: 'a configuração da Pluggy',
+      );
 
   @override
   void dispose() {
@@ -78,7 +91,10 @@ class _AdminPluggyTabState extends State<AdminPluggyTab> {
       if (secret.isNotEmpty) {
         payload['clientSecret'] = secret;
       }
-      await _doc.set(payload, SetOptions(merge: true));
+      await AdminLoadGuard.comPrazo(
+        _doc.set(payload, SetOptions(merge: true)),
+        oQue: 'a gravação da configuração',
+      );
       if (mounted) {
         _clientSecretCtrl.clear();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -108,7 +124,12 @@ class _AdminPluggyTabState extends State<AdminPluggyTab> {
       _lastTestMessage = null;
     });
     try {
-      final res = await FirebaseFunctions.instance.httpsCallable('ctCreatePluggyConnectToken').call();
+      final res = await FirebaseFunctions.instance
+          .httpsCallable(
+            'ctCreatePluggyConnectToken',
+            options: HttpsCallableOptions(timeout: AdminLoadGuard.longo),
+          )
+          .call();
       final data = Map<String, dynamic>.from(res.data as Map);
       final ok = data['ok'] == true;
       final msg = (data['message'] ?? '').toString();
@@ -136,8 +157,23 @@ class _AdminPluggyTabState extends State<AdminPluggyTab> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: _doc.snapshots(),
+      stream: _docStream,
       builder: (context, snap) {
+        if (snap.hasError && !snap.hasData) {
+          return ListView(
+            padding: AdminPageShell.listPadding(context, top: 8),
+            children: [
+              AdminErroCard(
+                erro: snap.error,
+                titulo: 'Não foi possível carregar a configuração da Pluggy',
+                onTentar: () => setState(() => _docStream = _novaEscuta()),
+              ),
+            ],
+          );
+        }
+        if (!snap.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
         final doc = snap.data;
         _hydrateFromSnapshot(doc);
         final d = (doc != null && doc.exists) ? (doc.data() ?? <String, dynamic>{}) : <String, dynamic>{};

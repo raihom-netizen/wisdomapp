@@ -13,6 +13,7 @@ import '../services/logs_service.dart';
 import '../services/mp_checkout_pricing_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/theme_context.dart';
+import '../utils/admin_load_guard.dart';
 import '../utils/debounced_text_controller.dart';
 import '../widgets/admin/admin_ui_kit.dart';
 import '../widgets/brl_amount_text_field.dart';
@@ -168,6 +169,11 @@ class _AdminPremiumProMonitorTabState extends State<AdminPremiumProMonitorTab> {
   String? _error;
   _ProAddonKpis _addonKpis = const _ProAddonKpis();
 
+  /// Escuta de preços guardada (antes `MpCheckoutPricingService.watch()` no
+  /// build: a cada letra da busca nascia uma escuta nova no Firestore).
+  late final Stream<MpCheckoutPricingSnapshot> _precosStream =
+      MpCheckoutPricingService.watch();
+
   @override
   void initState() {
     super.initState();
@@ -194,7 +200,7 @@ class _AdminPremiumProMonitorTabState extends State<AdminPremiumProMonitorTab> {
   Future<_ProAddonKpis> _fetchAddonKpis(FirebaseFirestore db) async {
     final now = Timestamp.now();
     try {
-      final snaps = await Future.wait<AggregateQuerySnapshot>([
+      final snaps = await AdminLoadGuard.comPrazo(Future.wait<AggregateQuerySnapshot>([
         db
             .collectionGroup('bank_connection_entitlements')
             .where('expiresAt', isGreaterThan: now)
@@ -215,7 +221,7 @@ class _AdminPremiumProMonitorTabState extends State<AdminPremiumProMonitorTab> {
             .where('entitlementType', isEqualTo: 'extra_bank_connection')
             .count()
             .get(),
-      ]);
+      ]), oQue: 'os indicadores de add-on');
       return _ProAddonKpis(
         extrasVigentes: snaps[0].count,
         negadoPorTeto: snaps[1].count,
@@ -223,7 +229,7 @@ class _AdminPremiumProMonitorTabState extends State<AdminPremiumProMonitorTab> {
         pagamentosAddOnAprovados: snaps[3].count,
       );
     } catch (e) {
-      return _ProAddonKpis(error: e.toString());
+      return _ProAddonKpis(error: AdminLoadGuard.mensagem(e));
     }
   }
 
@@ -237,12 +243,16 @@ class _AdminPremiumProMonitorTabState extends State<AdminPremiumProMonitorTab> {
     try {
       final db = FirebaseFirestore.instance;
       final addonFuture = _fetchAddonKpis(db);
-      final proLoad = await Future.wait<dynamic>([
-        db.doc('app_config/premium_pro_monitor').get(),
-        db.collection('users').where('plan', isEqualTo: 'premium_pro').limit(500).get(),
-        db.collection('users').where('premiumPro', isEqualTo: true).limit(500).get(),
-        db.collection('users').where('isPremiumPro', isEqualTo: true).limit(500).get(),
-      ]);
+      final proLoad = await AdminLoadGuard.comPrazo(
+        Future.wait<dynamic>([
+          db.doc('app_config/premium_pro_monitor').get(),
+          db.collection('users').where('plan', isEqualTo: 'premium_pro').limit(500).get(),
+          db.collection('users').where('premiumPro', isEqualTo: true).limit(500).get(),
+          db.collection('users').where('isPremiumPro', isEqualTo: true).limit(500).get(),
+        ]),
+        prazo: AdminLoadGuard.longo,
+        oQue: 'os usuários PRO',
+      );
       final econSnap = proLoad[0] as DocumentSnapshot<Map<String, dynamic>>;
       final s1 = proLoad[1] as QuerySnapshot<Map<String, dynamic>>;
       final s2 = proLoad[2] as QuerySnapshot<Map<String, dynamic>>;
@@ -268,12 +278,15 @@ class _AdminPremiumProMonitorTabState extends State<AdminPremiumProMonitorTab> {
       for (var i = 0; i < docs.length; i += batch) {
         final end = i + batch > docs.length ? docs.length : i + batch;
         final slice = docs.sublist(i, end);
-        final partial = await Future.wait(slice.map((doc) async {
-          final agg = await db.collection('users').doc(doc.id).collection('bank_connections').count().get();
-          final n = agg.count ?? 0;
-          final profile = _profileFromUserDoc(doc.id, doc.data());
-          return (doc: doc, bankCount: n, profile: profile);
-        }));
+        final partial = await AdminLoadGuard.comPrazo(
+          Future.wait(slice.map((doc) async {
+            final agg = await db.collection('users').doc(doc.id).collection('bank_connections').count().get();
+            final n = agg.count ?? 0;
+            final profile = _profileFromUserDoc(doc.id, doc.data());
+            return (doc: doc, bankCount: n, profile: profile);
+          })),
+          oQue: 'as conexões bancárias',
+        );
         rows.addAll(partial);
       }
       rows.sort((a, b) => a.profile.name.toLowerCase().compareTo(b.profile.name.toLowerCase()));
@@ -288,8 +301,8 @@ class _AdminPremiumProMonitorTabState extends State<AdminPremiumProMonitorTab> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString();
-          _addonKpis = _ProAddonKpis(error: e.toString());
+          _error = AdminLoadGuard.mensagem(e);
+          _addonKpis = _ProAddonKpis(error: AdminLoadGuard.mensagem(e));
           _loading = false;
         });
       }
@@ -313,7 +326,22 @@ class _AdminPremiumProMonitorTabState extends State<AdminPremiumProMonitorTab> {
       firebaseEstimatePerUserMonthBrl: fb,
       mercadoPagoFeePercent: fee,
     );
-    await FirebaseFirestore.instance.doc('app_config/premium_pro_monitor').set(next.toMap(), SetOptions(merge: true));
+    try {
+      await AdminLoadGuard.comPrazo(
+        FirebaseFirestore.instance
+            .doc('app_config/premium_pro_monitor')
+            .set(next.toMap(), SetOptions(merge: true)),
+        oQue: 'a gravação dos parâmetros',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Não salvou: ${AdminLoadGuard.mensagem(e)}'),
+          backgroundColor: AppColors.error,
+        ));
+      }
+      return;
+    }
     if (mounted) {
       setState(() => _econ = next);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Parâmetros de custo salvos.')));
@@ -337,7 +365,7 @@ class _AdminPremiumProMonitorTabState extends State<AdminPremiumProMonitorTab> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<MpCheckoutPricingSnapshot>(
-      stream: MpCheckoutPricingService.watch(),
+      stream: _precosStream,
       builder: (context, priceSnap) {
         final prices = priceSnap.data ?? MpCheckoutPricingSnapshot.defaults();
         final q = _searchCtrl.text.trim().toLowerCase();
@@ -402,7 +430,10 @@ class _AdminPremiumProMonitorTabState extends State<AdminPremiumProMonitorTab> {
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
                   : _error != null
-                      ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(_error!, style: const TextStyle(color: Colors.red))))
+                      ? Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: AdminErroCard(erro: _error, onTentar: _load),
+                        )
                       : RefreshIndicator(
                           onRefresh: _load,
                           child: ListView(

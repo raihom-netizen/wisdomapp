@@ -58,7 +58,11 @@ class _AdminPartnerResumoTabState extends State<AdminPartnerResumoTab> {
   Future<void> _refresh() async {
     _reload();
     final f = _statsFuture;
-    if (f != null) await f;
+    try {
+      if (f != null) await f;
+    } catch (_) {
+      // O erro já aparece no card com «Tentar de novo».
+    }
     if (mounted) setState(() => _lastUpdate = DateTime.now());
   }
 

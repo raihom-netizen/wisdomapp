@@ -87,7 +87,7 @@ class AdminMercadoPagoTabState extends State<AdminMercadoPagoTab>
       _applySnapshot(c);
     } catch (e) {
       if (mounted) {
-        _loadError = e.toString().split('\n').first;
+        _loadError = AdminLoadGuard.mensagem(e);
       }
     }
     if (mounted) setState(() => _loading = false);
@@ -254,7 +254,7 @@ class AdminMercadoPagoTabState extends State<AdminMercadoPagoTab>
         await reload();
       }
     } catch (e) {
-      if (mounted) _snack('Erro: ${e.toString().split('\n').first}');
+      if (mounted) _snack('Erro: ${AdminLoadGuard.mensagem(e)}');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -266,7 +266,7 @@ class AdminMercadoPagoTabState extends State<AdminMercadoPagoTab>
       final res = await FunctionsService().syncAllMpPayments();
       if (mounted) _snack(res['message']?.toString() ?? 'Sincronização concluída.');
     } catch (e) {
-      if (mounted) _snack('Erro: ${e.toString().split('\n').first}');
+      if (mounted) _snack('Erro: ${AdminLoadGuard.mensagem(e)}');
     } finally {
       if (mounted) setState(() => _syncingAll = false);
     }
@@ -302,7 +302,7 @@ class AdminMercadoPagoTabState extends State<AdminMercadoPagoTab>
         _snack(res['message']?.toString() ?? 'Pagamentos limpos.');
       }
     } catch (e) {
-      if (mounted) _snack('Erro: ${e.toString().split('\n').first}');
+      if (mounted) _snack('Erro: ${AdminLoadGuard.mensagem(e)}');
     } finally {
       if (mounted) setState(() => _purgingPayments = false);
     }
@@ -318,6 +318,22 @@ class AdminMercadoPagoTabState extends State<AdminMercadoPagoTab>
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 48),
         child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    // Carga falhou: NÃO mostrar o formulário vazio — «Salvar» gravaria
+    // credenciais/split em branco por cima dos valores reais.
+    if (_loadError != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _heroHeader(),
+          AdminErroCard(
+            erro: _loadError,
+            titulo: 'Não foi possível carregar a configuração do Mercado Pago',
+            onTentar: reload,
+          ),
+        ],
       );
     }
 

@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 import '../services/pro_open_finance_config_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/theme_context.dart';
+import '../utils/admin_load_guard.dart';
+import '../widgets/admin/admin_ui_kit.dart';
 
 /// Admin: teto global de conexões + listagem de add-ons (Mercado Pago) por utilizador.
 class AdminOpenFinanceExtrasTab extends StatefulWidget {
@@ -29,6 +31,33 @@ class _AdminOpenFinanceExtrasTabState extends State<AdminOpenFinanceExtrasTab> {
   bool _saving = false;
   String? _saveError;
 
+  /// Escuta guardada no State com prazo para o 1º dado (antes `.snapshots()`
+  /// dentro do build — escuta nova a cada rebuild e spinner eterno sem resposta).
+  late Stream<QuerySnapshot<Map<String, dynamic>>> _entitlementsStream =
+      _novaEscuta();
+
+  /// E-mail por uid, lido UMA vez (antes uma escuta `users/{uid}` por linha,
+  /// recriada a cada rebuild).
+  final Map<String, Future<String>> _emailPorUid = {};
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> _novaEscuta() =>
+      AdminLoadGuard.primeiroDadoComPrazo(
+        FirebaseFirestore.instance
+            .collectionGroup('bank_connection_entitlements')
+            .orderBy('createdAt', descending: true)
+            .limit(400)
+            .snapshots(),
+        oQue: 'as conexões extras',
+      );
+
+  Future<String> _emailDe(String uid) => _emailPorUid[uid] ??= AdminLoadGuard
+          .comPrazo(
+            FirebaseFirestore.instance.collection('users').doc(uid).get(),
+            oQue: 'o usuário',
+          )
+          .then((s) => (s.data()?['email'] ?? '—').toString())
+          .catchError((Object _) => '—');
+
   @override
   void initState() {
     super.initState();
@@ -43,10 +72,19 @@ class _AdminOpenFinanceExtrasTabState extends State<AdminOpenFinanceExtrasTab> {
 
   Future<void> _hydrate() async {
     try {
-      final c = await ProOpenFinanceConfigService.getOnce();
+      final c = await AdminLoadGuard.comPrazo(
+        ProOpenFinanceConfigService.getOnce(),
+        oQue: 'o teto de conexões',
+      );
       if (mounted) _maxCtrl.text = c.maxTotalBankConnections.toString();
-    } catch (_) {
-      if (mounted) _maxCtrl.text = '${ProOpenFinanceConfig.defaultMaxTotal}';
+    } catch (e) {
+      // Mostra o padrão, mas avisa — antes o padrão aparecia calado e podia
+      // ser gravado por cima do valor real.
+      if (mounted) {
+        _maxCtrl.text = '${ProOpenFinanceConfig.defaultMaxTotal}';
+        setState(() => _saveError =
+            'Não foi possível ler o teto atual (mostrando o padrão). ${AdminLoadGuard.mensagem(e)}');
+      }
     }
   }
 
@@ -61,13 +99,16 @@ class _AdminOpenFinanceExtrasTabState extends State<AdminOpenFinanceExtrasTab> {
       _saveError = null;
     });
     try {
-      await FirebaseFirestore.instance.collection('app_config').doc('pro_open_finance').set(
-        {
-          'maxTotalBankConnections': n,
-          'updatedAt': FieldValue.serverTimestamp(),
-          'updatedByUid': widget.currentAdminUid,
-        },
-        SetOptions(merge: true),
+      await AdminLoadGuard.comPrazo(
+        FirebaseFirestore.instance.collection('app_config').doc('pro_open_finance').set(
+          {
+            'maxTotalBankConnections': n,
+            'updatedAt': FieldValue.serverTimestamp(),
+            'updatedByUid': widget.currentAdminUid,
+          },
+          SetOptions(merge: true),
+        ),
+        oQue: 'a gravação do teto',
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -78,7 +119,7 @@ class _AdminOpenFinanceExtrasTabState extends State<AdminOpenFinanceExtrasTab> {
         );
       }
     } catch (e) {
-      if (mounted) setState(() => _saveError = e.toString());
+      if (mounted) setState(() => _saveError = AdminLoadGuard.mensagem(e));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -167,7 +208,10 @@ class _AdminOpenFinanceExtrasTabState extends State<AdminOpenFinanceExtrasTab> {
                     ),
                     if (_saveError != null) ...[
                       const SizedBox(height: 8),
-                      Text(_saveError!, style: TextStyle(color: Colors.red.shade800, fontSize: 12.5)),
+                      Text(_saveError!,
+                          style: TextStyle(
+                              color: context.isDarkMode ? Colors.red.shade300 : Colors.red.shade800,
+                              fontSize: 12.5)),
                     ],
                   ],
                 ),
@@ -189,17 +233,18 @@ class _AdminOpenFinanceExtrasTabState extends State<AdminOpenFinanceExtrasTab> {
         ),
         const SliverToBoxAdapter(child: SizedBox(height: 8)),
         StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collectionGroup('bank_connection_entitlements')
-              .orderBy('createdAt', descending: true)
-              .limit(400)
-              .snapshots(),
+          stream: _entitlementsStream,
           builder: (context, snap) {
             if (snap.hasError) {
               return SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Text('Erro ao listar: ${snap.error}'),
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: AdminErroCard(
+                    erro: snap.error,
+                    titulo: 'Não foi possível listar as conexões extras',
+                    onTentar: () =>
+                        setState(() => _entitlementsStream = _novaEscuta()),
+                  ),
                 ),
               );
             }
@@ -244,10 +289,10 @@ class _AdminOpenFinanceExtrasTabState extends State<AdminOpenFinanceExtrasTab> {
                               'Plano: $planCode · MP: $payId\nVálido até: ${exp != null ? df.format(exp) : "—"}',
                               style: const TextStyle(height: 1.35, fontSize: 12.5),
                             )
-                          : StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                              stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
+                          : FutureBuilder<String>(
+                              future: _emailDe(uid),
                               builder: (context, uSnap) {
-                                final em = (uSnap.data?.data()?['email'] ?? '—').toString();
+                                final em = uSnap.data ?? '…';
                                 return Text(
                                   '$em\nPlano: $planCode · MP: $payId\nVálido até: ${exp != null ? df.format(exp) : "—"} · Criado: ${cre != null ? df.format(cre) : "—"}',
                                   style: const TextStyle(height: 1.35, fontSize: 12.5),
