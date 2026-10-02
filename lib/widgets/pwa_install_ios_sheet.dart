@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/pwa_install_helper.dart';
 
 /// URL da imagem ou GIF que mostra onde tocar no Safari (Compartilhar → Adicionar à Tela de Início).
@@ -53,10 +54,10 @@ class PwaInstallIosSheet extends StatelessWidget {
               children: [
                 Icon(Icons.add_to_home_screen_rounded, size: 32, color: AppColors.primary),
                 const SizedBox(width: 12),
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Instalar no iPhone',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: context.appTextPrimary),
                   ),
                 ),
                 IconButton(
@@ -86,7 +87,7 @@ class PwaInstallIosSheet extends StatelessWidget {
                           Expanded(
                             child: Text(
                               'Instale o app (Adicionar à Tela de Início) primeiro, senão a notificação não chega.',
-                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary, height: 1.35),
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: context.appTextPrimary, height: 1.35),
                             ),
                           ),
                         ],
@@ -95,7 +96,9 @@ class PwaInstallIosSheet extends StatelessWidget {
                     const SizedBox(height: 16),
                     Text(
                       'Toque no Safari onde indicado na imagem abaixo:',
-                      style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
+                      style: TextStyle(
+                          fontSize: 14,
+                          color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 16),
@@ -103,7 +106,10 @@ class PwaInstallIosSheet extends StatelessWidget {
                     const SizedBox(height: 20),
                     Text(
                       'Se não aparecer a imagem:',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.grey.shade800),
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: context.isDarkMode ? context.appTextPrimary : Colors.grey.shade800),
                     ),
                     const SizedBox(height: 8),
                     _Step(number: 1, text: 'Toque no ícone Compartilhar (quadrado com seta para cima) na barra inferior do Safari.'),
@@ -232,17 +238,26 @@ Future<void> handlePwaInstallTap(BuildContext context) async {
           children: [
             Text(
               'Neste navegador a instalação é manual. Siga os passos abaixo:',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: ctx.isDarkMode ? ctx.appTextSecondary : Colors.grey.shade700),
             ),
             const SizedBox(height: 14),
-            Text('iPhone (Safari):', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.grey.shade800)),
+            Text('iPhone (Safari):',
+                style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: ctx.isDarkMode ? ctx.appTextPrimary : Colors.grey.shade800)),
             const SizedBox(height: 6),
             const Text(
               'Toque no ícone Compartilhar (quadrado com seta para cima) na barra do Safari e depois em "Adicionar à Tela de Início".',
               style: TextStyle(fontSize: 14, height: 1.4),
             ),
             const SizedBox(height: 16),
-            Text('Chrome:', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.grey.shade800)),
+            Text('Chrome:',
+                style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: ctx.isDarkMode ? ctx.appTextPrimary : Colors.grey.shade800)),
             const SizedBox(height: 6),
             const Text(
               'Toque no menu (⋮) do Chrome e selecione "Instalar app" ou "Adicionar à tela inicial".',

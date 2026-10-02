@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../constants/promo_site_urls.dart';
 import '../screens/payment_status_screen.dart';
+import '../theme/theme_context.dart';
 import '../utils/pwa_install_helper.dart';
 import '../utils/url_launcher_helper.dart';
 
@@ -245,6 +246,7 @@ class DivulgacaoPublicPromoCard extends StatelessWidget {
             ),
           );
         }
+        final dark = context.isDarkMode;
         return Padding(
           padding: const EdgeInsets.only(bottom: 24),
           child: Container(
@@ -264,7 +266,7 @@ class DivulgacaoPublicPromoCard extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(22),
-                color: Colors.white.withValues(alpha: 0.98),
+                color: dark ? context.appSurface : Colors.white.withValues(alpha: 0.98),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -283,7 +285,7 @@ class DivulgacaoPublicPromoCard extends StatelessWidget {
                             fontSize: 10,
                             fontWeight: FontWeight.w900,
                             letterSpacing: 1,
-                            color: _deep,
+                            color: dark ? context.appTextPrimary : _deep,
                           ),
                         ),
                       ),
@@ -298,7 +300,7 @@ class DivulgacaoPublicPromoCard extends StatelessWidget {
                       fontSize: 20,
                       fontWeight: FontWeight.w800,
                       height: 1.2,
-                      color: _deep,
+                      color: dark ? context.appTextPrimary : _deep,
                       letterSpacing: -0.4,
                     ),
                   ),
@@ -308,7 +310,7 @@ class DivulgacaoPublicPromoCard extends StatelessWidget {
                     style: GoogleFonts.inter(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade800,
+                      color: dark ? context.appTextPrimary : Colors.grey.shade800,
                       height: 1.35,
                     ),
                   ),
@@ -328,7 +330,7 @@ class DivulgacaoPublicPromoCard extends StatelessWidget {
                     child: FilledButton(
                       onPressed: () => _onCta(context, promo),
                       style: FilledButton.styleFrom(
-                        backgroundColor: _deep,
+                        backgroundColor: dark ? _violet : _deep,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         elevation: 0,
@@ -345,7 +347,10 @@ class DivulgacaoPublicPromoCard extends StatelessWidget {
                   Text(
                     'Novos e clientes: mesma conta. PIX ou cartão com Mercado Pago no app ou na web — a licença fica na sua conta.',
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.inter(fontSize: 11, color: Colors.grey.shade600, height: 1.35),
+                    style: GoogleFonts.inter(
+                        fontSize: 11,
+                        color: dark ? context.appTextSecondary : Colors.grey.shade600,
+                        height: 1.35),
                   ),
                 ],
               ),

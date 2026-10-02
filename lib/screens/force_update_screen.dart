@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/url_launcher_helper.dart';
 import '../services/version_check_service.dart';
 import '../constants/app_strings.dart';
@@ -68,7 +69,8 @@ class _ForceUpdateScreenState extends State<ForceUpdateScreen> {
     final version = VersionCheckService.pendingUpdateVersion ?? AppVersion.current;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FA),
+      backgroundColor:
+          context.isDarkMode ? context.appScaffold : const Color(0xFFF4F7FA),
       body: SafeArea(
         child: Center(
           child: Padding(
@@ -82,12 +84,12 @@ class _ForceUpdateScreenState extends State<ForceUpdateScreen> {
                   color: AppColors.primary,
                 ),
                 const SizedBox(height: 24),
-                const Text(
+                Text(
                   'Atualização obrigatória',
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
+                    color: context.appTextPrimary,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -96,7 +98,7 @@ class _ForceUpdateScreenState extends State<ForceUpdateScreen> {
                   'Uma nova versão ($version) está disponível. Atualize o app para continuar usando o WISDOMAPP.',
                   style: TextStyle(
                     fontSize: 16,
-                    color: AppColors.textSecondary,
+                    color: context.appTextSecondary,
                     height: 1.4,
                   ),
                   textAlign: TextAlign.center,
@@ -109,7 +111,7 @@ class _ForceUpdateScreenState extends State<ForceUpdateScreen> {
                         : 'Toque em "Atualizar agora" para abrir a Google Play Store e instalar a versão mais recente.',
                     style: TextStyle(
                       fontSize: 14,
-                      color: AppColors.textSecondary.withValues(alpha: 0.9),
+                      color: context.appTextSecondary.withValues(alpha: 0.9),
                       height: 1.3,
                     ),
                     textAlign: TextAlign.center,

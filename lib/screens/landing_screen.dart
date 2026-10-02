@@ -29,6 +29,7 @@ import '../widgets/oauth_login_buttons.dart';
 import '../widgets/official_social_top_buttons.dart';
 import '../widgets/wisdomapp_hero_brand.dart';
 import '../utils/keyboard_form_scaffold.dart';
+import '../theme/theme_context.dart';
 
 /// Página de divulgação do WISDOMAPP (hero, módulos, planos e rodapé).
 class LandingScreen extends StatefulWidget {
@@ -792,7 +793,11 @@ class _LandingScreenState extends State<LandingScreen>
                 Text(
                   'Melhor no iPhone: abra no Safari e toque em Compartilhar → "Adicionar à Tela de Início".',
                   style: TextStyle(
-                      fontSize: 13, color: Colors.grey.shade800, height: 1.3),
+                      fontSize: 13,
+                      color: context.isDarkMode
+                          ? context.appTextPrimary
+                          : Colors.grey.shade800,
+                      height: 1.3),
                 ),
               ],
             ),
@@ -979,7 +984,7 @@ class _LandingScreenState extends State<LandingScreen>
   Widget build(BuildContext context) {
     final padding = MediaQuery.paddingOf(context);
     return Scaffold(
-      backgroundColor: _scaffoldBg,
+      backgroundColor: context.isDarkMode ? context.appScaffold : _scaffoldBg,
       resizeToAvoidBottomInset: scaffoldKeyboardResizeToAvoidBottomInset(),
       body: keyboardScaffoldBody(
         Stack(
@@ -1037,13 +1042,15 @@ class _LandingScreenState extends State<LandingScreen>
   Widget _buildHeroSection(BuildContext context) {
     return Container(
       width: double.infinity,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            Color(0xFF061428),
-            Color(0xFF0A1F56),
-            Color(0xFF132D6B),
-            Color(0xFFF4F6FB),
+            const Color(0xFF061428),
+            const Color(0xFF0A1F56),
+            const Color(0xFF132D6B),
+            context.isDarkMode
+                ? context.appScaffold
+                : const Color(0xFFF4F6FB),
           ],
           stops: [0.0, 0.35, 0.72, 1.0],
           begin: Alignment.topCenter,
@@ -1140,7 +1147,9 @@ class _LandingScreenState extends State<LandingScreen>
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 22),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.97),
+                color: context.isDarkMode
+                    ? context.appSurface
+                    : Colors.white.withValues(alpha: 0.97),
                 borderRadius: BorderRadius.circular(26),
               ),
               child: Column(
@@ -1167,7 +1176,9 @@ class _LandingScreenState extends State<LandingScreen>
                               style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
-                                  color: Colors.grey.shade800),
+                                  color: context.isDarkMode
+                                      ? context.appTextPrimary
+                                      : Colors.grey.shade800),
                             ),
                           ),
                         ],
@@ -1190,7 +1201,9 @@ class _LandingScreenState extends State<LandingScreen>
                           style: TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w800,
-                              color: _lpDeep,
+                              color: context.isDarkMode
+                                  ? context.appTextPrimary
+                                  : _lpDeep,
                               letterSpacing: -0.3),
                         ),
                       ),
@@ -1203,7 +1216,11 @@ class _LandingScreenState extends State<LandingScreen>
                         : 'Entre com Google (Android e web) ou com Google/Apple no iPhone. Depois do login você compra ou renova a licença — PIX ou cartão.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                        fontSize: 13, height: 1.4, color: Colors.grey.shade700),
+                        fontSize: 13,
+                        height: 1.4,
+                        color: context.isDarkMode
+                            ? context.appTextSecondary
+                            : Colors.grey.shade700),
                   ),
                   const SizedBox(height: 18),
                   OAuthLoginButtons(
@@ -1460,8 +1477,12 @@ class _LandingScreenState extends State<LandingScreen>
             child: RichText(
               textAlign: TextAlign.center,
               text: TextSpan(
-                style: const TextStyle(
-                    fontSize: 14, color: Colors.black87, height: 1.4),
+                style: TextStyle(
+                    fontSize: 14,
+                    color: context.isDarkMode
+                        ? context.appTextPrimary
+                        : Colors.black87,
+                    height: 1.4),
                 children: [
                   TextSpan(
                     text:
@@ -1517,7 +1538,9 @@ class _LandingScreenState extends State<LandingScreen>
                 fontSize: 15,
                 height: 1.45,
                 fontStyle: FontStyle.italic,
-                color: _lpNavy.withValues(alpha: 0.92),
+                color: context.isDarkMode
+                    ? context.appTextPrimary
+                    : _lpNavy.withValues(alpha: 0.92),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -1567,7 +1590,7 @@ class _LandingScreenState extends State<LandingScreen>
             style: TextStyle(
                 fontSize: 26,
                 fontWeight: FontWeight.w800,
-                color: _lpNavy,
+                color: context.isDarkMode ? context.appTextPrimary : _lpNavy,
                 letterSpacing: -0.5),
           ),
           const SizedBox(height: 10),
@@ -1586,7 +1609,9 @@ class _LandingScreenState extends State<LandingScreen>
             style: TextStyle(
                 fontSize: 15,
                 height: 1.45,
-                color: Colors.grey.shade700,
+                color: context.isDarkMode
+                    ? context.appTextSecondary
+                    : Colors.grey.shade700,
                 fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 28),
@@ -1636,7 +1661,7 @@ class _LandingScreenState extends State<LandingScreen>
       width: 268,
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.isDarkMode ? context.appSurface : Colors.white,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(color: accent.withValues(alpha: 0.28)),
         boxShadow: [
@@ -1670,12 +1695,18 @@ class _LandingScreenState extends State<LandingScreen>
           const SizedBox(height: 16),
           Text(title,
               style: TextStyle(
-                  fontWeight: FontWeight.w800, fontSize: 17, color: _lpDeep)),
+                  fontWeight: FontWeight.w800,
+                  fontSize: 17,
+                  color: context.isDarkMode ? context.appTextPrimary : _lpDeep)),
           const SizedBox(height: 10),
           Text(desc,
               textAlign: TextAlign.center,
               style: TextStyle(
-                  color: Colors.grey.shade600, height: 1.35, fontSize: 13.5)),
+                  color: context.isDarkMode
+                      ? context.appTextSecondary
+                      : Colors.grey.shade600,
+                  height: 1.35,
+                  fontSize: 13.5)),
         ],
       ),
     );
@@ -1689,7 +1720,9 @@ class _LandingScreenState extends State<LandingScreen>
       width: double.infinity,
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [const Color(0xFFF1F5F9), Colors.white],
+          colors: context.isDarkMode
+              ? [context.appScaffold, context.appScaffold]
+              : [const Color(0xFFF1F5F9), Colors.white],
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
         ),
@@ -1702,14 +1735,16 @@ class _LandingScreenState extends State<LandingScreen>
             style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.w800,
-                color: _lpDeep,
+                color: context.isDarkMode ? context.appTextPrimary : _lpDeep,
                 letterSpacing: -0.6),
           ),
           const SizedBox(height: 10),
           Text(
             _landing.homePremiumCombinedPriceLine,
             style: TextStyle(
-                fontSize: 18, fontWeight: FontWeight.w800, color: _lpSlate),
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: context.isDarkMode ? context.appTextPrimary : _lpSlate),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
@@ -1718,7 +1753,11 @@ class _LandingScreenState extends State<LandingScreen>
             child: Text(
               _landing.landingPremiumDetail,
               style: TextStyle(
-                  fontSize: 15, height: 1.45, color: Colors.grey.shade700),
+                  fontSize: 15,
+                  height: 1.45,
+                  color: context.isDarkMode
+                      ? context.appTextSecondary
+                      : Colors.grey.shade700),
               textAlign: TextAlign.center,
             ),
           ),
@@ -1790,7 +1829,11 @@ class _LandingScreenState extends State<LandingScreen>
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(28),
         gradient: borderGradient,
-        color: isPremium ? null : Colors.grey.shade300,
+        color: isPremium
+            ? null
+            : (context.isDarkMode
+                ? context.appChipIdleBorder
+                : Colors.grey.shade300),
         boxShadow: [
           BoxShadow(
               color: _lpDeep.withValues(alpha: isPremium ? 0.25 : 0.08),
@@ -1801,7 +1844,9 @@ class _LandingScreenState extends State<LandingScreen>
       child: Container(
         padding: const EdgeInsets.all(28),
         decoration: BoxDecoration(
-          color: isPremium ? _lpDeep : Colors.white,
+          color: isPremium
+              ? _lpDeep
+              : (context.isDarkMode ? context.appSurface : Colors.white),
           borderRadius: BorderRadius.circular(26),
         ),
         child: Column(
@@ -1834,7 +1879,9 @@ class _LandingScreenState extends State<LandingScreen>
                   style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w800,
-                      color: _lpDeep)),
+                      color: context.isDarkMode
+                          ? context.appTextPrimary
+                          : _lpDeep)),
               const SizedBox(height: 16),
             ],
             if (isPremium) const SizedBox(height: 12),
@@ -1851,11 +1898,19 @@ class _LandingScreenState extends State<LandingScreen>
             Text(period,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                    color: isPremium ? Colors.white70 : Colors.grey.shade600,
+                    color: isPremium
+                        ? Colors.white70
+                        : (context.isDarkMode
+                            ? context.appTextSecondary
+                            : Colors.grey.shade600),
                     fontSize: 13)),
             Divider(
                 height: 36,
-                color: isPremium ? Colors.white24 : Colors.grey.shade300),
+                color: isPremium
+                    ? Colors.white24
+                    : (context.isDarkMode
+                        ? context.appBorderSubtle
+                        : Colors.grey.shade300)),
             ...features.map((f) => Padding(
                   padding: const EdgeInsets.symmetric(vertical: 5),
                   child: Row(
@@ -1870,7 +1925,9 @@ class _LandingScreenState extends State<LandingScreen>
                               style: TextStyle(
                                   color: isPremium
                                       ? Colors.white.withValues(alpha: 0.92)
-                                      : Colors.black87,
+                                      : (context.isDarkMode
+                                          ? context.appTextPrimary
+                                          : Colors.black87),
                                   height: 1.35))),
                     ],
                   ),
@@ -1928,8 +1985,10 @@ class _LandingScreenState extends State<LandingScreen>
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFF8FAFC), Color(0xFFEDF1F9)],
+        gradient: LinearGradient(
+          colors: context.isDarkMode
+              ? [context.appSurface, context.appScaffold]
+              : const [Color(0xFFF8FAFC), Color(0xFFEDF1F9)],
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
         ),
@@ -1938,18 +1997,18 @@ class _LandingScreenState extends State<LandingScreen>
       ),
       child: Column(
         children: [
-          const Text("Sistema sem propagandas indesejáveis, limpo e seguro.",
+          Text("Sistema sem propagandas indesejáveis, limpo e seguro.",
               style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFF1A237E))),
+                  color: context.appDeepTitle)),
           const SizedBox(height: 4),
-          const Text(
+          Text(
               "Acesso pelo celular, computador ou notebook. Acesso livre total.",
               style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFF1A237E))),
+                  color: context.appDeepTitle)),
           const SizedBox(height: 6),
           Builder(
             builder: (context) {
@@ -1960,7 +2019,11 @@ class _LandingScreenState extends State<LandingScreen>
               return Text(
                 paymentFooter,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 13, color: Colors.black87),
+                style: TextStyle(
+                    fontSize: 13,
+                    color: context.isDarkMode
+                        ? context.appTextPrimary
+                        : Colors.black87),
               );
             },
           ),
@@ -1974,12 +2037,20 @@ class _LandingScreenState extends State<LandingScreen>
                   label: 'Política de Privacidade',
                   onTap: () => Navigator.of(context).pushNamed('/privacidade')),
               Text('•',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                  style: TextStyle(
+                      color: context.isDarkMode
+                          ? context.appTextMuted
+                          : Colors.grey.shade600,
+                      fontSize: 12)),
               _FooterLink(
                   label: 'Termos de Uso',
                   onTap: () => Navigator.of(context).pushNamed('/termos')),
               Text('•',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                  style: TextStyle(
+                      color: context.isDarkMode
+                          ? context.appTextMuted
+                          : Colors.grey.shade600,
+                      fontSize: 12)),
               _FooterLink(
                   label: 'Suporte',
                   onTap: () => Navigator.of(context).pushNamed('/suporte')),
@@ -2002,13 +2073,23 @@ class _LandingScreenState extends State<LandingScreen>
               style: TextStyle(
                   fontSize: 12,
                   fontStyle: FontStyle.italic,
-                  color: Colors.grey.shade700)),
+                  color: context.isDarkMode
+                      ? context.appTextSecondary
+                      : Colors.grey.shade700)),
           const SizedBox(height: 16),
           Text('Desenvolvido por Raihom Barbosa',
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+              style: TextStyle(
+                  fontSize: 13,
+                  color: context.isDarkMode
+                      ? context.appTextSecondary
+                      : Colors.grey.shade600)),
           const SizedBox(height: 4),
           Text('© 2026 WISDOMAPP',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+              style: TextStyle(
+                  fontSize: 12,
+                  color: context.isDarkMode
+                      ? context.appTextMuted
+                      : Colors.grey.shade500)),
         ],
       ),
     );

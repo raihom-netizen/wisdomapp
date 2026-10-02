@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../services/biometric_auth_service.dart';
 import '../constants/app_business_rules.dart';
+import '../theme/theme_context.dart';
 
 /// Tela de bloqueio por biometria: exibe ao abrir o app quando biometria está ativa (mobile).
 class BiometricGateScreen extends StatefulWidget {
@@ -155,7 +156,9 @@ class _BiometricGateScreenState extends State<BiometricGateScreen> with WidgetsB
       );
     }
 
-    const gateBg = Color(0xFFE0EAFC);
+    final dark = context.isDarkMode;
+    final gateBg = dark ? context.appScaffold : const Color(0xFFE0EAFC);
+    final gateTitle = context.appDeepTitle;
     return Scaffold(
       backgroundColor: gateBg,
       body: Container(
@@ -163,9 +166,11 @@ class _BiometricGateScreenState extends State<BiometricGateScreen> with WidgetsB
         height: double.infinity,
         color: gateBg,
         child: Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [Color(0xFFE0EAFC), Color(0xFFCFDEF3)],
+              colors: dark
+                  ? context.appBodyGradient
+                  : const [Color(0xFFE0EAFC), Color(0xFFCFDEF3)],
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
             ),
@@ -182,20 +187,22 @@ class _BiometricGateScreenState extends State<BiometricGateScreen> with WidgetsB
                   color: Theme.of(context).colorScheme.primary,
                 ),
                 const SizedBox(height: 24),
-                const Text(
+                Text(
                   'Acesso por digital ou facial',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF1A237E),
+                    color: gateTitle,
                   ),
                 ),
                 const SizedBox(height: 12),
-                const Text(
+                Text(
                   'Toque no ícone ou use sua senha para acessar o WISDOMAPP.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.black54, fontSize: 16),
+                  style: TextStyle(
+                      color: dark ? context.appTextSecondary : Colors.black54,
+                      fontSize: 16),
                 ),
                 if (_error != null) ...[
                   const SizedBox(height: 16),
@@ -225,7 +232,7 @@ class _BiometricGateScreenState extends State<BiometricGateScreen> with WidgetsB
                   icon: const Icon(Icons.lock_outline_rounded, size: 20),
                   label: const Text('Entrar com senha'),
                   style: TextButton.styleFrom(
-                    foregroundColor: const Color(0xFF1A237E),
+                    foregroundColor: gateTitle,
                   ),
                 ),
                 if (widget.onDisableAndContinue != null) ...[
@@ -235,8 +242,9 @@ class _BiometricGateScreenState extends State<BiometricGateScreen> with WidgetsB
                     icon: const Icon(Icons.fingerprint_rounded, size: 20),
                     label: const Text('Desativar digital e entrar'),
                     style: FilledButton.styleFrom(
-                      backgroundColor: Colors.white70,
-                      foregroundColor: const Color(0xFF1A237E),
+                      backgroundColor:
+                          dark ? context.appSurfaceHigh : Colors.white70,
+                      foregroundColor: gateTitle,
                     ),
                   ),
                 ],

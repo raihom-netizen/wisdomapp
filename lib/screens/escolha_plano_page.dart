@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/landing_public_content.dart';
 import '../models/user_profile.dart';
 import '../services/mp_checkout_pricing_service.dart';
+import '../theme/theme_context.dart';
 import '../utils/navigator_safe_pop.dart';
 import '../widgets/divulgacao_public_promo_card.dart';
 import '../widgets/plan_change_acknowledgment_card.dart';
@@ -211,8 +212,9 @@ class _EscolhaPlanoPageState extends State<EscolhaPlanoPage> {
 
   @override
   Widget build(BuildContext context) {
+    final dark = context.isDarkMode;
     return Scaffold(
-      backgroundColor: const Color(0xFFEEF2F7),
+      backgroundColor: dark ? context.appScaffold : const Color(0xFFEEF2F7),
       appBar: AppBar(
         title: const Text('Seu Plano'),
         elevation: 0,
@@ -234,15 +236,17 @@ class _EscolhaPlanoPageState extends State<EscolhaPlanoPage> {
       ),
       body: Container(
         // Fundo moderno em gradiente suave (azul/lavanda) em vez de cinza chapado.
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFFEEF2F7),
-              Color(0xFFE7EEFF),
-              Color(0xFFF3EEFF),
-            ],
+            colors: dark
+                ? context.appBodyGradient
+                : const [
+                    Color(0xFFEEF2F7),
+                    Color(0xFFE7EEFF),
+                    Color(0xFFF3EEFF),
+                  ],
           ),
         ),
         child: SafeArea(
@@ -283,17 +287,17 @@ class _EscolhaPlanoPageState extends State<EscolhaPlanoPage> {
                         mainAxisSize: MainAxisSize.min,
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Text(
+                          Text(
                             'Escolha o plano ideal para sua gestão',
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                                fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF1A237E)),
+                                fontSize: 22, fontWeight: FontWeight.bold, color: context.appDeepTitle),
                           ),
                           const SizedBox(height: 10),
                           Text(
                             'Seu período de teste de ${UserProfile.newUserTrialDays} dias termina em breve. Mantenha seu controle total!',
                             textAlign: TextAlign.center,
-                            style: const TextStyle(color: Colors.grey, fontSize: 14),
+                            style: TextStyle(color: dark ? context.appTextSecondary : Colors.grey, fontSize: 14),
                           ),
                           const SizedBox(height: 6),
                           const Text(
@@ -303,11 +307,11 @@ class _EscolhaPlanoPageState extends State<EscolhaPlanoPage> {
                                 color: Color(0xFF2E7D32), fontSize: 12, fontWeight: FontWeight.w600),
                           ),
                           const SizedBox(height: 4),
-                          const Text(
+                          Text(
                             'Use onde for mais prático para si — a mesma conta em todos os acessos.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                                color: Color(0xFF1A237E), fontSize: 12, fontWeight: FontWeight.w600),
+                                color: context.appDeepTitle, fontSize: 12, fontWeight: FontWeight.w600),
                           ),
                           const SizedBox(height: 14),
                           Padding(
@@ -316,7 +320,7 @@ class _EscolhaPlanoPageState extends State<EscolhaPlanoPage> {
                               landing.divPlanosSubtitle,
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: Colors.grey.shade800,
+                                color: dark ? context.appTextPrimary : Colors.grey.shade800,
                                 fontSize: 13,
                                 height: 1.4,
                                 fontWeight: FontWeight.w600,
@@ -333,7 +337,7 @@ class _EscolhaPlanoPageState extends State<EscolhaPlanoPage> {
                                 'Esta promoção define o plano e a extensão da licença; o seletor abaixo fica desativado.',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
-                                    fontSize: 12, color: Colors.grey.shade700, height: 1.3),
+                                    fontSize: 12, color: dark ? context.appTextSecondary : Colors.grey.shade700, height: 1.3),
                               ),
                             ),
                           AbsorbPointer(
@@ -400,7 +404,7 @@ class _EscolhaPlanoPageState extends State<EscolhaPlanoPage> {
   Widget _buildPeriodSelector() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.isDarkMode ? context.appSurface : Colors.white,
         borderRadius: BorderRadius.circular(15),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 12, offset: const Offset(0, 4))],
       ),
@@ -429,7 +433,9 @@ class _EscolhaPlanoPageState extends State<EscolhaPlanoPage> {
             child: Text(
               label,
               style: TextStyle(
-                color: selected ? Colors.white : Colors.black87,
+                color: selected
+                    ? Colors.white
+                    : (context.isDarkMode ? context.appTextPrimary : Colors.black87),
                 fontWeight: FontWeight.bold,
                 fontSize: 13,
               ),
@@ -472,6 +478,7 @@ class _EscolhaPlanoPageState extends State<EscolhaPlanoPage> {
     String? notaAnual,
   }) {
     final selecionado = _planoSelecionado == nome;
+    final dark = context.isDarkMode;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -492,7 +499,7 @@ class _EscolhaPlanoPageState extends State<EscolhaPlanoPage> {
                   ],
                 )
               : null,
-          color: isPremium ? null : Colors.white,
+          color: isPremium ? null : (dark ? context.appSurface : Colors.white),
           borderRadius: BorderRadius.circular(25),
           border: selecionado ? Border.all(color: const Color(0xFF6D4DFF), width: 3) : null,
           boxShadow: [
@@ -530,7 +537,7 @@ class _EscolhaPlanoPageState extends State<EscolhaPlanoPage> {
                 fontSize: 20,
                 height: 1.2,
                 fontWeight: FontWeight.bold,
-                color: isPremium ? Colors.white : Colors.black87,
+                color: isPremium ? Colors.white : (dark ? context.appTextPrimary : Colors.black87),
               ),
             ),
             const SizedBox(height: 8),
@@ -551,7 +558,7 @@ class _EscolhaPlanoPageState extends State<EscolhaPlanoPage> {
                   periodo,
                   style: TextStyle(
                     fontSize: 14,
-                    color: isPremium ? Colors.white70 : Colors.grey,
+                    color: isPremium ? Colors.white70 : (dark ? context.appTextSecondary : Colors.grey),
                   ),
                 ),
               ],
@@ -562,13 +569,13 @@ class _EscolhaPlanoPageState extends State<EscolhaPlanoPage> {
                 notaAnual,
                 style: TextStyle(
                   fontSize: 12,
-                  color: isPremium ? Colors.white70 : Colors.grey.shade600,
+                  color: isPremium ? Colors.white70 : (dark ? context.appTextSecondary : Colors.grey.shade600),
                   height: 1.35,
                 ),
               ),
             ],
             const SizedBox(height: 16),
-            Divider(color: isPremium ? Colors.white24 : Colors.grey.shade300),
+            Divider(color: isPremium ? Colors.white24 : (dark ? context.appBorderSubtle : Colors.grey.shade300)),
             ...beneficios.map((b) => Padding(
                   padding: const EdgeInsets.symmetric(vertical: 5),
                   child: Row(
@@ -583,7 +590,7 @@ class _EscolhaPlanoPageState extends State<EscolhaPlanoPage> {
                         child: Text(
                           b,
                           style: TextStyle(
-                            color: isPremium ? Colors.white : Colors.black87,
+                            color: isPremium ? Colors.white : (dark ? context.appTextPrimary : Colors.black87),
                             fontSize: 13,
                           ),
                         ),
@@ -602,14 +609,16 @@ class _EscolhaPlanoPageState extends State<EscolhaPlanoPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Forma de Pagamento',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1A237E)),
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: context.appDeepTitle),
         ),
         const SizedBox(height: 8),
         Text(
           'Selecione Pix ou Cartão de Crédito para continuar.',
-          style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+          style: TextStyle(
+              fontSize: 13,
+              color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700),
         ),
         const SizedBox(height: 15),
         _paymentTile(
@@ -696,7 +705,7 @@ class _EscolhaPlanoPageState extends State<EscolhaPlanoPage> {
           constraints: const BoxConstraints(minHeight: 48),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: context.isDarkMode ? context.appSurface : Colors.white,
           borderRadius: BorderRadius.circular(15),
           border: Border.all(
             color: selected ? const Color(0xFF2962FF) : Colors.transparent,

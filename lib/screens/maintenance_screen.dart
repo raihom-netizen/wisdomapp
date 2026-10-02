@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../constants/promo_site_urls.dart';
 import '../utils/app_update_launcher.dart';
 import '../utils/maintenance_app_update_links.dart';
@@ -38,7 +39,9 @@ class MaintenanceScreen extends StatelessWidget {
         final myUid = FirebaseAuth.instance.currentUser?.uid;
         if (!_maintenanceFullScreenAppliesToUser(data, myUid)) {
           return Scaffold(
-            backgroundColor: const Color(0xFFF4F7FA),
+            backgroundColor: context.isDarkMode
+                ? context.appScaffold
+                : const Color(0xFFF4F7FA),
             body: SafeArea(
               child: Center(
                 child: Padding(
@@ -54,7 +57,9 @@ class MaintenanceScreen extends StatelessWidget {
                         textAlign: TextAlign.center,
                         style: TextStyle(
                             fontSize: 16,
-                            color: Colors.grey.shade800,
+                            color: context.isDarkMode
+                                ? context.appTextPrimary
+                                : Colors.grey.shade800,
                             height: 1.35),
                       ),
                     ],
@@ -130,14 +135,19 @@ class MaintenanceScreen extends StatelessWidget {
                       'Sistema em Manutenção',
                       style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                             fontWeight: FontWeight.w800,
-                            color: AppColors.textPrimary,
+                            color: context.appTextPrimary,
                           ),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 12),
                     Text(
                       subtext,
-                      style: TextStyle(fontSize: 16, color: Colors.grey.shade700, height: 1.4),
+                      style: TextStyle(
+                          fontSize: 16,
+                          color: context.isDarkMode
+                              ? context.appTextSecondary
+                              : Colors.grey.shade700,
+                          height: 1.4),
                       textAlign: TextAlign.center,
                     ),
                     if (appUpdateLinks.hasAnyButton) ...[

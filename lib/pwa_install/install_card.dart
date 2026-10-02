@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../theme/theme_context.dart';
 import 'pwa_install.dart';
 
 /// Card "Toque para instalar": Android/Chrome = 1 toque (prompt nativo); iPhone = modal com 3 passos.
@@ -139,7 +140,8 @@ class _InstallPwaCardState extends State<InstallPwaCard> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
-      builder: (_) {
+      builder: (sheetCtx) {
+        final dark = sheetCtx.isDarkMode;
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -153,13 +155,17 @@ class _InstallPwaCardState extends State<InstallPwaCard> {
                 ),
                 const SizedBox(height: 12),
                 _step('1',
-                    'Toque no botão "Compartilhar" do Safari (quadrado com seta pra cima).'),
-                _step('2', 'Role e toque em "Adicionar à Tela de Início".'),
-                _step('3', 'Confirme em "Adicionar".'),
+                    'Toque no botão "Compartilhar" do Safari (quadrado com seta pra cima).',
+                    dark: dark),
+                _step('2', 'Role e toque em "Adicionar à Tela de Início".',
+                    dark: dark),
+                _step('3', 'Confirme em "Adicionar".', dark: dark),
                 const SizedBox(height: 10),
-                const Text(
+                Text(
                   'No iPhone o Safari não permite instalação com 1 clique.',
-                  style: TextStyle(fontSize: 12, color: Colors.black54),
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: dark ? sheetCtx.appTextSecondary : Colors.black54),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
@@ -171,7 +177,7 @@ class _InstallPwaCardState extends State<InstallPwaCard> {
     );
   }
 
-  static Widget _step(String n, String text) {
+  static Widget _step(String n, String text, {bool dark = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -182,7 +188,8 @@ class _InstallPwaCardState extends State<InstallPwaCard> {
             height: 26,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: Colors.black87,
+              // Escuro: preto sobre o sheet escuro sumia — usa o teal do card.
+              color: dark ? const Color(0xFF15B8A6) : Colors.black87,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(

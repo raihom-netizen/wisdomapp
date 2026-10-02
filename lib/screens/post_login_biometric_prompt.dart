@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/biometric_auth_service.dart';
+import '../theme/theme_context.dart';
 
 /// Tela exibida após o primeiro login: pergunta se o usuário deseja ativar biometria.
 class PostLoginBiometricPrompt extends StatelessWidget {
@@ -13,9 +14,11 @@ class PostLoginBiometricPrompt extends StatelessWidget {
       body: SafeArea(
         child: Container(
           width: double.infinity,
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFFE0EAFC), Color(0xFFCFDEF3)],
+            colors: context.isDarkMode
+                ? context.appBodyGradient
+                : const [Color(0xFFE0EAFC), Color(0xFFCFDEF3)],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -32,20 +35,24 @@ class PostLoginBiometricPrompt extends StatelessWidget {
                   color: Theme.of(context).colorScheme.primary,
                 ),
                 const SizedBox(height: 24),
-                const Text(
+                Text(
                   'Deseja ativar acesso por digital ou facial?',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF1A237E),
+                    color: context.appDeepTitle,
                   ),
                 ),
                 const SizedBox(height: 12),
-                const Text(
+                Text(
                   'Você escolhe: ao ativar, no próximo acesso o app abrirá com digital ou reconhecimento facial, sem precisar digitar. Se não ativar, continuará entrando com Google ou e-mail e senha.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.black54, fontSize: 15),
+                  style: TextStyle(
+                      color: context.isDarkMode
+                          ? context.appTextSecondary
+                          : Colors.black54,
+                      fontSize: 15),
                 ),
                 const SizedBox(height: 40),
                 FilledButton(

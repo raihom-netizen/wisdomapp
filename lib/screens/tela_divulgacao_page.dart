@@ -15,6 +15,7 @@ import '../services/login_preferences.dart';
 import '../services/mp_checkout_pricing_service.dart';
 import '../services/push_notification_service.dart';
 import '../services/version_check_service.dart';
+import '../theme/theme_context.dart';
 import '../utils/url_launcher_helper.dart';
 import '../widgets/divulgacao_public_promo_card.dart';
 import '../widgets/oauth_login_buttons.dart';
@@ -54,6 +55,11 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
   static const Color _lpGoldLight = Color(0xFFF0D878);
   static const Color _lpRose = Color(0xFFF43F5E);
   static const Color _lpIndigoDeep = Color(0xFF312E81);
+
+  /// Modo escuro: texto marinho/ardósia fixo vira texto do tema (claro idêntico).
+  bool get _dk => context.isDarkMode;
+  Color get _txtDeep => _dk ? context.appTextPrimary : _lpDeep;
+  Color get _txtSlate => _dk ? context.appTextPrimary : _lpSlate;
 
   Color _parseHexColor(String? raw, Color fallback) {
     if (raw == null) return fallback;
@@ -396,7 +402,9 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
         : double.infinity;
 
     return Scaffold(
-      backgroundColor: Color.lerp(_scaffoldBg, _divThemePrimary, 0.04),
+      backgroundColor: _dk
+          ? context.appScaffold
+          : Color.lerp(_scaffoldBg, _divThemePrimary, 0.04),
       body: Stack(
         children: [
           Container(
@@ -405,14 +413,19 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [
-                  Color.lerp(const Color(0xFFF8FAFF), _divThemeAccent, 0.08) ??
-                      const Color(0xFFF8FAFF),
-                  Color.lerp(const Color(0xFFF4F6FB), _divThemePrimary, 0.06) ??
-                      const Color(0xFFF4F6FB),
-                  Color.lerp(const Color(0xFFF0F4FF), _divThemePrimary, 0.12) ??
-                      const Color(0xFFF0F4FF),
-                ],
+                colors: _dk
+                    ? context.appBodyGradient
+                    : [
+                        Color.lerp(const Color(0xFFF8FAFF), _divThemeAccent,
+                                0.08) ??
+                            const Color(0xFFF8FAFF),
+                        Color.lerp(const Color(0xFFF4F6FB), _divThemePrimary,
+                                0.06) ??
+                            const Color(0xFFF4F6FB),
+                        Color.lerp(const Color(0xFFF0F4FF), _divThemePrimary,
+                                0.12) ??
+                            const Color(0xFFF0F4FF),
+                      ],
                 stops: [0.0, 0.55, 1.0],
               ),
             ),
@@ -458,7 +471,7 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
                                   fontSize: 17,
                                   height: 1.45,
                                   fontWeight: FontWeight.w700,
-                                  color: _lpDeep,
+                                  color: _txtDeep,
                                   letterSpacing: -0.25,
                                 ),
                               ),
@@ -475,7 +488,9 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
                                 style: GoogleFonts.inter(
                                   fontSize: 15,
                                   fontWeight: FontWeight.w500,
-                                  color: Colors.grey.shade600,
+                                  color: _dk
+                                      ? context.appTextSecondary
+                                      : Colors.grey.shade600,
                                 ),
                               ),
                               const SizedBox(height: 22),
@@ -1055,7 +1070,7 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
                     style: GoogleFonts.inter(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
-                      color: _lpDeep,
+                      color: _txtDeep,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -1064,7 +1079,9 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
                     style: GoogleFonts.inter(
                       fontSize: 13,
                       height: 1.4,
-                      color: Colors.grey.shade700,
+                      color: _dk
+                          ? context.appTextSecondary
+                          : Colors.grey.shade700,
                     ),
                   ),
                 ],
@@ -1148,7 +1165,7 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
               fontSize: 11,
               fontWeight: FontWeight.w900,
               letterSpacing: 1.5,
-              color: _lpDeep,
+              color: _txtDeep,
             ),
           ),
         ),
@@ -1209,14 +1226,23 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [
-                Colors.white,
-                const Color(0xFFF8FAFF),
-                Colors.white.withValues(alpha: 0.97),
-              ],
+              colors: _dk
+                  ? [
+                      context.appSurface,
+                      context.appSurface,
+                      context.appSurface,
+                    ]
+                  : [
+                      Colors.white,
+                      const Color(0xFFF8FAFF),
+                      Colors.white.withValues(alpha: 0.97),
+                    ],
               stops: const [0.0, 0.45, 1.0],
             ),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.9)),
+            border: Border.all(
+                color: _dk
+                    ? context.appBorderSubtle
+                    : Colors.white.withValues(alpha: 0.9)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1279,7 +1305,7 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
                       ],
                     ),
                     child: Icon(Icons.workspace_premium_rounded,
-                        color: _lpDeep, size: 28),
+                        color: _txtDeep, size: 28),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -1289,7 +1315,7 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
                         ShaderMask(
                           blendMode: BlendMode.srcIn,
                           shaderCallback: (bounds) => LinearGradient(
-                            colors: [_lpDeep, _lpViolet, _lpCyan],
+                            colors: [_txtDeep, _lpViolet, _lpCyan],
                             begin: Alignment.centerLeft,
                             end: Alignment.centerRight,
                           ).createShader(
@@ -1302,7 +1328,9 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
                           style: GoogleFonts.inter(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
-                            color: _lpSlate.withValues(alpha: 0.85),
+                            color: _dk
+                                ? context.appTextSecondary
+                                : _lpSlate.withValues(alpha: 0.85),
                             height: 1.3,
                           ),
                         ),
@@ -1335,7 +1363,9 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
                   fontSize: 13,
                   height: 1.5,
                   fontWeight: FontWeight.w500,
-                  color: _lpSlate.withValues(alpha: 0.78),
+                  color: _dk
+                      ? context.appTextSecondary
+                      : _lpSlate.withValues(alpha: 0.78),
                 ),
               ),
               const SizedBox(height: 20),
@@ -1377,11 +1407,19 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(22.5),
           gradient: LinearGradient(
-            colors: [
-              const Color(0xFFECFDF5),
-              const Color(0xFFD1FAE5).withValues(alpha: 0.65),
-              Colors.white,
-            ],
+            colors: _dk
+                ? [
+                    context.appAccentSurface(const Color(0xFF10B981),
+                        darkAlpha: 0.22),
+                    context.appAccentSurface(const Color(0xFF10B981),
+                        darkAlpha: 0.12),
+                    context.appSurface,
+                  ]
+                : [
+                    const Color(0xFFECFDF5),
+                    const Color(0xFFD1FAE5).withValues(alpha: 0.65),
+                    Colors.white,
+                  ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -1406,7 +1444,7 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
               style: GoogleFonts.inter(
                 fontSize: 19,
                 fontWeight: FontWeight.w800,
-                color: const Color(0xFF065F46),
+                color: _dk ? const Color(0xFF6EE7B7) : const Color(0xFF065F46),
                 letterSpacing: -0.4,
               ),
             ),
@@ -1418,7 +1456,7 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
                 fontSize: 14,
                 height: 1.45,
                 fontWeight: FontWeight.w500,
-                color: Colors.grey.shade800,
+                color: _dk ? context.appTextPrimary : Colors.grey.shade800,
               ),
             ),
           ],
@@ -1450,12 +1488,12 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
         Container(
           padding: EdgeInsets.fromLTRB(22, isPremium ? 28 : 22, 22, 22),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: _dk ? context.appSurface : Colors.white,
             borderRadius: BorderRadius.circular(22),
             border: Border.all(
               color: isPremium
                   ? _lpViolet.withValues(alpha: 0.45)
-                  : Colors.grey.shade200,
+                  : (_dk ? context.appBorderSubtle : Colors.grey.shade200),
               width: isPremium ? 1.5 : 1,
             ),
             boxShadow: [
@@ -1484,7 +1522,7 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
                   fontSize: titulo.length > 52 ? 17 : 22,
                   height: 1.2,
                   fontWeight: FontWeight.w800,
-                  color: _lpDeep,
+                  color: _txtDeep,
                   letterSpacing: -0.5,
                 ),
               ),
@@ -1533,8 +1571,11 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
                             fontSize: 12.5,
                             height: 1.35,
                             fontWeight: FontWeight.w600,
-                            color:
-                                isPremium ? _lpDeep : Colors.blueGrey.shade800,
+                            color: _dk
+                                ? context.appTextPrimary
+                                : (isPremium
+                                    ? _lpDeep
+                                    : Colors.blueGrey.shade800),
                             letterSpacing: -0.1,
                           ),
                         ),
@@ -1550,7 +1591,7 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.8,
-                  color: Colors.grey.shade500,
+                  color: _dk ? context.appTextMuted : Colors.grey.shade500,
                 ),
               ),
               const SizedBox(height: 10),
@@ -1573,7 +1614,7 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
                             fontSize: 14,
                             height: 1.35,
                             fontWeight: FontWeight.w500,
-                            color: _lpSlate,
+                            color: _txtSlate,
                           ),
                         ),
                       ),
@@ -1627,7 +1668,7 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
             style: GoogleFonts.inter(
               fontSize: 16,
               fontWeight: FontWeight.w700,
-              color: _lpSlate,
+              color: _txtSlate,
             ),
           ),
         ),
@@ -1657,9 +1698,12 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: _dk ? context.appSurface : Colors.white,
           borderRadius: BorderRadius.circular(18.5),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.95)),
+          border: Border.all(
+              color: _dk
+                  ? context.appBorderSubtle
+                  : Colors.white.withValues(alpha: 0.95)),
         ),
         child: Column(
           children: [
@@ -1682,7 +1726,7 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
                   onPressed: _goHome,
                   child: Text(c.divFooterHome,
                       style: GoogleFonts.inter(
-                          fontWeight: FontWeight.w700, color: _lpDeep)),
+                          fontWeight: FontWeight.w700, color: _txtDeep)),
                 ),
                 Text('·', style: TextStyle(color: Colors.grey.shade400)),
                 TextButton(
@@ -1690,7 +1734,9 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
                   child: Text(c.divFooterTerms,
                       style: GoogleFonts.inter(
                           fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade700)),
+                          color: _dk
+                              ? context.appTextSecondary
+                              : Colors.grey.shade700)),
                 ),
                 Text('·', style: TextStyle(color: Colors.grey.shade400)),
                 TextButton(
@@ -1698,7 +1744,9 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
                   child: Text(c.divFooterPrivacy,
                       style: GoogleFonts.inter(
                           fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade700)),
+                          color: _dk
+                              ? context.appTextSecondary
+                              : Colors.grey.shade700)),
                 ),
               ],
             ),
@@ -1717,12 +1765,12 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
         child: OutlinedButton(
           onPressed: onPressed,
           style: OutlinedButton.styleFrom(
-            foregroundColor: _lpDeep,
+            foregroundColor: _txtDeep,
             side: BorderSide(
                 color: _lpViolet.withValues(alpha: 0.22), width: 1.5),
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            backgroundColor: Colors.white,
+            backgroundColor: _dk ? context.appSurface : Colors.white,
           ),
           child: Text(text,
               style:

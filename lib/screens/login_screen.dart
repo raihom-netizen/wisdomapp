@@ -13,6 +13,7 @@ import '../services/native_login_security_hooks.dart';
 import '../services/push_notification_service.dart';
 import '../services/session_restore_service.dart';
 import '../services/version_check_service.dart';
+import '../theme/theme_context.dart';
 import '../utils/keyboard_form_scaffold.dart';
 import '../widgets/oauth_login_buttons.dart';
 import 'landing_screen.dart';
@@ -492,7 +493,8 @@ class _LoginScreenState extends State<LoginScreen> {
       return const LandingScreen();
     }
     // APK/AAB, IPA e demais builds nativos: mesmo visual premium da landing; PWA/web mantém tema claro.
-    final nativePremium = !kIsWeb;
+    // Modo escuro (web): reaproveita o visual premium escuro já existente.
+    final nativePremium = !kIsWeb || context.isDarkMode;
     // Android 15+: Window#setStatusBarColor / setNavigationBarColor estão descontinuadas — não enviar cores de barra;
     // ícones claros + edge-to-edge (main.dart) + gradiente/SafeArea cobrem o visual.
     final isAndroidNative =

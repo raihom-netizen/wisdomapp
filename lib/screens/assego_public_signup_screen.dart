@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../widgets/fast_text_field.dart';
 import '../services/functions_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 
 class AssegoPublicSignupScreen extends StatefulWidget {
   const AssegoPublicSignupScreen({super.key, this.partnershipId});
@@ -96,7 +97,8 @@ class _AssegoPublicSignupScreenState extends State<AssegoPublicSignupScreen> {
     final width = MediaQuery.sizeOf(context).width;
     final compact = width < 640;
     return Scaffold(
-      backgroundColor: const Color(0xFFF3F6FB),
+      backgroundColor:
+          context.isDarkMode ? context.appScaffold : const Color(0xFFF3F6FB),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -123,7 +125,7 @@ class _AssegoPublicSignupScreenState extends State<AssegoPublicSignupScreen> {
                                 style: TextStyle(
                                   fontSize: compact ? 21 : 24,
                                   fontWeight: FontWeight.w800,
-                                  color: const Color(0xFF1A237E),
+                                  color: context.appDeepTitle,
                                 ),
                               ),
                             ),
@@ -134,7 +136,9 @@ class _AssegoPublicSignupScreenState extends State<AssegoPublicSignupScreen> {
                           'Preencha os dados abaixo. O cadastro entra automaticamente no convênio ${_partnershipId.toUpperCase()}, gera CSV e notifica a administração no painel ADM.',
                           style: TextStyle(
                             height: 1.35,
-                            color: Color(0xFF334155),
+                            color: context.isDarkMode
+                                ? context.appTextSecondary
+                                : const Color(0xFF334155),
                           ),
                         ),
                         const SizedBox(height: 18),

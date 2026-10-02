@@ -6,6 +6,7 @@ import '../services/ios_payments_gate.dart';
 import '../services/login_preferences.dart';
 import '../services/push_notification_service.dart';
 import '../services/version_check_service.dart';
+import '../theme/theme_context.dart';
 import '../utils/keyboard_form_scaffold.dart';
 import '../utils/navigator_safe_pop.dart';
 import '../widgets/oauth_login_buttons.dart';
@@ -114,9 +115,11 @@ class _LoginParaPlanoScreenState extends State<LoginParaPlanoScreen> {
         SafeArea(
           child: Container(
             width: double.infinity,
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [Color(0xFFE0EAFC), Color(0xFFCFDEF3)],
+                colors: context.isDarkMode
+                    ? context.appBodyGradient
+                    : const [Color(0xFFE0EAFC), Color(0xFFCFDEF3)],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               ),
@@ -168,33 +171,37 @@ class _LoginParaPlanoScreenState extends State<LoginParaPlanoScreen> {
                             ),
                           ),
                           const SizedBox(height: 28),
-                          const Text(
+                          Text(
                             'Login obrigatório',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.w900,
-                              color: Color(0xFF1A237E),
+                              color: context.appDeepTitle,
                             ),
                           ),
                           const SizedBox(height: 14),
                           Container(
                             padding: const EdgeInsets.all(18),
                             decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.7),
+                              color: context.isDarkMode
+                                  ? context.appSurface
+                                  : Colors.white.withValues(alpha: 0.7),
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
                                 color: const Color(0xFF2962FF).withValues(alpha: 0.12),
                               ),
                             ),
-                            child: const Text(
+                            child: Text(
                               'Para assinar um plano, entre com Google'
                               ' (Android e web) ou com Google/Apple no iPhone. '
                               'Depois você escolhe o plano e paga com PIX ou cartão.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 15,
-                                color: Colors.black87,
+                                color: context.isDarkMode
+                                    ? context.appTextPrimary
+                                    : Colors.black87,
                                 height: 1.5,
                               ),
                             ),
