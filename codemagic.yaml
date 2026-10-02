@@ -212,6 +212,16 @@ workflows:
           PY
           echo "Aguardando propagacao Push (60s)..."
           sleep 60
+      # Despertador: Runner.entitlements pede time-sensitive. Sem permissão na
+      # API o script tira o entitlement só neste build (push normal segue).
+      - name: Ativar Time Sensitive Notifications no App ID (API Apple)
+        script: |
+          set -e
+          export BUNDLE_ID
+          export IOS_ENTITLEMENTS_PATH="$CM_BUILD_DIR/ios/Runner/Runner.entitlements"
+          python3 scripts/codemagic_ios_enable_time_sensitive.py
+          echo "Aguardando propagacao Time Sensitive (60s)..."
+          sleep 60
       - name: Remover perfis App Store antigos (força perfil com capabilities atuais)
         script: |
           set -e
@@ -228,6 +238,12 @@ workflows:
         script: keychain add-certificates
       - name: Aplicar perfis ao projeto Xcode
         script: xcode-project use-profiles
+      - name: Validar perfil x Time Sensitive (antes do archive)
+        script: |
+          set -e
+          export BUNDLE_ID
+          export IOS_ENTITLEMENTS_PATH="$CM_BUILD_DIR/ios/Runner/Runner.entitlements"
+          python3 scripts/codemagic_ios_verify_time_sensitive_profile.py
       - name: Forçar iOS deployment target 15.5 (ML Kit)
         script: |
           set -e

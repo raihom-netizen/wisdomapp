@@ -25,7 +25,7 @@ on:
   workflow_dispatch:
     inputs:
       setup_capabilities:
-        description: 'Ativar capabilities no App ID (Sign in with Apple, Push). Desmarque nos builds seguintes: economiza ~2 min de espera.'
+        description: 'Ativar capabilities no App ID (Sign in with Apple, Push, Time Sensitive). Desmarque nos builds seguintes: economiza ~3 min de espera.'
         type: boolean
         default: true
       enviar_testflight:
@@ -153,6 +153,21 @@ jobs:
           echo "Aguardando propagacao Push (60s)..."
           sleep 60
 
+      # Despertador: Runner.entitlements pede
+      # com.apple.developer.usernotifications.time-sensitive (aviso fura o
+      # silencioso/Foco). Se a API nao deixar ativar, o script remove o
+      # entitlement so neste build e o push normal continua.
+      # Para falhar em vez de remover: IOS_TIME_SENSITIVE_STRICT=1.
+      - name: Ativar Time Sensitive Notifications no App ID (API Apple)
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.setup_capabilities }}
+        env:
+          IOS_ENTITLEMENTS_PATH: ${{ github.workspace }}/ios/Runner/Runner.entitlements
+        run: |
+          set -e
+          python3 scripts/codemagic_ios_enable_time_sensitive.py
+          echo "Aguardando propagacao Time Sensitive (60s)..."
+          sleep 60
+
       # --- Certificado e perfis --------------------------------------------
       - name: Remover perfis App Store antigos (forca perfil com capabilities atuais)
         run: python3 scripts/codemagic_ios_delete_appstore_profiles.py
@@ -170,6 +185,13 @@ jobs:
 
       - name: Aplicar perfis ao projeto Xcode
         run: xcode-project use-profiles
+
+      # Perfil sem Time Sensitive -> tira o entitlement deste build (o archive
+      # nao quebra; so perde a prioridade "time sensitive").
+      - name: Validar perfil x Time Sensitive (antes do archive)
+        env:
+          IOS_ENTITLEMENTS_PATH: ${{ github.workspace }}/ios/Runner/Runner.entitlements
+        run: python3 scripts/codemagic_ios_verify_time_sensitive_profile.py
 
       # Google ML Kit (google_mlkit_commons) exige iOS 15.5+.
       - name: Forcar iOS deployment target 15.5 (ML Kit)

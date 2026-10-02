@@ -23,6 +23,9 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" tools:ignore="ExactAlarm" />
+    <!-- Despertador: o app acorda para desenhar o alarme (botões Adiar/Encerrar)
+         quando o push chega com o aparelho em repouso. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <application
         android:label="@string/app_name"
         android:name="${applicationName}"
@@ -115,6 +118,11 @@
                 <action android:name="com.wisdomapp.app.WIDGET_SYNC_ALARM" />
             </intent-filter>
         </receiver>
+        <!-- Botões da notificação do despertador («Adiar 3/5 min», «Encerrar»):
+             o flutter_local_notifications só entrega a ação com este receiver. -->
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

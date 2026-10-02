@@ -12,5 +12,12 @@
 	</array>
 	<key>aps-environment</key>
 	<string>production</string>
+	<!-- Despertador e lembretes de compromisso chegam como "time-sensitive":
+	     aparecem na tela mesmo com o iPhone no silencioso ou em Foco. O servidor
+	     envia esse nível no push; sem este entitlement o iOS ignora. O CI ativa a
+	     capability no App ID (scripts/codemagic_ios_enable_time_sensitive.py) e,
+	     se o perfil não tiver, remove a chave só naquele build. -->
+	<key>com.apple.developer.usernotifications.time-sensitive</key>
+	<true/>
 </dict>
 </plist>

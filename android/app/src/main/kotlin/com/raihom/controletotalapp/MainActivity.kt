@@ -1,18 +1,24 @@
 package com.wisdomapp.app
 
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.MediaStore
 import android.provider.Settings
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.enableEdgeToEdge
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
 
 private const val launcherChannelName = "controletotal/launcher"
 private const val widgetSyncChannelName = "controletotal/widget_sync"
+private const val soundsChannelName = "controletotal/sons"
 private const val widgetSyncPrefs = "controletotal_widget_sync"
 private const val widgetSyncDueKey = "sync_due_ms"
 
@@ -121,6 +127,28 @@ class MainActivity : FlutterFragmentActivity() {
                     else -> result.notImplemented()
                 }
             }
+        // Despertador: toque próprio (MP3/voz) nos avisos com o app fechado. O
+        // sistema só toca som de canal que ELE consegue ler — por isso vai para
+        // o MediaStore (mesma solução do Controle Total).
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, soundsChannelName)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "registrarSomProprio" -> {
+                        val path = call.argument<String>("path")
+                        val nome = call.argument<String>("nome") ?: "WisdomApp"
+                        val anterior = call.argument<String>("anterior")
+                        Thread {
+                            val uri = try {
+                                registrarSomProprio(path, nome, anterior)
+                            } catch (_: Throwable) {
+                                null
+                            }
+                            runOnUiThread { result.success(uri) }
+                        }.start()
+                    }
+                    else -> result.notImplemented()
+                }
+            }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, widgetSyncChannelName)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -199,5 +227,42 @@ class MainActivity : FlutterFragmentActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+    /**
+     * Grava o WAV convertido em «Notifications/WisdomApp» (Android 10+, sem
+     * permissão: é mídia do próprio app) e devolve o content:// para o canal.
+     * Apaga o toque anterior da mesma categoria. Antes do Android 10 → null
+     * (o aviso segue com o som padrão).
+     */
+    private fun registrarSomProprio(path: String?, nome: String, anterior: String?): String? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || path.isNullOrEmpty()) return null
+        val arquivo = File(path)
+        if (!arquivo.exists()) return null
+        val resolver = contentResolver
+        if (!anterior.isNullOrEmpty()) {
+            try {
+                resolver.delete(Uri.parse(anterior), null, null)
+            } catch (_: Throwable) {
+            }
+        }
+        val valores = ContentValues().apply {
+            put(MediaStore.Audio.Media.DISPLAY_NAME, arquivo.name)
+            put(MediaStore.Audio.Media.TITLE, nome)
+            put(MediaStore.Audio.Media.MIME_TYPE, "audio/wav")
+            put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_NOTIFICATIONS}/WisdomApp")
+            put(MediaStore.Audio.Media.IS_NOTIFICATION, 1)
+            put(MediaStore.Audio.Media.IS_PENDING, 1)
+        }
+        val uri = resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, valores) ?: return null
+        resolver.openOutputStream(uri)?.use { saida ->
+            arquivo.inputStream().use { it.copyTo(saida) }
+        } ?: run {
+            resolver.delete(uri, null, null)
+            return null
+        }
+        valores.clear()
+        valores.put(MediaStore.Audio.Media.IS_PENDING, 0)
+        resolver.update(uri, valores, null, null)
+        return uri.toString()
     }
 }
