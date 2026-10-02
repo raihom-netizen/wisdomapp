@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 
 import 'finance_line_opening.dart';
+import 'finance_shared_stream.dart';
 import 'firestore_query_batched_collect.dart';
 import 'firestore_user_doc_id.dart';
 
@@ -44,7 +45,8 @@ List<QueryDocumentSnapshot<Map<String, dynamic>>> _mergeTransactionSnapshots(
 }
 
 /// Lista mesclada (date + effectiveDate no período) — evita perder lançamentos migrados.
-Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>> financeTransactionsPeriodDocs({
+Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
+    financeTransactionsPeriodDocs({
   required String uid,
   required DateTime rangeStart,
   required DateTime rangeEnd,
@@ -58,7 +60,10 @@ Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>> financeTransactionsPer
   }
   final rs = DateTime(rangeStart.year, rangeStart.month, rangeStart.day);
   final re = DateTime(rangeEnd.year, rangeEnd.month, rangeEnd.day, 23, 59, 59);
-  final col = FirebaseFirestore.instance.collection('users').doc(uid).collection('transactions');
+  final col = FirebaseFirestore.instance
+      .collection('users')
+      .doc(uid)
+      .collection('transactions');
   final metadataChanges = !kIsWeb;
   final byDate = col
       .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(rs))
@@ -76,7 +81,8 @@ Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>> financeTransactionsPer
       .orderBy('paidAt', descending: false)
       .snapshots(includeMetadataChanges: metadataChanges);
 
-  late final StreamController<List<QueryDocumentSnapshot<Map<String, dynamic>>>> controller;
+  late final StreamController<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
+      controller;
   QuerySnapshot<Map<String, dynamic>>? lastA;
   QuerySnapshot<Map<String, dynamic>>? lastB;
   QuerySnapshot<Map<String, dynamic>>? lastC;
@@ -97,7 +103,8 @@ Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>> financeTransactionsPer
     debugPrint('financeTransactionsPeriodDocs: $e');
   }
 
-  controller = StreamController<List<QueryDocumentSnapshot<Map<String, dynamic>>>>.broadcast(
+  controller = StreamController<
+      List<QueryDocumentSnapshot<Map<String, dynamic>>>>.broadcast(
     onListen: () {
       subs.add(byDate.listen((s) {
         lastA = s;
@@ -157,7 +164,8 @@ Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
 }
 
 /// Coleta mesclada (date + effectiveDate) — evita perder lançamentos migrados do legado.
-Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> financePeriodMergedDocumentsCollect({
+Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
+    financePeriodMergedDocumentsCollect({
   required String uid,
   required DateTime from,
   required DateTime to,
@@ -166,6 +174,7 @@ Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> financePeriodMergedDoc
   String? financeAccountId,
   int pageSize = 400,
   int maxDocuments = 8000,
+
   /// `true`: só o cache local (sem rede, sem novas tentativas) — para pintar
   /// na hora antes da leitura do servidor. Erro/sem cache = lista vazia.
   bool cacheOnly = false,
@@ -173,7 +182,10 @@ Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> financePeriodMergedDoc
   final id = firestoreUserDocIdForAppShell(uid);
   final f = DateTime(from.year, from.month, from.day);
   final t = DateTime(to.year, to.month, to.day, 23, 59, 59);
-  final col = FirebaseFirestore.instance.collection('users').doc(id).collection('transactions');
+  final col = FirebaseFirestore.instance
+      .collection('users')
+      .doc(id)
+      .collection('transactions');
 
   Query<Map<String, dynamic>> base(String field) {
     var q = col
@@ -203,7 +215,9 @@ Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> financePeriodMergedDoc
   }) async {
     if (cacheOnly) {
       try {
-        final snap = await q.limit(maxDocuments).get(const GetOptions(source: Source.cache));
+        final snap = await q
+            .limit(maxDocuments)
+            .get(const GetOptions(source: Source.cache));
         return snap.docs;
       } catch (_) {
         return [];
@@ -255,11 +269,14 @@ Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> financePeriodMergedDoc
   final out = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
   for (final doc in merged.values) {
     final d = doc.data();
-    if (statusFilter != 'all' && (d['status'] ?? 'paid').toString() != statusFilter) {
+    if (statusFilter != 'all' &&
+        (d['status'] ?? 'paid').toString() != statusFilter) {
       continue;
     }
-    if (typeFilter == 'income' && (d['type'] ?? 'expense').toString() != 'income') continue;
-    if (typeFilter == 'expense' && (d['type'] ?? 'expense').toString() != 'expense') continue;
+    if (typeFilter == 'income' &&
+        (d['type'] ?? 'expense').toString() != 'income') continue;
+    if (typeFilter == 'expense' &&
+        (d['type'] ?? 'expense').toString() != 'expense') continue;
     if (!_docEffectiveInPeriod(d, rs, re)) continue;
     out.add(doc);
   }
@@ -282,7 +299,8 @@ Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> financePeriodMergedDoc
 /// **Evitar** em produção: carrega a coleção inteira. Preferir
 /// [financeTransactionsRangedSnapshots], [financeTransactionsPeriodDocs] ou
 /// [financeTransactionsPendingSnapshots].
-Stream<QuerySnapshot<Map<String, dynamic>>> financeTransactionsOrderedSnapshots({
+Stream<QuerySnapshot<Map<String, dynamic>>>
+    financeTransactionsOrderedSnapshots({
   required String uid,
 }) {
   return FirebaseFirestore.instance
@@ -294,22 +312,35 @@ Stream<QuerySnapshot<Map<String, dynamic>>> financeTransactionsOrderedSnapshots(
 }
 
 /// Pendentes indexados (receita ou despesa) — até [limit] docs, sem varrer histórico.
-Stream<QuerySnapshot<Map<String, dynamic>>> financeTransactionsPendingSnapshots({
+Stream<QuerySnapshot<Map<String, dynamic>>>
+    financeTransactionsPendingSnapshots({
   required String uid,
   required String type,
   int limit = kFinancePendingStreamLimit,
 }) {
   assert(type == 'income' || type == 'expense');
-  return FirebaseFirestore.instance
-      .collection('users')
-      .doc(uid)
-      .collection('transactions')
-      .where('type', isEqualTo: type)
-      .where('status', isEqualTo: 'pending')
-      .orderBy('date', descending: false)
-      .limit(limit)
-      .snapshots(includeMetadataChanges: !kIsWeb);
+  // Uma escuta só por (uid, tipo, limite): o painel do Início chama isto
+  // dentro do `build` — cada redesenho fechava e reabria a MESMA consulta, o
+  // gatilho do assert ca9 do SDK Web (firebase-js-sdk #9842).
+  return _pendingStreams
+      .obter(
+        '$uid|$type|$limit',
+        () => FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .collection('transactions')
+            .where('type', isEqualTo: type)
+            .where('status', isEqualTo: 'pending')
+            .orderBy('date', descending: false)
+            .limit(limit)
+            .snapshots(includeMetadataChanges: !kIsWeb),
+      )
+      .stream;
 }
+
+final FinanceSharedStreamCache<QuerySnapshot<Map<String, dynamic>>>
+    _pendingStreams =
+    FinanceSharedStreamCache<QuerySnapshot<Map<String, dynamic>>>();
 
 Stream<QuerySnapshot<Map<String, dynamic>>> financeTransactionsRangedSnapshots({
   required String uid,

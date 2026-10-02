@@ -2,6 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 
+import 'firestore_web_fatal_stub.dart'
+    if (dart.library.js_interop) 'firestore_web_fatal_web.dart';
+
 /// Blindagem Web: `INTERNAL ASSERTION FAILED` / `WatchChangeAggregator` ao trocar
 /// sessão Auth (login Google) com listeners `snapshots()` ativos + cache IndexedDB.
 class FirestoreWebGuard {
@@ -14,6 +17,21 @@ class FirestoreWebGuard {
         msg.contains('WatchChangeAggregator') ||
         msg.contains('PersistentListenStream') ||
         msg.contains('__PRIVATE__TargetState');
+  }
+
+  /// Web: depois do `INTERNAL ASSERTION FAILED` (ca9/b815) a fila interna do
+  /// SDK JS falha para sempre — nenhuma escuta ou gravação volta sem recarregar
+  /// a página. Mostra o aviso «Conexão com o banco reiniciando…» e recarrega 1x
+  /// (proteção contra loop em `web/index.html`). Devolve `true` se era esse erro.
+  static bool reportIfFatalWebError(Object? e) {
+    if (!kIsWeb || e == null) return false;
+    if (!isInternalAssertionError(e)) return false;
+    final msg = e.toString();
+    if (!msg.contains('INTERNAL ASSERTION')) return false;
+    debugPrint(
+        'FirestoreWebGuard: assert fatal do SDK JS — recarregando: $msg');
+    reportFirestoreWebFatal(msg);
+    return true;
   }
 
   /// Erros do SDK Web que exigem `terminate()` + nova tentativa (não chamar recovery antes da operação).
@@ -67,7 +85,7 @@ class FirestoreWebGuard {
       try {
         return await fn();
       } catch (e, st) {
-        if (isClientTerminatedError(e)) {
+        if (isClientTerminatedError(e) || reportIfFatalWebError(e)) {
           Error.throwWithStackTrace(e, st);
         }
         final retry = attempt < maxAttempts - 1 &&
@@ -134,19 +152,20 @@ class FirestoreWebGuard {
     await Future<void>.delayed(const Duration(milliseconds: 140));
   }
 
-  /// Recupera estado corrompido do SDK JS (terminate + limpar persistência + long-polling).
+  /// Recupera o canal de escuta do SDK JS **sem** `terminate()`.
+  ///
+  /// 02/10/2026: antes fazia `terminate()` + `clearPersistence()`. No
+  /// cloud_firestore_web a instância JS fica guardada (`_webFirestore`), então
+  /// depois do `terminate()` TODAS as escutas morriam e qualquer leitura nova
+  /// dava «client has already been terminated» até recarregar a página (ex.:
+  /// sair e entrar de novo sem F5 → telas girando para sempre). Na Web o cache
+  /// é só em memória (`persistenceEnabled: false`), então `clearPersistence()`
+  /// não tinha o que limpar. Também NÃO desliga/religa a rede: perder/voltar a
+  /// rede com escutas abertas é um dos gatilhos do assert ca9 do SDK JS
+  /// (firebase-js-sdk #9172). Só garante rede ligada + token alinhado; se o
+  /// SDK já tiver dado o assert fatal, [reportIfFatalWebError] recarrega.
   static Future<void> recoverFirestoreWebSession() async {
     if (!kIsWeb) return;
-    try {
-      await FirebaseFirestore.instance.disableNetwork();
-    } catch (_) {}
-    try {
-      await FirebaseFirestore.instance.terminate();
-    } catch (_) {}
-    try {
-      await FirebaseFirestore.instance.clearPersistence();
-    } catch (_) {}
-    applyWebFirestoreSettings();
     try {
       await FirebaseFirestore.instance.enableNetwork();
     } catch (_) {}
@@ -161,6 +180,9 @@ class FirestoreWebGuard {
       return await fn();
     } catch (e, st) {
       if (!kIsWeb || !isRecoverableFirestoreWebError(e)) {
+        Error.throwWithStackTrace(e, st);
+      }
+      if (reportIfFatalWebError(e)) {
         Error.throwWithStackTrace(e, st);
       }
       if (isClientTerminatedError(e)) {

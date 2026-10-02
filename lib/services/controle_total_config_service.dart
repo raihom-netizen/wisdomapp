@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/controle_total_config.dart';
+import '../utils/finance_shared_stream.dart';
 import '../utils/firestore_user_doc_id.dart';
 
 /// Configurações do Controle Total por usuário (padrão horas, tipo servidor, adicionais).
@@ -45,8 +46,18 @@ class ControleTotalConfigService {
 
   Stream<ControleTotalConfig> watchConfig(String uid) {
     if (uid.isEmpty) return Stream.value(const ControleTotalConfig());
-    return _doc(uid).snapshots().map((s) => ControleTotalConfig.fromMap(s.data()));
+    final ref = _doc(uid);
+    return _configStreams
+        .obter(
+          ref.path,
+          () =>
+              ref.snapshots().map((s) => ControleTotalConfig.fromMap(s.data())),
+        )
+        .stream;
   }
+
+  static final FinanceSharedStreamCache<ControleTotalConfig> _configStreams =
+      FinanceSharedStreamCache<ControleTotalConfig>();
 
   Future<void> setConfig(String uid, ControleTotalConfig config) async {
     if (uid.isEmpty) return;

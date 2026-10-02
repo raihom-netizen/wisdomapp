@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../constants/app_business_rules.dart';
+import '../utils/finance_shared_stream.dart';
 import '../utils/firestore_user_doc_id.dart';
 
 /// Preferências de exibição das receitas fixas: contas pendentes e quantos meses à frente.
@@ -48,14 +49,24 @@ class FixedIncomePreferencesService {
   }
 
   Stream<Map<String, dynamic>> watch(String uid) {
-    return _settingsRef(uid).snapshots().map((s) {
-      final d = s.data();
-      return {
-        _showInPendingKey: d?[_showInPendingKey] as bool? ?? true,
-        _pendingMonthsAheadKey:
-            (d?[_pendingMonthsAheadKey] as num?)?.toInt().clamp(0, 12) ??
-                _defaultPendingMonthsAhead,
-      };
-    });
+    // Uma escuta só por usuário (o Início chama no `build`).
+    final ref = _settingsRef(uid);
+    return _prefsStreams
+        .obter(
+          ref.path,
+          () => ref.snapshots().map((s) {
+            final d = s.data();
+            return {
+              _showInPendingKey: d?[_showInPendingKey] as bool? ?? true,
+              _pendingMonthsAheadKey:
+                  (d?[_pendingMonthsAheadKey] as num?)?.toInt().clamp(0, 12) ??
+                      _defaultPendingMonthsAhead,
+            };
+          }),
+        )
+        .stream;
   }
+
+  static final FinanceSharedStreamCache<Map<String, dynamic>> _prefsStreams =
+      FinanceSharedStreamCache<Map<String, dynamic>>();
 }

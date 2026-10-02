@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../constants/premium_pro_limits.dart';
+import '../utils/finance_shared_stream.dart';
 
 /// Preços reais do checkout Mercado Pago (PIX/cartão), lidos de
 /// `app_config/mp_checkout_prices` (leitura pública). O painel Admin pode
@@ -29,13 +30,13 @@ class MpCheckoutPricingSnapshot {
   final double extraBankConnectionAnnual;
 
   static MpCheckoutPricingSnapshot defaults() => MpCheckoutPricingSnapshot(
-    premiumMonthly: 49.90,
-    premiumAnnual: 478.80,
-    premiumProMonthly: 25.90,
-    premiumProAnnual: 299.90,
-    extraBankConnectionMonthly: PremiumProLimits.extraConnectionMonthlyBrl,
-    extraBankConnectionAnnual: PremiumProLimits.extraConnectionAnnualBrl,
-  );
+        premiumMonthly: 49.90,
+        premiumAnnual: 478.80,
+        premiumProMonthly: 25.90,
+        premiumProAnnual: 299.90,
+        extraBankConnectionMonthly: PremiumProLimits.extraConnectionMonthlyBrl,
+        extraBankConnectionAnnual: PremiumProLimits.extraConnectionAnnualBrl,
+      );
 
   static double? _pickDouble(Map<String, dynamic>? m, String key) {
     if (m == null) return null;
@@ -66,10 +67,10 @@ class MpCheckoutPricingSnapshot {
           _pickDouble(raw, 'premium_pro_annual') ?? d.premiumProAnnual,
       extraBankConnectionMonthly:
           _pickDouble(raw, 'extra_bank_connection_monthly') ??
-          d.extraBankConnectionMonthly,
+              d.extraBankConnectionMonthly,
       extraBankConnectionAnnual:
           _pickDouble(raw, 'extra_bank_connection_annual') ??
-          d.extraBankConnectionAnnual,
+              d.extraBankConnectionAnnual,
     );
   }
 
@@ -147,7 +148,7 @@ class MpCheckoutPricingSnapshot {
           'Módulo financeiro completo, Agenda e lembretes, Cursos bíblicos, Comprovantes e backup, Relatórios e metas',
       'divPlanosSubtitle':
           'Plano Premium: finanças, agenda e cursos num só lugar. Mensal ou anual — no anual sai cerca de $eq/mês em média; '
-          'recomendamos o anual. No cartão, o plano anual pode ser parcelado em até 6 vezes quando o Mercado Pago permitir.',
+              'recomendamos o anual. No cartão, o plano anual pode ser parcelado em até 6 vezes quando o Mercado Pago permitir.',
       'landingPremiumDetail':
           'Plano mensal: $pm por mês. Plano anual: $pa/ano — frisando: comprando anual, sai $eq por mês; é um ótimo negócio. Recomendamos comprar anual para máxima economia.',
       'landingPremiumCardPeriod':
@@ -171,7 +172,7 @@ class MpCheckoutPricingSnapshot {
   }
 
   List<({String code, String title, String price, String subtitle})>
-  premiumPlanRowsForCheckout() {
+      premiumPlanRowsForCheckout() {
     final pm = formatBrl(premiumMonthly);
     final pa = formatBrl(premiumAnnual);
     final eq = formatBrl(premiumAnnualEquivalentMonthlyFloor(premiumAnnual));
@@ -200,9 +201,13 @@ class MpCheckoutPricingService {
       .collection('app_config')
       .doc('mp_checkout_prices');
 
-  static Stream<MpCheckoutPricingSnapshot> watch() {
-    return _doc.snapshots().map(
-      (s) => MpCheckoutPricingSnapshot.fromFirestore(s.data()),
-    );
-  }
+  /// Uma escuta só para o app inteiro (várias telas chamam no `build`).
+  static Stream<MpCheckoutPricingSnapshot> watch() => _shared.stream;
+
+  static final FinanceSharedStream<MpCheckoutPricingSnapshot> _shared =
+      FinanceSharedStream<MpCheckoutPricingSnapshot>(
+    () => _doc.snapshots().map(
+          (s) => MpCheckoutPricingSnapshot.fromFirestore(s.data()),
+        ),
+  );
 }

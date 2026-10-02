@@ -43,6 +43,10 @@ Future<T> runFirestoreWithRetry<T>(
     try {
       return await fn();
     } catch (e, st) {
+      // Web: assert fatal do SDK JS não volta com retry — aviso + recarga.
+      if (FirestoreWebGuard.reportIfFatalWebError(e)) {
+        Error.throwWithStackTrace(e, st);
+      }
       final retry = _isFirestoreTransient(e) && attempt < maxAttempts - 1;
       if (!retry) {
         Error.throwWithStackTrace(e, st);

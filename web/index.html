@@ -676,6 +676,68 @@
   <!-- Boot único: web/flutter_bootstrap.js customizado já chama _flutter.loader.load
        (canvaskit full local). Load duplicado aqui causava 2ª execução do main() e
        FirebaseError failed-precondition: initializeFirestore() com opções diferentes. -->
+  <!-- SDK JS do Firebase (02/10/2026): o FlutterFire carregava o 11.9.1, que tem a corrida
+       «INTERNAL ASSERTION FAILED: Unexpected state (ID: ca9)» (pendingResponses < 0) ao
+       escutar/cancelar o mesmo alvo em sequência. Corrigida no firebase@12.13.0 (PR #9842).
+       A API usada pelo FlutterFire (firebase_*_web) é a mesma no 12.x. -->
+  <script>window.flutterfire_web_sdk_version = '12.19.0';</script>
+  <!-- Firestore Web: depois do assert ca9/b815 o SDK JS para de entregar QUALQUER dado
+       (fila interna falha para sempre) — telas girando e «Erro ao gravar». Única saída é
+       recarregar. Aviso visível + recarrega em 2 s, no máximo 1x a cada 2 min. -->
+  <script>
+    (function () {
+      var KEY = "wa_fs_fatal_reload_at";
+      var shown = false;
+      function isFatal(msg) {
+        msg = String(msg || "");
+        return /INTERNAL ASSERTION FAILED/i.test(msg) &&
+          (/FIRESTORE/i.test(msg) || /Unexpected state/i.test(msg));
+      }
+      function banner(text, withButton) {
+        try {
+          var el = document.getElementById("wa-fs-fatal");
+          if (!el) {
+            el = document.createElement("div");
+            el.id = "wa-fs-fatal";
+            el.setAttribute("role", "alert");
+            el.style.cssText = "position:fixed;left:50%;top:max(12px,env(safe-area-inset-top));" +
+              "transform:translateX(-50%);z-index:2147483647;max-width:min(92vw,460px);" +
+              "padding:12px 16px;border-radius:14px;background:#0A1F56;color:#fff;" +
+              "font:600 14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;" +
+              "box-shadow:0 8px 28px rgba(0,0,0,.35);border:1px solid rgba(212,175,55,.6);text-align:center";
+            document.body.appendChild(el);
+          }
+          el.innerHTML = text + (withButton
+            ? '<br><button type="button" style="margin-top:8px;padding:8px 16px;border-radius:10px;border:0;background:#D4AF37;color:#0A1F56;font-weight:800;min-height:auto;min-width:auto">Recarregar</button>'
+            : "");
+          var b = el.querySelector("button");
+          if (b) b.onclick = function () { location.reload(); };
+        } catch (e) {}
+      }
+      window.waFirestoreFatal = function (msg) {
+        if (shown || !isFatal(msg)) return;
+        shown = true;
+        var last = 0;
+        try { last = parseInt(sessionStorage.getItem(KEY) || "0", 10) || 0; } catch (e) {}
+        if (Date.now() - last < 120000) {
+          banner("A conexão com o banco travou de novo. Toque para recarregar.", true);
+          return;
+        }
+        banner("Conexão com o banco reiniciando… a página vai recarregar em 2 s.", false);
+        try { sessionStorage.setItem(KEY, String(Date.now())); } catch (e) {}
+        setTimeout(function () { location.reload(); }, 2000);
+      };
+      window.addEventListener("error", function (ev) {
+        try { window.waFirestoreFatal((ev && (ev.message || (ev.error && ev.error.message))) || ""); } catch (e) {}
+      });
+      window.addEventListener("unhandledrejection", function (ev) {
+        try {
+          var r = ev && ev.reason;
+          window.waFirestoreFatal((r && (r.message || String(r))) || "");
+        } catch (e) {}
+      });
+    })();
+  </script>
   <script src="flutter_bootstrap.js?v=33" async></script>
 </body>
 </html>

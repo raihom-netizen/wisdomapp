@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_profile.dart';
+import '../utils/finance_shared_stream.dart';
 
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -20,11 +21,22 @@ class FirestoreService {
     if (clean.isEmpty) {
       return const Stream<UserProfile>.empty();
     }
-    return userDoc(clean).snapshots().map((snap) {
-      final d = snap.data() ?? {};
-      return UserProfile.fromFirestoreMap(clean, d);
-    });
+    // Uma escuta só por usuário (LicenseGate, HomeShell… chamam no build):
+    // abrir/fechar o mesmo alvo em rajada derrubava o SDK Web (assert ca9).
+    final ref = userDoc(clean);
+    return _profileStreams
+        .obter(
+          ref.path,
+          () => ref.snapshots().map((snap) {
+            final d = snap.data() ?? {};
+            return UserProfile.fromFirestoreMap(clean, d);
+          }),
+        )
+        .stream;
   }
+
+  static final FinanceSharedStreamCache<UserProfile> _profileStreams =
+      FinanceSharedStreamCache<UserProfile>();
 
   Future<void> ensureUserProfile({
     required String uid,
@@ -38,17 +50,21 @@ class FirestoreService {
     await _db.runTransaction((tx) async {
       final snap = await tx.get(ref);
       if (!snap.exists) {
-        final trialEnd = DateTime.now().add(Duration(days: UserProfile.newUserTrialDays));
-        tx.set(ref, {
-          'email': email,
-          'name': name,
-          'role': 'user',
-          'plan': 'premium',
-          'planStatus': 'active',
-          'licenseExpiresAt': Timestamp.fromDate(trialEnd),
-          'createdAt': now,
-          'updatedAt': now,
-        }, SetOptions(merge: true));
+        final trialEnd =
+            DateTime.now().add(Duration(days: UserProfile.newUserTrialDays));
+        tx.set(
+            ref,
+            {
+              'email': email,
+              'name': name,
+              'role': 'user',
+              'plan': 'premium',
+              'planStatus': 'active',
+              'licenseExpiresAt': Timestamp.fromDate(trialEnd),
+              'createdAt': now,
+              'updatedAt': now,
+            },
+            SetOptions(merge: true));
       } else {
         final existingEmail = (snap.data()?['email'] ?? '').toString().trim();
         final patch = <String, dynamic>{'updatedAt': now};

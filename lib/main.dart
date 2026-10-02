@@ -37,6 +37,7 @@ import 'services/course_videos_cache_service.dart';
 import 'services/login_preferences.dart';
 import 'services/user_profile_startup_cache.dart';
 import 'utils/firestore_user_doc_id.dart';
+import 'utils/firestore_web_guard.dart';
 import 'services/session_restore_service.dart';
 import 'screens/downloads_screen.dart';
 import 'screens/payment_status_screen.dart';
@@ -207,6 +208,21 @@ void main() async {
         80 * 1024 * 1024; // 80 MB
   }
   registerWebViewForWebEngine();
+  if (kIsWeb) {
+    // Web: assert fatal do SDK JS do Firestore (ca9/b815) que escapa como erro
+    // não tratado → aviso «Conexão com o banco reiniciando…» + recarga única.
+    final prevFlutterOnError = FlutterError.onError;
+    FlutterError.onError = (FlutterErrorDetails details) {
+      FirestoreWebGuard.reportIfFatalWebError(details.exception);
+      prevFlutterOnError?.call(details);
+    };
+    final dispatcher = WidgetsBinding.instance.platformDispatcher;
+    final prevPlatformOnError = dispatcher.onError;
+    dispatcher.onError = (Object error, StackTrace stack) {
+      FirestoreWebGuard.reportIfFatalWebError(error);
+      return prevPlatformOnError?.call(error, stack) ?? false;
+    };
+  }
   // Em release: exibe erro na tela em vez de tela branca quando um widget quebra no build.
   ErrorWidget.builder = (FlutterErrorDetails details) {
     return Material(

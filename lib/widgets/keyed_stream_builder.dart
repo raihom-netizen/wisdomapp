@@ -1,5 +1,7 @@
 import 'package:flutter/widgets.dart';
 
+import '../utils/firestore_web_guard.dart';
+
 /// [StreamBuilder] que só recria a escuta quando [streamKey] muda.
 ///
 /// `StreamBuilder(stream: ref.snapshots())` direto no `build` cria uma escuta
@@ -51,7 +53,13 @@ class _KeyedStreamBuilderState<T> extends State<KeyedStreamBuilder<T>> {
     return StreamBuilder<T>(
       stream: _stream,
       initialData: widget.initialData,
-      builder: widget.builder,
+      builder: (context, snapshot) {
+        // Web: assert fatal do SDK JS (ca9/b815) → aviso + recarga única.
+        if (snapshot.hasError) {
+          FirestoreWebGuard.reportIfFatalWebError(snapshot.error);
+        }
+        return widget.builder(context, snapshot);
+      },
     );
   }
 }
