@@ -40,6 +40,7 @@ import '../widgets/user_menu_lateral.dart';
 import '../services/home_start_module_cache.dart';
 import '../services/user_profile_startup_cache.dart';
 import '../widgets/home_start_module_picker.dart';
+import '../widgets/license_gate.dart' show PerfilCarregando;
 import '../widgets/app_version_footer.dart';
 import '../widgets/floating_shell_banners.dart';
 import '../utils/admin_panel_launch.dart';
@@ -1295,6 +1296,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     super.dispose();
   }
 
+  /// «Tentar de novo» da abertura do perfil (reabre a escuta).
+  int _perfilTentativa = 0;
+
   @override
   Widget build(BuildContext context) {
     if (!_hasFirestoreUid) {
@@ -1321,33 +1325,18 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     final profileUid = _profileFirestoreUid;
     // Stream em tempo real: ao pagar, o webhook atualiza users/{uid}; o perfil é recalculado e a UI libera sem recarregar.
     return StreamBuilder<UserProfile>(
+      key: ValueKey('perfil#$_perfilTentativa'),
       stream: fs.watchProfile(profileUid),
       builder: (context, snap) {
         final profile = snap.data ??
             UserProfileStartupCache.getSync(profileUid) ??
             UserProfileStartupCache.getSync(widget.uid);
         if (profile == null) {
-          return Scaffold(
-            body: Container(
-              width: double.infinity,
-              height: double.infinity,
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Color(0xFF1A237E),
-                    Color(0xFF2D5BFF),
-                    Color(0xFF0D9488),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: const SafeArea(
-                child: Center(
-                  child: CircularProgressIndicator(color: Colors.white),
-                ),
-              ),
-            ),
+          // Sem perfil (nem em cache): erro ou demora viram aviso com
+          // «Tentar de novo» — antes era um spinner para sempre.
+          return PerfilCarregando(
+            erro: snap.hasError,
+            onTentarDeNovo: () => setState(() => _perfilTentativa++),
           );
         }
         if (snap.hasData) {
