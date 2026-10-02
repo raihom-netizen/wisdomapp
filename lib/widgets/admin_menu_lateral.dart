@@ -1,7 +1,67 @@
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
-enum AdminMenuItem { resumo, painelGeral, usuarios, usuarios360, equipe, logs, relatorios, sugestoes, dicasFinanceiras, downloads, landing, acessosDominio, escala, drive, mercadopago, cursos, pluggy, openFinanceExtras, premiumProMonitor, promocoes, convenios, lojas, migracaoEmail, email, manutencao, voltar }
+enum AdminMenuItem { resumo, painelGeral, usuarios, usuarios360, usoModulos, equipe, logs, relatorios, sugestoes, dicasFinanceiras, downloads, landing, acessosDominio, escala, drive, mercadopago, cursos, pluggy, openFinanceExtras, premiumProMonitor, promocoes, convenios, lojas, migracaoEmail, email, manutencao, voltar }
+
+/// Título de cada item (menu, breadcrumb e matriz de permissões da Equipe).
+String adminMenuItemTitulo(AdminMenuItem item) {
+  switch (item) {
+    case AdminMenuItem.resumo:
+      return 'Resumo';
+    case AdminMenuItem.painelGeral:
+      return 'Painel geral';
+    case AdminMenuItem.usuarios:
+      return 'Usuários';
+    case AdminMenuItem.usuarios360:
+      return 'WISDOMAPP 360°';
+    case AdminMenuItem.usoModulos:
+      return 'Uso dos módulos';
+    case AdminMenuItem.equipe:
+      return 'Equipe';
+    case AdminMenuItem.logs:
+      return 'Logs';
+    case AdminMenuItem.relatorios:
+      return 'Relatórios';
+    case AdminMenuItem.sugestoes:
+      return 'Sugestões';
+    case AdminMenuItem.dicasFinanceiras:
+      return 'Dicas financeiras';
+    case AdminMenuItem.downloads:
+      return 'Downloads';
+    case AdminMenuItem.landing:
+      return 'Landing / Divulgação';
+    case AdminMenuItem.acessosDominio:
+      return 'Acessos domínio';
+    case AdminMenuItem.escala:
+      return 'Escala';
+    case AdminMenuItem.drive:
+      return 'Backups';
+    case AdminMenuItem.mercadopago:
+      return 'Mercado Pago';
+    case AdminMenuItem.cursos:
+      return 'Cursos em vídeo';
+    case AdminMenuItem.pluggy:
+      return 'Pluggy';
+    case AdminMenuItem.openFinanceExtras:
+      return 'Open Finance extras';
+    case AdminMenuItem.premiumProMonitor:
+      return 'Monitor legado';
+    case AdminMenuItem.promocoes:
+      return 'Promoções';
+    case AdminMenuItem.convenios:
+      return 'Convênios';
+    case AdminMenuItem.lojas:
+      return 'Publicar nas Lojas';
+    case AdminMenuItem.migracaoEmail:
+      return 'Migração e-mail';
+    case AdminMenuItem.email:
+      return 'E-mail';
+    case AdminMenuItem.manutencao:
+      return 'Manutenção';
+    case AdminMenuItem.voltar:
+      return 'Voltar ao aplicativo';
+  }
+}
 
 /// Cor de destaque por módulo — menu admin moderno e colorido.
 Color adminMenuAccentColor(AdminMenuItem item) {
@@ -14,6 +74,8 @@ Color adminMenuAccentColor(AdminMenuItem item) {
       return const Color(0xFF2D5BFF);
     case AdminMenuItem.usuarios360:
       return const Color(0xFF0EA5E9);
+    case AdminMenuItem.usoModulos:
+      return const Color(0xFF16A34A);
     case AdminMenuItem.equipe:
       return const Color(0xFF8B5CF6);
     case AdminMenuItem.logs:
@@ -126,6 +188,8 @@ class AdminMenuLateral extends StatelessWidget {
         itens: [
           (item: AdminMenuItem.usuarios, title: 'Usuários', icon: Icons.people_rounded),
           (item: AdminMenuItem.usuarios360, title: 'WISDOMAPP 360°', icon: Icons.hub_rounded),
+          // Quem usa cada módulo (financeiro, agenda, cursos…) + ativos 30 dias.
+          (item: AdminMenuItem.usoModulos, title: 'Uso dos módulos', icon: Icons.dashboard_customize_rounded),
           (item: AdminMenuItem.equipe, title: 'Equipe', icon: Icons.groups_rounded),
           (item: AdminMenuItem.sugestoes, title: 'Sugestões', icon: Icons.feedback_rounded),
         ],

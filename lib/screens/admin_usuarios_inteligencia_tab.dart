@@ -16,6 +16,8 @@ import '../widgets/module_header_premium.dart';
 import '../widgets/admin/admin_page_shell.dart';
 import '../widgets/admin_delegate_email_section.dart';
 import '../widgets/admin/admin_user_360_extras.dart';
+import '../utils/admin_load_guard.dart';
+import '../widgets/admin/admin_ui_kit.dart';
 
 /// Painel admin WISDOMAPP: visão 360° por utilizador (uso, versão do cliente, convênio, MP, mensagem push).
 class AdminUsuariosInteligenciaTab extends StatefulWidget {
@@ -93,7 +95,12 @@ class _AdminUsuariosInteligenciaTabState
       if (widget.useUnifiedPanel) {
         q = q.where('app', isEqualTo: widget.unifiedApp);
       }
-      _usersStreamCached = q.limit(_usersStreamLimit).snapshots();
+      // Prazo para o 1º dado (nunca spinner eterno) — ver AdminLoadGuard.
+      _usersStreamCached = AdminLoadGuard.primeiroDadoComPrazo(
+        q.limit(_usersStreamLimit).snapshots(),
+        prazo: AdminLoadGuard.longo,
+        oQue: 'os usuários',
+      );
       _usersStreamApp = appKey;
     }
     return _usersStreamCached!;
@@ -218,14 +225,20 @@ class _AdminUsuariosInteligenciaTabState
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: _usersStream(),
               builder: (context, snap) {
-                if (snap.hasError) {
-                  return Center(
-                    child: Text('Erro: ${snap.error}',
-                        style: TextStyle(color: Colors.red.shade700)),
+                if (snap.hasError && !snap.hasData) {
+                  return ListView(
+                    children: [
+                      AdminErroCard(
+                        erro: snap.error,
+                        onTentar: () => setState(() => _usersStreamCached = null),
+                      ),
+                    ],
                   );
                 }
                 if (!snap.hasData) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const Center(
+                    child: AdminCarregando(texto: 'Carregando os usuários…'),
+                  );
                 }
                 final filtered = _filterDocs(snap.data!.docs);
                 if (narrow) {
@@ -462,10 +475,24 @@ class _Usuario360DetailState extends State<_Usuario360Detail> {
   bool _sendingPush = false;
   late Future<_UsageBundle> _usageFuture;
 
+  /// Escutas guardadas por uid (antes `.snapshots()` dentro do build: a cada
+  /// rebuild uma escuta nova — no Firestore Web isso trava e fica girando).
+  late Stream<DocumentSnapshot<Map<String, dynamic>>> _userStream;
+  late Stream<DocumentSnapshot<Map<String, dynamic>>> _planStream;
+
+  void _bindStreams() {
+    _userStream = AdminLoadGuard.primeiroDadoComPrazo(
+      FirebaseFirestore.instance.collection('users').doc(widget.uid).snapshots(),
+      oQue: 'o usuário',
+    );
+    _planStream = homePlanningRef(widget.uid).snapshots();
+  }
+
   @override
   void initState() {
     super.initState();
     _usageFuture = _loadUsage(widget.uid);
+    _bindStreams();
   }
 
   @override
@@ -473,6 +500,7 @@ class _Usuario360DetailState extends State<_Usuario360Detail> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.uid != widget.uid) {
       _usageFuture = _loadUsage(widget.uid);
+      _bindStreams();
     }
   }
 
@@ -769,12 +797,25 @@ class _Usuario360DetailState extends State<_Usuario360Detail> {
             ),
           Expanded(
             child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(widget.uid)
-                  .snapshots(),
+              stream: _userStream,
               builder: (context, userSnap) {
-                if (!userSnap.hasData || !userSnap.data!.exists) {
+                if (userSnap.hasError && !userSnap.hasData) {
+                  return ListView(
+                    padding: const EdgeInsets.all(12),
+                    children: [
+                      AdminErroCard(
+                        erro: userSnap.error,
+                        onTentar: () => setState(_bindStreams),
+                      ),
+                    ],
+                  );
+                }
+                if (!userSnap.hasData) {
+                  return const Center(
+                    child: AdminCarregando(texto: 'Carregando o usuário…'),
+                  );
+                }
+                if (!userSnap.data!.exists) {
                   return const Center(child: Text('Utilizador não encontrado.'));
                 }
                 final u = userSnap.data!.data() ?? {};
@@ -783,7 +824,7 @@ class _Usuario360DetailState extends State<_Usuario360Detail> {
                 if (tel is Map) telMap = Map<String, dynamic>.from(tel);
 
                 return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                  stream: homePlanningRef(widget.uid).snapshots(),
+                  stream: _planStream,
                   builder: (context, planSnap) {
                     int? startIdx;
                     if (planSnap.hasData && planSnap.data!.exists) {

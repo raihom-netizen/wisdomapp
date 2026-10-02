@@ -5,6 +5,7 @@ import '../../services/admin_user_internal_notes_service.dart';
 import '../../services/billing_service.dart';
 import '../../services/admin_audit_service.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/admin_load_guard.dart';
 
 /// Histórico de auditoria + notas internas + renovar 1 ano na ficha 360°.
 class AdminUser360ExtrasPanel extends StatefulWidget {
@@ -27,6 +28,33 @@ class _AdminUser360ExtrasPanelState extends State<AdminUser360ExtrasPanel> {
   final _notesCtrl = TextEditingController();
   bool _savingNote = false;
   bool _renewing = false;
+
+  /// Escutas guardadas por uid (antes criadas no build a cada rebuild).
+  late Stream<String> _noteStream;
+  late Stream<List<AdminAuditEntry>> _auditStream;
+
+  void _bindStreams() {
+    _noteStream = AdminUserInternalNotesService().watchNote(widget.uid);
+    _auditStream = AdminLoadGuard.primeiroDadoComPrazo(
+      AdminAuditQueryService().watchForUser(widget.uid),
+      oQue: 'o histórico',
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _bindStreams();
+  }
+
+  @override
+  void didUpdateWidget(covariant AdminUser360ExtrasPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.uid != widget.uid) {
+      _notesCtrl.clear();
+      _bindStreams();
+    }
+  }
 
   @override
   void dispose() {
@@ -134,7 +162,7 @@ class _AdminUser360ExtrasPanelState extends State<AdminUser360ExtrasPanel> {
         ),
         const SizedBox(height: 8),
         StreamBuilder<String>(
-          stream: AdminUserInternalNotesService().watchNote(widget.uid),
+          stream: _noteStream,
           builder: (context, snap) {
             if (snap.hasData &&
                 _notesCtrl.text.isEmpty &&
@@ -176,8 +204,24 @@ class _AdminUser360ExtrasPanelState extends State<AdminUser360ExtrasPanel> {
         ),
         const SizedBox(height: 8),
         StreamBuilder<List<AdminAuditEntry>>(
-          stream: AdminAuditQueryService().watchForUser(widget.uid),
+          stream: _auditStream,
           builder: (context, snap) {
+            if (snap.hasError && !snap.hasData) {
+              return Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      AdminLoadGuard.mensagem(snap.error),
+                      style: TextStyle(fontSize: 12, color: Colors.red.shade700),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => setState(_bindStreams),
+                    child: const Text('Tentar de novo'),
+                  ),
+                ],
+              );
+            }
             if (snap.connectionState == ConnectionState.waiting) {
               return const Padding(
                 padding: EdgeInsets.all(12),

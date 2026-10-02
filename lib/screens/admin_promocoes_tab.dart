@@ -12,6 +12,8 @@ import '../utils/debounced_text_controller.dart';
 import '../utils/user_export_csv_save.dart';
 import '../widgets/brl_amount_text_field.dart';
 import '../widgets/module_header_premium.dart';
+import '../utils/admin_load_guard.dart';
+import '../widgets/admin/admin_ui_kit.dart';
 
 class _PromoEmailRecipient {
   final String uid;
@@ -21,7 +23,7 @@ class _PromoEmailRecipient {
 }
 
 /// CRUD de promoções: estoque, vigência, preço, duração da licença (+30 / +180 / +365 dias).
-class AdminPromocoesTab extends StatelessWidget {
+class AdminPromocoesTab extends StatefulWidget {
   const AdminPromocoesTab({super.key});
 
   static const List<String> kPlanCodes = [
@@ -30,16 +32,64 @@ class AdminPromocoesTab extends StatelessWidget {
   ];
 
   @override
+  State<AdminPromocoesTab> createState() => _AdminPromocoesTabState();
+
+  static Future<void> _openEditor(BuildContext context, String? docId) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => _PromoEditorDialog(docId: docId),
+    );
+  }
+
+  static Future<void> _openDuplicate(BuildContext context, String sourceId) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => _PromoEditorDialog(duplicateFromId: sourceId),
+    );
+  }
+
+  static Future<void> _openPromoListBroadcastDialog(
+      BuildContext context, String promoId) async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => _PromoListBroadcastDialog(promoId: promoId),
+    );
+  }
+}
+
+/// 02/10/2026: escuta guardada no State (antes `.snapshots()` no build de um
+/// StatelessWidget — nova escuta a cada rebuild do admin; no Firestore Web
+/// isso trava e fica girando). Prazo para o 1º dado + «Tentar de novo».
+class _AdminPromocoesTabState extends State<AdminPromocoesTab> {
+  late Stream<QuerySnapshot<Map<String, dynamic>>> _promotionsStream = _novaEscuta();
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> _novaEscuta() =>
+      AdminLoadGuard.primeiroDadoComPrazo(
+        FirebaseFirestore.instance.collection('promotions').snapshots(),
+        oQue: 'as promoções',
+      );
+
+  @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance.collection('promotions').snapshots(),
+        stream: _promotionsStream,
         builder: (context, snap) {
-          if (snap.hasError) {
-            return Center(
-                child: Text('Erro: ${snap.error}', style: const TextStyle(color: Colors.red)));
+          if (snap.hasError && !snap.hasData) {
+            return ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                AdminErroCard(
+                  erro: snap.error,
+                  onTentar: () => setState(() => _promotionsStream = _novaEscuta()),
+                ),
+              ],
+            );
           }
           if (!snap.hasData) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(
+                child: AdminCarregando(texto: 'Carregando as promoções…'));
           }
           final docs = snap.data!.docs.toList()
             ..sort((a, b) {
@@ -78,7 +128,7 @@ class AdminPromocoesTab extends StatelessWidget {
                     Material(
                       color: Colors.transparent,
                       child: InkWell(
-                        onTap: () => _openEditor(context, null),
+                        onTap: () => AdminPromocoesTab._openEditor(context, null),
                         borderRadius: BorderRadius.circular(14),
                         child: Ink(
                           decoration: BoxDecoration(
@@ -212,18 +262,18 @@ class AdminPromocoesTab extends StatelessWidget {
                                             color: AppColors.accent,
                                           ),
                                           onPressed: () =>
-                                              _openPromoListBroadcastDialog(
+                                              AdminPromocoesTab._openPromoListBroadcastDialog(
                                                   context, d.id),
                                         ),
                                       IconButton(
                                         tooltip: 'Duplicar',
                                         icon: Icon(Icons.copy_all_rounded, color: AppColors.deepBlue),
-                                        onPressed: () => _openDuplicate(context, d.id),
+                                        onPressed: () => AdminPromocoesTab._openDuplicate(context, d.id),
                                       ),
                                       IconButton(
                                         tooltip: 'Editar',
                                         icon: Icon(Icons.edit_rounded, color: AppColors.deepBlue),
-                                        onPressed: () => _openEditor(context, d.id),
+                                        onPressed: () => AdminPromocoesTab._openEditor(context, d.id),
                                       ),
                                     ],
                                   ),
@@ -237,30 +287,6 @@ class AdminPromocoesTab extends StatelessWidget {
             ],
           );
         },
-    );
-  }
-
-  static Future<void> _openEditor(BuildContext context, String? docId) async {
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => _PromoEditorDialog(docId: docId),
-    );
-  }
-
-  static Future<void> _openDuplicate(BuildContext context, String sourceId) async {
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => _PromoEditorDialog(duplicateFromId: sourceId),
-    );
-  }
-
-  static Future<void> _openPromoListBroadcastDialog(
-      BuildContext context, String promoId) async {
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => _PromoListBroadcastDialog(promoId: promoId),
     );
   }
 }

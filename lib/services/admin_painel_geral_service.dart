@@ -159,7 +159,19 @@ class AdminPainelGeralData {
     required this.resultadoUsuarios,
     required this.usuariosLidos,
     required this.limiteAtingido,
+    this.acessoHoje = 0,
+    this.acesso7 = 0,
+    this.acesso30 = 0,
+    this.semRegistroAcesso = 0,
   });
+
+  /// Último acesso do app (`users.clientTelemetry.lastPingAt`): hoje, 7 e 30 dias.
+  final int acessoHoje;
+  final int acesso7;
+  final int acesso30;
+
+  /// Cadastros sem nenhum registro de acesso (versão antiga ou nunca abriram).
+  final int semRegistroAcesso;
 
   final DateTime geradoEm;
   final int totalUsuarios;
@@ -370,6 +382,7 @@ class AdminPainelGeralData {
     var ativos = 0, emTeste = 0, vencendo7 = 0, carencia = 0, bloqueados = 0;
     var convenio = 0, equipe = 0, pagantes = 0, cortesia = 0, naoRenovaram = 0;
     var mrr = 0.0, prev30 = 0.0, prev90 = 0.0, prevMes = 0.0;
+    var acessoHoje = 0, acesso7 = 0, acesso30 = 0, semAcesso = 0;
     final fimDoMes = DateTime(agora.year, agora.month + 1, 1)
         .subtract(const Duration(days: 1));
     final resultado = <AdminResultadoUsuario>[];
@@ -380,7 +393,22 @@ class AdminPainelGeralData {
       final data = e.value;
       if (!adminUserHasCompleteEmail(data)) continue;
       final role = (data['role'] ?? 'user').toString().toLowerCase();
-      if (role == 'admin' || role == 'master' || role == 'gestor') equipe++;
+      if (role == 'admin' ||
+          role == 'master' ||
+          role == 'gestor' ||
+          role == 'editor_conteudo') {
+        equipe++;
+      }
+
+      final tel = data['clientTelemetry'];
+      final ping = tel is Map ? _data(tel['lastPingAt']) : null;
+      if (ping == null) {
+        semAcesso++;
+      } else {
+        if (!ping.isBefore(hoje)) acessoHoje++;
+        if (agora.difference(ping).inDays < 7) acesso7++;
+        if (agora.difference(ping).inDays < 30) acesso30++;
+      }
 
       final criado = _data(data['createdAt']);
       if (criado != null) {
@@ -507,6 +535,10 @@ class AdminPainelGeralData {
       resultadoUsuarios: resultado,
       usuariosLidos: usuarios.length,
       limiteAtingido: limiteAtingido,
+      acessoHoje: acessoHoje,
+      acesso7: acesso7,
+      acesso30: acesso30,
+      semRegistroAcesso: semAcesso,
     );
   }
 }

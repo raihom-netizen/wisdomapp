@@ -8,12 +8,22 @@ enum TeamRole {
   partner,
   suporte,
   editor,
+
+  /// `role: editor_conteudo` — só Cursos (vídeos) e Dicas financeiras.
+  editorConteudo,
 }
 
 class TeamRoleConfig {
   TeamRoleConfig._();
 
-  static const firestoreRoles = {'admin', 'master', 'gestor', 'partner', 'socio'};
+  static const firestoreRoles = {
+    'admin',
+    'master',
+    'gestor',
+    'partner',
+    'socio',
+    'editor_conteudo',
+  };
 
   static TeamRole fromFirestore({
     required String role,
@@ -23,6 +33,7 @@ class TeamRoleConfig {
     if (r == 'master') return TeamRole.master;
     if (r == 'gestor') return TeamRole.gestor;
     if (r == 'partner' || r == 'socio') return TeamRole.partner;
+    if (r == 'editor_conteudo') return TeamRole.editorConteudo;
     if (r == 'admin') {
       final lvl = (adminLevel ?? '').trim().toLowerCase();
       if (lvl == 'editor') return TeamRole.editor;
@@ -40,6 +51,8 @@ class TeamRoleConfig {
         return 'gestor';
       case TeamRole.partner:
         return 'partner';
+      case TeamRole.editorConteudo:
+        return 'editor_conteudo';
       case TeamRole.admin:
       case TeamRole.suporte:
       case TeamRole.editor:
@@ -72,6 +85,8 @@ class TeamRoleConfig {
         return 'Suporte';
       case TeamRole.editor:
         return 'Editor';
+      case TeamRole.editorConteudo:
+        return 'Editor de conteúdo';
     }
   }
 
@@ -90,6 +105,9 @@ class TeamRoleConfig {
         return 'Usuários e licenças; sem chaves do Mercado Pago.';
       case TeamRole.editor:
         return 'Divulgação e escalas; sem backups nem financeiro.';
+      case TeamRole.editorConteudo:
+        return 'Só Cursos (gravar, editar e excluir vídeos) e Dicas financeiras. '
+            'Não vê usuários, financeiro, equipe, logs nem configurações.';
     }
   }
 
@@ -107,6 +125,8 @@ class TeamRoleConfig {
         return const Color(0xFF1D4ED8);
       case TeamRole.editor:
         return const Color(0xFF0EA5E9);
+      case TeamRole.editorConteudo:
+        return const Color(0xFFDC2626);
     }
   }
 
@@ -124,6 +144,8 @@ class TeamRoleConfig {
         return Icons.support_agent_rounded;
       case TeamRole.editor:
         return Icons.edit_note_rounded;
+      case TeamRole.editorConteudo:
+        return Icons.video_library_rounded;
     }
   }
 
@@ -134,5 +156,6 @@ class TeamRoleConfig {
     TeamRole.partner,
     TeamRole.suporte,
     TeamRole.editor,
+    TeamRole.editorConteudo,
   ];
 }

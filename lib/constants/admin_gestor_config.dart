@@ -5,11 +5,12 @@ class AdminGestorConfig {
   AdminGestorConfig._();
 
   /// Fallback se `role` ainda não estiver no Firestore.
-  static const Set<String> kGestorEmails = {
-    'tarleypmgo@gmail.com',
-  };
+  /// 02/10/2026: tarleypmgo@gmail.com SAIU daqui — ele é editor de conteúdo
+  /// (`role: editor_conteudo`, só Cursos + Dicas). Um e-mail aqui daria a ele
+  /// o menu do gestor (usuários, relatórios, recebimentos) no app.
+  static const Set<String> kGestorEmails = {};
 
-  /// Menu do gestor (Tarley e demais gestores).
+  /// Menu do gestor.
   static const List<AdminMenuItem> kAllowedMenuItems = [
     AdminMenuItem.resumo,
     AdminMenuItem.usuarios,

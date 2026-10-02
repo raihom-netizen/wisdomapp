@@ -4,10 +4,12 @@ import 'package:intl/intl.dart';
 
 import '../services/user_feedback_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/admin_load_guard.dart';
 import '../utils/debounced_text_controller.dart';
 import '../widgets/fast_text_field.dart';
 import '../widgets/module_header_premium.dart';
 import '../widgets/admin/admin_page_shell.dart';
+import '../widgets/admin/admin_ui_kit.dart';
 
 /// Módulo admin: sugestões e críticas — abas Abertos/Respondidos, filtros, seleção e exclusão.
 class AdminSugestoesTab extends StatefulWidget {
@@ -32,6 +34,20 @@ class _AdminSugestoesTabState extends State<AdminSugestoesTab>
   final Set<String> _selectedIds = {};
   String _periodFilter = 'todos';
   String _searchQuery = '';
+
+  /// 02/10/2026: a escuta era criada no build (watchAllFeedback() a cada
+  /// letra/aba) — no Firestore Web isso trava e fica girando. Agora UMA
+  /// escuta guardada, com prazo para o 1º dado; «Tentar de novo» recria.
+  late Stream<QuerySnapshot<Map<String, dynamic>>> _feedbackStream =
+      _novaEscuta();
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> _novaEscuta() =>
+      AdminLoadGuard.primeiroDadoComPrazo(
+        _feedbackService.watchAllFeedback(),
+        oQue: 'as sugestões',
+      );
+
+  void _tentarDeNovo() => setState(() => _feedbackStream = _novaEscuta());
 
   @override
   void initState() {
@@ -229,13 +245,20 @@ class _AdminSugestoesTabState extends State<AdminSugestoesTab>
         ),
         Expanded(
           child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: _feedbackService.watchAllFeedback(),
+            stream: _feedbackStream,
             builder: (context, snap) {
-              if (snap.hasError) {
-                return Center(child: _errorBox('Erro: ${snap.error}'));
+              if (snap.hasError && !snap.hasData) {
+                return ListView(
+                  padding: EdgeInsets.fromLTRB(pad.left, 8, pad.right, pad.bottom),
+                  children: [
+                    AdminErroCard(erro: snap.error, onTentar: _tentarDeNovo),
+                  ],
+                );
               }
               if (!snap.hasData) {
-                return const Center(child: CircularProgressIndicator());
+                return const Center(
+                  child: AdminCarregando(texto: 'Carregando as sugestões…'),
+                );
               }
               final all = snap.data!.docs;
               final abertos = all
@@ -245,6 +268,15 @@ class _AdminSugestoesTabState extends State<AdminSugestoesTab>
                   .where((d) => UserFeedbackService.isReplied(d.data()))
                   .length;
               final filtered = _filterDocs(all);
+              final emAnalise = all
+                  .where((d) => UserFeedbackService.isEmAnalise(d.data()))
+                  .length;
+              final agora = DateTime.now();
+              final semana = all.where((d) {
+                final c = d.data()['createdAt'];
+                return c is Timestamp &&
+                    agora.difference(c.toDate()).inDays <= 7;
+              }).length;
 
               return ListView(
                 physics: const AlwaysScrollableScrollPhysics(
@@ -257,6 +289,49 @@ class _AdminSugestoesTabState extends State<AdminSugestoesTab>
                   pad.bottom,
                 ),
                 children: [
+                  if (snap.hasError)
+                    AdminErroCard(
+                      erro: snap.error,
+                      onTentar: _tentarDeNovo,
+                      titulo: 'Conexão perdida (mostrando a última lista)',
+                    ),
+                  AdminKpiGrid(children: [
+                    AdminKpi(
+                      rotulo: 'Em aberto',
+                      valor: '$abertos',
+                      sub: '$emAnalise em análise',
+                      icone: Icons.mark_email_unread_rounded,
+                      cor: AdminUi.ambar,
+                      selecionado: !_isRepliedTab(),
+                      onTap: () => _tabCtrl.animateTo(0),
+                    ),
+                    AdminKpi(
+                      rotulo: 'Respondidas',
+                      valor: '$respondidos',
+                      sub: all.isEmpty
+                          ? '—'
+                          : '${(respondidos * 100 / all.length).round()}% do total',
+                      icone: Icons.mark_email_read_rounded,
+                      cor: AdminUi.verde,
+                      selecionado: _isRepliedTab(),
+                      onTap: () => _tabCtrl.animateTo(1),
+                    ),
+                    AdminKpi(
+                      rotulo: 'Últimos 7 dias',
+                      valor: '$semana',
+                      sub: 'Novas mensagens',
+                      icone: Icons.schedule_rounded,
+                      cor: AdminUi.azul,
+                    ),
+                    AdminKpi(
+                      rotulo: 'Total',
+                      valor: '${all.length}',
+                      sub: all.length >= 500 ? 'Mostrando as 500 mais recentes' : 'Na base',
+                      icone: Icons.forum_rounded,
+                      cor: AdminUi.roxo,
+                    ),
+                  ]),
+                  const SizedBox(height: 10),
                   Text(
                     _isRepliedTab()
                         ? '$respondidos respondido(s) no total · ${filtered.length} após filtros'
@@ -453,17 +528,6 @@ class _AdminSugestoesTabState extends State<AdminSugestoesTab>
     );
   }
 
-  Widget _errorBox(String msg) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.orange.shade50,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.orange.shade200),
-      ),
-      child: Text(msg),
-    );
-  }
 }
 
 class _FeedbackCard extends StatelessWidget {
@@ -491,6 +555,7 @@ class _FeedbackCard extends StatelessWidget {
     final message = (d['message'] ?? '').toString();
     final adminReply = (d['adminReply'] ?? '').toString();
     final isReplied = UserFeedbackService.isReplied(d);
+    final emAnalise = UserFeedbackService.isEmAnalise(d);
     final createdAt = d['createdAt'] is Timestamp
         ? (d['createdAt'] as Timestamp).toDate()
         : null;
@@ -558,6 +623,46 @@ class _FeedbackCard extends StatelessWidget {
                     ],
                   ),
                 ),
+                AdminSelo(
+                  isReplied
+                      ? 'Respondida'
+                      : emAnalise
+                          ? 'Em análise'
+                          : 'Nova',
+                  cor: isReplied
+                      ? AdminUi.verde
+                      : emAnalise
+                          ? AdminUi.azul
+                          : AdminUi.ambar,
+                ),
+                if (!isReplied)
+                  PopupMenuButton<String>(
+                    tooltip: 'Status',
+                    icon: const Icon(Icons.flag_outlined),
+                    onSelected: (st) async {
+                      try {
+                        await UserFeedbackService().setStatus(doc.id, st);
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(AdminLoadGuard.mensagem(e))),
+                          );
+                        }
+                      }
+                    },
+                    itemBuilder: (_) => [
+                      if (!emAnalise)
+                        const PopupMenuItem(
+                          value: 'em_analise',
+                          child: Text('Marcar «Em análise»'),
+                        ),
+                      if (emAnalise)
+                        const PopupMenuItem(
+                          value: 'pending',
+                          child: Text('Voltar para «Nova»'),
+                        ),
+                    ],
+                  ),
                 IconButton(
                   tooltip: 'Excluir',
                   onPressed: onDelete,
@@ -613,14 +718,14 @@ class _FeedbackCard extends StatelessWidget {
                 ),
               ),
             ],
-            if (!isReplied)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: _ReplyFeedbackButton(
-                  docId: doc.id,
-                  onReplied: onReplied,
-                ),
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: _ReplyFeedbackButton(
+                docId: doc.id,
+                onReplied: onReplied,
+                label: isReplied ? 'Responder de novo' : 'Responder',
               ),
+            ),
           ],
         ),
       ),
@@ -631,10 +736,12 @@ class _FeedbackCard extends StatelessWidget {
 class _ReplyFeedbackButton extends StatefulWidget {
   final String docId;
   final VoidCallback onReplied;
+  final String label;
 
   const _ReplyFeedbackButton({
     required this.docId,
     required this.onReplied,
+    this.label = 'Responder',
   });
 
   @override
@@ -693,7 +800,7 @@ class _ReplyFeedbackButtonState extends State<_ReplyFeedbackButton> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro: $e')),
+          SnackBar(content: Text(AdminLoadGuard.mensagem(e))),
         );
       }
     } finally {
@@ -712,7 +819,7 @@ class _ReplyFeedbackButtonState extends State<_ReplyFeedbackButton> {
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           : const Icon(Icons.reply_rounded, size: 18),
-      label: Text(_saving ? 'Enviando...' : 'Responder'),
+      label: Text(_saving ? 'Enviando...' : widget.label),
       style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
     );
   }

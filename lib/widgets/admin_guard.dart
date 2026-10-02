@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../constants/admin_content_editor_config.dart';
 import '../constants/admin_partner_config.dart';
 import '../models/user_profile.dart';
 
@@ -97,6 +98,7 @@ class AdminGuard extends StatelessWidget {
               role == 'gestor' ||
               role == 'partner' ||
               role == 'socio' ||
+              AdminContentEditorConfig.isContentEditorRole(role) ||
               AdminPartnerConfig.isPartnerEmail(email)) {
             return child;
           }

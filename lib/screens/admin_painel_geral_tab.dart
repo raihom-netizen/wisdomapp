@@ -8,6 +8,8 @@ import '../services/course_analytics_service.dart';
 import '../utils/firestore_reliable_read.dart';
 import '../widgets/admin/admin_page_shell.dart';
 import '../widgets/admin_menu_lateral.dart' show AdminMenuItem;
+import '../utils/admin_load_guard.dart';
+import '../widgets/admin/admin_ui_kit.dart';
 
 final _moeda = NumberFormat.currency(locale: 'pt_BR', symbol: r'R$');
 final _moedaCurta = NumberFormat.compactCurrency(locale: 'pt_BR', symbol: r'R$');
@@ -61,10 +63,16 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
       _erro = null;
     });
     try {
-      final r = await Future.wait<Object?>([
-        AdminPainelGeralData.carregar(),
-        _carregarCursos(),
-      ]);
+      // Com prazo: sem resposta do servidor vira erro com «Tentar de novo»
+      // (nunca «Carregando os números…» para sempre).
+      final r = await AdminLoadGuard.comPrazo(
+        Future.wait<Object?>([
+          AdminPainelGeralData.carregar(),
+          _carregarCursos(),
+        ]),
+        prazo: const Duration(seconds: 90),
+        oQue: 'os números do painel',
+      );
       if (!mounted) return;
       setState(() {
         _d = r[0] as AdminPainelGeralData;
@@ -110,16 +118,16 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
             .copyWith(bottom: 40),
         children: [
           _hero(d),
-          if (_erro != null && d == null)
-            _aviso(
-              'Não foi possível carregar os números: $_erro',
-              _vermelho,
+          if (_erro != null)
+            AdminErroCard(
+              erro: _erro,
+              onTentar: _carregar,
+              titulo: d == null
+                  ? 'Não foi possível carregar os números'
+                  : 'Não deu para atualizar (mostrando os últimos números)',
             ),
           if (d == null && _carregando)
-            const Padding(
-              padding: EdgeInsets.all(40),
-              child: Center(child: CircularProgressIndicator()),
-            ),
+            const AdminCarregando(texto: 'Lendo cadastros e pagamentos…'),
           if (d != null) ...[
             if (d.limiteAtingido)
               _aviso(
@@ -149,6 +157,13 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
                   Icons.handshake_rounded, _azul, AdminMenuItem.convenios),
               _kpi('Usuários 360°', '', 'Tudo de um usuário: uso e pagamentos',
                   Icons.hub_rounded, _verde, AdminMenuItem.usuarios360),
+              _kpi('Usaram o app hoje', '${d.acessoHoje}',
+                  '${d.acesso7} em 7 dias · ${d.acesso30} em 30 dias',
+                  Icons.insights_rounded, _teal, AdminMenuItem.usoModulos),
+              _kpi('Uso dos módulos', '',
+                  'Quem usa Financeiro, Agenda, Cursos… (servidor)',
+                  Icons.dashboard_customize_rounded, _verde,
+                  AdminMenuItem.usoModulos),
             ]),
             const SizedBox(height: 12),
             _duasColunas(

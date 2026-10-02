@@ -45,6 +45,9 @@ import 'admin_tips_page.dart';
 import 'admin_notification_templates_tab.dart';
 import 'admin_sugestoes_tab.dart';
 import 'admin_painel_geral_tab.dart';
+import 'admin_uso_modulos_tab.dart';
+import '../utils/admin_load_guard.dart';
+import '../widgets/admin/admin_ui_kit.dart';
 import '../services/functions_service.dart';
 import 'package:intl/intl.dart';
 import '../utils/url_launcher_helper.dart' as url_helper;
@@ -106,6 +109,10 @@ class _AdminScreenState extends State<AdminScreen> {
       .collection('app_config')
       .doc('mp_checkout_prices');
   bool _landingLoaded = false;
+
+  /// Escutas guardadas (Firestore Web: nunca `.snapshots()` dentro do build).
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _downloadsStream;
+  Stream<DocumentSnapshot<Map<String, dynamic>>>? _landingStream;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final GlobalKey<AdminMercadoPagoTabState> _mpAdminTabKey =
       GlobalKey<AdminMercadoPagoTabState>();
@@ -182,8 +189,13 @@ class _AdminScreenState extends State<AdminScreen> {
 
   bool get _isPartner => _adminPermissions.isPartner(_adminCapability);
 
-  /// Gestor de conteúdo ou sócio — menu e módulos restritos.
-  bool get _isRestrictedPanel => _isContentGestor || _isPartner;
+  /// Editor de conteúdo (`role: editor_conteudo`): só Cursos + Dicas.
+  bool get _isContentEditor =>
+      _adminPermissions.isContentEditor(_adminCapability);
+
+  /// Gestor de conteúdo, sócio ou editor de conteúdo — menu e módulos restritos.
+  bool get _isRestrictedPanel =>
+      _isContentGestor || _isPartner || _isContentEditor;
 
   /// Admin master / suporte / financeiro — painel completo.
   bool get _isFullAdmin => !_isRestrictedPanel;
@@ -856,7 +868,14 @@ class _AdminScreenState extends State<AdminScreen> {
     if (widget.useUnifiedPanel) {
       q = q.where('app', isEqualTo: _selectedApp);
     }
-    return q.limit(_usersListLimit).snapshots();
+    // Prazo para o 1º dado: com o faturamento desligado (01-02/10/2026) ou o
+    // Firestore Web travado a escuta nunca respondia e a lista ficava no
+    // esqueleto para sempre. Agora vira erro com «Tentar novamente».
+    return AdminLoadGuard.primeiroDadoComPrazo(
+      q.limit(_usersListLimit).snapshots(),
+      prazo: AdminLoadGuard.longo,
+      oQue: 'os usuários',
+    );
   }
 
   final _heroTitleCtrl = TextEditingController();
@@ -1197,6 +1216,11 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   String _formatAdminResumoError(Object error) {
+    if (error is TimeoutException) return AdminLoadGuard.mensagem(error);
+    if (error is FirebaseException &&
+        !FirestoreWebGuard.isRecoverableFirestoreWebError(error)) {
+      return AdminLoadGuard.mensagem(error);
+    }
     if (FirestoreWebGuard.isRecoverableFirestoreWebError(error)) {
       return 'Instabilidade temporária do Firestore na Web. '
           'Toque em «Tentar novamente» (ou atualize a página).';
@@ -1224,12 +1248,22 @@ class _AdminScreenState extends State<AdminScreen> {
 
   Future<_AdminStats> _loadStats({int periodDays = 30}) {
     Future<_AdminStats> core() => _loadStatsCore(periodDays: periodDays);
+    // Prazo total: sem resposta do servidor vira erro visível (nunca
+    // esqueleto/spinner eterno no Resumo e no topo de Usuários).
     if (kIsWeb) {
-      return runFirestoreWithRetry(
-        () => FirestoreWebGuard.runWithWebRecovery(core),
+      return AdminLoadGuard.comPrazo(
+        runFirestoreWithRetry(
+          () => FirestoreWebGuard.runWithWebRecovery(core),
+        ),
+        prazo: const Duration(seconds: 90),
+        oQue: 'os indicadores',
       );
     }
-    return runFirestoreWithRetry(core);
+    return AdminLoadGuard.comPrazo(
+      runFirestoreWithRetry(core),
+      prazo: const Duration(seconds: 90),
+      oQue: 'os indicadores',
+    );
   }
 
   Future<_AdminStats> _loadStatsCore({int periodDays = 30}) async {
@@ -1871,7 +1905,7 @@ class _AdminScreenState extends State<AdminScreen> {
             },
           ),
           actions: [
-            if (!_isContentGestor)
+            if (!_isContentGestor && !_isContentEditor)
               IconButton(
                 icon: const Icon(Icons.search_rounded),
                 onPressed: _openAdminGlobalSearch,
@@ -1923,7 +1957,9 @@ class _AdminScreenState extends State<AdminScreen> {
                 onCloseDrawer: () => _scaffoldKey.currentState?.closeDrawer(),
                 allowedItems: _isRestrictedPanel ? _allowedMenuItems : null,
                 accountEmail: widget.profile.email,
-                accountSubtitle: _isContentGestor
+                accountSubtitle: _isContentEditor
+                    ? '${widget.profile.email} · editor · cursos · dicas'
+                    : _isContentGestor
                     ? '${widget.profile.email ?? ''} · gestor · dicas · cursos · relatórios'
                     : _isPartner
                         ? '${widget.profile.email ?? ''} · sócio · usuários · recebimentos'
@@ -1956,7 +1992,9 @@ class _AdminScreenState extends State<AdminScreen> {
                       allowedItems:
                           _isRestrictedPanel ? _allowedMenuItems : null,
                       accountEmail: widget.profile.email,
-                      accountSubtitle: _isContentGestor
+                      accountSubtitle: _isContentEditor
+                          ? '${widget.profile.email} · editor · cursos · dicas'
+                          : _isContentGestor
                           ? '${widget.profile.email ?? ''} · gestor · dicas · cursos · divulgação'
                           : _isPartner
                               ? '${widget.profile.email ?? ''} · sócio · usuários · recebimentos'
@@ -1991,6 +2029,8 @@ class _AdminScreenState extends State<AdminScreen> {
         return 'Usuários';
       case AdminMenuItem.usuarios360:
         return 'WISDOMAPP 360°';
+      case AdminMenuItem.usoModulos:
+        return 'Uso dos módulos';
       case AdminMenuItem.equipe:
         return 'Equipe';
       case AdminMenuItem.logs:
@@ -2229,6 +2269,8 @@ class _AdminScreenState extends State<AdminScreen> {
         return _buildUsuariosTab(brandBlue, brandTeal);
       case AdminMenuItem.usuarios360:
         return _buildUsuariosTab(brandBlue, brandTeal, forceSubTab: 1);
+      case AdminMenuItem.usoModulos:
+        return const AdminUsoModulosTab();
       case AdminMenuItem.equipe:
         return GestaoEquipeAdm(
           canManageTeam: _adminPermissions.canManageTeam(_adminCapability),
@@ -2258,7 +2300,9 @@ class _AdminScreenState extends State<AdminScreen> {
       case AdminMenuItem.mercadopago:
         return _buildMercadoPagoTab(brandBlue, brandTeal);
       case AdminMenuItem.cursos:
-        return const AdminCursosTab();
+        // Editor de conteúdo: só vídeos (sem métricas de quem assistiu nem
+        // textos do módulo — o servidor também recusa).
+        return AdminCursosTab(somenteVideos: _isContentEditor);
       case AdminMenuItem.pluggy:
         return _buildDiscontinuedOpenFinanceMessage(brandBlue);
       case AdminMenuItem.openFinanceExtras:
@@ -2899,7 +2943,7 @@ class _AdminScreenState extends State<AdminScreen> {
                             size: 40, color: Colors.red.shade700),
                         const SizedBox(height: 10),
                         Text(
-                          'Erro ao carregar usuários: ${snap.error}',
+                          'Erro ao carregar usuários: ${AdminLoadGuard.mensagem(snap.error)}',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                               fontSize: 13, color: Colors.grey.shade800),
@@ -5577,11 +5621,21 @@ class _AdminScreenState extends State<AdminScreen> {
 
   Widget _buildRelatoriosTab(Color brandBlue, Color brandTeal) {
     final pad = _adminListPadding(context);
-    _relatorioReceitaFuture ??= _loadRelatorioReceita();
+    _relatorioReceitaFuture ??= AdminLoadGuard.comPrazo(
+      _loadRelatorioReceita(),
+      prazo: AdminLoadGuard.longo,
+      oQue: 'os relatórios',
+    );
     return RefreshIndicator(
       onRefresh: () async {
-        setState(() => _relatorioReceitaFuture = _loadRelatorioReceita());
-        await _relatorioReceitaFuture;
+        setState(() => _relatorioReceitaFuture = AdminLoadGuard.comPrazo(
+              _loadRelatorioReceita(),
+              prazo: AdminLoadGuard.longo,
+              oQue: 'os relatórios',
+            ));
+        try {
+          await _relatorioReceitaFuture;
+        } catch (_) {}
       },
       child: FutureBuilder<Map<String, dynamic>>(
         future: _relatorioReceitaFuture,
@@ -5599,7 +5653,27 @@ class _AdminScreenState extends State<AdminScreen> {
                   subtitle: 'Receita por período (Mercado Pago) e exportação.',
                 ),
                 const SizedBox(height: 24),
-                const Center(child: CircularProgressIndicator()),
+                const AdminCarregando(texto: 'Somando os recebimentos…'),
+              ],
+            );
+          }
+          if (snap.hasError) {
+            return ListView(
+              padding: pad,
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
+              ),
+              children: [
+                const ModuleHeaderPremium(
+                  title: 'Relatórios',
+                  icon: Icons.bar_chart_rounded,
+                  subtitle: 'Receita por período (Mercado Pago) e exportação.',
+                ),
+                const SizedBox(height: 12),
+                AdminErroCard(
+                  erro: snap.error,
+                  onTentar: () => setState(() => _relatorioReceitaFuture = null),
+                ),
               ],
             );
           }
@@ -5792,15 +5866,19 @@ class _AdminScreenState extends State<AdminScreen> {
         ),
         const SizedBox(height: 12),
         StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collection('public_downloads')
-              .snapshots(),
+          stream: _downloadsStream ??= AdminLoadGuard.primeiroDadoComPrazo(
+            FirebaseFirestore.instance.collection('public_downloads').snapshots(),
+            oQue: 'os downloads',
+          ),
           builder: (context, snap) {
+            if (snap.hasError && !snap.hasData) {
+              return AdminErroCard(
+                erro: snap.error,
+                onTentar: () => setState(() => _downloadsStream = null),
+              );
+            }
             if (!snap.hasData) {
-              return const Center(
-                  child: Padding(
-                      padding: EdgeInsets.all(24),
-                      child: CircularProgressIndicator()));
+              return const AdminCarregando(texto: 'Carregando os downloads…');
             }
             final docs = snap.data!.docs
               ..sort((a, b) {
@@ -5899,7 +5977,10 @@ class _AdminScreenState extends State<AdminScreen> {
             subtitle: 'Edite textos e destaques da divulgação.'),
         const SizedBox(height: 12),
         StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-          stream: _landingDoc.snapshots(),
+          stream: _landingStream ??= AdminLoadGuard.primeiroDadoComPrazo(
+            _landingDoc.snapshots(),
+            oQue: 'a landing',
+          ),
           builder: (context, snap) {
             _ensureDivulgacaoCtrls();
             if (snap.hasData && !_landingLoaded) {
@@ -5912,30 +5993,10 @@ class _AdminScreenState extends State<AdminScreen> {
                 if (mounted) setState(() {});
               });
             }
-            if (snap.hasError) {
-              return Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: Colors.orange.shade300),
-                  boxShadow: [
-                    BoxShadow(
-                        color: Colors.orange.withValues(alpha: 0.1),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4))
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.error_outline_rounded,
-                        size: 48, color: Colors.orange.shade700),
-                    const SizedBox(height: 12),
-                    Text('Erro ao carregar: ${snap.error}',
-                        textAlign: TextAlign.center),
-                  ],
-                ),
+            if (snap.hasError && !snap.hasData) {
+              return AdminErroCard(
+                erro: snap.error,
+                onTentar: () => setState(() => _landingStream = null),
               );
             }
 
@@ -9349,6 +9410,10 @@ class _ManutencaoTabContent extends StatefulWidget {
 }
 
 class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
+  /// Escuta guardada (Firestore Web: nunca `.snapshots()` dentro do build).
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _promotionsStream =
+      FirebaseFirestore.instance.collection('promotions').snapshots();
+
   final _messageCtrl = TextEditingController();
   final _promoUrlAndroidCtrl = TextEditingController();
   final _promoUrlIosCtrl = TextEditingController();
@@ -10255,9 +10320,7 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
                     ),
                     const SizedBox(height: 8),
                     StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                      stream: FirebaseFirestore.instance
-                          .collection('promotions')
-                          .snapshots(),
+                      stream: _promotionsStream,
                       builder: (context, snap) {
                         final docs = snap.data?.docs ?? [];
                         docs.sort((a, b) {

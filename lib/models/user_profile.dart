@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart' show Timestamp;
 
+import '../constants/admin_content_editor_config.dart';
 import '../constants/admin_gestor_config.dart';
 import '../constants/admin_partner_config.dart';
 
@@ -225,8 +226,13 @@ class UserProfile {
   bool get isPartner =>
       AdminPartnerConfig.isPartnerAccount(role: role, email: email);
 
-  /// Pode abrir o Painel Admin (admin completo, gestor ou sócio).
-  bool get canAccessAdminPanel => isAdmin || isGestor || isPartner;
+  /// Editor de conteúdo — no admin só Cursos (vídeos) e Dicas financeiras.
+  bool get isContentEditor =>
+      AdminContentEditorConfig.isContentEditorRole(role);
+
+  /// Pode abrir o Painel Admin (admin completo, gestor, sócio ou editor de conteúdo).
+  bool get canAccessAdminPanel =>
+      isAdmin || isGestor || isPartner || isContentEditor;
 
   /// Novo usuário: criado há menos de [newUserTrialDays] dias — recebe acesso total (trial / rede de segurança).
   bool get isNewUserTrial {

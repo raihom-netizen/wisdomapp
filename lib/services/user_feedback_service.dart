@@ -23,9 +23,22 @@ class UserFeedbackService {
     });
   }
 
-  Stream<QuerySnapshot<Map<String, dynamic>>> watchAllFeedback() {
-    return _col.orderBy('createdAt', descending: true).snapshots();
+  /// Painel admin: as mais recentes (com teto — a coleção só cresce).
+  /// Guarde o stream no State; nunca chamar dentro do build.
+  Stream<QuerySnapshot<Map<String, dynamic>>> watchAllFeedback({int limit = 500}) {
+    return _col.orderBy('createdAt', descending: true).limit(limit).snapshots();
   }
+
+  /// Status de triagem no painel: `pending` (nova), `em_analise`, `replied`.
+  Future<void> setStatus(String docId, String status) async {
+    await _col.doc(docId).update({
+      'status': status,
+      'statusAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  static bool isEmAnalise(Map<String, dynamic> data) =>
+      (data['status'] ?? '').toString() == 'em_analise';
 
   Future<void> replyToFeedback(String docId, String adminReply) async {
     await _col.doc(docId).update({

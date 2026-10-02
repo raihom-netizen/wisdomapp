@@ -1,17 +1,30 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../constants/team_role_config.dart';
+import '../services/admin_permissions_service.dart';
 import '../services/logs_service.dart';
 import '../theme/app_colors.dart';
-import '../utils/admin_responsive.dart';
+import '../utils/admin_load_guard.dart';
 import '../widgets/admin/admin_page_shell.dart';
+import '../widgets/admin/admin_ui_kit.dart';
 import '../widgets/admin_guard.dart';
+import '../widgets/admin_menu_lateral.dart';
 import '../widgets/fast_text_field.dart';
 import 'create_admin_user_screen.dart';
 
-/// Gestão de equipe — Master gerencia ADMs, Gestores e Sócios.
+/// Gestão de equipe — Master gerencia ADMs, Gestores, Sócios e Editores.
+///
+/// 02/10/2026 (padrão Controle Total): a lista ficava «carregando» para
+/// sempre. A escuta `.snapshots()` era criada num getter chamado no build —
+/// cada letra da busca / troca de aba / teclado criava uma consulta nova, e no
+/// Firestore Web isso trava o cliente (`Target ID already exists`); com o
+/// faturamento desligado o SDK ainda repetia a escuta em silêncio. Agora é
+/// UMA leitura (`get`) com prazo, erro visível com «Tentar de novo» e
+/// recarga depois de cada ação.
 class GestaoEquipeAdm extends StatefulWidget {
   const GestaoEquipeAdm({
     super.key,
@@ -26,194 +39,336 @@ class GestaoEquipeAdm extends StatefulWidget {
   State<GestaoEquipeAdm> createState() => _GestaoEquipeAdmState();
 }
 
-class _GestaoEquipeAdmState extends State<GestaoEquipeAdm>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabs;
-  String _filterQuery = '';
+enum _FiltroPapel { todos, admins, gestores, socios, editores }
+
+class _Membro {
+  _Membro(this.id, this.data)
+      : role = TeamRoleConfig.fromFirestore(
+          role: (data['role'] ?? '').toString(),
+          adminLevel: (data['adminLevel'] ?? '').toString(),
+        );
+
+  final String id;
+  final Map<String, dynamic> data;
+  final TeamRole role;
+
+  String get nome =>
+      (data['name'] ?? data['displayName'] ?? '').toString().trim();
+  String get email => (data['email'] ?? '').toString().trim();
+
+  DateTime? get ultimoAcesso {
+    final t = data['clientTelemetry'];
+    final v = t is Map ? t['lastPingAt'] : null;
+    if (v is Timestamp) return v.toDate();
+    final u = data['updatedAt'];
+    return u is Timestamp ? u.toDate() : null;
+  }
+
+  String get plataforma {
+    final t = data['clientTelemetry'];
+    return t is Map ? (t['platform'] ?? '').toString() : '';
+  }
+
+  DateTime? get criadoEm {
+    final v = data['createdAt'];
+    return v is Timestamp ? v.toDate() : null;
+  }
+
+  bool get isAdminGroup =>
+      role == TeamRole.master ||
+      role == TeamRole.admin ||
+      role == TeamRole.suporte ||
+      role == TeamRole.editor;
+}
+
+class _GestaoEquipeAdmState extends State<GestaoEquipeAdm> {
+  final _buscaCtrl = TextEditingController();
+  String _busca = '';
+  _FiltroPapel _filtro = _FiltroPapel.todos;
+
+  List<_Membro>? _membros;
+  Object? _erro;
+  bool _carregando = false;
+  DateTime? _atualizadoEm;
+
+  static const _roles = [
+    'admin',
+    'master',
+    'gestor',
+    'partner',
+    'socio',
+    'editor_conteudo',
+  ];
 
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 4, vsync: this);
-    _tabs.addListener(() => setState(() {}));
+    _carregar();
   }
 
   @override
   void dispose() {
-    _tabs.dispose();
+    _buscaCtrl.dispose();
     super.dispose();
   }
 
-  Stream<QuerySnapshot<Map<String, dynamic>>> get _teamStream =>
-      FirebaseFirestore.instance
-          .collection('users')
-          .where('role', whereIn: ['admin', 'master', 'gestor', 'partner', 'socio'])
-          .snapshots();
-
-  List<QueryDocumentSnapshot<Map<String, dynamic>>> _filterDocs(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
-  ) {
-    final q = _filterQuery.trim().toLowerCase();
-    var list = docs.toList()
-      ..sort((a, b) {
-        final na = (a.data()['name'] ?? a.data()['email'] ?? '').toString();
-        final nb = (b.data()['name'] ?? b.data()['email'] ?? '').toString();
-        return na.toLowerCase().compareTo(nb.toLowerCase());
+  Future<void> _carregar() async {
+    if (_carregando) return;
+    setState(() {
+      _carregando = true;
+      _erro = null;
+    });
+    try {
+      final snap = await AdminLoadGuard.comPrazo(
+        FirebaseFirestore.instance
+            .collection('users')
+            .where('role', whereIn: _roles)
+            .limit(300)
+            .get(GetOptions(source: kIsWeb ? Source.server : Source.serverAndCache)),
+        oQue: 'a equipe',
+      );
+      if (!mounted) return;
+      setState(() {
+        _membros = [for (final d in snap.docs) _Membro(d.id, d.data())]
+          ..sort((a, b) {
+            final ra = a.role.index.compareTo(b.role.index);
+            if (ra != 0) return ra;
+            return (a.nome.isEmpty ? a.email : a.nome)
+                .toLowerCase()
+                .compareTo((b.nome.isEmpty ? b.email : b.nome).toLowerCase());
+          });
+        _carregando = false;
+        _atualizadoEm = DateTime.now();
       });
-
-    if (_tabs.index == 1) {
-      list = list.where((d) {
-        final r = TeamRoleConfig.fromFirestore(
-          role: (d.data()['role'] ?? '').toString(),
-          adminLevel: (d.data()['adminLevel'] ?? '').toString(),
-        );
-        return r == TeamRole.master || r == TeamRole.admin || r == TeamRole.suporte || r == TeamRole.editor;
-      }).toList();
-    } else if (_tabs.index == 2) {
-      list = list.where((d) {
-        final r = TeamRoleConfig.fromFirestore(
-          role: (d.data()['role'] ?? '').toString(),
-        );
-        return r == TeamRole.gestor;
-      }).toList();
-    } else if (_tabs.index == 3) {
-      list = list.where((d) {
-        final r = TeamRoleConfig.fromFirestore(
-          role: (d.data()['role'] ?? '').toString(),
-        );
-        return r == TeamRole.partner;
-      }).toList();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _erro = e;
+        _carregando = false;
+      });
     }
-
-    if (q.isNotEmpty) {
-      list = list.where((d) {
-        final data = d.data();
-        final blob = '${data['name']} ${data['email']} ${data['role']}'.toLowerCase();
-        return blob.contains(q);
-      }).toList();
-    }
-    return list;
   }
 
-  bool _canEditMember(Map<String, dynamic> data) {
+  bool _passaFiltro(_Membro m) {
+    switch (_filtro) {
+      case _FiltroPapel.todos:
+        break;
+      case _FiltroPapel.admins:
+        if (!m.isAdminGroup) return false;
+        break;
+      case _FiltroPapel.gestores:
+        if (m.role != TeamRole.gestor) return false;
+        break;
+      case _FiltroPapel.socios:
+        if (m.role != TeamRole.partner) return false;
+        break;
+      case _FiltroPapel.editores:
+        if (m.role != TeamRole.editorConteudo) return false;
+        break;
+    }
+    final q = _busca.trim().toLowerCase();
+    if (q.isEmpty) return true;
+    return '${m.nome} ${m.email} ${TeamRoleConfig.label(m.role)}'
+        .toLowerCase()
+        .contains(q);
+  }
+
+  bool _podeEditar(_Membro m) {
     if (!widget.canManageTeam) return false;
-    final role = TeamRoleConfig.fromFirestore(
-      role: (data['role'] ?? '').toString(),
-      adminLevel: (data['adminLevel'] ?? '').toString(),
-    );
-    return role != TeamRole.master;
+    if (m.id == FirebaseAuth.instance.currentUser?.uid) return false;
+    return m.role != TeamRole.master;
   }
 
-  Future<void> _openCreate(TeamRole preset) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => AdminGuard(
-          child: CreateAdminUserScreen(initialRole: preset),
-        ),
+  void _snack(String msg, {bool erro = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: erro ? AppColors.error : null,
       ),
     );
   }
 
-  Future<void> _editMember(String uid, Map<String, dynamic> data) async {
-    final nameCtrl = TextEditingController(text: (data['name'] ?? '').toString());
-    var selected = TeamRoleConfig.fromFirestore(
-      role: (data['role'] ?? '').toString(),
-      adminLevel: (data['adminLevel'] ?? '').toString(),
-    );
+  // ── Ações ────────────────────────────────────────────────────────────
 
-    final saved = await showDialog<bool>(
+  Future<void> _novoMembro() async {
+    final papel = await showModalBottomSheet<TeamRole>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: const Text('Editar membro'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                FastTextField(
-                  controller: nameCtrl,
-                  decoration: InputDecoration(
-                    labelText: 'Nome',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                DropdownButtonFormField<TeamRole>(
-                  initialValue: TeamRoleConfig.creatableRoles.contains(selected)
-                      ? selected
-                      : TeamRole.admin,
-                  decoration: InputDecoration(
-                    labelText: 'Papel',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  items: TeamRoleConfig.creatableRoles
-                      .map(
-                        (r) => DropdownMenuItem(
-                          value: r,
-                          child: Text(TeamRoleConfig.label(r)),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (v) => setLocal(() => selected = v ?? TeamRole.admin),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  TeamRoleConfig.description(selected),
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700, height: 1.35),
-                ),
-              ],
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          children: [
+            const Text(
+              'Criar conta nova para…',
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
             ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Salvar')),
+            const SizedBox(height: 8),
+            for (final r in TeamRoleConfig.creatableRoles)
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: TeamRoleConfig.color(r).withValues(alpha: 0.14),
+                  child: Icon(TeamRoleConfig.icon(r), color: TeamRoleConfig.color(r)),
+                ),
+                title: Text(TeamRoleConfig.label(r),
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: Text(TeamRoleConfig.description(r),
+                    maxLines: 2, overflow: TextOverflow.ellipsis),
+                onTap: () => Navigator.pop(ctx, r),
+              ),
           ],
         ),
       ),
     );
+    if (papel == null || !mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AdminGuard(child: CreateAdminUserScreen(initialRole: papel)),
+      ),
+    );
+    if (mounted) _carregar();
+  }
 
-    if (saved != true || !mounted) return;
+  Future<TeamRole?> _escolherPapel({
+    required String titulo,
+    required TeamRole inicial,
+    TextEditingController? nomeCtrl,
+    TextEditingController? emailCtrl,
+    required String confirmar,
+  }) {
+    var selected = TeamRoleConfig.creatableRoles.contains(inicial)
+        ? inicial
+        : TeamRole.admin;
+    return showDialog<TeamRole>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: Text(titulo),
+          content: SizedBox(
+            width: 420,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (emailCtrl != null) ...[
+                    FastTextField(
+                      controller: emailCtrl,
+                      kind: FastTextFieldKind.email,
+                      decoration: const InputDecoration(
+                        labelText: 'E-mail da conta (já cadastrada no app)',
+                        hintText: 'usuario@email.com',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  if (nomeCtrl != null) ...[
+                    FastTextField(
+                      controller: nomeCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Nome',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  for (final r in TeamRoleConfig.creatableRoles)
+                    RadioListTile<TeamRole>(
+                      value: r,
+                      groupValue: selected,
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      onChanged: (v) => setLocal(() => selected = v ?? selected),
+                      title: Row(
+                        children: [
+                          Icon(TeamRoleConfig.icon(r),
+                              size: 18, color: TeamRoleConfig.color(r)),
+                          const SizedBox(width: 6),
+                          Text(TeamRoleConfig.label(r),
+                              style: const TextStyle(fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                      subtitle: Text(
+                        TeamRoleConfig.description(r),
+                        style: const TextStyle(fontSize: 11.5),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, selected),
+              child: Text(confirmar),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
+  Map<String, dynamic> _payloadPapel(TeamRole r) {
+    final payload = <String, dynamic>{
+      'role': TeamRoleConfig.firestoreRoleFor(r),
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+    final lvl = TeamRoleConfig.adminLevelFor(r);
+    payload['adminLevel'] = lvl ?? FieldValue.delete();
+    return payload;
+  }
+
+  Future<void> _editar(_Membro m) async {
+    final nomeCtrl = TextEditingController(text: m.nome);
+    final papel = await _escolherPapel(
+      titulo: 'Editar ${m.nome.isEmpty ? m.email : m.nome}',
+      inicial: m.role,
+      nomeCtrl: nomeCtrl,
+      confirmar: 'Salvar',
+    );
+    final nome = nomeCtrl.text.trim();
+    nomeCtrl.dispose();
+    if (papel == null || !mounted) return;
     try {
-      final payload = <String, dynamic>{
-        'name': nameCtrl.text.trim(),
-        'role': TeamRoleConfig.firestoreRoleFor(selected),
-        'updatedAt': FieldValue.serverTimestamp(),
-      };
-      final lvl = TeamRoleConfig.adminLevelFor(selected);
-      if (lvl != null) {
-        payload['adminLevel'] = lvl;
-      } else {
-        payload['adminLevel'] = FieldValue.delete();
-      }
-      await FirebaseFirestore.instance.collection('users').doc(uid).update(payload);
+      await AdminLoadGuard.comPrazo(
+        FirebaseFirestore.instance
+            .collection('users')
+            .doc(m.id)
+            .update({..._payloadPapel(papel), 'name': nome}),
+        oQue: 'a alteração',
+      );
       await LogsService().saveLog(
         modulo: 'Admin',
         acao: 'Editou membro da equipe',
-        detalhes: '${nameCtrl.text.trim()} → ${TeamRoleConfig.label(selected)}',
+        detalhes: '${nome.isEmpty ? m.email : nome} → ${TeamRoleConfig.label(papel)}',
       );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Membro atualizado.')));
-      }
+      _snack('Membro atualizado.');
+      _carregar();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro: ${e.toString().split('\n').first}'), backgroundColor: AppColors.error),
-        );
-      }
+      _snack(AdminLoadGuard.mensagem(e), erro: true);
     }
   }
 
-  Future<void> _removeMember(String uid, String nome, String email) async {
+  Future<void> _remover(_Membro m) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Remover da equipe?'),
         content: Text(
-          '$nome ($email) perderá acesso ao Painel Admin.',
+          '${m.nome.isEmpty ? m.email : '${m.nome} (${m.email})'} perde o acesso '
+          'ao Painel Admin e volta a ser usuário comum (plano Free).',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () => Navigator.pop(ctx, true),
@@ -223,561 +378,407 @@ class _GestaoEquipeAdmState extends State<GestaoEquipeAdm>
       ),
     );
     if (ok != true || !mounted) return;
-
     try {
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
-        'role': 'user',
-        'plan': 'free',
-        'adminLevel': FieldValue.delete(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      await AdminLoadGuard.comPrazo(
+        FirebaseFirestore.instance.collection('users').doc(m.id).update({
+          'role': 'user',
+          'plan': 'free',
+          'adminLevel': FieldValue.delete(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }),
+        oQue: 'a remoção',
+      );
       await LogsService().saveLog(
         modulo: 'Admin',
         acao: 'Removeu membro da equipe',
-        detalhes: nome.isEmpty ? email : '$nome ($email)',
+        detalhes: m.nome.isEmpty ? m.email : '${m.nome} (${m.email})',
       );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Membro removido.')));
-      }
+      _snack('Membro removido.');
+      _carregar();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro: $e'), backgroundColor: AppColors.error),
-        );
-      }
+      _snack(AdminLoadGuard.mensagem(e), erro: true);
     }
   }
 
-  Future<void> _promoteExisting() async {
+  /// «Convidar»: dá papel a uma conta que já existe no app (pelo e-mail).
+  Future<void> _convidar() async {
     final emailCtrl = TextEditingController();
-    var selected = TeamRole.gestor;
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: const Text('Promover usuário existente'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              FastTextField(
-                controller: emailCtrl,
-                kind: FastTextFieldKind.email,
-                decoration: const InputDecoration(
-                  labelText: 'E-mail do usuário',
-                  hintText: 'usuario@email.com',
-                ),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<TeamRole>(
-                initialValue: selected,
-                decoration: const InputDecoration(labelText: 'Novo papel'),
-                items: TeamRoleConfig.creatableRoles
-                    .map((r) => DropdownMenuItem(value: r, child: Text(TeamRoleConfig.label(r))))
-                    .toList(),
-                onChanged: (v) => setLocal(() => selected = v ?? TeamRole.gestor),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Promover')),
-          ],
-        ),
-      ),
+    final papel = await _escolherPapel(
+      titulo: 'Convidar para a equipe',
+      inicial: TeamRole.gestor,
+      emailCtrl: emailCtrl,
+      confirmar: 'Dar acesso',
     );
-
-    if (ok != true || !mounted) return;
     final email = emailCtrl.text.trim().toLowerCase();
-    if (email.isEmpty) return;
-
+    emailCtrl.dispose();
+    if (papel == null || !mounted || email.isEmpty) return;
     try {
-      final snap = await FirebaseFirestore.instance
-          .collection('users')
-          .where('email', isEqualTo: email)
-          .limit(1)
-          .get();
+      final snap = await AdminLoadGuard.comPrazo(
+        FirebaseFirestore.instance
+            .collection('users')
+            .where('email', isEqualTo: email)
+            .limit(1)
+            .get(),
+        oQue: 'a conta',
+      );
       if (snap.docs.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Usuário não encontrado. Use «Novo membro» para criar conta.')),
-          );
-        }
+        _snack('Nenhuma conta com $email. A pessoa precisa entrar no app uma '
+            'vez, ou use «Novo membro» para criar a conta.');
         return;
       }
-      final doc = snap.docs.first;
-      final payload = <String, dynamic>{
-        'role': TeamRoleConfig.firestoreRoleFor(selected),
-        'updatedAt': FieldValue.serverTimestamp(),
-      };
-      final lvl = TeamRoleConfig.adminLevelFor(selected);
-      if (lvl != null) {
-        payload['adminLevel'] = lvl;
-      } else {
-        payload['adminLevel'] = FieldValue.delete();
-      }
-      await doc.reference.update(payload);
+      await snap.docs.first.reference.update(_payloadPapel(papel));
       await LogsService().saveLog(
         modulo: 'Admin',
         acao: 'Promoveu usuário à equipe',
-        detalhes: '$email → ${TeamRoleConfig.label(selected)}',
+        detalhes: '$email → ${TeamRoleConfig.label(papel)}',
       );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${TeamRoleConfig.label(selected)} ativado para $email.')),
-        );
-      }
+      _snack('${TeamRoleConfig.label(papel)} ativado para $email.');
+      _carregar();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro: $e'), backgroundColor: AppColors.error),
-        );
-      }
+      _snack(AdminLoadGuard.mensagem(e), erro: true);
     }
   }
+
+  // ── UI ───────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     final pad = widget.embeddedInAdmin
         ? AdminPageShell.listPadding(context, top: 4)
         : EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.paddingOf(context).bottom);
+    final membros = _membros;
+    final visiveis = membros?.where(_passaFiltro).toList() ?? const <_Membro>[];
 
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: _teamStream,
-      builder: (context, snap) {
-        final docs = snap.data?.docs ?? [];
-        final filtered = snap.hasData ? _filterDocs(docs) : <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+    int conta(bool Function(_Membro) f) => membros?.where(f).length ?? 0;
 
-        return CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-          slivers: [
-            SliverPadding(
-              padding: pad.copyWith(bottom: 0),
-              sliver: SliverToBoxAdapter(child: _HeroHeader(count: docs.length)),
-            ),
-            if (widget.canManageTeam) ...[
-              SliverPadding(
-                padding: EdgeInsets.fromLTRB(pad.left, 12, pad.right, 8),
-                sliver: SliverToBoxAdapter(child: _ActionButtons(onCreate: _openCreate, onPromote: _promoteExisting)),
+    return RefreshIndicator(
+      onRefresh: _carregar,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: pad.copyWith(bottom: pad.bottom + 32),
+        children: [
+          AdminHero(
+            titulo: 'Equipe',
+            subtitulo: membros == null
+                ? (_carregando ? 'Carregando a equipe…' : 'Admins, gestores, sócios e editores')
+                : '${membros.length} membro(s) com acesso ao painel'
+                    '${_atualizadoEm == null ? '' : ' · atualizado às ${DateFormat('HH:mm').format(_atualizadoEm!)}'}',
+            icone: Icons.groups_rounded,
+            cores: const [Color(0xFF1E1B4B), Color(0xFF6D28D9), Color(0xFF0F766E)],
+            carregando: _carregando,
+            onAtualizar: _carregar,
+          ),
+          const SizedBox(height: 12),
+          AdminKpiGrid(
+            maxColunas: 4,
+            children: [
+              AdminKpi(
+                rotulo: 'Todos',
+                valor: membros == null ? '—' : '${membros.length}',
+                sub: 'Com acesso ao painel',
+                icone: Icons.groups_rounded,
+                cor: AdminUi.roxo,
+                selecionado: _filtro == _FiltroPapel.todos,
+                onTap: () => setState(() => _filtro = _FiltroPapel.todos),
+              ),
+              AdminKpi(
+                rotulo: 'Administradores',
+                valor: membros == null ? '—' : '${conta((m) => m.isAdminGroup)}',
+                sub: 'Master, admin, suporte',
+                icone: Icons.admin_panel_settings_rounded,
+                cor: AdminUi.azul,
+                selecionado: _filtro == _FiltroPapel.admins,
+                onTap: () => setState(() => _filtro = _FiltroPapel.admins),
+              ),
+              AdminKpi(
+                rotulo: 'Gestores',
+                valor: membros == null ? '—' : '${conta((m) => m.role == TeamRole.gestor)}',
+                sub: 'Conteúdo + relatórios',
+                icone: Icons.manage_accounts_rounded,
+                cor: const Color(0xFF7C3AED),
+                selecionado: _filtro == _FiltroPapel.gestores,
+                onTap: () => setState(() => _filtro = _FiltroPapel.gestores),
+              ),
+              AdminKpi(
+                rotulo: 'Sócios',
+                valor: membros == null ? '—' : '${conta((m) => m.role == TeamRole.partner)}',
+                sub: 'Somente leitura',
+                icone: Icons.handshake_rounded,
+                cor: AdminUi.teal,
+                selecionado: _filtro == _FiltroPapel.socios,
+                onTap: () => setState(() => _filtro = _FiltroPapel.socios),
+              ),
+              AdminKpi(
+                rotulo: 'Editores de conteúdo',
+                valor: membros == null
+                    ? '—'
+                    : '${conta((m) => m.role == TeamRole.editorConteudo)}',
+                sub: 'Só Cursos e Dicas',
+                icone: Icons.video_library_rounded,
+                cor: AdminUi.vermelho,
+                selecionado: _filtro == _FiltroPapel.editores,
+                onTap: () => setState(() => _filtro = _FiltroPapel.editores),
               ),
             ],
-            SliverPadding(
-              padding: EdgeInsets.fromLTRB(pad.left, 0, pad.right, 10),
-              sliver: SliverToBoxAdapter(child: _RoleGuideCards()),
-            ),
-            SliverPadding(
-              padding: EdgeInsets.symmetric(horizontal: pad.left),
-              sliver: SliverToBoxAdapter(child: _TeamTabBar(tabs: _tabs, total: docs.length)),
-            ),
-            SliverPadding(
-              padding: EdgeInsets.fromLTRB(pad.left, 10, pad.right, 8),
-              sliver: SliverToBoxAdapter(
-                child: TextField(
-                  onChanged: (v) => setState(() => _filterQuery = v),
-                  decoration: InputDecoration(
-                    hintText: 'Buscar nome ou e-mail…',
-                    prefixIcon: const Icon(Icons.search_rounded),
-                    filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            if (snap.hasError)
-              SliverFillRemaining(
-                child: Center(child: Text('Erro: ${snap.error}')),
-              )
-            else if (snap.connectionState == ConnectionState.waiting && !snap.hasData)
-              const SliverFillRemaining(child: Center(child: CircularProgressIndicator()))
-            else if (filtered.isEmpty)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(
-                      widget.canManageTeam
-                          ? 'Nenhum membro nesta aba. Use «Novo Admin» ou «Novo Gestor».'
-                          : 'Nenhum membro listado.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey.shade700),
-                    ),
-                  ),
-                ),
-              )
-            else
-              SliverPadding(
-                padding: EdgeInsets.fromLTRB(pad.left, 0, pad.right, pad.bottom + 24),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, i) {
-                      final doc = filtered[i];
-                      final data = doc.data();
-                      final role = TeamRoleConfig.fromFirestore(
-                        role: (data['role'] ?? '').toString(),
-                        adminLevel: (data['adminLevel'] ?? '').toString(),
-                      );
-                      final isSelf = doc.id == FirebaseAuth.instance.currentUser?.uid;
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _MemberCard(
-                          name: (data['name'] ?? '').toString(),
-                          email: (data['email'] ?? '').toString(),
-                          role: role,
-                          isSelf: isSelf,
-                          canEdit: _canEditMember(data),
-                          onEdit: () => _editMember(doc.id, data),
-                          onRemove: () => _removeMember(
-                            doc.id,
-                            (data['name'] ?? '').toString(),
-                            (data['email'] ?? '').toString(),
-                          ),
-                        ),
-                      );
-                    },
-                    childCount: filtered.length,
-                  ),
-                ),
-              ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _HeroHeader extends StatelessWidget {
-  const _HeroHeader({required this.count});
-
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF0B1B4B), Color(0xFF0F766E)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF0B1B4B).withValues(alpha: 0.25),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
           ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: const Icon(Icons.groups_rounded, color: Colors.white, size: 28),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          if (widget.canManageTeam) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                const Text(
-                  'Gestão de equipe',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 20,
-                  ),
+                FilledButton.icon(
+                  onPressed: _novoMembro,
+                  icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
+                  label: const Text('Novo membro'),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  '$count membro(s) · Admin, Gestor e Sócio',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.9),
-                    fontSize: 12.5,
-                  ),
+                OutlinedButton.icon(
+                  onPressed: _convidar,
+                  icon: const Icon(Icons.forward_to_inbox_rounded, size: 18),
+                  label: const Text('Convidar conta existente'),
                 ),
               ],
             ),
+          ] else ...[
+            const SizedBox(height: 10),
+            Text(
+              'Só o super admin adiciona, edita ou remove membros.',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+          ],
+          const SizedBox(height: 12),
+          AdminBusca(
+            controller: _buscaCtrl,
+            hint: 'Buscar nome, e-mail ou papel…',
+            onChanged: (v) => setState(() => _busca = v),
           ),
+          const SizedBox(height: 10),
+          if (_erro != null && membros == null)
+            AdminErroCard(erro: _erro, onTentar: _carregar)
+          else if (membros == null)
+            const AdminCarregando(texto: 'Carregando a equipe…')
+          else ...[
+            if (_erro != null)
+              AdminErroCard(
+                erro: _erro,
+                onTentar: _carregar,
+                titulo: 'Não deu para atualizar (mostrando a última lista)',
+              ),
+            if (visiveis.isEmpty)
+              AdminVazio(
+                texto: membros.isEmpty
+                    ? 'Ninguém na equipe ainda.'
+                    : 'Nenhum membro neste filtro.',
+                icone: Icons.group_off_rounded,
+              )
+            else
+              _listaMembros(visiveis),
+          ],
+          AdminSecao(
+            titulo: 'O que cada papel acessa',
+            cor: AdminUi.roxo,
+            icone: Icons.verified_user_rounded,
+          ),
+          const _MatrizPermissoes(),
         ],
       ),
     );
   }
-}
 
-class _ActionButtons extends StatelessWidget {
-  const _ActionButtons({required this.onCreate, required this.onPromote});
-
-  final void Function(TeamRole) onCreate;
-  final VoidCallback onPromote;
-
-  @override
-  Widget build(BuildContext context) {
-    final narrow = AdminResponsive.useMobileLayout(context);
-    final children = [
-      Expanded(
-        child: FilledButton.icon(
-          onPressed: () => onCreate(TeamRole.admin),
-          icon: const Icon(Icons.admin_panel_settings_rounded),
-          label: Text(narrow ? 'Novo Admin' : 'Novo administrador'),
-          style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFF2563EB),
-            padding: const EdgeInsets.symmetric(vertical: 14),
-          ),
-        ),
+  Widget _listaMembros(List<_Membro> lista) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
       ),
-      const SizedBox(width: 8),
-      Expanded(
-        child: FilledButton.icon(
-          onPressed: () => onCreate(TeamRole.gestor),
-          icon: const Icon(Icons.manage_accounts_rounded),
-          label: Text(narrow ? 'Novo Gestor' : 'Novo gestor'),
-          style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFF7C3AED),
-            padding: const EdgeInsets.symmetric(vertical: 14),
-          ),
-        ),
+      child: Column(
+        children: [
+          for (var i = 0; i < lista.length; i++) ...[
+            if (i > 0) Divider(height: 1, color: Colors.grey.shade100),
+            _linhaMembro(lista[i]),
+          ],
+        ],
       ),
-    ];
+    );
+  }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (narrow) ...[
-          SizedBox(width: double.infinity, child: children[0]),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: () => onCreate(TeamRole.gestor),
-              icon: const Icon(Icons.manage_accounts_rounded),
-              label: const Text('Novo Gestor'),
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF7C3AED),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-            ),
+  Widget _linhaMembro(_Membro m) {
+    final c = TeamRoleConfig.color(m.role);
+    final eu = m.id == FirebaseAuth.instance.currentUser?.uid;
+    final ult = m.ultimoAcesso;
+    final df = DateFormat('dd/MM/yy HH:mm');
+    final pode = _podeEditar(m);
+    return LayoutBuilder(builder: (context, cons) {
+      final largo = cons.maxWidth >= 720;
+      final info = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            m.nome.isEmpty ? '—' : m.nome,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
           ),
-        ] else
-          Row(children: children),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            OutlinedButton.icon(
-              onPressed: () => onCreate(TeamRole.partner),
-              icon: const Icon(Icons.handshake_rounded, size: 18),
-              label: const Text('Novo sócio'),
-            ),
-            OutlinedButton.icon(
-              onPressed: onPromote,
-              icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
-              label: const Text('Promover existente'),
+          Text(
+            m.email,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+          ),
+          if (!largo) ...[
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                AdminSelo(eu ? '${TeamRoleConfig.label(m.role)} · você' : TeamRoleConfig.label(m.role),
+                    cor: c, icone: TeamRoleConfig.icon(m.role)),
+                if (ult != null)
+                  Text('Último acesso ${df.format(ult)}',
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+              ],
             ),
           ],
+        ],
+      );
+      final acoes = pode
+          ? PopupMenuButton<String>(
+              tooltip: 'Ações',
+              icon: const Icon(Icons.more_vert_rounded),
+              onSelected: (v) {
+                if (v == 'editar') _editar(m);
+                if (v == 'remover') _remover(m);
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: 'editar',
+                  child: ListTile(
+                    dense: true,
+                    leading: Icon(Icons.edit_rounded),
+                    title: Text('Editar nome / papel'),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'remover',
+                  child: ListTile(
+                    dense: true,
+                    leading: Icon(Icons.person_remove_rounded, color: Colors.red.shade400),
+                    title: Text('Remover da equipe',
+                        style: TextStyle(color: Colors.red.shade400)),
+                  ),
+                ),
+              ],
+            )
+          : const SizedBox(width: 48);
+      return InkWell(
+        onTap: pode ? () => _editar(m) : null,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 19,
+                backgroundColor: c.withValues(alpha: 0.14),
+                child: Icon(TeamRoleConfig.icon(m.role), color: c, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(flex: 5, child: info),
+              if (largo) ...[
+                Expanded(
+                  flex: 3,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: AdminSelo(
+                      eu ? '${TeamRoleConfig.label(m.role)} · você' : TeamRoleConfig.label(m.role),
+                      cor: c,
+                      icone: TeamRoleConfig.icon(m.role),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    ult == null
+                        ? 'Sem registro de acesso'
+                        : '${df.format(ult)}${m.plataforma.isEmpty ? '' : ' · ${m.plataforma}'}',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    m.criadoEm == null ? '' : 'Desde ${DateFormat('MM/yyyy').format(m.criadoEm!)}',
+                    style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600),
+                  ),
+                ),
+              ],
+              acoes,
+            ],
+          ),
         ),
-      ],
-    );
+      );
+    });
   }
 }
 
-class _RoleGuideCards extends StatelessWidget {
+/// Matriz: módulos do painel liberados para cada papel (mesma regra do
+/// [AdminPermissionsService] que o menu usa — sempre em sincronia).
+class _MatrizPermissoes extends StatelessWidget {
+  const _MatrizPermissoes();
+
   @override
   Widget build(BuildContext context) {
-    const roles = [
-      TeamRole.master,
-      TeamRole.admin,
-      TeamRole.gestor,
-      TeamRole.partner,
+    const svc = AdminPermissionsService();
+    final linhas = <(TeamRole, AdminCapability, String)>[
+      (TeamRole.master, AdminCapability.superAdmin, 'Tudo, inclusive equipe, exclusão definitiva e forçar versão.'),
+      (TeamRole.admin, AdminCapability.support, 'Painel completo; editar licenças. Sem gerir a equipe.'),
+      (TeamRole.gestor, AdminCapability.contentGestor, 'Conteúdo, relatórios e recebimentos; usuários só leitura.'),
+      (TeamRole.partner, AdminCapability.partner, 'Resumo da própria parte, usuários e recebimentos — leitura.'),
+      (TeamRole.editorConteudo, AdminCapability.contentEditor, 'Só Cursos (vídeos) e Dicas financeiras. Bloqueado no servidor.'),
     ];
-    return SizedBox(
-      height: 118,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
-        itemCount: roles.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 10),
-        itemBuilder: (context, i) {
-          final r = roles[i];
-          final c = TeamRoleConfig.color(r);
-          return Container(
-            width: 220,
-            padding: const EdgeInsets.all(14),
+    return Column(
+      children: [
+        for (final (papel, cap, resumo) in linhas)
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: c.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: c.withValues(alpha: 0.28)),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: TeamRoleConfig.color(papel).withValues(alpha: 0.25)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Icon(TeamRoleConfig.icon(r), size: 18, color: c),
+                    Icon(TeamRoleConfig.icon(papel), size: 18, color: TeamRoleConfig.color(papel)),
                     const SizedBox(width: 6),
-                    Text(
-                      TeamRoleConfig.label(r),
-                      style: TextStyle(fontWeight: FontWeight.w900, color: c, fontSize: 13),
+                    Text(TeamRoleConfig.label(papel),
+                        style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            color: TeamRoleConfig.color(papel))),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(resumo,
+                          style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700)),
                     ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                Expanded(
-                  child: Text(
-                    TeamRoleConfig.description(r),
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade800, height: 1.3),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _TeamTabBar extends StatelessWidget {
-  const _TeamTabBar({required this.tabs, required this.total});
-
-  final TabController tabs;
-  final int total;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: TabBar(
-        controller: tabs,
-        isScrollable: true,
-        tabAlignment: TabAlignment.start,
-        indicator: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          gradient: const LinearGradient(colors: [Color(0xFF0B1B4B), Color(0xFF0F766E)]),
-        ),
-        indicatorSize: TabBarIndicatorSize.tab,
-        dividerColor: Colors.transparent,
-        labelColor: Colors.white,
-        unselectedLabelColor: Colors.grey.shade700,
-        labelStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
-        tabs: [
-          Tab(text: 'Todos ($total)'),
-          const Tab(text: 'Admins'),
-          const Tab(text: 'Gestores'),
-          const Tab(text: 'Sócios'),
-        ],
-      ),
-    );
-  }
-}
-
-class _MemberCard extends StatelessWidget {
-  const _MemberCard({
-    required this.name,
-    required this.email,
-    required this.role,
-    required this.isSelf,
-    required this.canEdit,
-    required this.onEdit,
-    required this.onRemove,
-  });
-
-  final String name;
-  final String email;
-  final TeamRole role;
-  final bool isSelf;
-  final bool canEdit;
-  final VoidCallback onEdit;
-  final VoidCallback onRemove;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = TeamRoleConfig.color(role);
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: c.withValues(alpha: 0.25)),
-        boxShadow: [
-          BoxShadow(
-            color: c.withValues(alpha: 0.08),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CircleAvatar(
-                backgroundColor: c.withValues(alpha: 0.15),
-                child: Icon(TeamRoleConfig.icon(role), color: c, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
                   children: [
-                    Text(
-                      name.isEmpty ? '—' : name,
-                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-                    ),
-                    Text(email, style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
+                    for (final item in svc.allowedMenuItems(cap))
+                      AdminSelo(adminMenuItemTitulo(item), cor: TeamRoleConfig.color(papel)),
                   ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: c.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: c.withValues(alpha: 0.35)),
-                ),
-                child: Text(
-                  isSelf ? '${TeamRoleConfig.label(role)} · você' : TeamRoleConfig.label(role),
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: c),
-                ),
-              ),
-            ],
-          ),
-          if (canEdit) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                TextButton.icon(
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.edit_rounded, size: 18),
-                  label: const Text('Editar'),
-                ),
-                TextButton.icon(
-                  onPressed: onRemove,
-                  icon: Icon(Icons.person_remove_rounded, size: 18, color: Colors.red.shade400),
-                  label: Text('Remover', style: TextStyle(color: Colors.red.shade400)),
                 ),
               ],
             ),
-          ],
-        ],
-      ),
+          ),
+      ],
     );
   }
 }

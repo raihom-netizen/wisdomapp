@@ -1,4 +1,5 @@
 import '../constants/premium_pro_limits.dart';
+import '../constants/admin_content_editor_config.dart';
 import '../constants/admin_gestor_config.dart';
 import '../constants/admin_partner_config.dart';
 import '../widgets/admin_menu_lateral.dart';
@@ -10,6 +11,10 @@ enum AdminCapability {
 
   /// Sócio: usuários/licenças/receitas da própria parte — somente leitura.
   partner,
+
+  /// Editor de conteúdo (`role: editor_conteudo`): SÓ Cursos (vídeos) e
+  /// Dicas financeiras. Servidor bloqueia o resto (functions + regras).
+  contentEditor,
 
   /// Só visualização (resumo, listas, 360° leitura).
   readonly,
@@ -36,6 +41,12 @@ class AdminPermissionsService {
     final emailNorm = (email ?? '').trim().toLowerCase();
     if (PremiumProLimits.kHighIncludedConnectionsEmails.contains(emailNorm)) {
       return AdminCapability.superAdmin;
+    }
+
+    // Papel explícito vem antes de qualquer fallback por e-mail: quem é
+    // editor de conteúdo nunca herda poderes de gestor/sócio.
+    if (AdminContentEditorConfig.isContentEditorRole(role)) {
+      return AdminCapability.contentEditor;
     }
 
     if (AdminPartnerConfig.isPartnerAccount(role: role, email: emailNorm)) {
@@ -121,6 +132,9 @@ class AdminPermissionsService {
   bool isContentGestor(AdminCapability c) =>
       c == AdminCapability.contentGestor;
 
+  bool isContentEditor(AdminCapability c) =>
+      c == AdminCapability.contentEditor;
+
   /// Itens do menu lateral permitidos para a capacidade atual.
   List<AdminMenuItem> allowedMenuItems(AdminCapability c) {
     if (c == AdminCapability.contentGestor) {
@@ -128,6 +142,9 @@ class AdminPermissionsService {
     }
     if (c == AdminCapability.partner) {
       return AdminPartnerConfig.kAllowedMenuItems;
+    }
+    if (c == AdminCapability.contentEditor) {
+      return AdminContentEditorConfig.kAllowedMenuItems;
     }
     return AdminMenuItem.values
         .where((i) =>
@@ -150,6 +167,9 @@ class AdminPermissionsService {
     if (c == AdminCapability.partner) {
       return AdminPartnerConfig.kDefaultMenuItem;
     }
+    if (c == AdminCapability.contentEditor) {
+      return AdminContentEditorConfig.kDefaultMenuItem;
+    }
     return AdminMenuItem.resumo;
   }
 
@@ -159,6 +179,8 @@ class AdminPermissionsService {
         return 'Gestor';
       case AdminCapability.partner:
         return 'Sócio · ${AdminPartnerConfig.displayName}';
+      case AdminCapability.contentEditor:
+        return 'Editor de conteúdo';
       case AdminCapability.readonly:
         return 'Somente leitura';
       case AdminCapability.support:

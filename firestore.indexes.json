@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "activity_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "modulo", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "mp_payments",
       "queryScope": "COLLECTION",
       "fields": [

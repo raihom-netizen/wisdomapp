@@ -21,6 +21,7 @@ import '../services/course_media_storage_cleanup.dart';
 import '../services/course_videos_cache_service.dart';
 import '../services/course_analytics_service.dart';
 import '../services/youtube_oembed_service.dart';
+import '../utils/admin_load_guard.dart';
 import '../widgets/admin/course_admin_analytics_panel.dart';
 import '../widgets/admin/course_content_sheet_header.dart';
 import '../theme/app_colors.dart';
@@ -65,7 +66,13 @@ class _PickedMedia {
 }
 
 class AdminCursosTab extends StatefulWidget {
-  const AdminCursosTab({super.key});
+  const AdminCursosTab({super.key, this.somenteVideos = false});
+
+  /// Editor de conteúdo (`role: editor_conteudo`): publica/edita/exclui os
+  /// vídeos e nada mais — sem métricas de quem assistiu (`course_stats`, que
+  /// mostra usuários) e sem os textos do módulo. As regras e a function
+  /// também recusam; aqui só não se pede o que vai dar permission-denied.
+  final bool somenteVideos;
 
   @override
   State<AdminCursosTab> createState() => _AdminCursosTabState();
@@ -122,8 +129,9 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
           .collection('app_config')
           .doc(_configDoc)
           .snapshots();
-  late final Stream<List<CourseStatSummary>> _statsStream =
-      CourseAnalyticsService.instance.watchAllStats();
+  late final Stream<List<CourseStatSummary>> _statsStream = widget.somenteVideos
+      ? Stream<List<CourseStatSummary>>.value(const <CourseStatSummary>[])
+      : CourseAnalyticsService.instance.watchAllStats();
 
   @override
   void initState() {
@@ -210,14 +218,22 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
   Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
       _fetchCourseVideos() async {
     return _courseFirestoreOp(() async {
-      final snap = await FirebaseFirestore.instance
-          .collection('course_videos')
-          .get(const GetOptions(source: Source.serverAndCache));
+      // Com prazo: sem resposta vira erro com «Tentar novamente» (nunca
+      // spinner eterno — ver AdminLoadGuard).
+      final snap = await AdminLoadGuard.comPrazo(
+        FirebaseFirestore.instance
+            .collection('course_videos')
+            .get(const GetOptions(source: Source.serverAndCache)),
+        oQue: 'os cursos',
+      );
       return snap.docs;
     });
   }
 
   void _scheduleExpiryCleanup() {
+    // Editor de conteúdo não apaga direto no Firestore (regra); a limpeza
+    // diária do servidor (courseVideosExpiryCleanupScheduled) cuida disso.
+    if (widget.somenteVideos) return;
     if (_expiryCleanupScheduled) return;
     _expiryCleanupScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -2257,7 +2273,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
           return ListView(
             padding: const EdgeInsets.all(24),
             children: [
-              Text('Erro: $_courseDocsError',
+              Text('Erro: ${AdminLoadGuard.mensagem(_courseDocsError)}',
                   style: const TextStyle(color: Colors.red)),
               const SizedBox(height: 12),
               FilledButton.icon(
@@ -2301,18 +2317,20 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
             const SizedBox(height: 16),
             _buildQuickPublishCard(),
             const SizedBox(height: 16),
-            CourseAdminAnalyticsPanel(
-              stats: stats,
-              courseTitles: titleMap,
-              onOpenViewers: (id, title) => showCourseViewersSheet(
-                context,
-                courseId: id,
-                title: title,
+            if (!widget.somenteVideos) ...[
+              CourseAdminAnalyticsPanel(
+                stats: stats,
+                courseTitles: titleMap,
+                onOpenViewers: (id, title) => showCourseViewersSheet(
+                  context,
+                  courseId: id,
+                  title: title,
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            _buildConfigCard(),
-            const SizedBox(height: 16),
+              const SizedBox(height: 16),
+              _buildConfigCard(),
+              const SizedBox(height: 16),
+            ],
             _buildNewContentLauncher(),
             const SizedBox(height: 22),
             _buildGridToolbar(allCount, cursosCount, dicasCount),

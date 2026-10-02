@@ -23,6 +23,10 @@ class AdminPartnerReceiptsTab extends StatefulWidget {
 }
 
 class _AdminPartnerReceiptsTabState extends State<AdminPartnerReceiptsTab> {
+  /// Escuta guardada (antes `.snapshots()` dentro do build).
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _paymentsStream =
+      FirebaseFirestore.instance.collection('mp_payments').limit(500).snapshots();
+
   final _searchFilterCtrl = TextEditingController();
   Timer? _searchDebounce;
   String _searchQuery = '';
@@ -294,10 +298,7 @@ class _AdminPartnerReceiptsTabState extends State<AdminPartnerReceiptsTab> {
         ),
         const SizedBox(height: 16),
         StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collection('mp_payments')
-              .limit(500)
-              .snapshots(),
+          stream: _paymentsStream,
           builder: (context, snap) {
             if (snap.hasError) {
               return Center(
