@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../models/despertar_item.dart';
 import 'agenda_notification_cutoff.dart';
 import 'agenda_reminder_end_of_day.dart';
 import 'agenda_reminder_notify_times.dart';
@@ -36,6 +37,7 @@ class AgendaNotificationPlanEntry {
     required this.channelKind,
     this.eventSoundId,
     this.eventDeliveryMode,
+    this.despertar = false,
   });
 
   final DateTime notifyAt;
@@ -47,7 +49,15 @@ class AgendaNotificationPlanEntry {
   final AgendaNotificationChannelKind channelKind;
   final String? eventSoundId;
   final String? eventDeliveryMode;
+
+  /// Item com «Despertar» ligado — no Android vai como alarme EXATO
+  /// (`exactAllowWhileIdle`) quando o agendamento local estiver ativo.
+  final bool despertar;
 }
+
+/// «Despertar» ligado no próprio item (sem campo = desligado).
+bool agendaDocDespertarAtivo(Map<String, dynamic> d) =>
+    DespertarItem.fromData(d)?.ativo == true;
 
 /// Preferências carregadas de `users/{uid}/settings/notifications`.
 class AgendaNotificationUserSettings {
@@ -138,6 +148,7 @@ void _appendLeads({
   required AgendaNotificationChannelKind channelKind,
   required AgendaNotificationMessageFactory messageForLead,
   DateTime? forwardCutoff,
+  bool despertar = false,
 }) {
   final floor = forwardCutoff ?? agendaNotificationScheduleFloor(now);
   if (!agendaEventEligibleForForwardNotify(eventAt, now: now)) {
@@ -161,6 +172,7 @@ void _appendLeads({
         title: msg.title,
         body: msg.body,
         channelKind: channelKind,
+        despertar: despertar,
       ),
     );
   }
@@ -262,6 +274,7 @@ List<AgendaNotificationPlanEntry> buildAgendaNotificationPlan({
           leadMin: leadMin,
         ),
         forwardCutoff: floor,
+        despertar: agendaDocDespertarAtivo(d),
       );
   }
 
@@ -308,6 +321,7 @@ List<AgendaNotificationPlanEntry> buildAgendaNotificationPlan({
         leadMin: leadMin,
       ),
       forwardCutoff: floor,
+      despertar: agendaDocDespertarAtivo(d),
     );
   }
 
@@ -344,6 +358,8 @@ List<AgendaNotificationPlanEntry> buildAgendaNotificationPlan({
                 valor: amount.toStringAsFixed(2),
                 userName: userDisplayName,
               ),
+        // Contas: só desperta pendente (já filtrado acima).
+        despertar: agendaDocDespertarAtivo(d),
       );
     }
   }

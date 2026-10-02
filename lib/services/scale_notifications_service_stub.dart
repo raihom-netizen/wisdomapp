@@ -29,6 +29,8 @@ class ScaleNotificationsService {
 
   Future<void> cancelAllScaleReminders() async {}
 
+  Future<void> cancelPendingLocalAgendaReminders() async {}
+
   Future<void> updateChannelShowAsPopup(bool showAsPopup) async {}
 
   Future<void> refreshChannelsAfterSoundChange() async {}

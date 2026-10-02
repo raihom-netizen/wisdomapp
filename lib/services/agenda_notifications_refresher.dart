@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../utils/agenda_delivery_channel_prefs.dart';
 import '../utils/agenda_notification_cutoff.dart';
 import '../utils/agenda_reminder_end_of_day.dart';
+import 'agenda_server_sync_service.dart';
 import 'scale_notifications_service.dart';
 
 /// Reagenda todas as notificações locais (plantões, audiências/compromissos da
@@ -32,44 +34,69 @@ class AgendaNotificationsRefresher {
   /// Limite por coleção — evita ler centenas de docs desnecessários no boot.
   static const int _kMaxDocsPerCollection = 600;
 
+  /// Debounce padrão entre dois refresh: curto o bastante para um 2.º
+  /// salvamento reagendar logo, longo o bastante para não martelar o Firestore.
+  static const Duration kDefaultCoalesce = Duration(seconds: 3);
+
   /// Evita reagendar em rajada se o usuário salvar vários itens em sequência.
   static DateTime? _lastRunAt;
   static Future<void>? _inFlight;
 
+  /// Pedido que chegou com um refresh já rodando (o dado novo pode não ter
+  /// entrado na leitura dele) — roda mais uma vez logo depois.
+  static String? _rerunUid;
+
   /// Reagenda escalas + reminders (audiências/compromissos da Agenda) + contas
   /// pendentes para [uid].
   ///
-  /// Se já houve um refresh há menos de [coalesceWithin] segundos (padrão 2s),
-  /// agenda o próximo logo após o atual terminar — evita disparar GETs em
-  /// rajada quando o usuário salva vários itens seguidos.
+  /// Debounce de [coalesceWithin] (padrão 3 s): se o último refresh terminou há
+  /// menos que isso, espera só o que FALTA (antes esperava os 45 s inteiros).
+  /// Pedido durante um refresh em andamento marca uma única repetição ao final
+  /// (antes era descartado e o 2.º salvamento ficava sem reagendar).
   static Future<void> refresh({
     required String uid,
-    Duration coalesceWithin = const Duration(seconds: 45),
+    Duration coalesceWithin = kDefaultCoalesce,
   }) {
     if (uid.isEmpty) return Future<void>.value();
 
     if (_inFlight != null) {
-      // Já tem um refresh em andamento — espera ele terminar e devolve.
+      _rerunUid = uid;
       return _inFlight!;
     }
 
     final last = _lastRunAt;
-    if (last != null && DateTime.now().difference(last) < coalesceWithin) {
-      // Coalesce: agenda um único próximo refresh ao final do delay.
-      _inFlight = Future<void>.delayed(coalesceWithin, () => _doRefresh(uid));
+    final elapsed = last == null ? null : DateTime.now().difference(last);
+    final Future<void> body;
+    if (elapsed != null && elapsed < coalesceWithin) {
+      body = Future<void>.delayed(
+        coalesceWithin - elapsed,
+        () => _doRefresh(uid),
+      );
     } else {
-      _inFlight = _doRefresh(uid);
+      body = _doRefresh(uid);
     }
-    final running = _inFlight!.whenComplete(() {
+    _inFlight = body.whenComplete(() {
       _inFlight = null;
       _lastRunAt = DateTime.now();
+      final again = _rerunUid;
+      _rerunUid = null;
+      if (again != null) unawaited(refresh(uid: again));
     });
-    return running;
+    return _inFlight!;
   }
 
   static Future<void> _doRefresh(String uid) async {
     try {
       await ScaleNotificationsService().init();
+      // Política única (ver [kAgendaNotificationsServerPushOnly]): o servidor
+      // entrega; aqui só some com lembretes locais antigos ainda pendentes
+      // (sem tocar nas notificações já exibidas, ex.: despertador tocando) e
+      // pede a sincronização leve da fila.
+      if (agendaSkipsLocalSchedulingBecauseServerPushOnly()) {
+        await ScaleNotificationsService().cancelPendingLocalAgendaReminders();
+        unawaited(AgendaServerSyncService.requestLoginSync(uid));
+        return;
+      }
       final now = DateTime.now();
       final startOfToday = DateTime(now.year, now.month, now.day);
       // Inclui ontem/anteanterior: audiências «em aberto» 24h após o horário.

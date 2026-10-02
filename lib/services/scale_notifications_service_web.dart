@@ -62,6 +62,11 @@ class ScaleNotificationsService {
     String? userDisplayName,
   }) async {
     if (!_initialized || uid.isEmpty) return;
+    // Servidor é a única fonte (Web Push) — timer local daria aviso em dobro.
+    if (agendaSkipsLocalSchedulingBecauseServerPushOnly()) {
+      _pendingReminders.clear();
+      return;
+    }
     try {
       await beginRescheduleBatch();
       final snap = await FirebaseFirestore.instance
@@ -127,6 +132,11 @@ class ScaleNotificationsService {
   /// Na web, os lembretes são exibidos quando o app está aberto (timer a cada 1 min).
   Future<void> scheduleFromScales(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs, {String? uid}) async {
     if (!_initialized) return;
+    // Servidor é a única fonte (Web Push) — timer local daria aviso em dobro.
+    if (agendaSkipsLocalSchedulingBecauseServerPushOnly()) {
+      _pendingReminders.clear();
+      return;
+    }
     try {
       // Padrão (admin): 60 min E 1 dia antes ao mesmo tempo.
       List<int> globalLeads =
@@ -228,6 +238,11 @@ class ScaleNotificationsService {
 
   Future<void> scheduleFromReminders(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs, {String? uid}) async {
     if (!_initialized || uid == null || uid.isEmpty) return;
+    // Servidor é a única fonte (Web Push) — timer local daria aviso em dobro.
+    if (agendaSkipsLocalSchedulingBecauseServerPushOnly()) {
+      _pendingReminders.clear();
+      return;
+    }
     try {
       final snap = await FirebaseFirestore.instance.collection('users').doc(uid).collection('settings').doc('notifications').get();
       final data = snap.data();
@@ -306,6 +321,11 @@ class ScaleNotificationsService {
 
   Future<void> scheduleFinancialReminders(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs, {String? uid}) async {
     if (!_initialized || uid == null || uid.isEmpty) return;
+    // Servidor é a única fonte (Web Push) — timer local daria aviso em dobro.
+    if (agendaSkipsLocalSchedulingBecauseServerPushOnly()) {
+      _pendingReminders.clear();
+      return;
+    }
     try {
       final snap = await FirebaseFirestore.instance.collection('users').doc(uid).collection('settings').doc('notifications').get();
       final data = snap.data();
@@ -348,6 +368,11 @@ class ScaleNotificationsService {
   }
 
   Future<void> cancelAllScaleReminders() async {
+    _pendingReminders.clear();
+  }
+
+  /// Só os lembretes locais ainda pendentes (política servidor-only).
+  Future<void> cancelPendingLocalAgendaReminders() async {
     _pendingReminders.clear();
   }
 

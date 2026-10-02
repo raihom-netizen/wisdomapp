@@ -85,6 +85,89 @@ class ScaleNotificationsService {
     await cancelAllScaleReminders();
   }
 
+  /// Política servidor-only ([kAgendaNotificationsServerPushOnly]): some com os
+  /// lembretes locais AINDA PENDENTES — não mexe nas notificações já exibidas
+  /// (ex.: o despertador tocando, que veio pelo push do servidor).
+  Future<void> cancelPendingLocalAgendaReminders() async {
+    _imminentQueue.clear();
+    _shownImminentKeys.clear();
+    _pendingScheduledCount = 0;
+    if (!isSupported) return;
+    try {
+      await _plugin.cancelAllPendingNotifications();
+    } catch (_) {}
+  }
+
+  /// Android 12+: alarme exato exige SCHEDULE_EXACT_ALARM (usuário concede) ou
+  /// USE_EXACT_ALARM (13+, automático para app de agenda/despertador — os dois
+  /// estão no AndroidManifest, igual ao Controle Total). Negado → inexato.
+  bool? _exactAlarmAllowedCache;
+  DateTime? _exactAlarmCheckedAt;
+
+  Future<bool> _exactAlarmAllowed() async {
+    if (!Platform.isAndroid) return false;
+    final at = _exactAlarmCheckedAt;
+    if (_exactAlarmAllowedCache != null &&
+        at != null &&
+        DateTime.now().difference(at) < const Duration(minutes: 5)) {
+      return _exactAlarmAllowedCache!;
+    }
+    var ok = false;
+    try {
+      final androidImpl = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      ok = await androidImpl?.canScheduleExactNotifications() ?? false;
+    } catch (_) {
+      ok = false;
+    }
+    _exactAlarmAllowedCache = ok;
+    _exactAlarmCheckedAt = DateTime.now();
+    return ok;
+  }
+
+  /// Agenda no SO: «Despertar» → exato (não atrasa no Doze); demais → inexato.
+  /// Se o exato falhar (permissão revogada no meio do caminho), cai no inexato.
+  Future<void> _zonedScheduleSafe({
+    required int id,
+    required String title,
+    required String body,
+    required tz.TZDateTime scheduledDate,
+    required NotificationDetails details,
+    required String payload,
+    required bool exact,
+  }) async {
+    final useExact = exact && await _exactAlarmAllowed();
+    try {
+      await _plugin.zonedSchedule(
+        id: id,
+        title: title,
+        body: body,
+        scheduledDate: scheduledDate,
+        notificationDetails: details,
+        androidScheduleMode: useExact
+            ? AndroidScheduleMode.exactAllowWhileIdle
+            : AndroidScheduleMode.inexactAllowWhileIdle,
+        payload: payload,
+      );
+      _pendingScheduledCount++;
+    } catch (_) {
+      if (!useExact) return;
+      _exactAlarmAllowedCache = false;
+      try {
+        await _plugin.zonedSchedule(
+          id: id,
+          title: title,
+          body: body,
+          scheduledDate: scheduledDate,
+          notificationDetails: details,
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          payload: payload,
+        );
+        _pendingScheduledCount++;
+      } catch (_) {}
+    }
+  }
+
   /// Canal antigo (legado). Mantido somente para limpar instalações que ainda
   /// tinham notificações no canal antigo.
   static const _legacyChannelId = 'controletotal_plantao';
@@ -166,7 +249,9 @@ class ScaleNotificationsService {
   }
 
   Future<void> _flushImminentNotifications() async {
-    if (!_initialized) return;
+    if (!_initialized || agendaSkipsLocalSchedulingBecauseServerPushOnly()) {
+      return;
+    }
     final now = DateTime.now();
     final toRemove = <_AgendaImminentEntry>[];
     for (final entry in _imminentQueue) {
@@ -240,6 +325,7 @@ class ScaleNotificationsService {
     required String payload,
     String? dedupeDocId,
     DateTime? dedupeNotifyAt,
+    bool exact = false,
   }) async {
     final now = tz.TZDateTime.now(tz.local);
     final grace = now.add(
@@ -261,35 +347,29 @@ class ScaleNotificationsService {
         ),
       );
       if (scheduledDate.isAfter(now)) {
-        try {
-          await _plugin.zonedSchedule(
-            id: id,
-            title: title,
-            body: body,
-            scheduledDate: scheduledDate,
-            notificationDetails: details,
-            androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-            payload: payload,
-          );
-          _pendingScheduledCount++;
-        } catch (_) {}
+        await _zonedScheduleSafe(
+          id: id,
+          title: title,
+          body: body,
+          scheduledDate: scheduledDate,
+          details: details,
+          payload: payload,
+          exact: exact,
+        );
       } else {
         await _flushImminentNotifications();
       }
       return;
     }
-    try {
-      await _plugin.zonedSchedule(
-        id: id,
-        title: title,
-        body: body,
-        scheduledDate: scheduledDate,
-        notificationDetails: details,
-        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-        payload: payload,
-      );
-      _pendingScheduledCount++;
-    } catch (_) {}
+    await _zonedScheduleSafe(
+      id: id,
+      title: title,
+      body: body,
+      scheduledDate: scheduledDate,
+      details: details,
+      payload: payload,
+      exact: exact,
+    );
   }
 
   /// Cria os 4 canais (escala/compromisso/audiência/financeiro) e remove o
@@ -575,6 +655,7 @@ class ScaleNotificationsService {
     String? eventSoundId,
     String? eventDeliveryMode,
     AgendaNotificationMessageFactory? messageForLead,
+    bool despertar = false,
   }) async {
     final now = tz.TZDateTime.now(tz.local);
     int id = idStart;
@@ -640,6 +721,7 @@ class ScaleNotificationsService {
         scheduledDate: dataAviso,
         details: details,
         payload: payload,
+        exact: despertar,
       );
     }
     return id;
@@ -664,6 +746,10 @@ class ScaleNotificationsService {
     String? userDisplayName,
   }) async {
     if (!isSupported || !_initialized || uid.isEmpty) return;
+    if (agendaSkipsLocalSchedulingBecauseServerPushOnly()) {
+      await cancelPendingLocalAgendaReminders();
+      return;
+    }
     try {
       await beginRescheduleBatch();
       final snap = await FirebaseFirestore.instance
@@ -731,6 +817,7 @@ class ScaleNotificationsService {
           payload: payload,
           dedupeDocId: entry.docId,
           dedupeNotifyAt: entry.notifyAt,
+          exact: entry.despertar,
         );
       }
       await _flushImminentNotifications();
@@ -741,6 +828,10 @@ class ScaleNotificationsService {
       List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
       {String? uid}) async {
     if (!isSupported || !_initialized) return;
+    if (agendaSkipsLocalSchedulingBecauseServerPushOnly()) {
+      await cancelPendingLocalAgendaReminders();
+      return;
+    }
     try {
       List<int> globalLeads =
           List<int>.from(LocalNotificationPreferences.kDefaultLeads);
@@ -827,6 +918,7 @@ class ScaleNotificationsService {
             leadMin: leadMin,
           ),
           idStart: id,
+          despertar: agendaDocDespertarAtivo(d),
         );
       }
     } catch (_) {}
@@ -845,6 +937,10 @@ class ScaleNotificationsService {
       List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
       {String? uid}) async {
     if (!isSupported || !_initialized || uid == null || uid.isEmpty) return;
+    if (agendaSkipsLocalSchedulingBecauseServerPushOnly()) {
+      await cancelPendingLocalAgendaReminders();
+      return;
+    }
     try {
       final snap = await FirebaseFirestore.instance
           .collection('users')
@@ -923,6 +1019,7 @@ class ScaleNotificationsService {
             leadMin: leadMin,
           ),
           idStart: id,
+          despertar: agendaDocDespertarAtivo(d),
         );
       }
     } catch (_) {}
@@ -933,6 +1030,10 @@ class ScaleNotificationsService {
       List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
       {String? uid}) async {
     if (!isSupported || !_initialized || uid == null || uid.isEmpty) return;
+    if (agendaSkipsLocalSchedulingBecauseServerPushOnly()) {
+      await cancelPendingLocalAgendaReminders();
+      return;
+    }
     try {
       final snap = await FirebaseFirestore.instance
           .collection('users')
@@ -981,6 +1082,7 @@ class ScaleNotificationsService {
             leadMin: leadMin,
           ),
           idStart: id,
+          despertar: agendaDocDespertarAtivo(d),
         );
       }
     } catch (_) {}
