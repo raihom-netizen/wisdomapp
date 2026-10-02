@@ -64,8 +64,41 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed>
   @override
   void dispose() {
     _progressTimer?.cancel();
+    for (final s in _wheelSubs) {
+      s.cancel();
+    }
+    _wheelSubs.clear();
     widget.controller?.detach(this);
     super.dispose();
+  }
+
+  final List<StreamSubscription<html.WheelEvent>> _wheelSubs = [];
+
+  /// Na web o `<video>`/capa é um elemento HTML por cima do Flutter: a
+  /// rodinha/touchpad em cima dele não chega ao ListView da página e a tela
+  /// parece travada. Repassa o deslocamento ao Scrollable que envolve o player
+  /// (se houver; em tela cheia não há e o evento segue normal).
+  void _forwardWheel(html.Element el) {
+    _wheelSubs.add(el.onWheel.listen((e) {
+      if (!mounted || e.ctrlKey) return; // ctrl+rodinha = zoom do navegador
+      final scrollable = Scrollable.maybeOf(context);
+      if (scrollable == null) return;
+      final pos = scrollable.position;
+      final vertical = pos.axis == Axis.vertical;
+      var delta = (vertical ? e.deltaY : e.deltaX).toDouble();
+      if (delta == 0) return;
+      if (e.deltaMode == 1) {
+        delta *= 40; // linhas
+      } else if (e.deltaMode == 2) {
+        delta *= pos.viewportDimension; // páginas
+      }
+      final target = (pos.pixels + delta)
+          .clamp(pos.minScrollExtent, pos.maxScrollExtent)
+          .toDouble();
+      if (target == pos.pixels) return;
+      e.preventDefault();
+      pos.jumpTo(target);
+    }));
   }
 
   /// Comando para o iframe do YouTube (`enablejsapi=1` já vai na URL).
@@ -194,6 +227,7 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed>
           video.poster = poster;
         }
         _videoEl = video;
+        _forwardWheel(video);
         video.onPlay.listen((_) {
           final r = widget.controller?.playbackRate ?? 1.0;
           try {
@@ -337,6 +371,9 @@ class _CourseVideoEmbedState extends State<CourseVideoEmbed>
     _notifyReady();
 
     wrap.children.addAll([posterEl, iframe]);
+    // Só a capa: dentro do iframe do YouTube (outro domínio) o evento não
+    // chega ao app.
+    _forwardWheel(wrap);
     return wrap;
   }
 

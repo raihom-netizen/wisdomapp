@@ -407,6 +407,9 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
   }
 
   Widget _wideLayout() {
+    // Player limitado a ~62% da altura visível: em monitor largo o 16:9 da
+    // coluna ocupava a tela toda e título, botão e descrição ficavam fora.
+    final maxPlayerH = (MediaQuery.sizeOf(context).height - kToolbarHeight) * 0.62;
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 1400),
@@ -420,7 +423,17 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(14),
-                    child: _player(),
+                    child: ColoredBox(
+                      color: Colors.black,
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxHeight: maxPlayerH < 220 ? 220 : maxPlayerH,
+                          ),
+                          child: _player(),
+                        ),
+                      ),
+                    ),
                   ),
                   _header(),
                   _descriptionSection(),
