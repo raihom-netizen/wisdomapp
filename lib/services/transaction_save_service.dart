@@ -13,6 +13,7 @@ import '../models/despertar_item.dart';
 import '../utils/finance_transaction_datetime.dart';
 import '../utils/finance_transactions_hub.dart';
 import '../utils/firestore_user_doc_id.dart';
+import '../utils/installment_split.dart';
 import '../utils/connectivity_offline.dart';
 import '../utils/receipt_attachment_utils.dart';
 import 'functions_service.dart';
@@ -414,20 +415,24 @@ class TransactionSaveService {
         );
       }
     } else {
-      final batch = FirebaseFirestore.instance.batch();
       final groupId = col.doc().id;
       final valueIsPerParcel = data['installmentValueIsPerParcel'] == true;
-      final amountPerParcel = valueIsPerParcel ? amount : amount / installments;
+      // Total dividido em centavos; a última parcela absorve a diferença.
+      final split = valueIsPerParcel
+          ? const <double>[]
+          : splitInstallmentsInCents(total: amount, installments: installments);
       final parcelCount = installments - installmentStartIndex + 1;
+      final writes =
+          <({DocumentReference<Map<String, dynamic>> ref, Map<String, dynamic> data})>[];
       for (var k = 0; k < parcelCount; k++) {
         final i = installmentStartIndex + k;
         final d = addMonths(date, k);
         final ref = col.doc();
         if (k == 0) firstDocId = ref.id;
         savedIds.add(ref.id);
-        batch.set(ref, {
+        writes.add((ref: ref, data: {
           'type': type,
-          'amount': amountPerParcel,
+          'amount': valueIsPerParcel ? amount : split[i - 1],
           'category': category,
           'description': description,
           'status': status,
@@ -445,9 +450,16 @@ class TransactionSaveService {
           ..._optionalClosureAndSourceFields(data),
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
-        });
+        }));
       }
-      await writeLocalFirst(() => batch.commit(), messenger: messenger);
+      // Até 999 parcelas: lotes de 450 (limite do WriteBatch é 500).
+      for (final part in chunked(writes, size: 450)) {
+        final batch = FirebaseFirestore.instance.batch();
+        for (final w in part) {
+          batch.set(w.ref, w.data);
+        }
+        await writeLocalFirst(() => batch.commit(), messenger: messenger);
+      }
       unawaited(
         LogsService()
             .saveLog(
