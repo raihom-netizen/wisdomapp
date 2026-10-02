@@ -38,7 +38,8 @@ import '../widgets/finance_transaction_edit_dialog.dart';
 import '../widgets/agenda_pdf_export_sheet.dart';
 import '../widgets/modern_pdf_export_button.dart';
 import '../widgets/external_calendar_integration_panel.dart';
-import '../widgets/agenda/agenda_bulk_clear_confirm_dialog.dart';
+import '../services/yearly_commitment_repeat_service.dart';
+import '../widgets/agenda/agenda_bulk_clear_preview.dart';
 import '../widgets/agenda/agenda_bulk_clear_period_dialog.dart';
 import '../widgets/agenda/agenda_bulk_clear_toolbar.dart';
 import '../widgets/shell_keyboard_bottom_pad.dart';
@@ -477,21 +478,56 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
 
     setState(() => _bulkClearLoading = true);
     try {
-      final docs = await CompromissoReminderService.fetchCompromissosInRange(
-        userDocId: _userDocId,
-        start: start,
-        end: end,
-      );
+      // Prévia completa (dono 02/10/2026): compromissos do app/Google/Apple/anuais
+      // + lançamentos financeiros que aparecem no calendário.
+      final res = await Future.wait<List<QueryDocumentSnapshot<Map<String, dynamic>>>>([
+        CompromissoReminderService.fetchCompromissosInRange(
+          userDocId: _userDocId,
+          start: start,
+          end: end,
+        ).timeout(const Duration(seconds: 25)),
+        CompromissoReminderService.fetchFinanceiroNoCalendarioInRange(
+          userDocId: _userDocId,
+          start: start,
+          end: end,
+        ).catchError(
+            (Object _) => <QueryDocumentSnapshot<Map<String, dynamic>>>[]),
+      ]);
+      final docs = res[0];
+      final finDocs = res[1];
       if (!mounted) return;
 
-      final ok = await showAgendaBulkClearConfirm(
+      DateTime? dt(Object? raw) => raw is Timestamp ? raw.toDate() : null;
+      final itens = <AgendaBulkClearPreviewItem>[
+        for (final d in docs)
+          AgendaBulkClearPreviewItem(
+            date: dt(d.data()['date']),
+            title: (d.data()['title'] ?? '').toString(),
+            origem: YearlyCommitmentRepeatService.isYearlyRepeatEntry(d.data())
+                ? 'anual'
+                : (d.data()['googleEventId'] ?? '').toString().trim().isNotEmpty
+                    ? 'google'
+                    : (d.data()['appleEventId'] ?? '').toString().trim().isNotEmpty
+                        ? 'apple'
+                        : 'app',
+          ),
+        for (final d in finDocs)
+          AgendaBulkClearPreviewItem(
+            date: dt(d.data()['date']),
+            title: (d.data()['description'] ?? d.data()['category'] ?? '')
+                .toString(),
+            origem: 'financeiro',
+          ),
+      ];
+
+      final ok = await showAgendaBulkClearPreview(
         context,
         title: title,
-        count: docs.length,
         periodLabel: periodLabel,
         accent: accent,
         accent2: accent2,
         icon: icon,
+        itens: itens,
       );
       if (!ok || !mounted) return;
 
@@ -499,14 +535,23 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
         userDocId: _userDocId,
         docs: docs,
       );
+      final tirados = finDocs.isEmpty
+          ? 0
+          : await CompromissoReminderService.tirarFinanceiroDoCalendario(
+              finDocs);
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            removed == 0
-                ? 'Nenhum compromisso removido.'
-                : '$removed compromisso${removed == 1 ? '' : 's'} removido${removed == 1 ? '' : 's'}.',
+            removed == 0 && tirados == 0
+                ? 'Nada foi removido.'
+                : [
+                    if (removed > 0)
+                      '$removed compromisso${removed == 1 ? '' : 's'} removido${removed == 1 ? '' : 's'}',
+                    if (tirados > 0)
+                      '$tirados lançamento${tirados == 1 ? '' : 's'} fora do calendário',
+                  ].join(' · '),
           ),
         ),
       );

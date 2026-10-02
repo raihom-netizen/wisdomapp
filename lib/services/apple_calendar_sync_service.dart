@@ -197,6 +197,29 @@ class AppleCalendarSyncService {
     return _resolveDefaultCalendarId(uid);
   }
 
+  /// Limpeza em massa da Agenda (autorizada pelo dono 02/10/2026): apaga no
+  /// Calendário do iPhone o evento vinculado ao compromisso. Só no iOS, com a
+  /// integração ligada e permissão; qualquer falha devolve false (nada quebra).
+  static Future<bool> deleteAppleEventById({
+    required String userDocId,
+    required String appleEventId,
+  }) async {
+    final id = appleEventId.trim();
+    if (id.isEmpty || !isPlatformSupported) return false;
+    try {
+      if (!await isEnabled(userDocId)) return false;
+      if (!await _requestPermission()) return false;
+      final calId = await _calendarIdForUser(userDocId);
+      if (calId == null) return false;
+      final res = await _plugin
+          .deleteEvent(calId, id)
+          .timeout(const Duration(seconds: 15));
+      return res.isSuccess && res.data == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<List<AppleCalendarEventItem>> fetchEventsForMonth(
     DateTime month, {
     required String userDocId,

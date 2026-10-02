@@ -496,6 +496,16 @@ class CompromissoReminderService {
             ),
           );
         }
+        // Integração total (dono 02/10/2026): também sai do Calendário do iPhone.
+        final aId = (data['appleEventId'] ?? '').toString().trim();
+        if (aId.isNotEmpty) {
+          googleTasks.add(
+            AppleCalendarSyncService.deleteAppleEventById(
+              userDocId: userDocId,
+              appleEventId: aId,
+            ).then((_) {}),
+          );
+        }
 
         batch.delete(doc.reference);
         mirrorDeletes.add(
@@ -544,6 +554,49 @@ class CompromissoReminderService {
               docId: d.id,
             ))
         .toList(growable: false);
+  }
+
+  /// Lançamentos financeiros que aparecem no calendário (addToCalendar == true)
+  /// no intervalo — para a prévia da limpeza rápida.
+  static Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
+      fetchFinanceiroNoCalendarioInRange({
+    required String userDocId,
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    if (userDocId.isEmpty) return const [];
+    final endEod = DateTime(end.year, end.month, end.day, 23, 59, 59);
+    final snap = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userDocId)
+        .collection('transactions')
+        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+        .where('date', isLessThanOrEqualTo: Timestamp.fromDate(endEod))
+        .get()
+        .timeout(const Duration(seconds: 25));
+    return snap.docs
+        .where((d) => d.data()['addToCalendar'] == true)
+        .toList(growable: false);
+  }
+
+  /// Limpeza rápida: lançamento financeiro só SAI do calendário
+  /// (addToCalendar = false) — nunca apaga o lançamento.
+  static Future<int> tirarFinanceiroDoCalendario(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) async {
+    var n = 0;
+    for (var i = 0; i < docs.length; i += 450) {
+      final batch = FirebaseFirestore.instance.batch();
+      for (final d in docs.skip(i).take(450)) {
+        batch.update(d.reference, {
+          'addToCalendar': false,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        n++;
+      }
+      await batch.commit().timeout(const Duration(seconds: 40));
+    }
+    return n;
   }
 
   static bool isCompromissoDoc(Map<String, dynamic> data) {
