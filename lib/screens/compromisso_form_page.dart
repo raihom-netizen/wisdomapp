@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_native_contact_picker/flutter_native_contact_picker.dart';
 import 'package:intl/intl.dart';
 
-import '../constants/color_palette.dart';
 import '../constants/commitment_presets.dart';
 import '../constants/compromisso_despertador.dart';
 import '../models/despertar_item.dart';
@@ -21,6 +20,7 @@ import '../widgets/agenda_form_footer_actions.dart';
 import '../widgets/fast_text_field.dart';
 import '../utils/keyboard_form_scaffold.dart';
 import '../widgets/agenda_form_validation_alert.dart';
+import '../widgets/color_palette_tabs_dialog.dart';
 import '../widgets/commitment_description_picker.dart';
 import '../widgets/compromisso_schedule_personalize_sheet.dart';
 import '../widgets/multi_date_month_picker_dialog.dart';
@@ -542,64 +542,13 @@ class _CompromissoFormPageState extends State<CompromissoFormPage> {
   }
 
   Future<void> _abrirSeletorCor() async {
-    final palette = kColorPaletteHex.take(72).toList();
-    final colors = palette.map(_colorFromHex).toList();
-    final idx = await showDialog<int>(
-      context: context,
-      builder: (dlgCtx) => AlertDialog(
-        titlePadding: const EdgeInsets.fromLTRB(18, 12, 8, 2),
-        title: Row(
-          children: [
-            const Expanded(
-              child: Text(
-                'Cor no calendário',
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-              ),
-            ),
-            TextButton.icon(
-              onPressed: () => Navigator.pop(dlgCtx),
-              icon: const Icon(Icons.close_rounded, size: 18),
-              label: const Text('Cancelar'),
-              style: TextButton.styleFrom(
-                  foregroundColor: AppColors.textSecondary),
-            ),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: List.generate(colors.length, (i) {
-              final c = colors[i];
-              return InkWell(
-                onTap: () => Navigator.pop(dlgCtx, i),
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: c,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                    boxShadow: [
-                      BoxShadow(
-                        color: c.withValues(alpha: 0.5),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }),
-          ),
-        ),
-      ),
+    final escolhida = await mostrarSeletorDeCores(
+      context,
+      titulo: 'Cor no calendário',
+      selecionadaHex: _colorHex,
     );
-    if (idx == null || !mounted) return;
-    if (idx >= 0 && idx < palette.length) {
-      setState(() => _colorHex = _normalizeHex(palette[idx]));
-    }
+    if (escolhida == null || !mounted) return;
+    setState(() => _colorHex = _normalizeHex(escolhida));
   }
 
   Future<void> _submit() async {

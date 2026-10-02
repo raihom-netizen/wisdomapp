@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../widgets/fast_text_field.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../constants/color_palette.dart';
 import '../models/shift_location.dart';
 import '../constants/currency_formats.dart';
 import '../theme/app_colors.dart';
@@ -10,6 +9,7 @@ import '../utils/uppercase_text_input_formatter.dart';
 import '../utils/firestore_user_doc_id.dart';
 import '../widgets/agenda_form_footer_actions.dart';
 import '../widgets/brl_amount_text_field.dart';
+import '../widgets/color_palette_tabs_dialog.dart';
 import '../utils/keyboard_form_scaffold.dart';
 
 class EditLocationScreen extends StatefulWidget {
@@ -550,51 +550,15 @@ class _EditLocationScreenState extends State<EditLocationScreen> {
                 shadowColor: AppColors.vividShift(_pickedColor).withValues(alpha: 0.45),
                 child: InkWell(
                   onTap: () async {
-                    final colors = kColorPaletteHex.take(72).map((hex) {
-                      final h = hex.replaceFirst('#', '').replaceFirst('0x', '');
-                      return Color(0xFF000000 + int.parse(h.length <= 6 ? h : h.substring(0, 6), radix: 16));
-                    }).toList();
-                    final chosen = await showDialog<Color>(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        titlePadding: const EdgeInsets.fromLTRB(18, 12, 8, 2),
-                        title: Row(
-                          children: [
-                            const Expanded(
-                              child: Text(
-                                'Cor da frente de serviço',
-                                style: TextStyle(fontWeight: FontWeight.w800),
-                              ),
-                            ),
-                            TextButton.icon(
-                              onPressed: () => Navigator.pop(ctx),
-                              icon: const Icon(Icons.close_rounded, size: 18),
-                              label: const Text('Cancelar'),
-                            ),
-                          ],
-                        ),
-                        content: SingleChildScrollView(
-                          child: Wrap(
-                            spacing: 10,
-                            runSpacing: 10,
-                            children: colors.map((c) => InkWell(
-                              onTap: () => Navigator.pop(ctx, c),
-                              borderRadius: BorderRadius.circular(12),
-                                child: Container(
-                                width: 44,
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  color: c,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.white, width: 2),
-                                  boxShadow: [BoxShadow(color: c.withValues(alpha: 0.5), blurRadius: 6, offset: const Offset(0, 2))],
-                                ),
-                              ),
-                            )).toList(),
-                          ),
-                        ),
-                      ),
+                    final hexEscolhido = await mostrarSeletorDeCores(
+                      context,
+                      titulo: 'Cor da frente de serviço',
+                      selecionadaHex:
+                          '#${_pickedColor.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}',
                     );
+                    final chosen = hexEscolhido == null
+                        ? null
+                        : ColorPaletteTabsDialog.corDeHex(hexEscolhido);
                     if (chosen != null) setState(() => _pickedColor = chosen);
                   },
                   borderRadius: BorderRadius.circular(14),

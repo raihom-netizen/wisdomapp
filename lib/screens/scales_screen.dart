@@ -32,6 +32,7 @@ import '../services/agenda_notification_reschedule_helper.dart';
 import '../utils/agenda_delivery_reset.dart';
 import '../services/scale_notifications_service.dart';
 import '../utils/premium_upgrade.dart';
+import '../widgets/color_palette_tabs_dialog.dart';
 import '../widgets/selecao_plantao_sheet.dart';
 import '../widgets/lancamento_expresso_plantao_sheet.dart';
 import '../widgets/month_year_resumo_header.dart';
@@ -7238,74 +7239,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
           }
 
           Future<void> escolherCor() async {
-            final coresPremium = kColorPaletteHex.take(21).toList();
-            final picked = await showModalBottomSheet<String>(
-              context: ctx,
-              useSafeArea: true,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-              ),
-              builder: (bctx) {
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Text(
-                        'Toque na cor para escolher',
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w900,
-                          color: AppColors.deepBlue,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: coresPremium.map((hex) {
-                          final h = hex.startsWith('#') ? hex : '#$hex';
-                          final isSelected =
-                              selectedColorHex.toUpperCase() == h.toUpperCase();
-                          return InkWell(
-                            borderRadius: BorderRadius.circular(999),
-                            onTap: () => Navigator.pop(bctx, h),
-                            child: Container(
-                              width: 36,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Color(0xFF000000 +
-                                    int.parse(h.replaceFirst('#', ''),
-                                        radix: 16)),
-                                border: Border.all(
-                                  color: isSelected
-                                      ? Colors.white
-                                      : Colors.grey.shade300,
-                                  width: isSelected ? 2.5 : 1.1,
-                                ),
-                                boxShadow: const [
-                                  BoxShadow(
-                                      color: Colors.black26, blurRadius: 2)
-                                ],
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                      const SizedBox(height: 10),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: () => Navigator.pop(bctx),
-                          child: const Text('Cancelar'),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
+            final picked = await mostrarSeletorDeCores(
+              ctx,
+              titulo: 'Cor no calendário',
+              selecionadaHex: selectedColorHex,
             );
             if (picked != null && picked.isNotEmpty) {
               setModalState(() => selectedColorHex = picked);
@@ -9566,8 +9503,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                     height: 44,
                                     child: ListView(
                                       scrollDirection: Axis.horizontal,
-                                      children:
-                                          kColorPaletteHex.take(72).map((hex) {
+                                      children: kColorPaletteHex
+                                          .take(24)
+                                          .map<Widget>((hex) {
                                         final h =
                                             hex.startsWith('#') ? hex : '#$hex';
                                         final isSelected = selectedColorHex
@@ -9601,7 +9539,13 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                             ),
                                           ),
                                         );
-                                      }).toList(),
+                                      }).toList()
+                                        ..add(_botaoMaisCores(
+                                          context: context,
+                                          atual: selectedColorHex,
+                                          aoEscolher: (hex) => setModalState(
+                                              () => selectedColorHex = hex),
+                                        )),
                                     ),
                                   ),
                                 ] else ...[
@@ -11959,7 +11903,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           height: 40,
                           child: ListView(
                             scrollDirection: Axis.horizontal,
-                            children: kColorPaletteHex.take(72).map((hex) {
+                            children: kColorPaletteHex
+                                .take(24)
+                                .map<Widget>((hex) {
                               final isSelected = selectedColorHex
                                       .toUpperCase()
                                       .replaceFirst('#', '') ==
@@ -11993,7 +11939,13 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                   ),
                                 ),
                               );
-                            }).toList(),
+                            }).toList()
+                              ..add(_botaoMaisCores(
+                                context: context,
+                                atual: selectedColorHex,
+                                aoEscolher: (hex) =>
+                                    setModalState(() => selectedColorHex = hex),
+                              )),
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -12616,4 +12568,52 @@ class _CalendarDayNPartsPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// Botão no fim da fileira de cores: abre a paleta completa em abas.
+///
+/// A fileira horizontal mostra só as primeiras cores — rolar duzentas bolinhas
+/// de lado é pior que abrir uma grade organizada. Este botão dá acesso ao
+/// restante da paleta sem tirar a escolha rápida do caminho.
+Widget _botaoMaisCores({
+  required BuildContext context,
+  required String atual,
+  required void Function(String hex) aoEscolher,
+}) {
+  return Padding(
+    padding: const EdgeInsets.only(right: 8),
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () async {
+        final escolhida = await mostrarSeletorDeCores(
+          context,
+          titulo: 'Todas as cores',
+          selecionadaHex: atual,
+        );
+        if (escolhida != null) {
+          aoEscolher(escolhida.startsWith('#') ? escolhida : '#$escolhida');
+        }
+      },
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: const LinearGradient(
+            colors: [Color(0xFF6366F1), Color(0xFFEC4899)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF6366F1).withValues(alpha: 0.40),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: const Icon(Icons.palette_rounded, color: Colors.white, size: 20),
+      ),
+    ),
+  );
 }

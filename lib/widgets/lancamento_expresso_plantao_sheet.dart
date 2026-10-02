@@ -20,6 +20,7 @@ import '../utils/uppercase_text_input_formatter.dart';
 import 'commitment_description_picker.dart';
 import 'employer_vinculo_chips.dart';
 import 'brl_amount_text_field.dart';
+import 'color_palette_tabs_dialog.dart';
 import 'multi_date_month_picker_dialog.dart';
 import '../services/express_compromisso_agenda_sync.dart';
 import '../utils/agenda_reminder_module_scope.dart';
@@ -729,69 +730,13 @@ class _LancamentoExpressoBodyState extends State<_LancamentoExpressoBody> {
   }
 
   Future<void> _abrirSeletorCor() async {
-    final palette = kColorPaletteHex.take(72).toList();
-    final colors = palette.map((hex) {
-      var h = hex
-          .replaceFirst('#', '')
-          .replaceFirst(RegExp(r'^0x', caseSensitive: false), '');
-      if (h.length > 6) h = h.substring(h.length - 6);
-      return Color(int.parse('FF$h', radix: 16));
-    }).toList();
-    final idx = await showDialog<int>(
-      context: context,
-      builder: (dlgCtx) => AlertDialog(
-        titlePadding: const EdgeInsets.fromLTRB(18, 12, 8, 2),
-        title: Row(
-          children: [
-            const Expanded(
-              child: Text(
-                'Cor no calendário',
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-              ),
-            ),
-            TextButton.icon(
-              onPressed: () => Navigator.pop(dlgCtx),
-              icon: const Icon(Icons.close_rounded, size: 18),
-              label: const Text('Cancelar'),
-              style: TextButton.styleFrom(
-                  foregroundColor: AppColors.textSecondary),
-            ),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: List.generate(colors.length, (i) {
-              final c = colors[i];
-              return InkWell(
-                onTap: () => Navigator.pop(dlgCtx, i),
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: c,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                    boxShadow: [
-                      BoxShadow(
-                          color: c.withValues(alpha: 0.5),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2)),
-                    ],
-                  ),
-                ),
-              );
-            }),
-          ),
-        ),
-      ),
+    final escolhida = await mostrarSeletorDeCores(
+      context,
+      titulo: 'Cor no calendário',
+      selecionadaHex: _colorHexPicked,
     );
-    if (idx == null || !mounted) return;
-    if (idx >= 0 && idx < palette.length) {
-      setState(() => _colorHexPicked = _canonicalHex(palette[idx]));
-    }
+    if (escolhida == null || !mounted) return;
+    setState(() => _colorHexPicked = _canonicalHex(escolhida));
   }
 
   Future<Map<String, double>?> _valorMapForDay(

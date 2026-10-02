@@ -4,7 +4,6 @@ import 'package:flutter/material.dart' hide showDatePicker;
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
-import '../constants/color_palette.dart';
 import '../constants/field_text_limits.dart';
 import '../models/user_profile.dart';
 import '../services/agenda_scale_mirror_service.dart';
@@ -13,6 +12,7 @@ import '../utils/keyboard_form_scaffold.dart';
 import '../utils/premium_upgrade.dart';
 import '../widgets/agenda_form_footer_actions.dart';
 import '../widgets/agenda_form_validation_alert.dart';
+import '../widgets/color_palette_tabs_dialog.dart';
 import '../widgets/fast_text_field.dart';
 import '../widgets/multi_date_month_picker_dialog.dart';
 
@@ -298,70 +298,13 @@ class _AudienciaFormPageState extends State<AudienciaFormPage> {
   }
 
   Future<void> _abrirSeletorCor() async {
-    final palette = kColorPaletteHex.take(72).toList();
-    final idx = await showModalBottomSheet<int>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.55,
-        minChildSize: 0.35,
-        maxChildSize: 0.9,
-        builder: (_, scroll) => Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text('Cor no calendário',
-                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-              const SizedBox(height: 10),
-              Expanded(
-                child: GridView.builder(
-                  controller: scroll,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 8,
-                    mainAxisSpacing: 8,
-                    crossAxisSpacing: 8,
-                  ),
-                  itemCount: palette.length,
-                  itemBuilder: (_, i) {
-                    final c = palette[i];
-                    final selected = _normalizeHex(c) == _colorHex;
-                    return InkWell(
-                      onTap: () => Navigator.pop(ctx, i),
-                      borderRadius: BorderRadius.circular(10),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: _colorFromHex(c),
-                          borderRadius: BorderRadius.circular(10),
-                          border: selected
-                              ? Border.all(color: Colors.white, width: 3)
-                              : null,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.12),
-                              blurRadius: 4,
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    final escolhida = await mostrarSeletorDeCores(
+      context,
+      titulo: 'Cor no calendário',
+      selecionadaHex: _colorHex,
     );
-    if (idx == null || !mounted) return;
-    if (idx >= 0 && idx < palette.length) {
-      setState(() => _colorHex = _normalizeHex(palette[idx]));
-    }
+    if (escolhida == null || !mounted) return;
+    setState(() => _colorHex = _normalizeHex(escolhida));
   }
 
   Future<void> _pickOficio() async {

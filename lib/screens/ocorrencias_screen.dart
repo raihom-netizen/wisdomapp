@@ -30,6 +30,7 @@ import '../utils/firestore_user_doc_id.dart';
 import '../utils/produtividade_ocorrencias_pdf_partition.dart';
 import '../core/wisdom_media_upload.dart';
 import 'report_preview_screen.dart';
+import '../widgets/color_palette_tabs_dialog.dart';
 import '../widgets/date_time_field.dart';
 import '../widgets/produtividade_em_aberto_sheet.dart';
 
@@ -500,112 +501,10 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
 
   /// Igual ao mÃ³dulo AudiÃªncia: amostra da cor + Â«TrocarÂ» â†’ diÃ¡logo com grelha (72 tons + atalhos).
   Future<void> _abrirSeletorCorFolga() async {
-    final palette = kColorPaletteHex.take(72).toList();
-    final colors = palette.map(_colorFromHex6).toList();
-    final picked = await showDialog<String>(
-      context: context,
-      builder: (dlgCtx) => AlertDialog(
-        titlePadding: const EdgeInsets.fromLTRB(18, 12, 8, 2),
-        title: Row(
-          children: [
-            const Expanded(
-              child: Text(
-                'Cor no calendÃ¡rio (Escalas)',
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-              ),
-            ),
-            TextButton.icon(
-              onPressed: () => Navigator.pop(dlgCtx),
-              icon: const Icon(Icons.close_rounded, size: 18),
-              label: const Text('Fechar'),
-              style: TextButton.styleFrom(
-                  foregroundColor: AppColors.textSecondary),
-            ),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Atalhos (mesmos tons da Agenda)',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.grey.shade800,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  ActionChip(
-                    avatar: Icon(Icons.schedule_rounded,
-                        size: 18, color: _colorFromHex6(kCalendarPresetPlantaoOrdinarioHex)),
-                    label: const Text('PlantÃ£o'),
-                    onPressed: () =>
-                        Navigator.pop(dlgCtx, kCalendarPresetPlantaoOrdinarioHex),
-                  ),
-                  ActionChip(
-                    avatar: Icon(Icons.gavel_rounded,
-                        size: 18, color: _colorFromHex6(kCalendarPresetAudienciaHex)),
-                    label: const Text('Dourado'),
-                    onPressed: () =>
-                        Navigator.pop(dlgCtx, kCalendarPresetAudienciaHex),
-                  ),
-                  ActionChip(
-                    avatar: Icon(Icons.event_rounded,
-                        size: 18, color: _colorFromHex6(kCalendarPresetCompromissoHex)),
-                    label: const Text('Compromisso'),
-                    onPressed: () =>
-                        Navigator.pop(dlgCtx, kCalendarPresetCompromissoHex),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              Text(
-                'Todas as cores',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.grey.shade800,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: List.generate(colors.length, (i) {
-                  final c = colors[i];
-                  final hexStr = palette[i];
-                  return InkWell(
-                    onTap: () => Navigator.pop(dlgCtx, hexStr),
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: c,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                        boxShadow: [
-                          BoxShadow(
-                            color: c.withValues(alpha: 0.5),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }),
-              ),
-            ],
-          ),
-        ),
-      ),
+    final picked = await mostrarSeletorDeCores(
+      context,
+      titulo: 'Cor da folga no calendário',
+      selecionadaHex: _folgaCalendarColorHex,
     );
     if (picked == null || !mounted) return;
     setState(() => _folgaCalendarColorHex = _normalizeHexFolga(picked));
