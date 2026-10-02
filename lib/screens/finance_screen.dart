@@ -3211,12 +3211,13 @@ class _FinanceScreenState extends State<FinanceScreen>
   }
 
   /// Confirma pagamento/recebimento: data, banco/conta (opcional trocar) e comprovante.
-  Future<void> _confirmarPagamento(BuildContext context, String docId) async {
+  /// Retorna true se confirmou de fato (a folha de pendentes tira o item na hora).
+  Future<bool> _confirmarPagamento(BuildContext context, String docId) async {
     if (!widget.profile.hasActiveLicense) {
       mostrarAvisoSeLicencaInativa(context, widget.profile);
-      return;
+      return false;
     }
-    if (docId.isEmpty) return;
+    if (docId.isEmpty) return false;
     // Dados já na tela: a folha de confirmar abre na hora (antes esperava uma
     // leitura no servidor). Fora da lista, lê como antes.
     final preData = _displayedTxData(docId) ??
@@ -3242,7 +3243,7 @@ class _FinanceScreenState extends State<FinanceScreen>
     final isCardFatura = !isIncome &&
         cardAccount != null &&
         (preData['status'] ?? 'paid').toString() == 'pending';
-    if (!context.mounted) return;
+    if (!context.mounted) return false;
 
     final FinanceConfirmPaymentSheetResult? result;
     if (isCardFatura) {
@@ -3270,7 +3271,7 @@ class _FinanceScreenState extends State<FinanceScreen>
         descriptionPreview: (preData['description'] ?? '').toString(),
       );
     }
-    if (result == null || !mounted) return;
+    if (result == null || !mounted) return false;
     final paymentResult = result;
 
     // Saldos mudam NA HORA (antes do servidor responder): mesmo patch que a
@@ -3304,7 +3305,7 @@ class _FinanceScreenState extends State<FinanceScreen>
         result: paymentResult,
         creditCardFaturaPayment: isCardFatura,
       );
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _optimisticPaidIds.remove(docId);
         if (!openingHandled) {
@@ -3324,6 +3325,7 @@ class _FinanceScreenState extends State<FinanceScreen>
             isIncome ? 'Recebimento confirmado.' : 'Pagamento confirmado.'),
         behavior: SnackBarBehavior.floating,
       ));
+      return true;
     } catch (e) {
       if (mounted) {
         setState(() => _optimisticPaidIds.remove(docId));
@@ -3334,10 +3336,17 @@ class _FinanceScreenState extends State<FinanceScreen>
         ));
       }
     }
+    return false;
   }
 
-  Future<void> _editTx(BuildContext context, String docId,
-      Map<String, dynamic> current, String type) async {
+  Future<void> _editTx(
+    BuildContext context,
+    String docId,
+    Map<String, dynamic> current,
+    String type, {
+    void Function(String id)? onPendingRemoved,
+    void Function(String id, Map<String, dynamic> patch)? onPendingPatched,
+  }) async {
     if (!widget.profile.hasActiveLicense) {
       mostrarAvisoSeLicencaInativa(context, widget.profile);
       return;
@@ -3411,15 +3420,39 @@ class _FinanceScreenState extends State<FinanceScreen>
           transactionEffectiveDate: effectiveDate,
           openingHandled: openingHandled,
         ));
+        // Folha de pendentes aberta: pago sai da lista, pendente atualiza.
+        final st = (patch['status'] ?? '').toString();
+        if (st != 'pending') {
+          onPendingRemoved?.call(id);
+        } else {
+          onPendingPatched?.call(id, patch);
+        }
+      },
+      onDeleted: (id, effectiveDate) {
+        if (!mounted) return;
+        setState(() {
+          // Tira o valor do lançamento dos saldos na hora (mesma regra).
+          _applyOptimisticBalanceChanges({
+            id: (before: _displayedTxData(id) ?? current, after: null),
+          });
+          _mainPeriodDocs.removeWhere((d) => d.id == id);
+        });
+        unawaited(_applyFinanceMutationSync(
+          removedDocIds: [id],
+          transactionEffectiveDate: effectiveDate,
+          openingHandled: true,
+        ));
+        onPendingRemoved?.call(id);
       },
     );
     if (!saved) return;
   }
 
-  Future<void> _deleteTx(BuildContext context, String docId) async {
+  /// Retorna true se excluiu de fato (para atualizar a folha de pendentes na hora).
+  Future<bool> _deleteTx(BuildContext context, String docId) async {
     if (!widget.profile.hasActiveLicense) {
       mostrarAvisoSeLicencaInativa(context, widget.profile);
-      return;
+      return false;
     }
     final confirm = await showDialog<bool>(
       context: context,
@@ -3438,7 +3471,7 @@ class _FinanceScreenState extends State<FinanceScreen>
         ],
       ),
     );
-    if (confirm != true) return;
+    if (confirm != true) return false;
     // Dados já na tela (sem ida ao servidor); só lê se não estiver visível.
     var data = _displayedTxData(docId);
     if (data == null) {
@@ -3452,7 +3485,7 @@ class _FinanceScreenState extends State<FinanceScreen>
     // Dados de cada perna excluída (transferência = as duas) para tirar dos
     // saldos na hora (port Controle Total, 30/09/2026).
     final removidos = <String, Map<String, dynamic>>{docId: data};
-    if (!context.mounted) return;
+    if (!context.mounted) return false;
     final messenger = ScaffoldMessenger.maybeOf(context);
     void onLateError(Object _) {
       // Servidor recusou: o Firestore já desfez localmente; relê o período.
@@ -3510,7 +3543,7 @@ class _FinanceScreenState extends State<FinanceScreen>
           backgroundColor: AppColors.error,
         ));
       }
-      return;
+      return false;
     }
     if (mounted) {
       final effectiveDate = FinanceLineOpening.effectiveDateTimeFromMap(data) ??
@@ -3542,6 +3575,7 @@ class _FinanceScreenState extends State<FinanceScreen>
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Lançamento excluído.')));
     }
+    return true;
   }
 
   /// Exclui vários lançamentos (confirma uma vez, depois exclui em lote).
@@ -5102,11 +5136,15 @@ class _FinanceScreenState extends State<FinanceScreen>
           buildItem: (c, e,
                   {selectionMode = false,
                   isSelected = false,
-                  onToggleSelect}) =>
+                  onToggleSelect,
+                  required removeFromSheet,
+                  required patchInSheet}) =>
               _buildReceitaPendenteListItem(c, e,
                   selectionMode: selectionMode,
                   isSelected: isSelected,
-                  onToggleSelect: onToggleSelect),
+                  onToggleSelect: onToggleSelect,
+                  onPendingRemoved: removeFromSheet,
+                  onPendingPatched: patchInSheet),
           batchConfirmShortLabel: 'Confirmar recebimento',
           onConfirmBatch: (sheetCtx, ids) async {
             await _confirmarPagamentoEmLote(
@@ -5134,6 +5172,8 @@ class _FinanceScreenState extends State<FinanceScreen>
     bool selectionMode = false,
     bool isSelected = false,
     VoidCallback? onToggleSelect,
+    void Function(String id)? onPendingRemoved,
+    void Function(String id, Map<String, dynamic> patch)? onPendingPatched,
   }) {
     final amount = (e['amount'] ?? 0).toDouble().abs();
     final cat = (e['category'] ?? '').toString().trim();
@@ -5212,12 +5252,16 @@ class _FinanceScreenState extends State<FinanceScreen>
                 tooltip: 'Ações do lançamento',
                 onSelected: (v) {
                   if (v == 'edit') {
-                    _editTx(context, docId, e, 'income');
+                    _editTx(context, docId, e, 'income',
+                        onPendingRemoved: onPendingRemoved,
+                        onPendingPatched: onPendingPatched);
                   } else if (v == 'view' && hasReceiptView)
                     mostrarComprovanteReceipt(context, receipt);
                   else if (v == 'attach')
                     _attachReceipt(context, docId);
-                  else if (v == 'delete') _deleteTx(context, docId);
+                  else if (v == 'delete') _deleteTx(context, docId).then((ok) {
+                      if (ok) onPendingRemoved?.call(docId);
+                    });
                 },
                 itemBuilder: (_) => [
                   const PopupMenuItem(
@@ -5274,7 +5318,10 @@ class _FinanceScreenState extends State<FinanceScreen>
               runSpacing: 6,
               children: [
                 FilledButton.icon(
-                  onPressed: () => _confirmarPagamento(context, docId),
+                  onPressed: () async {
+                    final ok = await _confirmarPagamento(context, docId);
+                    if (ok) onPendingRemoved?.call(docId);
+                  },
                   icon: const Icon(Icons.check_circle_rounded, size: 18),
                   label: const Text('Confirmar recebimento',
                       style:
@@ -5290,7 +5337,10 @@ class _FinanceScreenState extends State<FinanceScreen>
                 ),
                 const SizedBox(width: 8),
                 OutlinedButton.icon(
-                  onPressed: () => _deleteTx(context, docId),
+                  onPressed: () async {
+                    final ok = await _deleteTx(context, docId);
+                    if (ok) onPendingRemoved?.call(docId);
+                  },
                   icon: const Icon(Icons.delete_outline_rounded, size: 18),
                   label: const Text('Excluir',
                       style:
@@ -5360,11 +5410,15 @@ class _FinanceScreenState extends State<FinanceScreen>
           buildItem: (c, e,
                   {selectionMode = false,
                   isSelected = false,
-                  onToggleSelect}) =>
+                  onToggleSelect,
+                  required removeFromSheet,
+                  required patchInSheet}) =>
               _buildDespesaPendenteListItem(c, e,
                   selectionMode: selectionMode,
                   isSelected: isSelected,
-                  onToggleSelect: onToggleSelect),
+                  onToggleSelect: onToggleSelect,
+                  onPendingRemoved: removeFromSheet,
+                  onPendingPatched: patchInSheet),
           batchConfirmShortLabel: 'Confirmar pagamento',
           onConfirmBatch: (sheetCtx, ids) async {
             await _confirmarPagamentoEmLote(
@@ -5392,6 +5446,8 @@ class _FinanceScreenState extends State<FinanceScreen>
     bool selectionMode = false,
     bool isSelected = false,
     VoidCallback? onToggleSelect,
+    void Function(String id)? onPendingRemoved,
+    void Function(String id, Map<String, dynamic> patch)? onPendingPatched,
   }) {
     final amount = (e['amount'] ?? 0).toDouble().abs();
     final cat = (e['category'] ?? '').toString().trim();
@@ -5470,12 +5526,16 @@ class _FinanceScreenState extends State<FinanceScreen>
                 tooltip: 'Ações do lançamento',
                 onSelected: (v) {
                   if (v == 'edit') {
-                    _editTx(context, docId, e, 'expense');
+                    _editTx(context, docId, e, 'expense',
+                        onPendingRemoved: onPendingRemoved,
+                        onPendingPatched: onPendingPatched);
                   } else if (v == 'view' && hasReceiptView)
                     mostrarComprovanteReceipt(context, receipt);
                   else if (v == 'attach')
                     _attachReceipt(context, docId);
-                  else if (v == 'delete') _deleteTx(context, docId);
+                  else if (v == 'delete') _deleteTx(context, docId).then((ok) {
+                      if (ok) onPendingRemoved?.call(docId);
+                    });
                 },
                 itemBuilder: (_) => [
                   const PopupMenuItem(
@@ -5532,7 +5592,10 @@ class _FinanceScreenState extends State<FinanceScreen>
               runSpacing: 6,
               children: [
                 FilledButton.icon(
-                  onPressed: () => _confirmarPagamento(context, docId),
+                  onPressed: () async {
+                    final ok = await _confirmarPagamento(context, docId);
+                    if (ok) onPendingRemoved?.call(docId);
+                  },
                   icon: const Icon(Icons.check_circle_rounded, size: 18),
                   label: const Text('Confirmar pagamento',
                       style:
@@ -5547,7 +5610,10 @@ class _FinanceScreenState extends State<FinanceScreen>
                       foregroundColor: AppColors.success),
                 ),
                 OutlinedButton.icon(
-                  onPressed: () => _deleteTx(context, docId),
+                  onPressed: () async {
+                    final ok = await _deleteTx(context, docId);
+                    if (ok) onPendingRemoved?.call(docId);
+                  },
                   icon: const Icon(Icons.delete_outline_rounded, size: 18),
                   label: const Text('Excluir',
                       style:
@@ -8478,6 +8544,8 @@ class _PendingListSheetContent extends StatefulWidget {
     bool selectionMode,
     bool isSelected,
     VoidCallback? onToggleSelect,
+    required void Function(String id) removeFromSheet,
+    required void Function(String id, Map<String, dynamic> patch) patchInSheet,
   }) buildItem;
   final Future<void> Function(List<String> ids) onDeleteBatch;
 
@@ -8513,9 +8581,16 @@ class _PendingListSheetContentState extends State<_PendingListSheetContent> {
   bool _deletingBatch = false;
   bool _confirmingBatch = false;
 
+  /// Cópia da lista: pagar/excluir/editar um item atualiza a folha na hora
+  /// (port Controle Total) — antes ela só mudava ao fechar e abrir de novo.
+  late List<Map<String, dynamic>> _items;
+
   @override
   void initState() {
     super.initState();
+    _items = _items
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList(growable: true);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (await shouldShowSheetSelectionHint() && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -8527,7 +8602,32 @@ class _PendingListSheetContentState extends State<_PendingListSheetContent> {
     });
   }
 
-  double get _totalValue => widget.list.fold<double>(
+  void _removeFromSheet(String id) {
+    if (!mounted || id.isEmpty) return;
+    setState(() {
+      _items.removeWhere((e) => (e['id'] ?? '').toString() == id);
+      _selectedIds.remove(id);
+    });
+    if (_items.isEmpty && widget.header == null && mounted) {
+      Navigator.of(context).maybePop();
+    }
+  }
+
+  void _patchInSheet(String id, Map<String, dynamic> patch) {
+    if (!mounted || id.isEmpty) return;
+    final st = (patch['status'] ?? '').toString();
+    if (st.isNotEmpty && st != 'pending') {
+      _removeFromSheet(id);
+      return;
+    }
+    setState(() {
+      final i = _items.indexWhere((e) => (e['id'] ?? '').toString() == id);
+      if (i < 0) return;
+      _items[i] = {..._items[i], ...patch, 'id': id};
+    });
+  }
+
+  double get _totalValue => _items.fold<double>(
       0, (s, e) => s + ((e['amount'] ?? 0) as num).toDouble().abs());
 
   @override
@@ -8585,7 +8685,7 @@ class _PendingListSheetContentState extends State<_PendingListSheetContent> {
                                         color: AppColors.textPrimary),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis),
-                                if (widget.list.isNotEmpty)
+                                if (_items.isNotEmpty)
                                   Text(
                                       'Total: ${CurrencyFormats.formatBRL(_totalValue)}',
                                       style: TextStyle(
@@ -8623,7 +8723,7 @@ class _PendingListSheetContentState extends State<_PendingListSheetContent> {
                                     color: AppColors.textPrimary),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis),
-                            if (widget.list.isNotEmpty)
+                            if (_items.isNotEmpty)
                               Text(
                                   'Total: ${CurrencyFormats.formatBRL(_totalValue)}',
                                   style: TextStyle(
@@ -8637,7 +8737,7 @@ class _PendingListSheetContentState extends State<_PendingListSheetContent> {
                     ),
             ),
             Expanded(
-              child: (widget.list.isEmpty && widget.header == null)
+              child: (_items.isEmpty && widget.header == null)
                   ? Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
@@ -8660,14 +8760,14 @@ class _PendingListSheetContentState extends State<_PendingListSheetContent> {
                       // O painel entra como primeiro item: rola junto com a
                       // lista, sem roubar altura fixa da folha.
                       itemCount: (widget.header == null ? 0 : 1) +
-                          (widget.list.isEmpty ? 1 : widget.list.length),
+                          (_items.isEmpty ? 1 : _items.length),
                       itemBuilder: (_, indice) {
                         var i = indice;
                         if (widget.header != null) {
                           if (i == 0) return widget.header!;
                           i -= 1;
                         }
-                        if (widget.list.isEmpty) {
+                        if (_items.isEmpty) {
                           return Padding(
                             padding: const EdgeInsets.symmetric(vertical: 24),
                             child: Center(
@@ -8678,7 +8778,7 @@ class _PendingListSheetContentState extends State<_PendingListSheetContent> {
                             ),
                           );
                         }
-                        final e = widget.list[i];
+                        final e = _items[i];
                         final id = (e['id'] ?? '').toString();
                         return widget.buildItem(
                           context,
@@ -8692,6 +8792,8 @@ class _PendingListSheetContentState extends State<_PendingListSheetContent> {
                               _selectedIds.add(id);
                             }
                           }),
+                          removeFromSheet: _removeFromSheet,
+                          patchInSheet: _patchInSheet,
                         );
                       },
                     ),
@@ -8717,7 +8819,7 @@ class _PendingListSheetContentState extends State<_PendingListSheetContent> {
         ),
       );
     }
-    final idList = widget.list
+    final idList = _items
         .map((e) => (e['id'] ?? '').toString())
         .where((s) => s.isNotEmpty)
         .toList();
@@ -8732,7 +8834,7 @@ class _PendingListSheetContentState extends State<_PendingListSheetContent> {
             tapTargetSize: MaterialTapTargetSize.padded),
         child: const Text(AppStrings.cancel),
       ),
-      if (widget.list.isNotEmpty)
+      if (_items.isNotEmpty)
         TextButton(
           onPressed: () => setState(() {
             _selectedIds
