@@ -2926,7 +2926,8 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: () {},
+            // Tocar no cartão abre a edição (antes o toque não fazia nada).
+            onTap: () => _abrirEditarOcorrencia(context, id, e),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 14, 10, 14),
               child: LayoutBuilder(

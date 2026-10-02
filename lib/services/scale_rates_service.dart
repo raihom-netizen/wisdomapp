@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../models/controle_total_config.dart';
 import '../models/scale_rates.dart';
 import '../utils/firestore_user_doc_id.dart';
@@ -61,14 +62,22 @@ class ScaleRatesService {
   Future<DocumentSnapshot<Map<String, dynamic>>> _getDocCacheFirst(
     DocumentReference<Map<String, dynamic>> ref,
   ) async {
+    // Web: sem cache em disco — vai ao servidor (com prazo) e só cai no cache
+    // de memória se a rede falhar.
+    if (!kIsWeb) {
+      try {
+        final cached = await ref
+            .get(const GetOptions(source: Source.cache))
+            .timeout(const Duration(seconds: 4));
+        if (cached.exists) return cached;
+      } catch (_) {}
+    }
     try {
-      final cached = await ref.get(const GetOptions(source: Source.cache));
-      if (cached.exists) return cached;
-    } catch (_) {}
-    try {
-      return await ref.get();
+      return await ref.get().timeout(const Duration(seconds: 12));
     } catch (_) {
-      return await ref.get(const GetOptions(source: Source.cache));
+      return await ref
+          .get(const GetOptions(source: Source.cache))
+          .timeout(const Duration(seconds: 4));
     }
   }
 
