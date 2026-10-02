@@ -22,6 +22,11 @@ const agendaMsg = require("./agenda_message_templates");
 const notifTpl = require("./notification_templates_config");
 const agendaDigest = require("./agenda_daily_digest");
 const agendaDelivery = require("./agenda_delivery_prefs");
+// Despertador (padrão Controle Total): soneca/som por módulo, «Despertar» por
+// item e «⏰ Despertar no horário».
+const agendaSoneca = require("./agenda_soneca");
+const agendaDespertador = require("./agenda_despertador");
+const agendaDespertarItem = require("./agenda_despertar_item");
 const agendaPeriodSnapshot = require("./agendaPeriodSnapshot");
 const googleCalendarOAuth = require("./googleCalendarOAuth");
 
@@ -127,12 +132,82 @@ function agendaReminderMulticastOptions(link, channelKind, alert, templatesOpt) 
           sound: "default",
           "mutable-content": 1,
           "thread-id": theme.threadId,
+          // Aviso com hora marcada: "time-sensitive" aparece na tela mesmo
+          // com o iPhone no silencioso/Foco (exige o entitlement no app).
+          "interruption-level": "time-sensitive",
+          "relevance-score": 1.0,
           ...(apsAlert ? { alert: apsAlert } : {}),
         },
       },
       fcmOptions: { ...(base.apns?.fcmOptions || {}), image: richImage },
     },
   };
+}
+
+/**
+ * Som escolhido e soneca (despertador) por cima de um push de agenda já
+ * montado — mesma regra do Controle Total.
+ * - Som: canal Android `ct_som_<id>` (arquivo em res/raw do app) e
+ *   `aps.sound = <id>.wav` (o app copia o tom para Library/Sounds).
+ *   Aparelho com app antigo cai no som padrão — nunca deixa de mostrar.
+ * - «Só vibrar» / «silencioso»: canais `ct_vibrar` / `ct_silencio`; no iPhone
+ *   push sem som também não vibra (regra da Apple).
+ * - Soneca: Android vira data-only (sem `notification` na raiz nem no
+ *   android) para o APP desenhar a notificação com Adiar/Encerrar; iOS ganha
+ *   a categoria CT_SONECA (botões nativos); Web recebe título/corpo no webpush.
+ */
+function aplicarSomESonecaNoPush(message, { destinoSom, soneca, modo }) {
+  const somAndroid = (destinoSom && destinoSom.android) || "";
+  const somIos = (destinoSom && destinoSom.ios) || "";
+  const msg = message;
+  if (modo === "vibrar" || modo === "silencio") {
+    if (msg.android && msg.android.notification) {
+      msg.android.notification = {
+        ...msg.android.notification,
+        channelId: modo === "vibrar" ? "ct_vibrar" : "ct_silencio",
+        defaultSound: false,
+        defaultVibrateTimings: modo === "vibrar",
+      };
+    }
+    if (msg.apns && msg.apns.payload && msg.apns.payload.aps) {
+      delete msg.apns.payload.aps.sound;
+    }
+  } else {
+    if (somAndroid && msg.android && msg.android.notification) {
+      msg.android.notification = {
+        ...msg.android.notification,
+        channelId: somAndroid,
+        // `sound` só vale para Android < 8 e só com recurso do catálogo.
+        ...(destinoSom.catalogo ? { sound: destinoSom.catalogo } : {}),
+        defaultSound: false,
+      };
+    }
+    if (somIos && msg.apns && msg.apns.payload && msg.apns.payload.aps) {
+      msg.apns.payload.aps.sound = somIos;
+    }
+  }
+  if (soneca) {
+    if (msg.android) {
+      const { notification, ...resto } = msg.android;
+      msg.android = resto;
+    }
+    if (msg.notification) {
+      const n = msg.notification;
+      delete msg.notification;
+      msg.webpush = {
+        ...(msg.webpush || {}),
+        notification: {
+          ...((msg.webpush && msg.webpush.notification) || {}),
+          title: n.title,
+          body: n.body,
+        },
+      };
+    }
+    if (msg.apns && msg.apns.payload && msg.apns.payload.aps) {
+      msg.apns.payload.aps.category = "CT_SONECA";
+    }
+  }
+  return msg;
 }
 
 /** Push genérico (notificações do painel / broadcast): prioridade alta + canal Android. */
@@ -4799,6 +4874,54 @@ exports.ctSendMaintenancePromoTestEmail = onCall(async (req) => {
  */
 
 /**
+ * Botões da notificação do despertador: «Encerrar», «Adiar 3 min», «Adiar 5 min».
+ * Chamado pelo app em segundo plano (Android) e pela parte nativa do iOS, sem
+ * login — a autorização é o token HMAC do par uid + aviso que veio no push.
+ * Body (JSON ou form) ou query: { u, a, t, acao: "encerrar" | "adiar", min: 3|5 }.
+ * Mesmo endpoint/nome do Controle Total (o app chama a `sonecaUrl` do push).
+ */
+exports.ctSonecaAcao = onRequest(
+  { region: "us-central1", cors: true, memory: "256MiB", timeoutSeconds: 30 },
+  async (req, res) => {
+    try {
+      const p = { ...(req.query || {}), ...(typeof req.body === "object" && req.body ? req.body : {}) };
+      const uid = (p.u || "").toString();
+      const avisoId = (p.a || "").toString();
+      const acao = (p.acao || "").toString();
+      const db = admin.firestore();
+      if (!(await agendaSoneca.tokenValido(db, uid, avisoId, (p.t || "").toString()))) {
+        res.status(403).json({ ok: false, motivo: "token" });
+        return;
+      }
+      if (acao === "encerrar" || acao === "parar") {
+        const n = await agendaSoneca.encerrarSerie(db, uid, avisoId, "soneca_encerrada");
+        // «Despertar no horário»: Encerrar conclui o compromisso (o gatilho do
+        // reminder então limpa a fila — nada mais toca).
+        const concluido = await agendaSoneca
+          .concluirAlarmeAoEncerrar(db, uid, avisoId)
+          .catch((e) => {
+            console.warn("[ctSonecaAcao] concluir:", e?.message || e);
+            return false;
+          });
+        res.json({ ok: true, canceladas: n, concluido });
+        return;
+      }
+      if (acao === "adiar") {
+        const min = Number(p.min) === 3 ? 3 : 5;
+        const config = await loadAgendaNotificationConfig(db, uid);
+        const r = await agendaSoneca.adiarSerie(db, uid, avisoId, min, config);
+        res.json(r);
+        return;
+      }
+      res.status(400).json({ ok: false, motivo: "acao" });
+    } catch (e) {
+      console.warn("[ctSonecaAcao]", e?.message || e);
+      res.status(500).json({ ok: false });
+    }
+  },
+);
+
+/**
  * verificarAgendaEDisparar (Scheduled Function): roda a cada 1 minuto.
  * Processa a fila users/{uid}/agendaAlerts (pending com notifyAt <= agora) e dispara push/e-mail.
  * Funciona com app fechado — não depende do cliente aberto.
@@ -5203,18 +5326,51 @@ async function dispatchAgendaReminderMessages(db, uid, userData, tokens, toSend,
     let alertEmailEnabled = true;
     let alertPushAlready = false;
     let alertEmailAlready = false;
+    let alertDataAtual = null;
     if (msg.agendaAlertRef) {
       const alertSnap = await msg.agendaAlertRef.get();
       const alertData = alertSnap.data() || {};
+      alertDataAtual = alertData;
       alertPushEnabled = alertData.pushEnabled !== false;
       alertEmailEnabled = alertData.emailEnabled !== false;
       alertPushAlready = alertData.pushDelivered === true;
       alertEmailAlready = alertData.emailDelivered === true;
     }
+    // Repetição da soneca é só push: o e-mail já recebeu o aviso original.
+    const ehRepeticaoSoneca = !!(alertDataAtual && alertDataAtual.snoozeOf);
+    // «Despertar no horário»: o aviso é o próprio alarme — «⏰ Agora: X».
+    const ehAlarmeDoItem = agendaSoneca.ehAlarmeDoItem(alertDataAtual) && !!msg.reminderData;
+    // «Despertar» POR ITEM (agenda_despertar_item.js): o item decide SE
+    // desperta (ausente/desligado = aviso normal); o módulo só define COMO
+    // toca (vezes/intervalo/som). Vale para Contas pendentes também.
+    const despertarItem =
+      msg.despertarItem !== undefined
+        ? msg.despertarItem
+        : agendaDespertarItem.despertarEfetivo(
+          msg.reminderData || msg.scaleData || msg.transactionData || {},
+          { sourceType },
+        );
+    // O alarme «no horário» mantém as repetições dele (3 × 3 min ou as do módulo).
+    const configMsg = ehAlarmeDoItem
+      ? config
+      : agendaDespertarItem.configComDespertar(config, channelKind, despertarItem);
+    if (ehAlarmeDoItem) {
+      const eventoAlarme = msg.date instanceof Date ? msg.date : new Date(msg.date);
+      const alarme = agendaDespertador.textoDoAlarme(msg.reminderData, eventoAlarme);
+      enriched.title = alarme.title;
+      enriched.body = alarme.body;
+    }
+    if (ehRepeticaoSoneca) {
+      alertEmailEnabled = false;
+      const n = Number(alertDataAtual.snoozeIndex) || 1;
+      const t = Number(alertDataAtual.snoozeTotal) || n;
+      enriched.title = `🔁 ${enriched.title}`;
+      enriched.body = `${enriched.body}\nRepetição ${n} de ${t}`;
+    }
     const wantPush =
       userData.pushEnabled !== false &&
       alertPushEnabled &&
-      agendaDelivery.allowsPushForChannel(config, channelKind);
+      (ehAlarmeDoItem || agendaDelivery.allowsPushForChannel(config, channelKind));
     const wantEmail =
       alertEmailEnabled &&
       hasEmail &&
@@ -5226,19 +5382,42 @@ async function dispatchAgendaReminderMessages(db, uid, userData, tokens, toSend,
     let emailDelivered = false;
     if (allowPush && tokens.length > 0) {
       try {
-        const soundId = (enriched.soundId || msg.soundId || "").toString();
-        const resp = await admin.messaging().sendEachForMulticast({
+        const srcData = msg.reminderData || msg.scaleData || msg.transactionData || {};
+        // Alarme por item: toque longo de despertador (o do item, o longo do
+        // módulo ou o padrão «Despertar crescente»). Despertar do item
+        // ligado: toque escolhido nele (ou só vibrar).
+        const somAlarme = ehAlarmeDoItem
+          ? agendaDespertador.somDoAlarme(config, srcData)
+          : agendaDespertarItem.somDoDespertar(config, channelKind, despertarItem);
+        const soundId = (
+          (somAlarme && somAlarme.soundId) ||
+          enriched.soundId ||
+          msg.soundId ||
+          agendaSoneca.somPara(config, channelKind, srcData) ||
+          ""
+        ).toString();
+        const modoAviso = somAlarme ? somAlarme.modo : agendaSoneca.modoPara(config, channelKind, srcData);
+        const destinoSom = agendaSoneca.destinoDoSom(config, channelKind, soundId);
+        const dadosSoneca = msg.agendaAlertRef
+          ? await agendaSoneca.dadosDoPush(db, uid, alertDataAtual || {}, msg.agendaAlertRef.id, configMsg)
+          : {};
+        const pushMessage = {
           tokens,
           notification: { title: enriched.title, body: enriched.body },
           data: {
             url: link,
             type: "agenda_reminder",
             channelKind,
-            soundId,
+            // Só id do catálogo (o app toca/escolhe o canal por ele); toque
+            // próprio vai pelo `canalAndroid`.
+            soundId: destinoSom.catalogo || (soundId === "proprio" ? "" : soundId),
+            ...(destinoSom.android && !destinoSom.catalogo ? { canalAndroid: destinoSom.android } : {}),
             title: enriched.title,
             body: enriched.body,
             iconUrl: APP_ICON_URL,
             ...(enriched.subtitle ? { subtitle: enriched.subtitle } : {}),
+            ...dadosSoneca,
+            modoAviso,
           },
           ...agendaReminderMulticastOptions(
             link,
@@ -5250,7 +5429,13 @@ async function dispatchAgendaReminderMessages(db, uid, userData, tokens, toSend,
             },
             templates,
           ),
+        };
+        aplicarSomESonecaNoPush(pushMessage, {
+          destinoSom,
+          soneca: dadosSoneca.soneca === "1",
+          modo: modoAviso,
         });
+        const resp = await admin.messaging().sendEachForMulticast(pushMessage);
         pushSent += resp.successCount;
         if (resp.successCount > 0) pushDelivered = true;
         resp.responses.forEach((r, i) => {
@@ -5378,6 +5563,16 @@ async function dispatchAgendaReminderMessages(db, uid, userData, tokens, toSend,
         alertUpdates.sentAt = admin.firestore.FieldValue.serverTimestamp();
       }
       await msg.agendaAlertRef.update(alertUpdates);
+      // Soneca: o 1º push saiu → agenda as repetições (só no aviso original).
+      if (pushDelivered && !ehRepeticaoSoneca && alertDataAtual) {
+        try {
+          await agendaSoneca.criarRepeticoesAposEnvio(
+            db, uid, msg.agendaAlertRef, alertDataAtual, configMsg, nowDispatch,
+          );
+        } catch (e) {
+          console.warn(`[soneca] uid=${uid} repetições:`, e?.message || e);
+        }
+      }
     }
   }
 
@@ -5455,6 +5650,12 @@ async function loadAgendaNotificationConfig(db, uid) {
     deliveryAudiencia: delivery.deliveryAudiencia,
     deliveryFinanceiro: delivery.deliveryFinanceiro,
     globalLeads,
+    // Despertador (agenda_soneca.js): vezes/intervalo por módulo, toque e
+    // modo (som/vibrar) por categoria e o toque próprio (MP3) do aparelho.
+    soneca: agendaSoneca.parseSonecaConfig(notifData),
+    sons: agendaSoneca.parseSons(notifData),
+    modos: agendaSoneca.parseModos(notifData),
+    somProprio: agendaSoneca.parseSomProprio(notifData),
   };
 }
 
@@ -5825,20 +6026,40 @@ function planReminderAgendaAlertSlots(docSnap, config, now) {
 
   const type = (d.type || "compromisso").toString().toLowerCase();
   const channelKind = type === "audiencia" ? "audiencia" : "compromisso";
+  // «⏰ Despertar no horário» (só compromisso): o item pediu alarme, então o
+  // aviso no horário sai mesmo com os avisos de compromisso desligados.
+  const alarmeDoItem = type !== "audiencia" && agendaDespertador.ativo(d);
   if (type === "audiencia" && !config.notifAudiencias) return [];
-  if (type !== "audiencia" && !config.notifCompromissos) return [];
+  if (type !== "audiencia" && !config.notifCompromissos && !alarmeDoItem) return [];
   const eventTitle = (d.title || (type === "audiencia" ? "Audiência" : "Compromisso")).toString().trim();
   const isAud = type === "audiencia";
-  const leads = reminderLeadsForDoc(d, config.globalLeads);
+  const leads = alarmeDoItem
+    ? agendaDespertador.leadsDoItem(d, config.notifCompromissos ? config.globalLeads : [])
+    : reminderLeadsForDoc(d, config.globalLeads);
   const slots = [];
 
   for (const leadMin of leads) {
-    if (agendaDelivery.isAgendaLeadDeliveryComplete(d, leadMin, config, channelKind)) continue;
-    const notifyAt = agendaNotifyAtForLead(reminderAt, leadMin, now);
-    if (!notifyAt || !isAgendaLeadSlotSchedulable(reminderAt, notifyAt, now)) continue;
-    const leadLabel = agendaMsg.leadTitlePrefix(leadMin);
+    const noHorario = alarmeDoItem && leadMin === agendaDespertador.LEAD_NO_HORARIO;
+    if (noHorario) {
+      // Lead 0: toca NO horário. Já tocou (notificadoLeads tem 0) ou o horário
+      // passou além da folga → não entra.
+      const jaTocou = Array.isArray(d.notificadoLeads) && d.notificadoLeads.includes(0);
+      if (jaTocou || !agendaDespertador.slotNoHorarioAgendavel(reminderAt, now)) continue;
+    } else if (agendaDelivery.isAgendaLeadDeliveryComplete(d, leadMin, config, channelKind)) {
+      continue;
+    }
+    const notifyAt = noHorario ? reminderAt : agendaNotifyAtForLead(reminderAt, leadMin, now);
+    if (!noHorario && (!notifyAt || !isAgendaLeadSlotSchedulable(reminderAt, notifyAt, now))) continue;
     const built = agendaMsg.buildAlertSlotForReminder(d, reminderAt, timeStr, leadMin, now);
+    if (noHorario) {
+      const alarme = agendaDespertador.textoDoAlarme(d, reminderAt);
+      built.title = alarme.title;
+      built.body = alarme.body;
+    }
     slots.push({
+      ...(noHorario
+        ? { despertador: true, despertadorAte: agendaDespertador.limiteDoAlarme(reminderAt, config) }
+        : {}),
       alertId: agendaAlertDocId("reminder", docId, leadMin),
       sourceType: "reminder",
       sourceId: docId,
@@ -6053,7 +6274,14 @@ function isAgendaNotificationMetadataOnlyChange(beforeData, afterData) {
 function didAgendaNotifyPlanChange(beforeData, afterData) {
   if (!beforeData || !afterData) return false;
   if (normalizeReminderLeadsKey(beforeData) !== normalizeReminderLeadsKey(afterData)) return true;
-  const fields = ["notificationSoundId", "notificationDeliveryMode"];
+  const fields = [
+    "notificationSoundId",
+    "notificationDeliveryMode",
+    // Liga/desliga do «⏰ Despertar no horário» replaneja a fila do item.
+    agendaDespertador.CAMPO_DESPERTADOR,
+    agendaDespertador.CAMPO_NO_HORARIO,
+    agendaDespertador.CAMPO_SO_NO_HORARIO,
+  ];
   return fields.some((f) => (beforeData[f] || "").toString() !== (afterData[f] || "").toString());
 }
 
@@ -6168,11 +6396,18 @@ async function syncAgendaAlertSlots(db, uid, slots, config) {
         eventTitle: slot.eventTitle,
         timeStr: slot.timeStr || null,
         startStr: slot.startStr || null,
-        pushEnabled: agendaDelivery.allowsPushForChannel(config, slot.channelKind),
+        // Alarme por item sempre vai por push (é o que toca no celular).
+        pushEnabled:
+          slot.despertador === true ||
+          agendaDelivery.allowsPushForChannel(config, slot.channelKind),
         emailEnabled: agendaDelivery.allowsEmailForChannel(config, slot.channelKind),
         planVersion: AGENDA_ALERT_PLAN_VERSION,
         updatedAt: nowTs,
       };
+      if (slot.despertador === true) {
+        payload.despertador = true;
+        payload.despertadorAte = admin.firestore.Timestamp.fromDate(slot.despertadorAte);
+      }
 
       if (keepSent) {
         payload.status = AGENDA_ALERT_STATUS.SENT;
@@ -6200,10 +6435,21 @@ async function syncAgendaAlertSlots(db, uid, slots, config) {
     const existing = await coll.where("sourceType", "==", sourceType).where("sourceId", "==", sourceId).get();
     const cancelBatch = db.batch();
     let cancelOps = 0;
+    // Horário do evento no plano novo: repetição da soneca com o MESMO horário
+    // continua valendo (não é slot planejado, é série de um aviso já enviado).
+    const eventosDoPlano = new Set(
+      slots
+        .filter((s) => s.sourceType === sourceType && s.sourceId === sourceId)
+        .map((s) => s.eventAt.getTime()),
+    );
     for (const doc of existing.docs) {
       if (!desiredIds.has(doc.id)) {
         const st = (doc.data().status || "").toString();
         if (st === AGENDA_ALERT_STATUS.SENT) continue;
+        const dd = doc.data();
+        if (dd.snoozeOf && dd.eventAt?.toDate && eventosDoPlano.has(dd.eventAt.toDate().getTime())) {
+          continue;
+        }
         cancelBatch.update(doc.ref, {
           status: AGENDA_ALERT_STATUS.CANCELLED,
           updatedAt: nowTs,
@@ -6294,12 +6540,43 @@ async function cancelAgendaAlertsForSource(db, uid, sourceType, sourceId) {
   await batch.commit();
 }
 
+/**
+ * Repetição da soneca de um evento que mudou de horário depois do 1º aviso:
+ * a série fala do horário antigo — cancela em vez de mandar informação errada.
+ */
+async function sonecaComEventoMudado(alertDoc, a, eventAtAtual) {
+  if (!a.snoozeOf) return false;
+  const antigo = a.eventAt?.toDate ? a.eventAt.toDate() : null;
+  if (!antigo || !eventAtAtual) return false;
+  if (Math.abs(antigo.getTime() - eventAtAtual.getTime()) < 60 * 1000) return false;
+  await updateAgendaAlertDoc(alertDoc.ref, {
+    status: AGENDA_ALERT_STATUS.CANCELLED,
+    cancelReason: "soneca_evento_mudou",
+  });
+  return true;
+}
+
 /** Converte alertas vencidos em mensagens para dispatchAgendaReminderMessages. */
 async function buildDispatchMessagesFromAgendaAlerts(db, uid, alertDocs, now) {
   const toSend = [];
   const reminderCache = new Map();
   const scaleCache = new Map();
   const transactionCache = new Map();
+  // Pré-cadastros recorrentes com «Despertar» (só lidos se algum plantão da
+  // leva não tiver o campo próprio).
+  let locaisDespertar = null;
+  const despertarDoPlantao = async (d) => {
+    if (agendaDespertarItem.despertarDoItem(d)) return agendaDespertarItem.despertarDoItem(d);
+    if (!locaisDespertar) {
+      try {
+        const s = await db.collection("users").doc(uid).collection("locations").get();
+        locaisDespertar = s.docs.map((x) => x.data() || {}).filter((x) => agendaDespertarItem.despertarDoItem(x));
+      } catch (_) {
+        locaisDespertar = [];
+      }
+    }
+    return agendaDespertarItem.despertarEfetivo(d, { sourceType: "scale", locations: locaisDespertar });
+  };
 
   for (const alertDoc of alertDocs) {
     const a = alertDoc.data();
@@ -6307,19 +6584,28 @@ async function buildDispatchMessagesFromAgendaAlerts(db, uid, alertDocs, now) {
     const notifyAt = a.notifyAt?.toDate ? a.notifyAt.toDate() : new Date(a.notifyAt);
     if (notifyAt > now) continue;
 
+    // «⏰ Despertar no horário»: o lead 0 e as repetições dele tocam NO
+    // horário e depois dele, até `despertadorAte`. Aviso comum segue a regra
+    // de sempre (evento começou = não sai).
+    const alarme = a.despertador === true;
     const eventAt = a.eventAt?.toDate ? a.eventAt.toDate() : null;
     if (eventAt && eventAt <= now) {
-      await updateAgendaAlertDoc(alertDoc.ref, {
-        status: AGENDA_ALERT_STATUS.SKIPPED,
-        cancelReason: "event_started",
-      });
-      continue;
+      const ate = a.despertadorAte?.toDate
+        ? a.despertadorAte.toDate()
+        : new Date(eventAt.getTime() + 15 * 60 * 1000);
+      if (!alarme || now > ate) {
+        await updateAgendaAlertDoc(alertDoc.ref, {
+          status: AGENDA_ALERT_STATUS.SKIPPED,
+          cancelReason: alarme ? "despertador_passou" : "event_started",
+        });
+        continue;
+      }
     }
 
     const sourceType = (a.sourceType || "").toString();
     const sourceId = (a.sourceId || "").toString();
     const leadMin = parseInt(a.leadMin, 10) || 0;
-    if (!sourceId || leadMin <= 0) continue;
+    if (!sourceId || (leadMin <= 0 && !alarme)) continue;
 
     if (sourceType === "reminder") {
       let src = reminderCache.get(sourceId);
@@ -6345,6 +6631,7 @@ async function buildDispatchMessagesFromAgendaAlerts(db, uid, alertDocs, now) {
         });
         continue;
       }
+      if (await sonecaComEventoMudado(alertDoc, a, parseEventAtFromReminderData(d))) continue;
       const date = a.eventAt?.toDate ? a.eventAt.toDate() : (a.date?.toDate ? a.date.toDate() : new Date());
       const timeStr = (a.timeStr || d.time || "09:00").toString();
       const channelKind =
@@ -6386,6 +6673,7 @@ async function buildDispatchMessagesFromAgendaAlerts(db, uid, alertDocs, now) {
         });
         continue;
       }
+      if (await sonecaComEventoMudado(alertDoc, a, parseEventAtFromScaleData(d))) continue;
       const date = a.eventAt?.toDate ? a.eventAt.toDate() : (a.date?.toDate ? a.date.toDate() : new Date());
       const startStr = (a.startStr || d.start || "08:00").toString();
       const channelKind =
@@ -6402,6 +6690,7 @@ async function buildDispatchMessagesFromAgendaAlerts(db, uid, alertDocs, now) {
         leadMin,
         agendaAlertRef: alertDoc.ref,
         channelKind,
+        despertarItem: await despertarDoPlantao(d),
       });
     } else if (sourceType === "transaction") {
       let src = transactionCache.get(sourceId);
@@ -6427,6 +6716,12 @@ async function buildDispatchMessagesFromAgendaAlerts(db, uid, alertDocs, now) {
           cancelReason: "event_closed",
         });
         continue;
+      }
+      if (a.snoozeOf && d.date) {
+        const dv = d.date.toDate ? d.date.toDate() : new Date(d.date.seconds * 1000);
+        const p = getDatePartsBrasilia(dv);
+        const dueAtAtual = dateInBrasilia(p.year, p.month + 1, p.day, 9, 0, 0);
+        if (await sonecaComEventoMudado(alertDoc, a, dueAtAtual)) continue;
       }
       const date = a.eventAt?.toDate ? a.eventAt.toDate() : (a.date?.toDate ? a.date.toDate() : new Date());
       toSend.push({
@@ -6683,7 +6978,8 @@ async function controlAgendaAlertsOnReminderWritten(event) {
   if (
     !config.scaleReminderEnabled ||
     (remType === "audiencia" && !config.notifAudiencias) ||
-    (remType !== "audiencia" && !config.notifCompromissos)
+    // «⏰ Despertar no horário» toca mesmo com os avisos de compromisso desligados.
+    (remType !== "audiencia" && !config.notifCompromissos && !agendaDespertador.ativo(afterData))
   ) {
     await cancelAgendaAlertsForSource(db, uid, "reminder", reminderId);
     return;
