@@ -16,6 +16,7 @@ import '../constants/color_palette.dart';
 import '../constants/default_ocorrencias_naturezas.dart';
 import '../models/user_profile.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../constants/produtividade_module_icons.dart';
 import '../services/ocorrencias_service.dart';
 import '../services/ocorrencias_naturezas_service.dart';
@@ -346,7 +347,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                         : 'Limpar data da folga (${selParaAcao.length})',
                   ),
                   style: FilledButton.styleFrom(
-                    foregroundColor: AppColors.deepBlueDark,
+                    foregroundColor: context.isDarkMode ? context.appTextPrimary : AppColors.deepBlueDark,
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   ),
                 ),
@@ -355,7 +356,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
             const SizedBox(height: 6),
             Text(
               'Use quando cancelar a folga ou para voltar os pontos a «disponíveis» e marcar folga noutra data.',
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade700, height: 1.25),
+              style: TextStyle(fontSize: 11, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700, height: 1.25),
             ),
           ],
         ],
@@ -520,7 +521,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Material(
-          color: Colors.white,
+          color: context.isDarkMode ? context.appSurfaceHigh : Colors.white,
           elevation: 0,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -535,12 +536,12 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'Cor no calendário',
                         style: TextStyle(
                           fontSize: 13.5,
                           fontWeight: FontWeight.w800,
-                          color: Color(0xFF0F172A),
+                          color: context.isDarkMode ? context.appTextPrimary : const Color(0xFF0F172A),
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -549,7 +550,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade600,
+                          color: context.isDarkMode ? context.appTextMuted : Colors.grey.shade600,
                           height: 1.25,
                         ),
                       ),
@@ -634,7 +635,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
           child: Container(
             margin: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: ctx.isDarkMode ? ctx.appSurface : Colors.white,
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
@@ -677,7 +678,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                       'Revise os dados antes de gerar o PDF e registar no sistema.',
                       style: TextStyle(
                         fontSize: 13,
-                        color: Colors.grey.shade700,
+                        color: ctx.isDarkMode ? ctx.appTextSecondary : Colors.grey.shade700,
                         height: 1.35,
                         fontWeight: FontWeight.w600,
                       ),
@@ -744,7 +745,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade800,
+                              color: ctx.isDarkMode ? ctx.appTextPrimary : Colors.grey.shade800,
                               height: 1.35,
                             ),
                           ),
@@ -759,7 +760,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade700,
+                        color: ctx.isDarkMode ? ctx.appTextSecondary : Colors.grey.shade700,
                         height: 1.35,
                       ),
                     ),
@@ -803,17 +804,17 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: Colors.grey.shade600,
+              color: context.isDarkMode ? context.appTextMuted : Colors.grey.shade600,
             ),
           ),
         ),
         Expanded(
           child: Text(
             valor,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
+              color: context.appTextPrimary,
             ),
           ),
         ),
@@ -936,7 +937,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
       resizeToAvoidBottomInset: scaffoldKeyboardResizeToAvoidBottomInset(
         embeddedInHomeShell: embeddedInShell,
       ),
-      backgroundColor: const Color(0xFFEEF2F7),
+      backgroundColor: context.isDarkMode ? context.appScaffold : const Color(0xFFEEF2F7),
       body: SafeArea(
         bottom: homeShellSafeAreaBottom(embeddedInHomeShell: embeddedInShell),
         child: CustomScrollView(
@@ -991,7 +992,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                                     'Não foi possível carregar as ocorrências. Verifique a sessão e a rede.',
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
-                                        color: Colors.grey.shade800,
+                                        color: context.isDarkMode ? context.appTextPrimary : Colors.grey.shade800,
                                         fontWeight: FontWeight.w600),
                                   ),
                                   const SizedBox(height: 12),
@@ -1022,7 +1023,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                                               'erro desconhecido',
                                           style: TextStyle(
                                             fontSize: 11,
-                                            color: Colors.grey.shade700,
+                                            color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                                             fontFamily: 'monospace',
                                           ),
                                         ),
@@ -1115,7 +1116,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 11,
-                        color: AppColors.textMuted,
+                        color: context.appTextMuted,
                         fontStyle: FontStyle.italic,
                       ),
                     ),
@@ -1155,7 +1156,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
   Widget _buildTopoRecolher() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.isDarkMode ? context.appSurface : Colors.white,
         borderRadius: BorderRadius.circular(_radiusLg),
         border: Border.all(
           color: AppColors.deepBlueDark.withValues(alpha: 0.06),
@@ -1196,10 +1197,10 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                     const SizedBox(width: 12),
                     Text(
                       _topoExpandido ? 'Recolher' : 'Expandir filtros',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
+                        color: context.appTextPrimary,
                       ),
                     ),
                     const Spacer(),
@@ -1218,7 +1219,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
+                          color: context.appTextPrimary,
                         ),
                       ),
                     ],
@@ -1924,7 +1925,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
     final accent =
         temFolga ? AppColors.logoOrange : AppColors.accent;
     return Material(
-      color: Colors.white,
+      color: context.isDarkMode ? context.appSurface : Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(color: accent.withValues(alpha: 0.25)),
@@ -1957,9 +1958,9 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                 children: [
                   Text(
                     natureza.isEmpty ? 'Ocorrência' : natureza,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w800,
-                      color: Color(0xFF0F172A),
+                      color: context.isDarkMode ? context.appTextPrimary : const Color(0xFF0F172A),
                       fontSize: 13.5,
                     ),
                     maxLines: 2,
@@ -1972,7 +1973,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                         : 'Data: ${formatDateOrDash(dt)}',
                     style: TextStyle(
                       fontSize: 11.5,
-                      color: Colors.grey.shade700,
+                      color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -2065,8 +2066,10 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
 
         return Container(
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFFF8FAFF), Color(0xFFF1F5FF)],
+            gradient: LinearGradient(
+              colors: ctx.isDarkMode
+                  ? [ctx.appSurface, ctx.appSurfaceHigh]
+                  : const [Color(0xFFF8FAFF), Color(0xFFF1F5FF)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -2121,13 +2124,13 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
       avatar: Icon(
         chipIcon,
         size: 18,
-        color: selected ? accent : AppColors.textSecondary,
+        color: selected ? accent : context.appTextSecondary,
       ),
       label: Text(
         label,
         style: TextStyle(
           fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-          color: selected ? accent : AppColors.textSecondary,
+          color: selected ? accent : context.appTextSecondary,
           fontSize: 13,
         ),
       ),
@@ -2141,7 +2144,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
       checkmarkColor: accent,
       showCheckmark: true,
       side: BorderSide(
-        color: selected ? accent : AppColors.textMuted.withValues(alpha: 0.45),
+        color: selected ? accent : context.appTextMuted.withValues(alpha: 0.45),
         width: selected ? 2 : 1,
       ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -2189,10 +2192,10 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                         children: [
                           Text(
                             '${_selecionadosFolga.length} ocorrência(s) selecionada(s)',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w700,
-                              color: AppColors.textPrimary,
+                              color: context.appTextPrimary,
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -2209,7 +2212,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                             'Para 1 folga: $pontuacaoParaFolga pts (parâmetro em Configurações)',
                             style: TextStyle(
                               fontSize: 12,
-                              color: AppColors.textSecondary,
+                              color: context.appTextSecondary,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -2322,7 +2325,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                       style: TextStyle(fontWeight: FontWeight.w700),
                     ),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.textPrimary,
+                      foregroundColor: context.appTextPrimary,
                       side: BorderSide(
                         color: AppColors.secondary.withValues(alpha: 0.35),
                         width: 1.5,
@@ -2832,10 +2835,10 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
           const SizedBox(width: 12),
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w900,
-              color: AppColors.textPrimary,
+              color: context.appTextPrimary,
               letterSpacing: -0.2,
             ),
           ),
@@ -2865,14 +2868,14 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
       child: Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.isDarkMode ? context.appSurface : Colors.white,
         borderRadius: BorderRadius.circular(_radiusLg),
         // Faixa de estado à esquerda (evita Row + IntrinsicHeight + Expanded — quebra layout Web/iOS em alguns motores).
         border: Border(
           left: BorderSide(color: barColor, width: 5),
-          top: BorderSide(color: AppColors.deepBlueDark.withValues(alpha: 0.06)),
-          right: BorderSide(color: AppColors.deepBlueDark.withValues(alpha: 0.06)),
-          bottom: BorderSide(color: AppColors.deepBlueDark.withValues(alpha: 0.06)),
+          top: BorderSide(color: context.isDarkMode ? context.appBorderSubtle : AppColors.deepBlueDark.withValues(alpha: 0.06)),
+          right: BorderSide(color: context.isDarkMode ? context.appBorderSubtle : AppColors.deepBlueDark.withValues(alpha: 0.06)),
+          bottom: BorderSide(color: context.isDarkMode ? context.appBorderSubtle : AppColors.deepBlueDark.withValues(alpha: 0.06)),
         ),
         boxShadow: [
           BoxShadow(
@@ -3019,8 +3022,9 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                                           padding: EdgeInsets.zero,
                                           backgroundColor: AppColors.amber
                                               .withValues(alpha: 0.18),
-                                          foregroundColor:
-                                              AppColors.deepBlueDark,
+                                          foregroundColor: context.isDarkMode
+                                              ? context.appTextPrimary
+                                              : AppColors.deepBlueDark,
                                           shape: RoundedRectangleBorder(
                                             borderRadius:
                                                 BorderRadius.circular(12),
@@ -3120,17 +3124,17 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                                 dataDisplay.isEmpty ? 'Data não informada' : dataDisplay,
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: AppColors.textMuted,
+                                  color: context.appTextMuted,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
                               const SizedBox(height: 6),
                               Text(
                                 naturezaDisplay,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.w800,
-                                  color: AppColors.textPrimary,
+                                  color: context.appTextPrimary,
                                   height: 1.2,
                                 ),
                                 maxLines: 2,
@@ -3143,7 +3147,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                                     'Nº $numeroDisplay',
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: AppColors.textSecondary,
+                                      color: context.appTextSecondary,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
@@ -3241,7 +3245,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                                               width: 120,
                                               height: 88,
                                               decoration: BoxDecoration(
-                                                color: Colors.grey.shade100,
+                                                color: context.isDarkMode ? context.appSurfaceHigh : Colors.grey.shade100,
                                                 border: Border.all(
                                                   color: AppColors.primary
                                                       .withValues(alpha: 0.2),
@@ -3343,7 +3347,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 36),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.isDarkMode ? context.appSurface : Colors.white,
         borderRadius: BorderRadius.circular(_radiusLg),
         border: Border.all(
           color: AppColors.primary.withValues(alpha: 0.12),
@@ -3380,8 +3384,8 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
           Text(
             message,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
+            style: TextStyle(
+              color: context.appTextSecondary,
               fontSize: 15,
               fontWeight: FontWeight.w600,
               height: 1.35,
@@ -3428,7 +3432,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
             scrollable: true,
             insetPadding: keyboardAwareDialogInsetPadding(ctx),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            backgroundColor: Colors.white,
+            backgroundColor: ctx.isDarkMode ? ctx.appSurface : Colors.white,
             surfaceTintColor: Colors.transparent,
             titlePadding: EdgeInsets.zero,
             title: _dialogGradientTitle(
@@ -3504,21 +3508,21 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
+                        color: context.isDarkMode ? context.appSurfaceHigh : Colors.grey.shade100,
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.grey.shade300),
+                        border: Border.all(color: context.isDarkMode ? context.appChipIdleBorder : Colors.grey.shade300),
                       ),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Icon(Icons.star_rounded, color: AppColors.amber, size: 22),
                           const SizedBox(width: 12),
-                          Text('$pontuacao pts', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                          Text('$pontuacao pts', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: context.appTextPrimary)),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               '(definido na natureza)',
-                              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                              style: TextStyle(fontSize: 12, color: context.isDarkMode ? context.appTextMuted : Colors.grey.shade600),
                               softWrap: true,
                               maxLines: 3,
                             ),
@@ -3595,7 +3599,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                           '$anexoFileName (${((anexoBytes?.length ?? 0) / 1024).toStringAsFixed(0)} KB)',
                           style: TextStyle(
                             fontSize: 12,
-                            color: AppColors.textSecondary,
+                            color: context.appTextSecondary,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -3609,15 +3613,15 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
               OutlinedButton.icon(
                 onPressed: () => Navigator.of(ctx).pop(false),
                 icon: Icon(Icons.close_rounded,
-                    size: 18, color: AppColors.textSecondary.withValues(alpha: 0.95)),
+                    size: 18, color: context.appTextSecondary.withValues(alpha: 0.95)),
                 label: const Text(
                   'Cancelar',
                   style: TextStyle(fontWeight: FontWeight.w800),
                 ),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.textPrimary,
+                  foregroundColor: context.appTextPrimary,
                   side: BorderSide(
-                    color: AppColors.textMuted.withValues(alpha: 0.45),
+                    color: context.appTextMuted.withValues(alpha: 0.45),
                     width: 1.4,
                   ),
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
@@ -3775,7 +3779,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
 
   Widget _buildLabelObrigatorio(String label) => Row(
         children: [
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.textPrimary)),
+          Text(label, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: context.appTextPrimary)),
           const SizedBox(width: 4),
           Text('*', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.w800)),
         ],
@@ -3783,10 +3787,10 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
 
   Widget _buildLabelOpcional(String label) => Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontWeight: FontWeight.w700,
           fontSize: 14,
-          color: AppColors.textPrimary,
+          color: context.appTextPrimary,
         ),
       );
 
@@ -3806,7 +3810,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         filled: true,
-        fillColor: const Color(0xFFF8FAFC),
+        fillColor: context.isDarkMode ? context.appInputFill : const Color(0xFFF8FAFC),
       );
 
   Widget _buildCampoDataForm(BuildContext ctx, DateTime date, void Function(DateTime) onDate) {
@@ -3838,7 +3842,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
           scrollable: true,
           insetPadding: keyboardAwareDialogInsetPadding(ctx),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          backgroundColor: Colors.white,
+          backgroundColor: ctx.isDarkMode ? ctx.appSurface : Colors.white,
           surfaceTintColor: Colors.transparent,
           titlePadding: EdgeInsets.zero,
           title: _dialogGradientTitle(
@@ -3874,12 +3878,12 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
             OutlinedButton.icon(
               onPressed: () => Navigator.of(ctx).pop(null),
               icon: Icon(Icons.close_rounded,
-                  size: 18, color: AppColors.textSecondary.withValues(alpha: 0.95)),
+                  size: 18, color: context.appTextSecondary.withValues(alpha: 0.95)),
               label: const Text('Cancelar', style: TextStyle(fontWeight: FontWeight.w800)),
               style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.textPrimary,
+                foregroundColor: context.appTextPrimary,
                 side: BorderSide(
-                  color: AppColors.textMuted.withValues(alpha: 0.45),
+                  color: context.appTextMuted.withValues(alpha: 0.45),
                   width: 1.4,
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -3952,7 +3956,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
             scrollable: true,
             insetPadding: keyboardAwareDialogInsetPadding(ctx),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            backgroundColor: Colors.white,
+            backgroundColor: ctx.isDarkMode ? ctx.appSurface : Colors.white,
             surfaceTintColor: Colors.transparent,
             titlePadding: EdgeInsets.zero,
             title: _dialogGradientTitle(
@@ -3992,7 +3996,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
                                   height: 1.35,
-                                  color: Colors.grey.shade800,
+                                  color: ctx.isDarkMode ? ctx.appTextPrimary : Colors.grey.shade800,
                                 ),
                               ),
                             ),
@@ -4082,7 +4086,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                                 label: const Text('Editar natureza / pontuação'),
                                 style: FilledButton.styleFrom(
                                   backgroundColor: AppColors.amber.withValues(alpha: 0.22),
-                                  foregroundColor: AppColors.deepBlueDark,
+                                  foregroundColor: ctx.isDarkMode ? ctx.appTextPrimary : AppColors.deepBlueDark,
                                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
@@ -4096,21 +4100,21 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                               decoration: BoxDecoration(
-                                color: Colors.grey.shade100,
+                                color: context.isDarkMode ? context.appSurfaceHigh : Colors.grey.shade100,
                                 borderRadius: BorderRadius.circular(14),
-                                border: Border.all(color: Colors.grey.shade300),
+                                border: Border.all(color: context.isDarkMode ? context.appChipIdleBorder : Colors.grey.shade300),
                               ),
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Icon(Icons.star_rounded, color: AppColors.amber, size: 22),
                                   const SizedBox(width: 12),
-                                  Text('$pontuacao pts', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                                  Text('$pontuacao pts', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: context.appTextPrimary)),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
                                       '(definido na natureza)',
-                                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                      style: TextStyle(fontSize: 12, color: context.isDarkMode ? context.appTextMuted : Colors.grey.shade600),
                                       softWrap: true,
                                       maxLines: 3,
                                     ),
@@ -4137,7 +4141,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                       const SizedBox(height: 6),
                       Text(
                         'Pode corrigir o número (RAI) caso tenha digitado errado.',
-                        style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600, height: 1.3),
+                        style: TextStyle(fontSize: 11.5, color: context.isDarkMode ? context.appTextMuted : Colors.grey.shade600, height: 1.3),
                       ),
                     ],
                     const SizedBox(height: 20),
@@ -4213,7 +4217,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                           '$novoAnexoFileName (${((novoAnexoBytes?.length ?? 0) / 1024).toStringAsFixed(0)} KB)',
                           style: TextStyle(
                             fontSize: 12,
-                            color: AppColors.textSecondary,
+                            color: context.appTextSecondary,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -4222,7 +4226,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                       const SizedBox(height: 6),
                       Text(
                         'Pode anexar o PDF / print mesmo após pegar a folga (não altera os pontos já usados).',
-                        style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600, height: 1.3),
+                        style: TextStyle(fontSize: 11.5, color: context.isDarkMode ? context.appTextMuted : Colors.grey.shade600, height: 1.3),
                       ),
                     ],
                   ],
@@ -4234,12 +4238,12 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
               OutlinedButton.icon(
                 onPressed: () => Navigator.of(ctx).pop(false),
                 icon: Icon(Icons.close_rounded,
-                    size: 18, color: AppColors.textSecondary.withValues(alpha: 0.95)),
+                    size: 18, color: context.appTextSecondary.withValues(alpha: 0.95)),
                 label: const Text('Cancelar', style: TextStyle(fontWeight: FontWeight.w800)),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.textPrimary,
+                  foregroundColor: context.appTextPrimary,
                   side: BorderSide(
-                    color: AppColors.textMuted.withValues(alpha: 0.45),
+                    color: context.appTextMuted.withValues(alpha: 0.45),
                     width: 1.4,
                   ),
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
@@ -4431,7 +4435,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-        backgroundColor: Colors.white,
+        backgroundColor: ctx.isDarkMode ? ctx.appSurface : Colors.white,
         surfaceTintColor: Colors.transparent,
         title: Row(
           children: [
@@ -4459,12 +4463,12 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
           OutlinedButton.icon(
             onPressed: () => Navigator.of(ctx).pop(false),
             icon: Icon(Icons.close_rounded,
-                size: 18, color: AppColors.textSecondary.withValues(alpha: 0.95)),
+                size: 18, color: context.appTextSecondary.withValues(alpha: 0.95)),
             label: const Text('Manter', style: TextStyle(fontWeight: FontWeight.w800)),
             style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.textPrimary,
+              foregroundColor: context.appTextPrimary,
               side: BorderSide(
-                color: AppColors.textMuted.withValues(alpha: 0.45),
+                color: context.appTextMuted.withValues(alpha: 0.45),
                 width: 1.4,
               ),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -4531,9 +4535,9 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
               : items.where((n) => n.label.toLowerCase().contains(filtro)).toList();
 
           return Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            decoration: BoxDecoration(
+              color: ctx.isDarkMode ? ctx.appSurface : Colors.white,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
             ),
             child: Column(
               children: [
@@ -4602,9 +4606,9 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                         ),
                         child: ListTile(
                           leading: const Icon(Icons.add_circle_rounded, color: AppColors.accent),
-                          title: const Text(
+                          title: Text(
                             'Adicionar natureza',
-                            style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.textPrimary),
+                            style: TextStyle(fontWeight: FontWeight.w800, color: ctx.appTextPrimary),
                           ),
                           subtitle: const Text('Cria uma nova opção para usar nas ocorrências'),
                           onTap: () async {
@@ -4635,7 +4639,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                             style: TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w700,
-                              color: AppColors.textSecondary.withValues(alpha: 0.9),
+                              color: ctx.appTextSecondary.withValues(alpha: 0.9),
                             ),
                           ),
                         ),
@@ -4644,10 +4648,10 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                           margin: const EdgeInsets.only(bottom: 8),
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF8FAFC),
+                            color: ctx.isDarkMode ? ctx.appChipIdleBg : const Color(0xFFF8FAFC),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: AppColors.textMuted.withValues(alpha: 0.35),
+                              color: ctx.appTextMuted.withValues(alpha: 0.35),
                             ),
                           ),
                           child: const Text(
@@ -4662,7 +4666,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                           padding: const EdgeInsets.only(bottom: 8),
                           child: ListTile(
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            tileColor: const Color(0xFFF8FAFC),
+                            tileColor: ctx.isDarkMode ? ctx.appChipIdleBg : const Color(0xFFF8FAFC),
                             title: Text(n.label, style: const TextStyle(fontWeight: FontWeight.w700)),
                             subtitle: Text(
                               '${n.pontos} pontos',
@@ -4784,7 +4788,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
           scrollable: true,
           insetPadding: keyboardAwareDialogInsetPadding(ctx),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          backgroundColor: Colors.white,
+          backgroundColor: ctx.isDarkMode ? ctx.appSurface : Colors.white,
           surfaceTintColor: Colors.transparent,
           titlePadding: EdgeInsets.zero,
           title: _dialogGradientTitle(
@@ -4820,12 +4824,12 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
             OutlinedButton.icon(
               onPressed: () => Navigator.of(ctx).pop(false),
               icon: Icon(Icons.close_rounded,
-                  size: 18, color: AppColors.textSecondary.withValues(alpha: 0.95)),
+                  size: 18, color: context.appTextSecondary.withValues(alpha: 0.95)),
               label: const Text('Cancelar', style: TextStyle(fontWeight: FontWeight.w800)),
               style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.textPrimary,
+                foregroundColor: context.appTextPrimary,
                 side: BorderSide(
-                  color: AppColors.textMuted.withValues(alpha: 0.45),
+                  color: context.appTextMuted.withValues(alpha: 0.45),
                   width: 1.4,
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -4916,15 +4920,15 @@ class _ObservacaoExpansivelState extends State<_ObservacaoExpansivel> {
               margin: const EdgeInsets.only(top: 6),
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppColors.deepBlueDark.withValues(alpha: 0.05),
+                color: context.isDarkMode ? context.appSurfaceHigh : AppColors.deepBlueDark.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.deepBlueDark.withValues(alpha: 0.15)),
+                border: Border.all(color: context.isDarkMode ? context.appBorderSubtle : AppColors.deepBlueDark.withValues(alpha: 0.15)),
               ),
               child: SelectableText(
                 widget.texto,
                 style: TextStyle(
                   fontSize: 11,
-                  color: AppColors.textSecondary,
+                  color: context.appTextSecondary,
                   height: 1.4,
                 ),
               ),

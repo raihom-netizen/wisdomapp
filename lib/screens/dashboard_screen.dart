@@ -15,6 +15,7 @@ import '../models/scale_entry.dart';
 import '../models/shift_location.dart';
 import '../models/controle_total_config.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/premium_global_message_host.dart';
 import '../utils/maintenance_app_update_links.dart';
@@ -952,7 +953,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                Colors.white,
+                context.appSurface,
                 AppColors.primary.withValues(alpha: 0.05),
                 const Color(0xFF0D9488).withValues(alpha: 0.04),
               ],
@@ -1007,7 +1008,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               style: TextStyle(
                                 fontWeight: FontWeight.w900,
                                 fontSize: 16,
-                                color: Colors.grey.shade900,
+                                color: context.isDarkMode
+                                    ? context.appTextPrimary
+                                    : Colors.grey.shade900,
                                 letterSpacing: -0.2,
                               ),
                             ),
@@ -1016,7 +1019,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               'Receita, despesa ou colar linha de SMS do banco',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.grey.shade600,
+                                color: context.isDarkMode
+                                    ? context.appTextSecondary
+                                    : Colors.grey.shade600,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -1168,14 +1173,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text.rich(
-                          const TextSpan(
+                          TextSpan(
                             style: TextStyle(
                               fontSize: 11,
                               height: 1.4,
-                              color: AppColors.textSecondary,
+                              color: context.appTextSecondary,
                               fontWeight: FontWeight.w600,
                             ),
-                            children: [
+                            children: const [
                               TextSpan(
                                 text:
                                     'Copie a mensagem do banco, volte ao app, toque no botão acima (cores da marca) e use ',
@@ -1258,7 +1263,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: context.appSurface,
                   borderRadius: BorderRadius.circular(10),
                   boxShadow: [
                     BoxShadow(
@@ -1281,14 +1286,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       style: TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 14,
-                          color: Colors.grey.shade900),
+                          color: context.isDarkMode
+                              ? context.appTextPrimary
+                              : Colors.grey.shade900),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       'Sem abrir Escalas · aparece no calendário e nos relatórios',
                       style: TextStyle(
                           fontSize: 11,
-                          color: Colors.grey.shade600,
+                          color: context.isDarkMode
+                              ? context.appTextSecondary
+                              : Colors.grey.shade600,
                           height: 1.25),
                     ),
                   ],
@@ -1664,7 +1673,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     if (widget.onNavigateTo != null)
                       Text('Toque para abrir Escalas',
                           style: TextStyle(
-                              fontSize: 12, color: Colors.grey.shade600)),
+                              fontSize: 12,
+                              color: context.isDarkMode
+                                  ? context.appTextMuted
+                                  : Colors.grey.shade600)),
                     SizedBox(height: _kDashHeroGap),
                     _buildEscalasSectionPeriodSelector(),
                     SizedBox(height: _kDashChartTitleGap),
@@ -1725,7 +1737,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             Text(
                                 'Usa o mesmo filtro de período da seção Produtividade de Escalas acima.',
                                 style: TextStyle(
-                                    fontSize: 12, color: Colors.grey.shade600)),
+                                    fontSize: 12,
+                                    color: context.isDarkMode
+                                        ? context.appTextMuted
+                                        : Colors.grey.shade600)),
                             SizedBox(height: _kDashHeroGap),
                             StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                               stream: FirebaseFirestore.instance
@@ -1803,7 +1818,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: Colors.grey.shade700)),
+                  color: context.isDarkMode
+                      ? context.appTextSecondary
+                      : Colors.grey.shade700)),
           const SizedBox(height: 8),
           LayoutBuilder(
             builder: (ctx, c) => _dashChipRowScrollOrWrap(
@@ -1819,7 +1836,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 fontWeight: FontWeight.w600,
                                 color: effective == p
                                     ? Colors.white
-                                    : const Color(0xFF1A237E))),
+                                    : context.appDeepTitle)),
                         selected: effective == p,
                         onSelected: (_) {
                           setState(() {
@@ -1832,11 +1849,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           });
                         },
                         selectedColor: const Color(0xFF1A237E),
-                        backgroundColor: Colors.white,
+                        backgroundColor: context.appSurface,
                         side: BorderSide(
                             color: effective == p
                                 ? const Color(0xFF1A237E)
-                                : Colors.grey.shade300),
+                                : (context.isDarkMode
+                                    ? context.appChipIdleBorder
+                                    : Colors.grey.shade300)),
                         padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 8),
                       ))
@@ -2658,9 +2677,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.appSurface,
             borderRadius: BorderRadius.circular(_kDashSurfaceRadius),
-            border: Border.all(color: Colors.grey.shade200),
+            border: Border.all(
+                color: context.isDarkMode
+                    ? context.appBorderSubtle
+                    : Colors.grey.shade200),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.05),
@@ -2688,7 +2710,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     fontWeight: FontWeight.w700,
                                     color: _selectedPeriod == p
                                         ? Colors.white
-                                        : const Color(0xFF1A237E),
+                                        : context.appDeepTitle,
                                   ),
                                 ),
                                 selected: _selectedPeriod == p,
@@ -2707,7 +2729,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 labelStyle: TextStyle(
                                     color: _selectedPeriod == p
                                         ? Colors.white
-                                        : const Color(0xFF1A237E),
+                                        : context.appDeepTitle,
                                     fontWeight: FontWeight.w700),
                                 backgroundColor: Colors.transparent,
                                 side: BorderSide.none,
@@ -2729,7 +2751,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     fontWeight: FontWeight.w700,
                                     color: _selectedPeriod == p
                                         ? Colors.white
-                                        : const Color(0xFF1A237E),
+                                        : context.appDeepTitle,
                                   ),
                                 ),
                                 selected: _selectedPeriod == p,
@@ -2748,7 +2770,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 labelStyle: TextStyle(
                                     color: _selectedPeriod == p
                                         ? Colors.white
-                                        : const Color(0xFF1A237E),
+                                        : context.appDeepTitle,
                                     fontWeight: FontWeight.w700),
                                 backgroundColor: Colors.transparent,
                                 side: BorderSide.none,
@@ -2979,7 +3001,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 12,
-                        color: AppColors.textMuted,
+                        color: context.appTextMuted,
                       ),
                     ),
                   ),
@@ -3029,7 +3051,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             return Container(
               clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: context.appSurface,
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(
                   color: AppColors.primary.withValues(alpha: 0.12),
@@ -3103,7 +3125,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     style: TextStyle(
                                       fontSize: isNarrow ? 14 : 15,
                                       fontWeight: FontWeight.w900,
-                                      color: AppColors.deepBlueDark,
+                                      color: context.isDarkMode
+                                          ? context.appTextPrimary
+                                          : AppColors.deepBlueDark,
                                       letterSpacing: -0.2,
                                     ),
                                     maxLines: 2,
@@ -3115,7 +3139,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     style: TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
-                                      color: AppColors.textMuted,
+                                      color: context.appTextMuted,
                                     ),
                                   ),
                                 ],
@@ -3191,7 +3215,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       style: TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w600,
-                                        color: AppColors.textSecondary,
+                                        color: context.appTextSecondary,
                                       ),
                                       maxLines: 3,
                                       overflow: TextOverflow.ellipsis,
@@ -3219,7 +3243,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appSurface,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.primary.withValues(alpha: 0.1)),
       ),
@@ -3238,7 +3262,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   height: 14,
                   width: isNarrow ? 160 : 220,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE2E8F0),
+                    color: context.appChipIdleBorder,
                     borderRadius: BorderRadius.circular(6),
                   ),
                 ),
@@ -3249,7 +3273,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       child: Container(
                         height: 40,
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF1F5F9),
+                          color: context.appInputFill,
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
@@ -3259,7 +3283,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       child: Container(
                         height: 40,
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF1F5F9),
+                          color: context.appInputFill,
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
@@ -3269,7 +3293,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       child: Container(
                         height: 40,
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF1F5F9),
+                          color: context.appInputFill,
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
@@ -3348,10 +3372,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Expanded(
           child: Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w800,
-              color: Color(0xFF1A237E),
+              color: context.appDeepTitle,
               letterSpacing: -0.25,
               height: 1.2,
             ),
@@ -3476,14 +3500,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       style: TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 13,
-                          color: Colors.grey.shade800),
+                          color: context.isDarkMode
+                              ? context.appTextPrimary
+                              : Colors.grey.shade800),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     Text(
                       '${SensitiveBalancePreferences.formatBrl(amount.abs(), hidden: _hideSensitiveBalances)} · Clique em Confirmar pagamento no Financeiro ou no painel acima.',
-                      style:
-                          TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: context.isDarkMode
+                              ? context.appTextSecondary
+                              : Colors.grey.shade700),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -3789,10 +3818,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: context.appSurface,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.9), width: 1),
+                      color: context.isDarkMode
+                          ? context.appBorderSubtle
+                          : Colors.white.withValues(alpha: 0.9),
+                      width: 1),
                   boxShadow: [
                     BoxShadow(
                         color: Colors.black.withValues(alpha: 0.08),
@@ -3819,7 +3851,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           color: Colors.white, size: 22),
                     ),
                     const SizedBox(width: 12),
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -3828,20 +3860,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w900,
-                                color: Color(0xFF14532D)),
+                                color: context.isDarkMode
+                                    ? context.appNeonSoft
+                                    : const Color(0xFF14532D)),
                           ),
                           Text(
                             'Corrente, poupança e cartões — toque para ver',
                             style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
-                                color: AppColors.textSecondary),
+                                color: context.appTextSecondary),
                           ),
                         ],
                       ),
                     ),
                     Icon(Icons.chevron_right_rounded,
-                        color: Colors.grey.shade600),
+                        color: context.isDarkMode
+                            ? context.appTextMuted
+                            : Colors.grey.shade600),
                   ],
                 ),
               ),
@@ -4328,7 +4364,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final inner = Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appSurface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
             color: AppColors.deepBlue.withValues(alpha: 0.08), width: 1),
@@ -4365,7 +4401,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (hint != null) ...[
             const SizedBox(height: 4),
             Text(hint,
-                style: TextStyle(fontSize: 9, color: Colors.grey.shade600),
+                style: TextStyle(
+                    fontSize: 9,
+                    color: context.isDarkMode
+                        ? context.appTextMuted
+                        : Colors.grey.shade600),
                 textAlign: TextAlign.center),
           ],
         ],
@@ -4385,7 +4425,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final inner = Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appSurface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
             color: AppColors.saldoNegative.withValues(alpha: 0.16), width: 1),
@@ -4422,7 +4462,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (onTap != null) ...[
             const SizedBox(height: 4),
             Text('Toque para gráficos',
-                style: TextStyle(fontSize: 9, color: Colors.grey.shade600),
+                style: TextStyle(
+                    fontSize: 9,
+                    color: context.isDarkMode
+                        ? context.appTextMuted
+                        : Colors.grey.shade600),
                 textAlign: TextAlign.center),
           ],
         ],
@@ -4527,7 +4571,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Colors.white,
+      backgroundColor: context.appSurface,
       builder: (ctx) => FinanceInsightSheet(
         uid: _userFsId,
         initialScope: scope,
@@ -4574,7 +4618,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         expand: false,
         builder: (ctx, scrollController) => Container(
           decoration:
-              financePremiumSheetDecoration(surfaceTint: AppColors.primary),
+              financePremiumSheetDecoration(
+                  surfaceTint: AppColors.primary, context: ctx),
           child:
               StreamBuilder<List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
             stream: financeTransactionsPeriodDocs(
@@ -4725,7 +4770,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                               child: Container(
                                                 height: 64,
                                                 decoration: BoxDecoration(
-                                                  color: Colors.grey.shade200,
+                                                  color: context.isDarkMode
+                                                      ? context.appSurfaceHigh
+                                                      : Colors.grey.shade200,
                                                   borderRadius:
                                                       BorderRadius.circular(14),
                                                 ),
@@ -4736,7 +4783,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             textAlign: TextAlign.center,
                                             style: TextStyle(
                                                 fontSize: 12,
-                                                color: Colors.grey.shade600),
+                                                color: context.isDarkMode
+                                                    ? context.appTextMuted
+                                                    : Colors.grey.shade600),
                                           ),
                                         ],
                                       )
@@ -4750,7 +4799,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                 'Cadastre contas em Financeiro → Bancos e cartões.',
                                                 style: TextStyle(
                                                     fontSize: 14,
-                                                    color: Colors.grey.shade700,
+                                                    color: context.isDarkMode
+                                                        ? context
+                                                            .appTextSecondary
+                                                        : Colors.grey.shade700,
                                                     height: 1.35),
                                               ),
                                               if (widget.onNavigateTo !=
@@ -5073,7 +5125,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                       isScrollControlled: true,
                                                       useSafeArea: true,
                                                       backgroundColor:
-                                                          Colors.white,
+                                                          context.appSurface,
                                                       builder: (_) =>
                                                           FinanceInsightSheet(
                                                         uid: _userFsId,
@@ -5537,7 +5589,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Colors.white,
+      backgroundColor: context.appSurface,
       builder: (ctx) => DraggableScrollableSheet(
         initialChildSize: 0.6,
         minChildSize: 0.3,
@@ -5611,10 +5663,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Categoria: ${cat.isNotEmpty ? cat : 'Receita'}',
-                      style: const TextStyle(
+                      style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF1A237E)),
+                          color: context.appDeepTitle),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis),
                   Text('Descrição: ${desc.isNotEmpty ? desc : '—'}',
@@ -5622,14 +5674,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           fontSize: 13,
                           color: desc.isEmpty
                               ? Colors.grey
-                              : const Color(0xFF1A237E)),
+                              : context.appDeepTitle),
                       maxLines: 5,
                       overflow: TextOverflow.visible),
                   Text(dataStr,
                       style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade600),
+                          color: context.isDarkMode
+                              ? context.appTextMuted
+                              : Colors.grey.shade600),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis),
                 ],
@@ -5756,7 +5810,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Colors.white,
+      backgroundColor: context.appSurface,
       builder: (ctx) => DraggableScrollableSheet(
         initialChildSize: 0.6,
         minChildSize: 0.3,
@@ -5830,10 +5884,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Categoria: ${cat.isNotEmpty ? cat : 'Despesa'}',
-                      style: const TextStyle(
+                      style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF1A237E)),
+                          color: context.appDeepTitle),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis),
                   Text('Descrição: ${desc.isNotEmpty ? desc : '—'}',
@@ -5841,14 +5895,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           fontSize: 13,
                           color: desc.isEmpty
                               ? Colors.grey
-                              : const Color(0xFF1A237E)),
+                              : context.appDeepTitle),
                       maxLines: 5,
                       overflow: TextOverflow.visible),
                   Text(dataStr,
                       style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade600),
+                          color: context.isDarkMode
+                              ? context.appTextMuted
+                              : Colors.grey.shade600),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis),
                 ],
@@ -6425,9 +6481,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       height: 250,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appSurface,
         borderRadius: BorderRadius.circular(_kDashSurfaceRadius),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(
+            color: context.isDarkMode
+                ? context.appBorderSubtle
+                : Colors.grey.shade200),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -6456,16 +6515,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Receitas',
+                      Text('Receitas',
                           style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
-                              color: Color(0xFF374151))),
+                              color: context.isDarkMode
+                                  ? context.appTextPrimary
+                                  : const Color(0xFF374151))),
                       Text(CurrencyFormats.formatBRL(totalIncome),
                           style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w500,
-                              color: Colors.grey.shade600)),
+                              color: context.isDarkMode
+                                  ? context.appTextMuted
+                                  : Colors.grey.shade600)),
                     ],
                   ),
                 ],
@@ -6484,16 +6547,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Despesas',
+                      Text('Despesas',
                           style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
-                              color: Color(0xFF374151))),
+                              color: context.isDarkMode
+                                  ? context.appTextPrimary
+                                  : const Color(0xFF374151))),
                       Text(CurrencyFormats.formatBRL(totalExpense),
                           style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w500,
-                              color: Colors.grey.shade600)),
+                              color: context.isDarkMode
+                                  ? context.appTextMuted
+                                  : Colors.grey.shade600)),
                     ],
                   ),
                 ],
@@ -6528,10 +6595,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               padding: const EdgeInsets.only(top: 8),
                               child: Text(
                                 DateFormat('MMM', 'pt_BR').format(s),
-                                style: const TextStyle(
+                                style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w700,
-                                    color: Color(0xFF374151)),
+                                    color: context.isDarkMode
+                                        ? context.appTextSecondary
+                                        : const Color(0xFF374151)),
                               ),
                             );
                           }
@@ -6539,10 +6608,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             padding: const EdgeInsets.only(top: 8),
                             child: Text(
                               '${s.day}/${s.month}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
-                                  color: Color(0xFF374151)),
+                                  color: context.isDarkMode
+                                      ? context.appTextSecondary
+                                      : const Color(0xFF374151)),
                             ),
                           );
                         }
@@ -6631,9 +6702,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       height: 220,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appSurface,
         borderRadius: BorderRadius.circular(_kDashSurfaceRadius),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(
+            color: context.isDarkMode
+                ? context.appBorderSubtle
+                : Colors.grey.shade200),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -6647,7 +6721,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Text('Sem dados no período',
                   style: TextStyle(
                       fontSize: 14,
-                      color: Colors.grey.shade600,
+                      color: context.isDarkMode
+                          ? context.appTextMuted
+                          : Colors.grey.shade600,
                       fontWeight: FontWeight.w600)),
             )
           : LineChart(
@@ -7089,7 +7165,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final child = Container(
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appSurface,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -7105,10 +7181,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey)),
           const SizedBox(height: 4),
           Text('${horas.toStringAsFixed(1)}h',
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF1A237E))),
+                  color: context.appDeepTitle)),
           const SizedBox(height: 4),
           Text(CurrencyFormats.formatBRL(valor),
               style: TextStyle(
@@ -7116,7 +7192,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (entries != null && periodLabel != null) ...[
             const SizedBox(height: 4),
             Text('Toque para ver',
-                style: TextStyle(fontSize: 9, color: Colors.grey.shade500)),
+                style: TextStyle(
+                    fontSize: 9,
+                    color: context.isDarkMode
+                        ? context.appTextMuted
+                        : Colors.grey.shade500)),
           ],
         ],
       ),
@@ -7168,7 +7248,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       height: chartHeight,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appSurface,
         borderRadius: BorderRadius.circular(_kDashSurfaceRadius),
         boxShadow: [
           BoxShadow(
@@ -7197,7 +7277,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          color: Colors.grey.shade700)),
+                          color: context.isDarkMode
+                              ? context.appTextSecondary
+                              : Colors.grey.shade700)),
                 ],
               ),
               const SizedBox(width: 16),
@@ -7215,7 +7297,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          color: Colors.grey.shade700)),
+                          color: context.isDarkMode
+                              ? context.appTextSecondary
+                              : Colors.grey.shade700)),
                 ],
               ),
             ],
@@ -7548,7 +7632,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ]
                 : [
                     AppColors.primary.withValues(alpha: 0.10),
-                    Colors.white,
+                    context.appSurface,
                   ],
           ),
           borderRadius: BorderRadius.circular(_kDashSurfaceRadius),
@@ -7593,7 +7677,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           letterSpacing: 0.2,
                           color: passouTeto
                               ? Colors.orange.shade900
-                              : const Color(0xFF1A237E),
+                              : context.appDeepTitle,
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -7650,7 +7734,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 height: 1.35,
                 color: passouTeto
                     ? Colors.orange.shade900
-                    : const Color(0xFF1A237E),
+                    : context.appDeepTitle,
               ),
             ),
           ],
@@ -7791,10 +7875,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     Text(
                       '${labels[t]} — total',
-                      style: const TextStyle(
+                      style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w900,
-                          color: Color(0xFF1A237E)),
+                          color: context.appDeepTitle),
                     ),
                     const SizedBox(height: 8),
                     FittedBox(
@@ -7806,7 +7890,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             fontSize: valueFont,
                             height: 1.0,
                             fontWeight: FontWeight.w900,
-                            color: const Color(0xFF1A237E)),
+                            color: context.appDeepTitle),
                       ),
                     ),
                     Text(
@@ -7814,7 +7898,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: Colors.grey.shade800),
+                          color: context.isDarkMode
+                              ? context.appTextPrimary
+                              : Colors.grey.shade800),
                     ),
                     const SizedBox(height: 10),
                     InkWell(
@@ -7834,7 +7920,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           'Já tirados: ${jaByTypeCounts[t] ?? 0} · ${CurrencyFormats.formatBRL(jaByTypeValues[t] ?? 0)}',
                           style: TextStyle(
                               fontSize: chipFont,
-                              color: Colors.green.shade800,
+                              color: context.isDarkMode
+                                  ? Colors.green.shade300
+                                  : Colors.green.shade800,
                               fontWeight: FontWeight.w800),
                         ),
                       ),
@@ -7857,7 +7945,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           'Não tirados: ${naoByTypeCounts[t] ?? 0} · ${CurrencyFormats.formatBRL(naoByTypeValues[t] ?? 0)}',
                           style: TextStyle(
                               fontSize: chipFont,
-                              color: Colors.blue.shade800,
+                              color: context.isDarkMode
+                                  ? Colors.blue.shade300
+                                  : Colors.blue.shade800,
                               fontWeight: FontWeight.w800),
                         ),
                       ),
@@ -7867,7 +7957,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         style: TextStyle(
                             fontSize: compact ? 10 : 11,
                             fontWeight: FontWeight.w600,
-                            color: Colors.grey.shade600)),
+                            color: context.isDarkMode
+                                ? context.appTextMuted
+                                : Colors.grey.shade600)),
                   ],
                 ),
               );
@@ -7880,7 +7972,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appSurface,
         borderRadius: BorderRadius.circular(_kDashSurfaceRadius),
         boxShadow: [
           BoxShadow(
@@ -7899,7 +7991,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               style: TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w800,
-                  color: Colors.grey.shade800),
+                  color: context.isDarkMode
+                      ? context.appTextPrimary
+                      : Colors.grey.shade800),
             ),
           ),
           if (totalPorVinculo == 0)
@@ -7908,7 +8002,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Text('Nenhum plantão por vínculo neste período.',
                   style: TextStyle(
                       fontSize: 12,
-                      color: Colors.grey.shade600,
+                      color: context.isDarkMode
+                          ? context.appTextMuted
+                          : Colors.grey.shade600,
                       fontStyle: FontStyle.italic)),
             ),
           Column(
@@ -7922,19 +8018,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           if (totalPorVinculo > 0) ...[
             const SizedBox(height: 16),
-            Divider(height: 1, color: Colors.grey.shade200),
+            Divider(
+                height: 1,
+                color: context.isDarkMode
+                    ? context.appBorderSubtle
+                    : Colors.grey.shade200),
             const SizedBox(height: 14),
             Text(
               'Total no período (Estado + Município + Particular)',
               style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w800,
-                  color: Colors.grey.shade800),
+                  color: context.isDarkMode
+                      ? context.appTextPrimary
+                      : Colors.grey.shade800),
             ),
             const SizedBox(height: 4),
             Text(
               'Soma de já tirados + não tirados (inclui Particular) no filtro acima.',
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+              style: TextStyle(
+                  fontSize: 11,
+                  color: context.isDarkMode
+                      ? context.appTextMuted
+                      : Colors.grey.shade600),
             ),
             const SizedBox(height: 12),
             Container(
@@ -7978,25 +8084,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
-                              color: Colors.grey.shade700),
+                              color: context.isDarkMode
+                                  ? context.appTextSecondary
+                                  : Colors.grey.shade700),
                         ),
                         const SizedBox(height: 6),
                         FittedBox(
                           fit: BoxFit.scaleDown,
                           child: Text(
                             CurrencyFormats.formatBRL(sumTotalPeriod),
-                            style: const TextStyle(
+                            style: TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.w900,
-                                color: Color(0xFF1A237E)),
+                                color: context.appDeepTitle),
                           ),
                         ),
                         Text('$countTotalPeriod plantão(ões)',
                             style: TextStyle(
-                                fontSize: 10, color: Colors.grey.shade600)),
+                                fontSize: 10,
+                                color: context.isDarkMode
+                                    ? context.appTextMuted
+                                    : Colors.grey.shade600)),
                         Text('Toque para ver',
                             style: TextStyle(
-                                fontSize: 9, color: Colors.grey.shade500)),
+                                fontSize: 9,
+                                color: context.isDarkMode
+                                    ? context.appTextMuted
+                                    : Colors.grey.shade500)),
                       ],
                     ),
                   ),
@@ -8094,7 +8208,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                     Icon(Icons.chevron_right_rounded,
-                        size: 20, color: Colors.grey.shade500),
+                        size: 20,
+                        color: context.isDarkMode
+                            ? context.appTextMuted
+                            : Colors.grey.shade500),
                   ],
                 ),
                 const SizedBox(height: 10),
@@ -8111,7 +8228,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             style: TextStyle(
                                 fontSize: chipFont,
                                 fontWeight: FontWeight.w700,
-                                color: Colors.green.shade700),
+                                color: context.isDarkMode
+                                    ? Colors.green.shade300
+                                    : Colors.green.shade700),
                           ),
                         ),
                       ),
@@ -8128,7 +8247,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             style: TextStyle(
                                 fontSize: chipFont,
                                 fontWeight: FontWeight.w700,
-                                color: Colors.blue.shade700),
+                                color: context.isDarkMode
+                                    ? Colors.blue.shade300
+                                    : Colors.blue.shade700),
                           ),
                         ),
                       ),
@@ -8145,7 +8266,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appSurface,
         borderRadius: BorderRadius.circular(_kDashSurfaceRadius),
         boxShadow: [
           BoxShadow(
@@ -8160,7 +8281,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           end: Alignment.bottomRight,
           colors: [
             const Color(0xFF1A237E).withValues(alpha: 0.04),
-            Colors.white,
+            context.appSurface,
           ],
         ),
       ),
@@ -8176,17 +8297,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   color: const Color(0xFF1A237E).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: const Icon(Icons.event_note_rounded,
-                    color: Color(0xFF1A237E), size: 26),
+                child: Icon(Icons.event_note_rounded,
+                    color: context.appDeepTitle, size: 26),
               ),
               const SizedBox(width: 14),
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Controle de Plantões / Compromissos - ordinários',
                   style: TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w900,
-                      color: Color(0xFF1A237E),
+                      color: context.appDeepTitle,
                       height: 1.25),
                 ),
               ),
@@ -8196,7 +8317,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Text(
             'Soma plantões sem financeiro no painel e compromissos. Já tirados: pagos ou dia já passou (plantões sem financeiro). A tirar: hoje ou futuro, ainda não pagos.',
             style: TextStyle(
-                fontSize: 13, color: Colors.grey.shade700, height: 1.35),
+                fontSize: 13,
+                color: context.isDarkMode
+                    ? context.appTextSecondary
+                    : Colors.grey.shade700,
+                height: 1.35),
           ),
           const SizedBox(height: 16),
           if (totalLancamentos == 0)
@@ -8206,7 +8331,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 'Nenhum plantão sem financeiro nem compromisso neste período.',
                 style: TextStyle(
                     fontSize: 12,
-                    color: Colors.grey.shade600,
+                    color: context.isDarkMode
+                        ? context.appTextMuted
+                        : Colors.grey.shade600,
                     fontStyle: FontStyle.italic),
               ),
             ),
@@ -8224,7 +8351,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 tipoLabel: tipoListaOrdinarios),
             onTapNao: () => _abrirPlantoesATirar(context, todosNao, periodLabel,
                 tipoLabel: tipoListaOrdinarios),
-            color: const Color(0xFF1A237E),
+            color: context.appDeepTitle,
             icon: Icons.event_available_rounded,
             naoTiradosLabel: 'A tirar',
             titleFont: 14,
@@ -8255,9 +8382,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         maxChildSize: 0.9,
         expand: false,
         builder: (ctx, scrollController) => Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          decoration: BoxDecoration(
+            color: context.appSurface,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(24)),
           ),
           child: Column(
             children: [
@@ -8288,16 +8416,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(title,
-                              style: const TextStyle(
+                              style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w800,
-                                  color: Color(0xFF1A237E))),
+                                  color: context.appDeepTitle)),
                           Text(periodLabel,
                               style: TextStyle(
-                                  fontSize: 12, color: Colors.grey.shade600)),
+                                  fontSize: 12,
+                                  color: context.isDarkMode
+                                      ? context.appTextMuted
+                                      : Colors.grey.shade600)),
                           Text('${entries.length} plantão(ões)',
                               style: TextStyle(
-                                  fontSize: 12, color: Colors.grey.shade500)),
+                                  fontSize: 12,
+                                  color: context.isDarkMode
+                                      ? context.appTextMuted
+                                      : Colors.grey.shade500)),
                         ],
                       ),
                     ),
@@ -8316,7 +8450,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             const SizedBox(height: 16),
                             Text('Nenhum plantão já tirado no período',
                                 style: TextStyle(
-                                    fontSize: 16, color: Colors.grey.shade600)),
+                                    fontSize: 16,
+                                    color: context.isDarkMode
+                                        ? context.appTextMuted
+                                        : Colors.grey.shade600)),
                           ],
                         ),
                       )
@@ -8384,9 +8521,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         maxChildSize: 0.9,
         expand: false,
         builder: (ctx, scrollController) => Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          decoration: BoxDecoration(
+            color: context.appSurface,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(24)),
           ),
           child: Column(
             children: [
@@ -8417,16 +8555,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(title,
-                              style: const TextStyle(
+                              style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w800,
-                                  color: Color(0xFF1A237E))),
+                                  color: context.appDeepTitle)),
                           Text(periodLabel,
                               style: TextStyle(
-                                  fontSize: 12, color: Colors.grey.shade600)),
+                                  fontSize: 12,
+                                  color: context.isDarkMode
+                                      ? context.appTextMuted
+                                      : Colors.grey.shade600)),
                           Text('${entries.length} plantão(ões)',
                               style: TextStyle(
-                                  fontSize: 12, color: Colors.grey.shade500)),
+                                  fontSize: 12,
+                                  color: context.isDarkMode
+                                      ? context.appTextMuted
+                                      : Colors.grey.shade500)),
                         ],
                       ),
                     ),
@@ -8445,7 +8589,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             const SizedBox(height: 16),
                             Text('Nenhum plantão não tirado no período',
                                 style: TextStyle(
-                                    fontSize: 16, color: Colors.grey.shade600)),
+                                    fontSize: 16,
+                                    color: context.isDarkMode
+                                        ? context.appTextMuted
+                                        : Colors.grey.shade600)),
                           ],
                         ),
                       )
@@ -8513,9 +8660,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         maxChildSize: 0.9,
         expand: false,
         builder: (ctx, scrollController) => Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          decoration: BoxDecoration(
+            color: context.appSurface,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(24)),
           ),
           child: Column(
             children: [
@@ -8546,16 +8694,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(title,
-                              style: const TextStyle(
+                              style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w800,
-                                  color: Color(0xFF1A237E))),
+                                  color: context.appDeepTitle)),
                           Text(periodLabel,
                               style: TextStyle(
-                                  fontSize: 12, color: Colors.grey.shade600)),
+                                  fontSize: 12,
+                                  color: context.isDarkMode
+                                      ? context.appTextMuted
+                                      : Colors.grey.shade600)),
                           Text('${sorted.length} plantão(ões)',
                               style: TextStyle(
-                                  fontSize: 12, color: Colors.grey.shade500)),
+                                  fontSize: 12,
+                                  color: context.isDarkMode
+                                      ? context.appTextMuted
+                                      : Colors.grey.shade500)),
                         ],
                       ),
                     ),
@@ -8637,9 +8791,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         maxChildSize: 0.9,
         expand: false,
         builder: (ctx, scrollController) => Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          decoration: BoxDecoration(
+            color: context.appSurface,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(24)),
           ),
           child: Column(
             children: [
@@ -8675,16 +8830,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(title,
-                              style: const TextStyle(
+                              style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w800,
-                                  color: Color(0xFF1A237E))),
+                                  color: context.appDeepTitle)),
                           Text(periodLabel,
                               style: TextStyle(
-                                  fontSize: 12, color: Colors.grey.shade600)),
+                                  fontSize: 12,
+                                  color: context.isDarkMode
+                                      ? context.appTextMuted
+                                      : Colors.grey.shade600)),
                           Text('${entries.length} plantão(ões)',
                               style: TextStyle(
-                                  fontSize: 12, color: Colors.grey.shade500)),
+                                  fontSize: 12,
+                                  color: context.isDarkMode
+                                      ? context.appTextMuted
+                                      : Colors.grey.shade500)),
                         ],
                       ),
                     ),
@@ -8708,7 +8869,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             Text(
                                 'Nenhum plantão com ${isNoturnas ? "horas noturnas" : "horas diurnas"} no período',
                                 style: TextStyle(
-                                    fontSize: 16, color: Colors.grey.shade600),
+                                    fontSize: 16,
+                                    color: context.isDarkMode
+                                        ? context.appTextMuted
+                                        : Colors.grey.shade600),
                                 textAlign: TextAlign.center),
                           ],
                         ),
@@ -8789,11 +8953,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(e.label ?? 'Plantão',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, color: Color(0xFF1A237E))),
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: context.appDeepTitle)),
                 Text(DateFormat('dd MMM', 'pt_BR').format(e.date),
-                    style:
-                        TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                    style: TextStyle(
+                        color: context.isDarkMode
+                            ? context.appTextMuted
+                            : Colors.grey.shade600,
+                        fontSize: 12)),
                 const SizedBox(height: 4),
                 Text(
                     '${horas.toStringAsFixed(1)}h · ${CurrencyFormats.formatBRL(valor)}',
@@ -8880,7 +9048,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appSurface,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -8901,18 +9069,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(e.label ?? 'Plantão',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, color: Color(0xFF1A237E))),
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: context.appDeepTitle)),
                 Text(DateFormat('dd MMM', 'pt_BR').format(e.date),
-                    style:
-                        TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                    style: TextStyle(
+                        color: context.isDarkMode
+                            ? context.appTextMuted
+                            : Colors.grey.shade600,
+                        fontSize: 12)),
                 const SizedBox(height: 4),
                 if (resumoLinhas.isEmpty)
                   Text(
                     scaleEntryResumoNumberEmptyLabel(e),
                     style: TextStyle(
                       fontSize: 11,
-                      color: Colors.grey.shade500,
+                      color: context.isDarkMode
+                          ? context.appTextMuted
+                          : Colors.grey.shade500,
                     ),
                   )
                 else
@@ -8921,7 +9095,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       line,
                       style: TextStyle(
                         fontSize: 11,
-                        color: Colors.grey.shade700,
+                        color: context.isDarkMode
+                            ? context.appTextSecondary
+                            : Colors.grey.shade700,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -8932,7 +9108,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     'Observação: ${(e.notes ?? '').trim()}',
                     style: TextStyle(
                       fontSize: 11,
-                      color: Colors.grey.shade700,
+                      color: context.isDarkMode
+                          ? context.appTextSecondary
+                          : Colors.grey.shade700,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -8942,8 +9120,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           if (!hideValue)
             Text(CurrencyFormats.formatBRL(e.totalValue),
-                style: const TextStyle(
-                    fontWeight: FontWeight.w800, color: Color(0xFF1A237E))),
+                style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: context.appDeepTitle)),
           IconButton(
             icon: const Icon(Icons.edit_outlined, size: 22),
             onPressed: () =>
@@ -8985,9 +9164,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         maxChildSize: 0.92,
         expand: false,
         builder: (ctx, scrollController) => Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          decoration: BoxDecoration(
+            color: context.appSurface,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(24)),
           ),
           child: Column(
             children: [
@@ -9019,15 +9199,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Ocorrências em aberto',
+                          Text('Ocorrências em aberto',
                               style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w800,
-                                  color: Color(0xFF1A237E))),
+                                  color: context.appDeepTitle)),
                           Text(
                               '${ocorrenciasEmAberto.length} ocorrência(s) · ainda não usadas para folga',
                               style: TextStyle(
-                                  fontSize: 12, color: Colors.grey.shade600)),
+                                  fontSize: 12,
+                                  color: context.isDarkMode
+                                      ? context.appTextMuted
+                                      : Colors.grey.shade600)),
                         ],
                       ),
                     ),
@@ -9046,7 +9229,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             const SizedBox(height: 16),
                             Text('Nenhuma ocorrência em aberto',
                                 style: TextStyle(
-                                    fontSize: 16, color: Colors.grey.shade600)),
+                                    fontSize: 16,
+                                    color: context.isDarkMode
+                                        ? context.appTextMuted
+                                        : Colors.grey.shade600)),
                           ],
                         ),
                       )
@@ -9089,10 +9275,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   ),
                                   child: Center(
                                       child: Text('$pts',
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                               fontSize: 16,
                                               fontWeight: FontWeight.w800,
-                                              color: Color(0xFF1A237E)))),
+                                              color: context.appDeepTitle))),
                                 ),
                                 const SizedBox(width: 14),
                                 Expanded(
@@ -9101,22 +9287,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(natureza,
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                               fontSize: 14,
                                               fontWeight: FontWeight.w700,
-                                              color: Color(0xFF1A237E)),
+                                              color: context.appDeepTitle),
                                           maxLines: 2,
                                           overflow: TextOverflow.ellipsis),
                                       if (numero.isNotEmpty)
                                         Text('Nº $numero',
                                             style: TextStyle(
                                                 fontSize: 12,
-                                                color: Colors.grey.shade600)),
+                                                color: context.isDarkMode
+                                                    ? context.appTextMuted
+                                                    : Colors.grey.shade600)),
                                       const SizedBox(height: 4),
                                       Text(dataStr,
                                           style: TextStyle(
                                               fontSize: 11,
-                                              color: Colors.grey.shade500)),
+                                              color: context.isDarkMode
+                                                  ? context.appTextMuted
+                                                  : Colors.grey.shade500)),
                                     ],
                                   ),
                                 ),
@@ -9155,9 +9345,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         builder: (ctx, scrollController) {
           final expandedIndices = <int>{};
           return Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            decoration: BoxDecoration(
+              color: context.appSurface,
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(24)),
             ),
             child: Column(
               children: [
@@ -9189,15 +9380,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('Folgas no ano',
+                            Text('Folgas no ano',
                                 style: TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.w800,
-                                    color: Color(0xFF1A237E))),
+                                    color: context.appDeepTitle)),
                             Text(
                                 '${folgasOrdenadas.length} data(s) em que você folgou',
                                 style: TextStyle(
-                                    fontSize: 12, color: Colors.grey.shade600)),
+                                    fontSize: 12,
+                                    color: context.isDarkMode
+                                        ? context.appTextMuted
+                                        : Colors.grey.shade600)),
                           ],
                         ),
                       ),
@@ -9217,7 +9411,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               Text('Nenhuma folga registrada no ano',
                                   style: TextStyle(
                                       fontSize: 16,
-                                      color: Colors.grey.shade600)),
+                                      color: context.isDarkMode
+                                          ? context.appTextMuted
+                                          : Colors.grey.shade600)),
                             ],
                           ),
                         )
@@ -9287,17 +9483,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                     CrossAxisAlignment.start,
                                                 children: [
                                                   Text(dataFolgaStr,
-                                                      style: const TextStyle(
+                                                      style: TextStyle(
                                                           fontSize: 16,
                                                           fontWeight:
                                                               FontWeight.w800,
-                                                          color: Color(
-                                                              0xFF1A237E))),
+                                                          color: context
+                                                              .appDeepTitle)),
                                                   Text(diaSemana,
                                                       style: TextStyle(
                                                           fontSize: 12,
-                                                          color: Colors
-                                                              .grey.shade600)),
+                                                          color: context
+                                                                  .isDarkMode
+                                                              ? context
+                                                                  .appTextMuted
+                                                              : Colors.grey
+                                                                  .shade600)),
                                                 ],
                                               ),
                                             ),
@@ -9385,7 +9585,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                               style: TextStyle(
                                                   fontSize: 12,
                                                   fontWeight: FontWeight.w700,
-                                                  color: Colors.grey.shade700)),
+                                                  color: context.isDarkMode
+                                                      ? context.appTextSecondary
+                                                      : Colors.grey.shade700)),
                                         ),
                                         ...items.map((e) {
                                           final pts = (e['pontuacao'] is int)
@@ -9410,12 +9612,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                 SizedBox(
                                                   width: 36,
                                                   child: Text('$pts pts',
-                                                      style: const TextStyle(
+                                                      style: TextStyle(
                                                           fontSize: 13,
                                                           fontWeight:
                                                               FontWeight.w700,
-                                                          color: Color(
-                                                              0xFF1A237E))),
+                                                          color: context
+                                                              .appDeepTitle)),
                                                 ),
                                                 Expanded(
                                                   child: Column(
@@ -9429,8 +9631,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                               fontWeight:
                                                                   FontWeight
                                                                       .w600,
-                                                              color: Colors.grey
-                                                                  .shade800),
+                                                              color: context
+                                                                      .isDarkMode
+                                                                  ? context
+                                                                      .appTextPrimary
+                                                                  : Colors.grey
+                                                                      .shade800),
                                                           maxLines: 2,
                                                           overflow: TextOverflow
                                                               .ellipsis),
@@ -9439,9 +9645,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                             'Nº $numero · $dataStr',
                                                             style: TextStyle(
                                                                 fontSize: 11,
-                                                                color: Colors
-                                                                    .grey
-                                                                    .shade500)),
+                                                                color: context
+                                                                        .isDarkMode
+                                                                    ? context
+                                                                        .appTextMuted
+                                                                    : Colors
+                                                                        .grey
+                                                                        .shade500)),
                                                     ],
                                                   ),
                                                 ),
@@ -9644,7 +9854,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             return Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: context.appSurface,
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
@@ -9657,7 +9867,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       offset: const Offset(0, 4)),
                 ],
                 border: Border.all(
-                    color: Colors.grey.shade100.withOpacity(0.8), width: 1),
+                    color: context.isDarkMode
+                        ? context.appBorderSubtle
+                        : Colors.grey.shade100.withOpacity(0.8),
+                    width: 1),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -9677,7 +9890,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         if (widget.onNavigateTo != null) ...[
                           const SizedBox(width: 6),
                           Icon(Icons.arrow_forward_ios_rounded,
-                              size: 14, color: Colors.grey.shade600),
+                              size: 14,
+                              color: context.isDarkMode
+                                  ? context.appTextMuted
+                                  : Colors.grey.shade600),
                         ],
                       ],
                     ),
@@ -9687,7 +9903,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       padding: const EdgeInsets.only(top: 4, left: 32),
                       child: Text('Toque para abrir o módulo',
                           style: TextStyle(
-                              fontSize: 12, color: Colors.grey.shade600)),
+                              fontSize: 12,
+                              color: context.isDarkMode
+                                  ? context.appTextMuted
+                                  : Colors.grey.shade600)),
                     ),
                   const SizedBox(height: 16),
                   LayoutBuilder(
@@ -9704,7 +9923,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         fontWeight: FontWeight.w700,
                                         color: _produtividadeChartPeriod == p
                                             ? Colors.white
-                                            : const Color(0xFF1A237E))),
+                                            : context.appDeepTitle)),
                                 selected: _produtividadeChartPeriod == p,
                                 onSelected: (_) {
                                   setState(() {
@@ -9718,11 +9937,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   });
                                 },
                                 selectedColor: AppColors.accent,
-                                backgroundColor: Colors.grey.shade50,
+                                backgroundColor: context.isDarkMode
+                                    ? context.appChipIdleBg
+                                    : Colors.grey.shade50,
                                 side: BorderSide(
                                     color: _produtividadeChartPeriod == p
                                         ? AppColors.accent
-                                        : Colors.grey.shade300),
+                                        : (context.isDarkMode
+                                            ? context.appChipIdleBorder
+                                            : Colors.grey.shade300)),
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 14, vertical: 8),
                                 shape: RoundedRectangleBorder(
@@ -9857,18 +10080,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w600,
-                                          color: Colors.grey.shade700)),
+                                          color: context.isDarkMode
+                                              ? context.appTextSecondary
+                                              : Colors.grey.shade700)),
                                   const SizedBox(height: 6),
                                   Text('$totalEmAberto',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                           fontSize: 22,
                                           fontWeight: FontWeight.w900,
-                                          color: Color(0xFF1A237E))),
+                                          color: context.appDeepTitle)),
                                   const SizedBox(height: 2),
                                   Text('Toque para ver lista',
                                       style: TextStyle(
                                           fontSize: 10,
-                                          color: Colors.grey.shade500)),
+                                          color: context.isDarkMode
+                                              ? context.appTextMuted
+                                              : Colors.grey.shade500)),
                                 ],
                               ),
                             ),
@@ -9906,18 +10133,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w600,
-                                          color: Colors.grey.shade700)),
+                                          color: context.isDarkMode
+                                              ? context.appTextSecondary
+                                              : Colors.grey.shade700)),
                                   const SizedBox(height: 6),
                                   Text('${folgaDatesAno.length}',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                           fontSize: 22,
                                           fontWeight: FontWeight.w900,
-                                          color: Color(0xFF1A237E))),
+                                          color: context.appDeepTitle)),
                                   const SizedBox(height: 2),
                                   Text('Toque para ver datas',
                                       style: TextStyle(
                                           fontSize: 10,
-                                          color: Colors.grey.shade500)),
+                                          color: context.isDarkMode
+                                              ? context.appTextMuted
+                                              : Colors.grey.shade500)),
                                 ],
                               ),
                             ),
@@ -9931,9 +10162,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     height: 220,
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
+                      color: context.appChipIdleBg,
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.grey.shade200),
+                      border: Border.all(
+                          color: context.isDarkMode
+                              ? context.appBorderSubtle
+                              : Colors.grey.shade200),
                       boxShadow: [
                         BoxShadow(
                             color: Colors.black.withOpacity(0.04),
@@ -9945,7 +10179,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ? Center(
                             child: Text('Nenhuma ocorrência no período.',
                                 style: TextStyle(
-                                    color: Colors.grey.shade600,
+                                    color: context.isDarkMode
+                                        ? context.appTextMuted
+                                        : Colors.grey.shade600,
                                     fontWeight: FontWeight.w600)))
                         : Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -9967,11 +10203,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                 blurRadius: 4)
                                           ])),
                                   const SizedBox(width: 8),
-                                  const Text('Em aberto',
+                                  Text('Em aberto',
                                       style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w700,
-                                          color: Color(0xFF374151))),
+                                          color: context.isDarkMode
+                                              ? context.appTextPrimary
+                                              : const Color(0xFF374151))),
                                   const SizedBox(width: 20),
                                   Container(
                                       width: 12,
@@ -9987,11 +10225,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                 blurRadius: 4)
                                           ])),
                                   const SizedBox(width: 8),
-                                  const Text('Já usado para folga',
+                                  Text('Já usado para folga',
                                       style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w700,
-                                          color: Color(0xFF374151))),
+                                          color: context.isDarkMode
+                                              ? context.appTextPrimary
+                                              : const Color(0xFF374151))),
                                 ],
                               ),
                               const SizedBox(height: 12),
@@ -10244,9 +10484,10 @@ class _DashboardPendingListSheetContentState
     final sortedList =
         FinanceFaturaTransactionSort.sortedMaps(widget.list, _sortMode);
     return Container(
-      decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      decoration: BoxDecoration(
+          color: context.appSurface,
+          borderRadius:
+              const BorderRadius.vertical(top: Radius.circular(24))),
       child: SafeArea(
         top: false,
         child: Column(
@@ -10285,17 +10526,19 @@ class _DashboardPendingListSheetContentState
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(widget.title,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                           fontSize: 18,
                                           fontWeight: FontWeight.w800,
-                                          color: Color(0xFF1A237E)),
+                                          color: context.appDeepTitle),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis),
                                   if (widget.subtitle != null)
                                     Text(widget.subtitle!,
                                         style: TextStyle(
                                             fontSize: 12,
-                                            color: Colors.grey.shade600),
+                                            color: context.isDarkMode
+                                                ? context.appTextMuted
+                                                : Colors.grey.shade600),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis),
                                   if (widget.list.isNotEmpty)
@@ -10331,17 +10574,19 @@ class _DashboardPendingListSheetContentState
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(widget.title,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.w800,
-                                      color: Color(0xFF1A237E)),
+                                      color: context.appDeepTitle),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis),
                               if (widget.subtitle != null)
                                 Text(widget.subtitle!,
                                     style: TextStyle(
                                         fontSize: 12,
-                                        color: Colors.grey.shade600),
+                                        color: context.isDarkMode
+                                            ? context.appTextMuted
+                                            : Colors.grey.shade600),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis),
                               if (widget.list.isNotEmpty)
@@ -10377,7 +10622,10 @@ class _DashboardPendingListSheetContentState
                           const SizedBox(height: 12),
                           Text(widget.emptyMessage,
                               style: TextStyle(
-                                  fontSize: 14, color: Colors.grey.shade600)),
+                                  fontSize: 14,
+                                  color: context.isDarkMode
+                                      ? context.appTextMuted
+                                      : Colors.grey.shade600)),
                         ],
                       ),
                     )

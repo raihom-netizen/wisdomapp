@@ -5,6 +5,7 @@ import '../models/scale_rates.dart';
 import '../widgets/brl_amount_text_field.dart';
 import '../services/logs_service.dart';
 import '../services/scale_rates_service.dart';
+import '../theme/theme_context.dart';
 
 /// Tela para o usuário personalizar valores padrão de hora diurna/noturna por dia da semana.
 /// Base: AC4 Goiás. Os valores são usados no cálculo automático dos plantões.
@@ -130,7 +131,7 @@ class _ScaleRatesEditScreenState extends State<ScaleRatesEditScreen> {
                         children: [
                           Text(
                             'Valores de hora diurna e noturna por dia da semana. Base: AC4 (Goiás). Personalize conforme sua realidade.',
-                            style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
+                            style: TextStyle(fontSize: 14, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700),
                           ),
                           const SizedBox(height: 16),
                           OutlinedButton.icon(
@@ -151,11 +152,11 @@ class _ScaleRatesEditScreenState extends State<ScaleRatesEditScreen> {
                     },
                     children: [
                       TableRow(
-                        decoration: BoxDecoration(color: Colors.grey.shade200),
+                        decoration: BoxDecoration(color: context.isDarkMode ? context.appSurfaceHigh : Colors.grey.shade200),
                         children: [
-                          Padding(padding: const EdgeInsets.all(8), child: Text('Dia', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.grey.shade800))),
-                          Padding(padding: const EdgeInsets.all(8), child: Text('Diurno (R\$)', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.grey.shade800))),
-                          Padding(padding: const EdgeInsets.all(8), child: Text('Noturno (R\$)', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.grey.shade800))),
+                          Padding(padding: const EdgeInsets.all(8), child: Text('Dia', style: TextStyle(fontWeight: FontWeight.w700, color: context.isDarkMode ? context.appTextPrimary : Colors.grey.shade800))),
+                          Padding(padding: const EdgeInsets.all(8), child: Text('Diurno (R\$)', style: TextStyle(fontWeight: FontWeight.w700, color: context.isDarkMode ? context.appTextPrimary : Colors.grey.shade800))),
+                          Padding(padding: const EdgeInsets.all(8), child: Text('Noturno (R\$)', style: TextStyle(fontWeight: FontWeight.w700, color: context.isDarkMode ? context.appTextPrimary : Colors.grey.shade800))),
                         ],
                       ),
                       ...List.generate(7, (i) => TableRow(

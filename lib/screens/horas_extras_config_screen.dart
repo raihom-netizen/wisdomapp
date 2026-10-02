@@ -15,6 +15,7 @@ import '../services/scale_rates_service.dart';
 import '../services/user_scale_rates_period_service.dart';
 import '../constants/date_time_formats.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../widgets/admin_scale_rates_period_editor_page.dart';
 import '../widgets/brl_amount_text_field.dart';
 import '../widgets/fast_text_field.dart';
@@ -350,7 +351,7 @@ class _HorasExtrasConfigScreenState extends State<HorasExtrasConfigScreen>
             const SizedBox(height: 6),
             Text(
               'Usado nas previsões (Meta) e nos alertas de Escalas. Padrão GO: 192 h.',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+              style: TextStyle(fontSize: 12, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700),
             ),
             const SizedBox(height: 12),
             FastTextField(
@@ -432,10 +433,15 @@ class _HorasExtrasConfigScreenState extends State<HorasExtrasConfigScreen>
               Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [
-                      const Color(0xFFDCFCE7),
-                      const Color(0xFFECFDF5),
-                    ],
+                    colors: context.isDarkMode
+                        ? [
+                            context.appAccentSurface(const Color(0xFF22C55E), darkAlpha: 0.22),
+                            context.appAccentSurface(const Color(0xFF22C55E), darkAlpha: 0.12),
+                          ]
+                        : [
+                            const Color(0xFFDCFCE7),
+                            const Color(0xFFECFDF5),
+                          ],
                   ),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: const Color(0xFF22C55E).withValues(alpha: 0.35)),
@@ -463,7 +469,7 @@ class _HorasExtrasConfigScreenState extends State<HorasExtrasConfigScreen>
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.textSecondary,
+                        color: context.appTextSecondary,
                       ),
                     ),
                   ],
@@ -559,12 +565,12 @@ class _HorasExtrasConfigScreenState extends State<HorasExtrasConfigScreen>
                 const SizedBox(height: 12),
                 BrlAmountTextField(
                   controller: _salaryCtrl,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Salário bruto mensal',
                     prefixText: 'R\$ ',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
                     filled: true,
-                    fillColor: Color(0xFFF8FAFC),
+                    fillColor: context.appChipIdleBg,
                   ),
                   onChanged: (_) => setState(() {}),
                 ),
@@ -573,25 +579,25 @@ class _HorasExtrasConfigScreenState extends State<HorasExtrasConfigScreen>
                   controller: _monthlyHoursCtrl,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: false),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Horas mensais contratadas',
                     hintText: '220 (44h/sem) ou 180 (36h/sem)',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
                     filled: true,
-                    fillColor: Color(0xFFF8FAFC),
+                    fillColor: context.appChipIdleBg,
                   ),
                   onChanged: (_) => setState(() {}),
                 ),
                 const SizedBox(height: 12),
                 BrlAmountTextField(
                   controller: _fixedHourCtrl,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Ou valor fixo da hora cheia',
                     prefixText: 'R\$ ',
                     hintText: '0,00 = calcular pelo salário',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
                     filled: true,
-                    fillColor: Color(0xFFF8FAFC),
+                    fillColor: context.appChipIdleBg,
                   ),
                   onChanged: (_) => setState(() {}),
                 ),
@@ -626,7 +632,9 @@ class _HorasExtrasConfigScreenState extends State<HorasExtrasConfigScreen>
         const SizedBox(height: 16),
         Card(
           elevation: 0,
-          color: const Color(0xFFF0FDF4),
+          color: context.isDarkMode
+              ? context.appAccentSurface(const Color(0xFF22C55E))
+              : const Color(0xFFF0FDF4),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -693,8 +701,12 @@ class _HorasExtrasConfigScreenState extends State<HorasExtrasConfigScreen>
           icon: const Icon(Icons.cloud_download_rounded),
           label: const Text('Carregar padrão vigente do sistema'),
           style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFFDBEAFE),
-            foregroundColor: const Color(0xFF1D4ED8),
+            backgroundColor: context.isDarkMode
+                ? context.appAccentSurface(const Color(0xFF3B82F6), darkAlpha: 0.25)
+                : const Color(0xFFDBEAFE),
+            foregroundColor: context.isDarkMode
+                ? const Color(0xFF93C5FD)
+                : const Color(0xFF1D4ED8),
             padding: const EdgeInsets.symmetric(vertical: 14),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
@@ -745,7 +757,7 @@ class _HorasExtrasConfigScreenState extends State<HorasExtrasConfigScreen>
                 const SizedBox(height: 8),
                 Text(
                   'Ignora o padrão Goiás. Use a linha do tempo para vigência ou edite a tabela atual.',
-                  style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                  style: TextStyle(fontSize: 12, color: context.appTextMuted),
                 ),
                 const SizedBox(height: 12),
                 ...List.generate(7, (i) {
@@ -769,9 +781,13 @@ class _HorasExtrasConfigScreenState extends State<HorasExtrasConfigScreen>
                               prefixText: 'R\$ ',
                               border: const OutlineInputBorder(),
                               filled: true,
-                              fillColor: i == 0 || i >= 5
-                                  ? const Color(0xFFFFF7ED)
-                                  : const Color(0xFFF0F9FF),
+                              fillColor: context.isDarkMode
+                                  ? (i == 0 || i >= 5
+                                      ? context.appAccentSurface(const Color(0xFFF97316))
+                                      : context.appAccentSurface(const Color(0xFF0EA5E9)))
+                                  : (i == 0 || i >= 5
+                                      ? const Color(0xFFFFF7ED)
+                                      : const Color(0xFFF0F9FF)),
                             ),
                             onChanged: (_) => setState(() {}),
                           ),
@@ -786,9 +802,13 @@ class _HorasExtrasConfigScreenState extends State<HorasExtrasConfigScreen>
                               prefixText: 'R\$ ',
                               border: const OutlineInputBorder(),
                               filled: true,
-                              fillColor: i == 0 || i >= 5
-                                  ? const Color(0xFFFFF7ED)
-                                  : const Color(0xFFF5F3FF),
+                              fillColor: context.isDarkMode
+                                  ? (i == 0 || i >= 5
+                                      ? context.appAccentSurface(const Color(0xFFF97316))
+                                      : context.appAccentSurface(const Color(0xFF8B5CF6)))
+                                  : (i == 0 || i >= 5
+                                      ? const Color(0xFFFFF7ED)
+                                      : const Color(0xFFF5F3FF)),
                             ),
                             onChanged: (_) => setState(() {}),
                           ),
@@ -858,7 +878,8 @@ class _HorasExtrasConfigScreenState extends State<HorasExtrasConfigScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F4FA),
+      backgroundColor:
+          context.isDarkMode ? context.appScaffold : const Color(0xFFF0F4FA),
       appBar: AppBar(
         title: const Text('Horas extras / Banco de horas'),
         flexibleSpace: Container(

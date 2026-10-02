@@ -21,6 +21,7 @@ import '../constants/color_palette.dart';
 import '../constants/currency_formats.dart';
 import '../theme/app_colors.dart';
 import '../theme/gemini_theme.dart';
+import '../theme/theme_context.dart';
 import '../services/scale_rates_period_service.dart';
 import '../services/goias_scale_rates_recalc_service.dart';
 import '../services/scale_rates_service.dart';
@@ -61,6 +62,28 @@ import '../services/yearly_commitment_repeat_service.dart';
 
 bool _isSameDay(DateTime? a, DateTime b) =>
     a != null && a.year == b.year && a.month == b.month && a.day == b.day;
+
+/// Atalhos de modo escuro deste arquivo: no claro devolvem exatamente a cor
+/// original (cinzas do Material); no escuro, os tokens legíveis do tema.
+extension _ScalesDarkColors on BuildContext {
+  Color get scGrey600 => isDarkMode ? appTextMuted : Colors.grey[600]!;
+  Color get scGrey700 => isDarkMode ? appTextSecondary : Colors.grey[700]!;
+  Color get scGrey800 => isDarkMode ? appTextPrimary : Colors.grey[800]!;
+  Color get scGrey50Bg => isDarkMode ? appInputFill : Colors.grey[50]!;
+  Color get scGrey100Border =>
+      isDarkMode ? appBorderSubtle : Colors.grey[100]!;
+  Color get scGrey200Border =>
+      isDarkMode ? appChipIdleBorder : Colors.grey[200]!;
+  Color get scGrey300Border =>
+      isDarkMode ? appChipIdleBorder : Colors.grey[300]!;
+
+  /// Azul-marinho da marca usado como TEXTO/ícone (AppColors.deepBlue).
+  Color get scDeepBlue => isDarkMode ? appDeepTitle : AppColors.deepBlue;
+
+  /// Texto quase preto (0xFF1A1C1E) usado em títulos de seção.
+  Color get scInkText =>
+      isDarkMode ? appTextPrimary : const Color(0xFF1A1C1E);
+}
 
 /// Tipografia coerente em mobile (Android/iPhone/Web estreito) vs desktop.
 double _scalesScreenFontSize(BuildContext context, double desktop) {
@@ -205,6 +228,7 @@ List<Color> _magicRegimeGradient(String r) {
 
 /// Tipo de geração / CTAs do “botão mágico” — gradiente + ícone em cápsula.
 Widget _magicGradientChoice({
+  required BuildContext context,
   required bool selected,
   required String label,
   required IconData icon,
@@ -227,7 +251,7 @@ Widget _magicGradientChoice({
                   colors: selectedGradient,
                 )
               : null,
-          color: selected ? null : const Color(0xFFF8FAFC),
+          color: selected ? null : context.appChipIdleBg,
           border: Border.all(
             color: selected
                 ? Colors.white.withValues(alpha: 0.45)
@@ -275,7 +299,7 @@ Widget _magicGradientChoice({
                   fontSize: 13,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.15,
-                  color: selected ? Colors.white : AppColors.textPrimary,
+                  color: selected ? Colors.white : context.appTextPrimary,
                   height: 1.25,
                 ),
               ),
@@ -294,6 +318,7 @@ Widget _magicGradientChoice({
 }
 
 Widget _magicRegimePill({
+  required BuildContext context,
   required String label,
   required bool selected,
   required VoidCallback onTap,
@@ -316,11 +341,13 @@ Widget _magicRegimePill({
                     colors: g,
                   )
                 : null,
-            color: selected ? null : const Color(0xFFF1F5F9),
+            color: selected ? null : context.appInputFill,
             border: Border.all(
               color: selected
                   ? Colors.white.withValues(alpha: 0.4)
-                  : const Color(0xFFCBD5E1),
+                  : (context.isDarkMode
+                      ? context.appChipIdleBorder
+                      : const Color(0xFFCBD5E1)),
               width: selected ? 1.3 : 1,
             ),
             boxShadow: selected
@@ -343,7 +370,7 @@ Widget _magicRegimePill({
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.2,
-                  color: selected ? Colors.white : AppColors.textPrimary,
+                  color: selected ? Colors.white : context.appTextPrimary,
                 ),
               ),
               if (selected) ...[
@@ -427,6 +454,7 @@ Widget _magicFullWidthCta({
 
 /// Secundário premium (personalizado / expediente) — contorno colorido + preenchimento suave.
 Widget _magicSecondaryCta({
+  required BuildContext context,
   required VoidCallback? onPressed,
   required IconData icon,
   required String label,
@@ -449,8 +477,8 @@ Widget _magicSecondaryCta({
                     accentGradient.last.withValues(alpha: 0.1),
                   ]
                 : [
-                    Colors.white,
-                    const Color(0xFFF8FAFC),
+                    context.appSurface,
+                    context.appChipIdleBg,
                   ],
           ),
           border: Border.all(
@@ -477,7 +505,7 @@ Widget _magicSecondaryCta({
                 label,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: selected ? AppColors.textPrimary : a,
+                  color: selected ? context.appTextPrimary : a,
                   fontWeight: FontWeight.w800,
                   fontSize: 14,
                   letterSpacing: 0.15,
@@ -839,7 +867,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
   @override
   Widget build(BuildContext context) {
     if (!widget.isShellVisible) {
-      return const ColoredBox(color: Color(0xFFF4F7FA));
+      return ColoredBox(
+          color: context.isDarkMode
+              ? context.appScaffold
+              : const Color(0xFFF4F7FA));
     }
     // Quando o atalho "Incluir plantão" (ou Calculadora) pede, abre o formulário Configurar Plantão
     final dateToOpen = widget.initialOpenConfigurarPlantao;
@@ -865,7 +896,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
         padding.right > horizontalPad ? padding.right : horizontalPad;
     final sectionGap = isNarrow ? 16.0 : 24.0;
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FA),
+      backgroundColor: context.isDarkMode
+          ? context.appScaffold
+          : const Color(0xFFF4F7FA),
       resizeToAvoidBottomInset: scaffoldKeyboardResizeToAvoidBottomInset(
         embeddedInHomeShell: widget.shellScrollController != null,
       ),
@@ -1189,7 +1222,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
       String title, String value, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: GeminiTheme.cardDecoration(color: Colors.white).copyWith(
+      decoration:
+          GeminiTheme.cardDecoration(color: context.appSurface).copyWith(
         boxShadow: [
           BoxShadow(
               color: color.withValues(alpha: 0.1),
@@ -1218,17 +1252,21 @@ class _ScalesScreenState extends State<ScalesScreen> {
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w800,
-              color: GeminiTheme.textMuted,
+              color: context.isDarkMode
+                  ? context.appTextMuted
+                  : GeminiTheme.textMuted,
               letterSpacing: 1.2,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w900,
-              color: GeminiTheme.textPrimary,
+              color: context.isDarkMode
+                  ? context.appTextPrimary
+                  : GeminiTheme.textPrimary,
             ),
           ),
         ],
@@ -1280,7 +1318,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
 
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: GeminiTheme.cardDecoration(),
+      decoration: GeminiTheme.cardDecorationOf(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1289,12 +1327,12 @@ class _ScalesScreenState extends State<ScalesScreen> {
               Icon(Icons.bar_chart_rounded,
                   color: GeminiTheme.primary, size: 24),
               const SizedBox(width: 10),
-              const Text(
+              Text(
                 'Ganhos por semana',
                 style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
-                    color: GeminiTheme.textPrimary),
+                    color: GeminiTheme.textPrimaryOf(context)),
               ),
             ],
           ),
@@ -1530,7 +1568,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     if (total <= 0) {
       return Container(
         padding: const EdgeInsets.all(24),
-        decoration: GeminiTheme.cardDecoration(),
+        decoration: GeminiTheme.cardDecorationOf(context),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -1612,7 +1650,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     );
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: GeminiTheme.cardDecoration(),
+      decoration: GeminiTheme.cardDecorationOf(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1626,7 +1664,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                 style: TextStyle(
                     fontSize: fsTitulo,
                     fontWeight: FontWeight.w800,
-                    color: GeminiTheme.textPrimary),
+                    color: GeminiTheme.textPrimaryOf(context)),
               ),
             ],
           ),
@@ -1675,11 +1713,13 @@ class _ScalesScreenState extends State<ScalesScreen> {
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.amber.shade50,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.amber.shade200),
-            ),
+            decoration: context.isDarkMode
+                ? context.appInfoBannerDecoration(Colors.amber, radius: 10)
+                : BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.amber.shade200),
+                  ),
             child: Row(
               children: [
                 Icon(Icons.info_outline_rounded,
@@ -1689,7 +1729,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
                   child: Text(
                     'Banco de Horas: 05h às 22h (diurno); 22h01 às 05h (noturno). Padrão GO: o dia civil encerra à meia-noite; até 23:59 no calendário; após 00:00 do dia seguinte (e na virada do mês, após 00:00 do dia 1º) no mês seguinte.',
                     style: TextStyle(
-                        fontSize: fsInfo, color: Colors.amber.shade900),
+                        fontSize: fsInfo,
+                        color: context.isDarkMode
+                            ? Colors.amber.shade200
+                            : Colors.amber.shade900),
                   ),
                 ),
               ],
@@ -1751,6 +1794,13 @@ class _ScalesScreenState extends State<ScalesScreen> {
     bool ring = false,
     bool emphasized = false,
   }) {
+    // Modo escuro: fundo pastel vira faixa escura com tom do accent e o texto
+    // clareia para continuar legível. No claro fica exatamente como antes.
+    if (context.isDarkMode) {
+      background =
+          context.appAccentSurface(foreground, darkAlpha: 0.22);
+      foreground = Color.lerp(foreground, Colors.white, 0.55) ?? foreground;
+    }
     return Container(
       constraints: const BoxConstraints(minWidth: 108),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -1853,15 +1903,22 @@ class _ScalesScreenState extends State<ScalesScreen> {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: passouTeto
+              colors: context.isDarkMode
                   ? [
-                      Colors.orange.shade50,
-                      Colors.orange.shade100.withValues(alpha: 0.45),
+                      context.appAccentSurface(
+                          passouTeto ? Colors.orange : GeminiTheme.primary,
+                          darkAlpha: 0.22),
+                      context.appSurface,
                     ]
-                  : [
-                      GeminiTheme.primary.withValues(alpha: 0.10),
-                      Colors.white,
-                    ],
+                  : passouTeto
+                      ? [
+                          Colors.orange.shade50,
+                          Colors.orange.shade100.withValues(alpha: 0.45),
+                        ]
+                      : [
+                          GeminiTheme.primary.withValues(alpha: 0.10),
+                          Colors.white,
+                        ],
             ),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
@@ -1905,8 +1962,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
                             fontWeight: FontWeight.w900,
                             letterSpacing: 0.2,
                             color: passouTeto
-                                ? Colors.orange.shade900
-                                : const Color(0xFF1A237E),
+                                ? (context.isDarkMode
+                                    ? Colors.orange.shade300
+                                    : Colors.orange.shade900)
+                                : context.appDeepTitle,
                           ),
                         ),
                         const SizedBox(height: 6),
@@ -1974,8 +2033,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
                   fontWeight: FontWeight.w600,
                   height: 1.35,
                   color: passouTeto
-                      ? Colors.orange.shade900
-                      : GeminiTheme.textPrimary,
+                      ? (context.isDarkMode
+                          ? Colors.orange.shade300
+                          : Colors.orange.shade900)
+                      : GeminiTheme.textPrimaryOf(context),
                 ),
               ),
             ],
@@ -2017,7 +2078,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                     style: TextStyle(
                         fontSize: fsVal,
                         fontWeight: FontWeight.w800,
-                        color: GeminiTheme.textPrimary),
+                        color: GeminiTheme.textPrimaryOf(context)),
                   ),
                 ),
               ],
@@ -2078,7 +2139,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
       final valPend = pendentes.fold<double>(0, (s, e) => s + e.totalValue);
       final valTotal = valReal + valPend;
       final color = typeKey == 'state'
-          ? const Color(0xFF1A237E)
+          ? (context.isDarkMode
+              ? const Color(0xFF7986CB)
+              : const Color(0xFF1A237E))
           : typeKey == 'municipality'
               ? const Color(0xFF0D9488)
               : const Color(0xFF7C3AED);
@@ -2086,7 +2149,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
         width: double.infinity,
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: context.appSurface,
           borderRadius: BorderRadius.circular(22),
           border: Border.all(color: AppColors.deepBlue.withValues(alpha: 0.1)),
           boxShadow: [
@@ -2148,7 +2211,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                               style: TextStyle(
                                 fontSize: fsCardTitle,
                                 fontWeight: FontWeight.w900,
-                                color: AppColors.textPrimary,
+                                color: context.appTextPrimary,
                                 letterSpacing: 0.2,
                                 height: 1.2,
                               ),
@@ -2159,7 +2222,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                               style: TextStyle(
                                 fontSize: fsTiny,
                                 fontWeight: FontWeight.w700,
-                                color: AppColors.textMuted,
+                                color: context.appTextMuted,
                               ),
                             ),
                           ],
@@ -2179,7 +2242,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           style: TextStyle(
                               fontSize: fsRow,
                               fontWeight: FontWeight.w700,
-                              color: AppColors.textSecondary,
+                              color: context.appTextSecondary,
                               height: 1.25),
                           maxLines: 2,
                           softWrap: true,
@@ -2199,7 +2262,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           style: TextStyle(
                               fontSize: fsRow,
                               fontWeight: FontWeight.w700,
-                              color: AppColors.textSecondary,
+                              color: context.appTextSecondary,
                               height: 1.25),
                           maxLines: 2,
                           softWrap: true,
@@ -2236,7 +2299,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                   fontSize: fsTiny,
                                   fontWeight: FontWeight.w900,
                                   letterSpacing: 0.65,
-                                  color: AppColors.textMuted,
+                                  color: context.appTextMuted,
                                 ),
                               ),
                               const SizedBox(height: 4),
@@ -2245,7 +2308,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                 style: TextStyle(
                                   fontSize: fsHint,
                                   fontWeight: FontWeight.w600,
-                                  color: AppColors.textSecondary,
+                                  color: context.appTextSecondary,
                                 ),
                               ),
                             ],
@@ -2301,7 +2364,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
               style: TextStyle(
                   fontSize: fsSec,
                   fontWeight: FontWeight.w800,
-                  color: const Color(0xFF1A1C1E)),
+                  color: context.scInkText),
             ),
           ],
         ),
@@ -2309,7 +2372,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
         Text(
           'Apenas plantões ligados à lista de plantões recorrentes com financeiro ativo · mês do calendário: ${DateFormat('MM/yyyy').format(_focusedDay)}',
           style: TextStyle(
-              fontSize: fsCap, color: Colors.grey.shade700, height: 1.25),
+              fontSize: fsCap, color: context.scGrey700, height: 1.25),
         ),
         const SizedBox(height: 12),
         cardVinculo('state', labels['state']!, byType['state']!,
@@ -2346,7 +2409,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
               margin: const EdgeInsets.only(top: 8),
               clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: context.appSurface,
                 borderRadius: BorderRadius.circular(22),
                 border: Border.all(
                     color: AppColors.deepBlue.withValues(alpha: 0.12)),
@@ -2391,7 +2454,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Icon(Icons.summarize_rounded,
-                                  size: 22, color: AppColors.deepBlue),
+                                  size: 22, color: context.scDeepBlue),
                             ),
                             const SizedBox(width: 10),
                             Expanded(
@@ -2404,7 +2467,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                       fontSize: fsTiny,
                                       fontWeight: FontWeight.w900,
                                       letterSpacing: 0.55,
-                                      color: AppColors.textMuted,
+                                      color: context.appTextMuted,
                                     ),
                                   ),
                                   const SizedBox(height: 2),
@@ -2413,7 +2476,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                     style: TextStyle(
                                       fontSize: fsRow,
                                       fontWeight: FontWeight.w900,
-                                      color: AppColors.textPrimary,
+                                      color: context.appTextPrimary,
                                       height: 1.2,
                                     ),
                                     softWrap: true,
@@ -2428,7 +2491,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           'Soma só dos vínculos com financeiro ativo no mês visível acima.',
                           style: TextStyle(
                               fontSize: fsHint,
-                              color: AppColors.textSecondary,
+                              color: context.appTextSecondary,
                               fontWeight: FontWeight.w600,
                               height: 1.3),
                         ),
@@ -2465,7 +2528,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                                   fontSize: fsCap,
                                                   fontWeight: FontWeight.w800,
                                                   color:
-                                                      AppColors.textSecondary)),
+                                                      context.appTextSecondary)),
                                           const SizedBox(height: 4),
                                           FittedBox(
                                             fit: BoxFit.scaleDown,
@@ -2484,7 +2547,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                               '${totReal.length} plantão(ões) · toque p/ ver',
                                               style: TextStyle(
                                                   fontSize: fsTiny,
-                                                  color: AppColors.textMuted)),
+                                                  color: context.appTextMuted)),
                                         ],
                                       ),
                                     ),
@@ -2517,7 +2580,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                                   fontSize: fsCap,
                                                   fontWeight: FontWeight.w800,
                                                   color:
-                                                      AppColors.textSecondary)),
+                                                      context.appTextSecondary)),
                                           const SizedBox(height: 4),
                                           FittedBox(
                                             fit: BoxFit.scaleDown,
@@ -2537,7 +2600,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                               '${totPend.length} plantão(ões) · toque p/ ver',
                                               style: TextStyle(
                                                   fontSize: fsTiny,
-                                                  color: AppColors.textMuted)),
+                                                  color: context.appTextMuted)),
                                         ],
                                       ),
                                     ),
@@ -2575,7 +2638,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                   fontSize: fsTiny,
                                   fontWeight: FontWeight.w900,
                                   letterSpacing: 0.65,
-                                  color: AppColors.textMuted,
+                                  color: context.appTextMuted,
                                 ),
                               ),
                               const SizedBox(height: 4),
@@ -2584,7 +2647,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                 style: TextStyle(
                                     fontSize: fsSub,
                                     fontWeight: FontWeight.w800,
-                                    color: AppColors.textSecondary),
+                                    color: context.appTextSecondary),
                                 softWrap: true,
                               ),
                               const SizedBox(height: 8),
@@ -2598,7 +2661,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                   style: TextStyle(
                                       fontSize: fsTotBig + 1,
                                       fontWeight: FontWeight.w900,
-                                      color: AppColors.deepBlue),
+                                      color: context.scDeepBlue),
                                 ),
                               ),
                             ],
@@ -2629,7 +2692,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
       child: Container(
         margin: EdgeInsets.symmetric(horizontal: isNarrow ? 0 : 15),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: context.appSurface,
           borderRadius: BorderRadius.circular(isNarrow ? 22 : 28),
           boxShadow: [
             BoxShadow(
@@ -2674,7 +2737,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
       width: double.infinity,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appSurface,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
           color: AppColors.deepBlue.withValues(alpha: 0.12),
@@ -2719,10 +2782,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
                         color: AppColors.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.event_available_rounded,
                         size: 18,
-                        color: AppColors.deepBlue,
+                        color: context.scDeepBlue,
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -2736,7 +2799,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                               fontSize: _scalesScreenFontSize(context, 10.5),
                               fontWeight: FontWeight.w900,
                               letterSpacing: 0.55,
-                              color: AppColors.textMuted,
+                              color: context.appTextMuted,
                             ),
                           ),
                           const SizedBox(height: 2),
@@ -2745,7 +2808,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                             style: TextStyle(
                               fontSize: fsTitulo,
                               fontWeight: FontWeight.w900,
-                              color: AppColors.textPrimary,
+                              color: context.appTextPrimary,
                               height: 1.2,
                             ),
                           ),
@@ -2760,7 +2823,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                     'Sem feriados nacionais neste mês.',
                     style: TextStyle(
                       fontSize: fsCorpo,
-                      color: AppColors.textSecondary,
+                      color: context.appTextSecondary,
                       fontWeight: FontWeight.w600,
                       height: 1.35,
                     ),
@@ -2793,7 +2856,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           '$data · ${f.name}$extra',
                           style: TextStyle(
                             fontSize: fsCorpo,
-                            color: AppColors.textPrimary,
+                            color: context.appTextPrimary,
                             fontWeight: FontWeight.w700,
                             height: 1.25,
                           ),
@@ -3036,7 +3099,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                       scaleEntryResumoTitleText(
                         e,
                         fontSize: fsResumoItemTitulo,
-                        color: const Color(0xFF1A237E),
+                        color: context.appDeepTitle,
                       ),
                       const SizedBox(height: 6),
                       Text(
@@ -3054,7 +3117,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                             fontSize: fs12,
                             fontWeight: FontWeight.w700,
                             height: 1.35,
-                            color: const Color(0xFF1A237E),
+                            color: context.appDeepTitle,
                           ),
                         ),
                       ],
@@ -3067,7 +3130,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           fontSize: fs12,
                           fontWeight: FontWeight.w800,
                           color: e.isCompromisso
-                              ? AppColors.textMuted
+                              ? context.appTextMuted
                               : Colors.green.shade700,
                         ),
                       ),
@@ -3084,7 +3147,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(22),
-            color: Colors.white,
+            color: context.appSurface,
             border: Border.all(
               color: AppColors.deepBlue.withValues(alpha: 0.12),
             ),
@@ -3129,7 +3192,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           fontSize: fsResumoDiaHeader,
                           fontWeight: FontWeight.w900,
                           letterSpacing: 0.35,
-                          color: AppColors.textPrimary,
+                          color: context.appTextPrimary,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -3138,7 +3201,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                         style: TextStyle(
                           fontSize: fs12,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.textSecondary,
+                          color: context.appTextSecondary,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -3153,7 +3216,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                 style: TextStyle(
                                     fontSize: fs12,
                                     fontWeight: FontWeight.w600,
-                                    color: Colors.grey.shade700),
+                                    color: context.scGrey700),
                                 overflow: TextOverflow.ellipsis),
                           ),
                           const SizedBox(width: 8),
@@ -3161,7 +3224,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                               style: TextStyle(
                                   fontSize: fs14,
                                   fontWeight: FontWeight.w700,
-                                  color: const Color(0xFF1A237E))),
+                                  color: context.appDeepTitle)),
                         ],
                       ),
                       const SizedBox(height: 4),
@@ -3172,7 +3235,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                 style: TextStyle(
                                     fontSize: fs12,
                                     fontWeight: FontWeight.w600,
-                                    color: Colors.grey.shade700),
+                                    color: context.scGrey700),
                                 overflow: TextOverflow.ellipsis),
                           ),
                           const SizedBox(width: 8),
@@ -3189,13 +3252,15 @@ class _ScalesScreenState extends State<ScalesScreen> {
                             vertical: 6, horizontal: 8),
                         decoration: BoxDecoration(
                           color: _isLastDayOfMonth(day) && split.de0007 > 0
-                              ? Colors.indigo.shade50
-                              : Colors.grey.shade50,
+                              ? (context.isDarkMode
+                                  ? context.appAccentSurface(Colors.indigo)
+                                  : Colors.indigo.shade50)
+                              : context.scGrey50Bg,
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
                               color: _isLastDayOfMonth(day) && split.de0007 > 0
                                   ? Colors.indigo.shade200
-                                  : Colors.grey.shade200),
+                                  : context.scGrey200Border),
                         ),
                         child: Row(
                           children: [
@@ -3216,7 +3281,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                     color: _isLastDayOfMonth(day) &&
                                             split.de0007 > 0
                                         ? Colors.indigo.shade800
-                                        : Colors.grey.shade700),
+                                        : context.scGrey700),
                               ),
                             ),
                           ],
@@ -3234,7 +3299,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                 fontSize: fs13,
                                 fontWeight: FontWeight.w700,
                                 height: 1.3,
-                                color: AppColors.textSecondary),
+                                color: context.appTextSecondary),
                             softWrap: true,
                             maxLines: 2,
                           ),
@@ -3245,7 +3310,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           style: TextStyle(
                               fontSize: fs18,
                               fontWeight: FontWeight.w900,
-                              color: AppColors.deepBlue),
+                              color: context.scDeepBlue),
                           overflow: TextOverflow.visible,
                         ),
                       ],
@@ -3621,7 +3686,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
           weekdayStyle: TextStyle(
             fontSize: isNarrow ? 11 : 10.5,
             fontWeight: FontWeight.w800,
-            color: const Color(0xFF455A64),
+            color: context.appCalendarWeekday,
           ),
           weekendStyle: TextStyle(
             fontSize: isNarrow ? 11 : 10.5,
@@ -3656,7 +3721,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                 ? (isNarrow ? 26 : 24)
                 : (isNarrow ? 22 : 21),
             fontWeight: FontWeight.w900,
-            color: const Color(0xFF1A237E),
+            color: context.appDeepTitle,
             letterSpacing: -0.35,
           ),
           leftChevronIcon: Container(
@@ -3693,7 +3758,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
             boxShadow: todaySoftLift(AppColors.primary),
           ),
           todayTextStyle: TextStyle(
-              color: const Color(0xFF0B1F4B),
+              color: context.isDarkMode
+                  ? context.appTextPrimary
+                  : const Color(0xFF0B1F4B),
               fontWeight: FontWeight.w900,
               fontSize: isNarrow ? 26 : 24),
           // Seleção: só indicador discreto (ponto), sem preencher a célula de azul — evita confundir com plantões coloridos
@@ -3702,14 +3769,14 @@ class _ScalesScreenState extends State<ScalesScreen> {
             borderRadius: BorderRadius.circular(10),
           ),
           selectedTextStyle: TextStyle(
-              color: const Color(0xFF1A1C1E),
+              color: context.scInkText,
               fontWeight: FontWeight.w600,
               fontSize: isNarrow ? 21 : 19),
           markerDecoration: BoxDecoration(
               color: AppColors.accent, borderRadius: BorderRadius.circular(4)),
           outsideDaysVisible: false,
           defaultTextStyle: TextStyle(
-              color: const Color(0xFF1A1C1E),
+              color: context.scInkText,
               fontWeight: FontWeight.w600,
               fontSize: isNarrow ? 21 : 19),
           weekendTextStyle: TextStyle(
@@ -3786,7 +3853,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                     letterSpacing: 0.2,
                     color: isWeekend
                         ? Colors.red.shade700
-                        : const Color(0xFF455A64),
+                        : context.appCalendarWeekday,
                   ),
                 ),
               ),
@@ -3960,7 +4027,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                         style: TextStyle(
                           color: isHol
                               ? const Color(0xFFE53935)
-                              : const Color(0xFF1A1C1E),
+                              : context.scInkText,
                           fontWeight: isHol ? FontWeight.w900 : FontWeight.w600,
                           fontSize: isNarrow ? 17 : 15,
                         ),
@@ -4080,15 +4147,15 @@ class _ScalesScreenState extends State<ScalesScreen> {
     return Container(
       padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appSurface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.grey.shade100),
+        border: Border.all(color: context.scGrey100Border),
       ),
       child: Center(
         child: Column(
           children: [
             Icon(Icons.event_busy_rounded,
-                size: 48, color: Colors.grey.shade300),
+                size: 48, color: context.scGrey300Border),
             const SizedBox(height: 12),
             Text(
               'Nenhum plantão agendado',
@@ -4160,7 +4227,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
               style: TextStyle(
                 fontSize: fsLbl,
                 fontWeight: FontWeight.w700,
-                color: Colors.grey.shade800,
+                color: context.scGrey800,
                 height: 1.3,
               ),
             ),
@@ -4170,7 +4237,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
             style: TextStyle(
               fontSize: fsVal,
               fontWeight: FontWeight.w900,
-              color: const Color(0xFF1A237E),
+              color: context.appDeepTitle,
             ),
           ),
         ],
@@ -4195,7 +4262,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
       return Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: context.appSurface,
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
@@ -4203,7 +4270,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                 blurRadius: 10,
                 offset: const Offset(0, 4))
           ],
-          border: Border.all(color: Colors.grey.shade100),
+          border: Border.all(color: context.scGrey100Border),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -4218,7 +4285,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                   style: TextStyle(
                       fontSize: fs18,
                       fontWeight: FontWeight.w800,
-                      color: Colors.grey.shade800),
+                      color: context.scGrey800),
                 ),
               ],
             ),
@@ -4228,7 +4295,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
               style: TextStyle(
                   fontSize: fs17,
                   fontWeight: FontWeight.w900,
-                  color: const Color(0xFF1A237E),
+                  color: context.appDeepTitle,
                   letterSpacing: 0.5),
             ),
             const SizedBox(height: 14),
@@ -4247,7 +4314,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
                     style: TextStyle(
                         fontSize: fs14,
                         fontWeight: FontWeight.w900,
-                        color: Colors.grey.shade900),
+                        color: context.isDarkMode
+                            ? context.appTextPrimary
+                            : Colors.grey.shade900),
                   ),
                 ),
                 Text(
@@ -4255,7 +4324,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                   style: TextStyle(
                       fontSize: fs15,
                       fontWeight: FontWeight.w900,
-                      color: const Color(0xFF1A237E)),
+                      color: context.appDeepTitle),
                 ),
               ],
             ),
@@ -4280,7 +4349,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appSurface,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -4288,7 +4357,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
               blurRadius: 10,
               offset: const Offset(0, 4))
         ],
-        border: Border.all(color: Colors.grey.shade100),
+        border: Border.all(color: context.scGrey100Border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -4310,7 +4379,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           style: TextStyle(
                               fontSize: fs18,
                               fontWeight: FontWeight.w800,
-                              color: Colors.grey.shade800),
+                              color: context.scGrey800),
                         ),
                       ),
                       if (!narrow)
@@ -4356,14 +4425,14 @@ class _ScalesScreenState extends State<ScalesScreen> {
             style: TextStyle(
                 fontSize: fs17,
                 fontWeight: FontWeight.w900,
-                color: const Color(0xFF1A237E),
+                color: context.appDeepTitle,
                 letterSpacing: 0.5),
           ),
           const SizedBox(height: 14),
           Text(
             'Somente quantidades (valores em Estado / Município / Particular acima).',
             style: TextStyle(
-                fontSize: fs12, color: Colors.grey.shade700, height: 1.35),
+                fontSize: fs12, color: context.scGrey700, height: 1.35),
           ),
           const SizedBox(height: 12),
           _linhaResumoMesSoQuantidade('PLANTÕES ESCALAS / COMPROMISSOS',
@@ -4382,7 +4451,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
                   style: TextStyle(
                       fontSize: fs14,
                       fontWeight: FontWeight.w900,
-                      color: Colors.grey.shade900),
+                      color: context.isDarkMode
+                            ? context.appTextPrimary
+                            : Colors.grey.shade900),
                 ),
               ),
               Text(
@@ -4390,7 +4461,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                 style: TextStyle(
                     fontSize: fs15,
                     fontWeight: FontWeight.w900,
-                    color: const Color(0xFF1A237E)),
+                    color: context.appDeepTitle),
               ),
             ],
           ),
@@ -4555,8 +4626,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
         );
       case 'Estado':
         return (
-          bg: const Color(0xFF1A237E).withValues(alpha: 0.12),
-          fg: const Color(0xFF1A237E)
+          bg: const Color(0xFF1A237E)
+              .withValues(alpha: context.isDarkMode ? 0.35 : 0.12),
+          fg: context.appDeepTitle
         );
       case 'Município':
         return (
@@ -4569,7 +4641,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
           fg: const Color(0xFF6D28D9)
         );
       default:
-        return (bg: Colors.grey.shade200, fg: Colors.grey.shade800);
+        return (
+          bg: context.isDarkMode ? context.appSurfaceHigh : Colors.grey.shade200,
+          fg: context.scGrey800
+        );
     }
   }
 
@@ -4747,7 +4822,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
     final resumoDataServicoStyle = TextStyle(
       fontSize: 15,
       fontWeight: FontWeight.w800,
-      color: AppColors.textPrimary,
+      color: context.appTextPrimary,
       height: 1.25,
     );
     final dia = DateFormat('dd', 'pt_BR').format(e.date);
@@ -4761,8 +4836,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
     final temValor = e.totalValue > 0;
     final valorBgColor = temValor
         ? AppColors.success.withValues(alpha: 0.10)
-        : AppColors.textMuted.withValues(alpha: 0.10);
-    final valorFgColor = temValor ? AppColors.success : AppColors.textSecondary;
+        : context.appTextMuted.withValues(alpha: 0.10);
+    final valorFgColor = temValor ? AppColors.success : context.appTextSecondary;
     Widget valorPill() {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -4860,10 +4935,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
           const SizedBox(height: 6),
           Text(
             title.isEmpty ? 'Plantão' : title,
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.w800,
               fontSize: 15,
-              color: AppColors.textPrimary,
+              color: context.appTextPrimary,
               height: 1.25,
             ),
             maxLines: 4,
@@ -4873,7 +4948,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
           if (resumoLinhas.isEmpty)
             Row(
               children: [
-                Icon(Icons.tag_rounded, size: 14, color: AppColors.textMuted),
+                Icon(Icons.tag_rounded, size: 14, color: context.appTextMuted),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
@@ -4881,7 +4956,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.textMuted,
+                      color: context.appTextMuted,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -4990,7 +5065,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
         return Container(
           margin: const EdgeInsets.only(bottom: 10),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.appSurface,
             borderRadius: BorderRadius.circular(18),
             border: Border(left: BorderSide(color: accent, width: 4)),
             boxShadow: [
@@ -5308,17 +5383,17 @@ class _ScalesScreenState extends State<ScalesScreen> {
           ),
           const Spacer(),
           Material(
-            color: Colors.grey.shade100,
+            color: ctx.isDarkMode ? ctx.appSurfaceHigh : Colors.grey.shade100,
             shape: const CircleBorder(),
             child: InkWell(
               customBorder: const CircleBorder(),
               onTap: () => Navigator.of(ctx).pop(),
-              child: const Padding(
-                padding: EdgeInsets.all(8),
+              child: Padding(
+                padding: const EdgeInsets.all(8),
                 child: Icon(
                   Icons.close_rounded,
                   size: 22,
-                  color: Color(0xFF1A237E),
+                  color: ctx.appDeepTitle,
                   semanticLabel: 'Fechar',
                 ),
               ),
@@ -5366,10 +5441,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
                 child: Text(
                   titulo,
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
-                      color: Color(0xFF1A1C1E)),
+                      color: ctx.scInkText),
                 ),
               ),
               const Divider(height: 1),
@@ -5408,9 +5483,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appSurface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: context.scGrey200Border),
         boxShadow: [
           BoxShadow(
               color: Colors.black.withValues(alpha: 0.04),
@@ -5438,10 +5513,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
                 children: [
                   Text(
                     e.label ?? 'Plantão',
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 15,
-                        color: Color(0xFF1A237E)),
+                        color: context.appDeepTitle),
                   ),
                   const SizedBox(height: 6),
                   Wrap(
@@ -5482,7 +5557,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                         '${DateFormat('dd/MM/yyyy', 'pt_BR').format(e.date)} · das ${e.start} às ${e.end}',
                         style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey.shade700,
+                            color: context.scGrey700,
                             fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 2),
@@ -5500,7 +5575,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                         fontSize: 12,
                         color: (e.scaleNumber ?? '').trim().isEmpty
                             ? Colors.grey.shade500
-                            : Colors.grey.shade700),
+                            : context.scGrey700),
                   ),
                   _scaleNotesGridBlock(e, showObsPrefix: true),
                 ],
@@ -5538,7 +5613,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
               },
               tooltip: 'Remover serviço',
               style: IconButton.styleFrom(
-                backgroundColor: Colors.red.shade50,
+                backgroundColor: context.isDarkMode
+                    ? context.appAccentSurface(Colors.red)
+                    : Colors.red.shade50,
                 minimumSize: const Size(40, 40),
                 padding: EdgeInsets.zero,
               ),
@@ -5563,7 +5640,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
       margin: const EdgeInsets.only(bottom: 15),
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appSurface,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -5593,7 +5670,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                     style: TextStyle(
                         fontWeight: FontWeight.w900,
                         fontSize: fsTitle,
-                        color: const Color(0xFF1A237E)),
+                        color: context.appDeepTitle),
                   ),
                   const SizedBox(height: 8),
                   Wrap(
@@ -5616,7 +5693,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           style: TextStyle(
                             fontSize: fsHora,
                             fontWeight: FontWeight.w900,
-                            color: const Color(0xFF1A237E),
+                            color: context.appDeepTitle,
                             height: 1.1,
                           ),
                         ),
@@ -5625,7 +5702,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           style: TextStyle(
                             fontSize: fsAux,
                             fontWeight: FontWeight.w700,
-                            color: Colors.grey.shade700,
+                            color: context.scGrey700,
                           ),
                         ),
                       ] else
@@ -5634,7 +5711,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           style: TextStyle(
                             fontSize: fsAux,
                             fontWeight: FontWeight.w800,
-                            color: Colors.grey.shade800,
+                            color: context.scGrey800,
                           ),
                         ),
                       if (!e.isCompromisso)
@@ -5763,20 +5840,20 @@ class _ScalesScreenState extends State<ScalesScreen> {
                             icon: Icon(
                               Icons.arrow_back_ios_new_rounded,
                               size: 17,
-                              color: AppColors.textSecondary,
+                              color: context.appTextSecondary,
                             ),
                             label: Text(
                               'Voltar',
                               style: TextStyle(
                                 fontWeight: FontWeight.w800,
                                 fontSize: _scalesScreenFontSize(ctx, 14),
-                                color: AppColors.textSecondary,
+                                color: context.appTextSecondary,
                               ),
                             ),
                             style: TextButton.styleFrom(
                               padding:
                                   const EdgeInsets.symmetric(horizontal: 4),
-                              foregroundColor: AppColors.textSecondary,
+                              foregroundColor: context.appTextSecondary,
                             ),
                           ),
                           const Spacer(),
@@ -5827,7 +5904,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                             style: TextStyle(
                               fontSize: _scalesScreenFontSize(ctx, 15),
                               fontWeight: FontWeight.w900,
-                              color: AppColors.deepBlue,
+                              color: context.scDeepBlue,
                               letterSpacing: -0.2,
                             ),
                             textAlign: TextAlign.center,
@@ -6146,7 +6223,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                         style: TextStyle(
                                             fontSize: fsResumoSecTitulo,
                                             fontWeight: FontWeight.w900,
-                                            color: AppColors.textPrimary,
+                                            color: context.appTextPrimary,
                                             letterSpacing: 0.12,
                                             height: 1.2),
                                       ),
@@ -6234,8 +6311,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                                       e,
                                                       fontSize:
                                                           fsResumoItemTitulo,
-                                                      color: const Color(
-                                                          0xFF1A237E),
+                                                      color: context.appDeepTitle,
                                                     ),
                                                     const SizedBox(height: 6),
                                                     Text(
@@ -6263,8 +6339,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                                             fontSize: 11,
                                                             fontWeight:
                                                                 FontWeight.w700,
-                                                            color: const Color(
-                                                                0xFF1A237E),
+                                                            color: context
+                                                                .appDeepTitle,
                                                           ),
                                                         ),
                                                       ),
@@ -6344,17 +6420,17 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                                           fontSize: 12,
                                                           fontWeight:
                                                               FontWeight.w700,
-                                                          color: Colors
-                                                              .grey.shade800)),
+                                                          color:
+                                                              context.scGrey800)),
                                                   Text(
                                                       CurrencyFormats.formatBRL(
                                                           split.ate2359),
-                                                      style: const TextStyle(
+                                                      style: TextStyle(
                                                           fontWeight:
                                                               FontWeight.w800,
                                                           fontSize: 14,
-                                                          color: Color(
-                                                              0xFF1A237E))),
+                                                          color: context
+                                                              .appDeepTitle)),
                                                 ],
                                               ),
                                               const SizedBox(height: 6),
@@ -6369,8 +6445,8 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                                           fontSize: 12,
                                                           fontWeight:
                                                               FontWeight.w700,
-                                                          color: Colors
-                                                              .grey.shade800)),
+                                                          color:
+                                                              context.scGrey800)),
                                                   Text(
                                                       CurrencyFormats.formatBRL(
                                                           split.de0007),
@@ -6389,8 +6465,11 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                                   padding:
                                                       const EdgeInsets.all(8),
                                                   decoration: BoxDecoration(
-                                                    color:
-                                                        Colors.indigo.shade50,
+                                                    color: context.isDarkMode
+                                                        ? context
+                                                            .appAccentSurface(
+                                                                Colors.indigo)
+                                                        : Colors.indigo.shade50,
                                                     borderRadius:
                                                         BorderRadius.circular(
                                                             8),
@@ -6437,21 +6516,22 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                                   MainAxisAlignment
                                                       .spaceBetween,
                                               children: [
-                                                const Text('Total do dia',
+                                                Text('Total do dia',
                                                     style: TextStyle(
                                                         fontWeight:
                                                             FontWeight.w800,
                                                         fontSize: 14,
-                                                        color:
-                                                            Color(0xFF1A237E))),
+                                                        color: context
+                                                            .appDeepTitle)),
                                                 Text(
                                                   CurrencyFormats.formatBRL(
                                                       totalDia),
-                                                  style: const TextStyle(
+                                                  style: TextStyle(
                                                       fontWeight:
                                                           FontWeight.w900,
                                                       fontSize: 16,
-                                                      color: Color(0xFF1A237E)),
+                                                      color:
+                                                          context.appDeepTitle),
                                                 ),
                                               ],
                                             ),
@@ -6502,9 +6582,13 @@ class _ScalesScreenState extends State<ScalesScreen> {
       ultraCompact ? 9 : 9.5,
     );
     final badgeFs = _scalesScreenFontSize(context, ultraCompact ? 8 : 8.5);
-    final bgA = Color.lerp(Colors.white, color, 0.05)!;
-    final bgB = Color.lerp(Colors.white, color, 0.11)!;
-    final titleColor = Color.lerp(color, const Color(0xFF0F172A), 0.38)!;
+    final dark = context.isDarkMode;
+    final bgBase = dark ? context.appSurface : Colors.white;
+    final bgA = Color.lerp(bgBase, color, dark ? 0.12 : 0.05)!;
+    final bgB = Color.lerp(bgBase, color, dark ? 0.22 : 0.11)!;
+    final titleColor = dark
+        ? Color.lerp(color, Colors.white, 0.6)!
+        : Color.lerp(color, const Color(0xFF0F172A), 0.38)!;
     final iconSize = ultraCompact ? 17 : (compact ? 18 : 19);
     final iconPad = ultraCompact ? 6.0 : (compact ? 7.0 : 7.0);
     final useSideBySide = panelWidth >= 360 && !ultraCompact;
@@ -6558,7 +6642,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                 fontSize: badgeFs,
                 fontWeight: FontWeight.w900,
                 letterSpacing: 0.6,
-                color: const Color(0xFFB45309),
+                color: dark ? const Color(0xFFFBBF24) : const Color(0xFFB45309),
               ),
             ),
           ),
@@ -6586,7 +6670,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
               fontSize: subFs,
               fontWeight: FontWeight.w700,
               height: 1.15,
-              color: AppColors.textMuted,
+              color: context.appTextMuted,
             ),
           ),
         ],
@@ -6681,8 +6765,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
           color,
           Color.lerp(color, Colors.black, 0.22) ?? color,
         ];
-    final bgA = Color.lerp(Colors.white, color, 0.05)!;
-    final bgB = Color.lerp(Colors.white, color, 0.11)!;
+    final dark = context.isDarkMode;
+    final bgBase = dark ? context.appSurface : Colors.white;
+    final bgA = Color.lerp(bgBase, color, dark ? 0.12 : 0.05)!;
+    final bgB = Color.lerp(bgBase, color, dark ? 0.22 : 0.11)!;
     return Material(
       color: Colors.transparent,
       elevation: 0,
@@ -6759,7 +6845,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
                       fontWeight: FontWeight.w800,
                       letterSpacing: 0.02,
                       height: 1.12,
-                      color: Color.lerp(color, const Color(0xFF0F172A), 0.38),
+                      color: dark
+                          ? Color.lerp(color, Colors.white, 0.6)
+                          : Color.lerp(color, const Color(0xFF0F172A), 0.38),
                     ),
                   ),
                 ],
@@ -6889,7 +6977,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                 style: TextStyle(
                   fontSize: _scalesScreenFontSize(ctx, 17),
                   fontWeight: FontWeight.w900,
-                  color: AppColors.deepBlue,
+                  color: context.scDeepBlue,
                 ),
               ),
               const SizedBox(height: 4),
@@ -6897,7 +6985,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                 DateFormat('dd/MM/yyyy').format(day),
                 style: TextStyle(
                   fontSize: _scalesScreenFontSize(ctx, 12),
-                  color: AppColors.textSecondary,
+                  color: context.appTextSecondary,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -6930,7 +7018,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                       fontSize: _scalesScreenFontSize(ctx, 12),
                       height: 1.35,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.textSecondary,
+                      color: context.appTextSecondary,
                     ),
                   ),
                   trailing: Text(
@@ -6940,7 +7028,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                     style: TextStyle(
                       fontWeight: FontWeight.w800,
                       color: e.isCompromisso
-                          ? AppColors.textMuted
+                          ? context.appTextMuted
                           : AppColors.primary,
                     ),
                   ),
@@ -6998,7 +7086,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                   fontSize: 14,
                   height: 1.38,
                   fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade800,
+                  color: context.scGrey800,
                 ),
               ),
               const SizedBox(height: 14),
@@ -7031,7 +7119,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                 style: TextStyle(
                   fontSize: 12,
                   height: 1.35,
-                  color: Colors.grey.shade700,
+                  color: context.scGrey700,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -7282,13 +7370,13 @@ class _ScalesScreenState extends State<ScalesScreen> {
                         tooltip: 'Voltar',
                       ),
                       const SizedBox(width: 8),
-                      const Expanded(
+                      Expanded(
                         child: Text(
                           'Editar compromisso/plantão',
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w900,
-                            color: AppColors.deepBlue,
+                            color: context.scDeepBlue,
                           ),
                         ),
                       ),
@@ -7393,7 +7481,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                         'SEI e RAI deste item são editados no módulo Agenda.',
                         style: TextStyle(
                           fontSize: 12.5,
-                          color: AppColors.textSecondary,
+                          color: context.appTextSecondary,
                           height: 1.35,
                         ),
                       ),
@@ -7438,7 +7526,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF7F9FF),
+                      color: context.isDarkMode
+                          ? context.appInputFill
+                          : const Color(0xFFF7F9FF),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                           color: AppColors.primary.withValues(alpha: 0.18)),
@@ -7979,7 +8069,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                         'Selecione os lançamentos criados no botão mágico (somente últimos 3 dias).',
                         style: TextStyle(
                           fontSize: 13,
-                          color: Colors.grey.shade700,
+                          color: context.scGrey700,
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -7999,9 +8089,14 @@ class _ScalesScreenState extends State<ScalesScreen> {
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 10),
                           child: Material(
-                            color: checked
-                                ? const Color(0xFFEEF2FF)
-                                : const Color(0xFFF8FAFF),
+                            color: ctx.isDarkMode
+                                ? (checked
+                                    ? ctx.appAccentSurface(AppColors.primary,
+                                        darkAlpha: 0.24)
+                                    : ctx.appInputFill)
+                                : (checked
+                                    ? const Color(0xFFEEF2FF)
+                                    : const Color(0xFFF8FAFF)),
                             borderRadius: BorderRadius.circular(16),
                             child: InkWell(
                               borderRadius: BorderRadius.circular(16),
@@ -8041,10 +8136,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                             principal,
                                             maxLines: 2,
                                             overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               fontSize: 15,
                                               fontWeight: FontWeight.w800,
-                                              color: Color(0xFF1A237E),
+                                              color: ctx.appDeepTitle,
                                             ),
                                           ),
                                           const SizedBox(height: 4),
@@ -8052,7 +8147,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                             subtitulo,
                                             style: TextStyle(
                                               fontSize: 12.5,
-                                              color: Colors.grey.shade700,
+                                              color: context.scGrey700,
                                             ),
                                           ),
                                           const SizedBox(height: 3),
@@ -8358,7 +8453,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
-        color: Colors.red.shade50,
+        color: ctx.isDarkMode
+            ? ctx.appAccentSurface(Colors.red)
+            : Colors.red.shade50,
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           onTap: () {
@@ -8383,7 +8480,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                               color: Colors.red.shade800)),
                       Text(subtitulo,
                           style: TextStyle(
-                              fontSize: 12, color: Colors.grey.shade700)),
+                              fontSize: 12, color: context.scGrey700)),
                     ],
                   ),
                 ),
@@ -8916,11 +9013,13 @@ class _ScalesScreenState extends State<ScalesScreen> {
           return FractionallySizedBox(
             heightFactor: 0.98,
             child: DecoratedBox(
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [Color(0xFFF8FAFF), Color(0xFFF2F6FF)],
+                  colors: ctx.isDarkMode
+                      ? [ctx.appScaffold, ctx.appSurface]
+                      : const [Color(0xFFF8FAFF), Color(0xFFF2F6FF)],
                 ),
               ),
               child: KeyboardViewInsetPad(
@@ -8987,21 +9086,22 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                       onPressed: () => Navigator.pop(ctx),
                                       tooltip: 'Voltar',
                                       style: IconButton.styleFrom(
-                                        backgroundColor: Colors.grey.shade200,
-                                        foregroundColor:
-                                            const Color(0xFF1A237E),
+                                        backgroundColor: ctx.isDarkMode
+                                            ? ctx.appSurfaceHigh
+                                            : Colors.grey.shade200,
+                                        foregroundColor: ctx.appDeepTitle,
                                       ),
                                     ),
                                     const SizedBox(width: 12),
                                     Icon(Icons.auto_awesome_rounded,
                                         color: Colors.amber.shade700, size: 28),
                                     const SizedBox(width: 10),
-                                    const Expanded(
+                                    Expanded(
                                       child: Text('Geração automática',
                                           style: TextStyle(
                                               fontSize: 22,
                                               fontWeight: FontWeight.bold,
-                                              color: Color(0xFF1A237E))),
+                                              color: ctx.appDeepTitle)),
                                     ),
                                   ],
                                 ),
@@ -9011,7 +9111,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                     'Compromissos em série também entram no Painel (em aberto) e no módulo Agenda.',
                                     style: TextStyle(
                                         fontSize: 13,
-                                        color: Colors.grey.shade700)),
+                                        color: ctx.isDarkMode
+                                            ? ctx.appTextSecondary
+                                            : context.scGrey700)),
                               ],
                             ),
                           ),
@@ -9019,7 +9121,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           Container(
                             padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: ctx.appSurface,
                               borderRadius: BorderRadius.circular(18),
                               border: Border.all(
                                 color: const Color(0xFF4F46E5)
@@ -9055,6 +9157,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                       SizedBox(
                                         width: double.infinity,
                                         child: _magicGradientChoice(
+                                          context: ctx,
                                           selected: !gerarComoCompromisso,
                                           label:
                                               'Plantão (lista de plantões recorrentes)',
@@ -9073,6 +9176,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                       SizedBox(
                                         width: double.infinity,
                                         child: _magicGradientChoice(
+                                          context: ctx,
                                           selected: gerarComoCompromisso,
                                           label: 'Compromisso particular',
                                           icon: Icons.event_note_rounded,
@@ -9096,6 +9200,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                     children: [
                                       Expanded(
                                         child: _magicGradientChoice(
+                                          context: ctx,
                                           selected: !gerarComoCompromisso,
                                           label:
                                               'Plantão (lista de plantões recorrentes)',
@@ -9113,6 +9218,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                       const SizedBox(width: 12),
                                       Expanded(
                                         child: _magicGradientChoice(
+                                          context: ctx,
                                           selected: gerarComoCompromisso,
                                           label: 'Compromisso particular',
                                           icon: Icons.event_note_rounded,
@@ -9139,7 +9245,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           Container(
                             padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: ctx.appSurface,
                               borderRadius: BorderRadius.circular(18),
                               border: Border.all(
                                 color: const Color(0xFF0EA5E9)
@@ -9533,7 +9639,11 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                                 border: Border.all(
                                                     color: isSelected
                                                         ? Colors.blue
-                                                        : Colors.grey.shade300,
+                                                        : (ctx.isDarkMode
+                                                            ? ctx
+                                                                .appChipIdleBorder
+                                                            : Colors
+                                                                .grey.shade300),
                                                     width: isSelected ? 2 : 1),
                                               ),
                                             ),
@@ -9619,24 +9729,29 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 12, vertical: 10),
                                       decoration: BoxDecoration(
-                                        color: Colors.blue.shade50,
+                                        color: ctx.isDarkMode
+                                            ? ctx.appAccentSurface(Colors.blue)
+                                            : Colors.blue.shade50,
                                         borderRadius: BorderRadius.circular(10),
                                         border: Border.all(
-                                            color: Colors.blue.shade200),
+                                            color: ctx.isDarkMode
+                                                ? Colors.blue
+                                                    .withValues(alpha: 0.4)
+                                                : Colors.blue.shade200),
                                       ),
                                       child: Row(
                                         children: [
-                                          const Icon(Icons.access_time_rounded,
+                                          Icon(Icons.access_time_rounded,
                                               size: 20,
-                                              color: Color(0xFF1A237E)),
+                                              color: ctx.appDeepTitle),
                                           const SizedBox(width: 10),
                                           Expanded(
                                             child: Text(
                                               'Horário: ${locSelecionada!.startTime} às ${locSelecionada!.endTime}  (da lista de plantões recorrentes)',
-                                              style: const TextStyle(
+                                              style: TextStyle(
                                                   fontSize: 13,
                                                   fontWeight: FontWeight.w600,
-                                                  color: Color(0xFF1A237E)),
+                                                  color: ctx.appDeepTitle),
                                             ),
                                           ),
                                         ],
@@ -9651,7 +9766,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           Container(
                             padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: ctx.appSurface,
                               borderRadius: BorderRadius.circular(18),
                               border: Border.all(
                                 color: const Color(0xFF4F46E5)
@@ -9695,6 +9810,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                     ].map((r) {
                                       final sel = regime == r;
                                       return _magicRegimePill(
+                                        context: ctx,
                                         label: r,
                                         selected: sel,
                                         onTap: () async {
@@ -9723,6 +9839,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                   SizedBox(
                                     width: double.infinity,
                                     child: _magicSecondaryCta(
+                                      context: ctx,
                                       onPressed: () async {
                                         final setDias =
                                             await _showExpedienteDiasSemanaDialog(
@@ -9748,6 +9865,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                 SizedBox(
                                   width: double.infinity,
                                   child: _magicSecondaryCta(
+                                    context: ctx,
                                     onPressed: () => setModalState(
                                         () => regime = 'Personalizado'),
                                     icon: Icons.tune_rounded,
@@ -9932,7 +10050,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                           Icons.numbers_rounded,
                                           size: 20),
                                       filled: true,
-                                      fillColor: const Color(0xFFF5F3FF),
+                                      fillColor: ctx.isDarkMode
+                                          ? ctx.appInputFill
+                                          : const Color(0xFFF5F3FF),
                                     ),
                                     onChanged: (v) {
                                       final parsed = int.tryParse(v.trim());
@@ -10043,7 +10163,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                       'Clique no relógio ou digite no formato 24h (ex: 08:00, 22:30)',
                                       style: TextStyle(
                                           fontSize: 11,
-                                          color: Colors.grey.shade600)),
+                                          color: ctx.scGrey600)),
                                   const SizedBox(height: 6),
                                   Row(
                                     children: [
@@ -10166,7 +10286,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           Container(
                             padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: ctx.appSurface,
                               borderRadius: BorderRadius.circular(18),
                               border: Border.all(
                                 color: const Color(0xFFF59E0B)
@@ -10210,7 +10330,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                                       : 'O dia inicial é sempre o 1º plantão. Regimes 24xN: 1 dia plantão + folga em horas ÷24 (ex.: 24x96 = ciclo 5 dias: plantão, 4 folga). 24x144 = ciclo 7; 24x192 = ciclo 9. Ex. 24x72 a partir de 24/02: 24/02, 28/02, 04/03…',
                                   style: TextStyle(
                                       fontSize: 13,
-                                      color: Colors.grey.shade700),
+                                      color: ctx.scGrey700),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
@@ -10232,7 +10352,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                               style: TextStyle(
                                                   fontSize: 11,
                                                   fontWeight: FontWeight.w600,
-                                                  color: Colors.grey.shade700)),
+                                                  color: ctx.scGrey700)),
                                           const SizedBox(height: 4),
                                           OutlinedButton.icon(
                                             onPressed: () async {
@@ -10273,7 +10393,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                               style: TextStyle(
                                                   fontSize: 11,
                                                   fontWeight: FontWeight.w600,
-                                                  color: Colors.grey.shade700)),
+                                                  color: ctx.scGrey700)),
                                           const SizedBox(height: 4),
                                           OutlinedButton.icon(
                                             onPressed: () async {
@@ -10616,7 +10736,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                 Text(
                     'Escolha um plantão da lista de plantões recorrentes ou crie um novo (será salvo no banco de plantões).',
                     style:
-                        TextStyle(fontSize: 13, color: Colors.grey.shade700)),
+                        TextStyle(fontSize: 13, color: context.scGrey700)),
                 const SizedBox(height: 20),
                 if (_locations.isNotEmpty) ...[
                   const Text('Lista de plantões recorrentes',
@@ -11241,7 +11361,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
         fullscreenDialog: true,
         builder: (routeCtx) {
           return Scaffold(
-            backgroundColor: const Color(0xFFF1F5F9),
+            backgroundColor: routeCtx.isDarkMode
+                ? routeCtx.appScaffold
+                : const Color(0xFFF1F5F9),
             appBar: AppBar(
               elevation: 0,
               scrolledUnderElevation: 0,
@@ -11323,12 +11445,12 @@ class _ScalesScreenState extends State<ScalesScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const SizedBox(height: 6),
-                        const Text(
+                        Text(
                             'Plantão com valor: busque na lista de plantões recorrentes. Compromisso particular: marque a opção abaixo e salve.',
                             style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
-                                color: Color(0xFF1A237E))),
+                                color: ctx.appDeepTitle)),
                         const SizedBox(height: 10),
                         if (_locations.isEmpty)
                           Padding(
@@ -11340,7 +11462,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                     'Nenhum plantão na lista de plantões recorrentes. Crie o primeiro para depois escolher aqui.',
                                     style: TextStyle(
                                         fontSize: 13,
-                                        color: Colors.grey.shade700)),
+                                        color: context.scGrey700)),
                                 const SizedBox(height: 12),
                                 OutlinedButton.icon(
                                   onPressed: () async {
@@ -11580,7 +11702,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                 labelStyle: TextStyle(
                                     color: tipoCalculo == 'Padrão GO'
                                         ? Colors.white
-                                        : Colors.black87),
+                                        : (ctx.isDarkMode
+                                            ? ctx.appTextPrimary
+                                            : Colors.black87)),
                               ),
                               const SizedBox(width: 10),
                               ChoiceChip(
@@ -11592,7 +11716,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                 labelStyle: TextStyle(
                                     color: tipoCalculo == 'Personalizado'
                                         ? Colors.white
-                                        : Colors.black87),
+                                        : (ctx.isDarkMode
+                                            ? ctx.appTextPrimary
+                                            : Colors.black87)),
                               ),
                             ],
                           ),
@@ -11604,13 +11730,13 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                 labelText: 'Valor total / diária (R\$)',
                                 hintText: '0,00',
                                 filled: true,
-                                fillColor: Colors.grey.shade50,
+                                fillColor: ctx.scGrey50Bg,
                                 border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(14)),
                                 enabledBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(14),
                                     borderSide: BorderSide(
-                                        color: Colors.grey.shade300)),
+                                        color: ctx.scGrey300Border)),
                               ),
                             ),
                           ],
@@ -11742,7 +11868,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                           vertical: 12, horizontal: 12),
                                       decoration: BoxDecoration(
                                         border: Border.all(
-                                            color: Colors.grey.shade300),
+                                            color: ctx.scGrey300Border),
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: Row(
@@ -11852,10 +11978,10 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                       style: TextStyle(
                                           fontWeight: FontWeight.w600)),
                                   Text(CurrencyFormats.formatBRL(valorEstimado),
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                           fontSize: 18,
                                           fontWeight: FontWeight.w800,
-                                          color: Color(0xFF1A237E))),
+                                          color: ctx.appDeepTitle)),
                                 ],
                               ),
                             ),
@@ -11928,7 +12054,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                       border: Border.all(
                                           color: isSelected
                                               ? Colors.white
-                                              : Colors.grey.shade300,
+                                              : ctx.scGrey300Border,
                                           width: isSelected ? 3 : 1),
                                       boxShadow: [
                                         BoxShadow(
@@ -11954,11 +12080,15 @@ class _ScalesScreenState extends State<ScalesScreen> {
                           Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 12, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: Colors.blue.shade100),
-                            ),
+                            decoration: ctx.isDarkMode
+                                ? ctx.appInfoBannerDecoration(Colors.blue,
+                                    radius: 10)
+                                : BoxDecoration(
+                                    color: Colors.blue.shade50,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border:
+                                        Border.all(color: Colors.blue.shade100),
+                                  ),
                             child: Row(
                               children: [
                                 Icon(Icons.info_outline_rounded,
@@ -11969,7 +12099,9 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                     'Plantão será lançado em ${DateFormat('dd/MM/yyyy').format(dataEscala)}. Valor calculado conforme dia e horário.',
                                     style: TextStyle(
                                         fontSize: 12,
-                                        color: Colors.blue.shade900,
+                                        color: ctx.isDarkMode
+                                            ? Colors.blue.shade200
+                                            : Colors.blue.shade900,
                                         fontWeight: FontWeight.w500),
                                   ),
                                 ),
@@ -12402,7 +12534,7 @@ class _ExpedienteDiasSemanaDialogState
           children: [
             Text(
               'Marque os dias em que há expediente. Se tiver folga em um dia da semana, desmarque esse dia.',
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+              style: TextStyle(fontSize: 13, color: context.scGrey700),
             ),
             const SizedBox(height: 12),
             for (final e in _itens)

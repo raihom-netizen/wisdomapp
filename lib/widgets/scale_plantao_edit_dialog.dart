@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../models/scale_entry.dart';
 import '../theme/app_colors.dart';
 import '../theme/gemini_theme.dart';
+import '../theme/theme_context.dart';
 import '../utils/keyboard_form_scaffold.dart';
 import '../utils/scale_entry_sei_ocorrencia.dart';
 import '../utils/uppercase_text_input_formatter.dart';
@@ -100,7 +101,7 @@ class _ScalePlantaoEditPageState extends State<_ScalePlantaoEditPage> {
         helperText: helper,
         isDense: true,
         filled: true,
-        fillColor: const Color(0xFFF1F5F9),
+        fillColor: context.appInputFill,
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         suffixIcon: suffix,
         border: OutlineInputBorder(
@@ -134,7 +135,7 @@ class _ScalePlantaoEditPageState extends State<_ScalePlantaoEditPage> {
     required Widget field,
   }) {
     return Material(
-      color: Colors.white,
+      color: context.appSurface,
       elevation: 0,
       shadowColor: AppColors.deepBlueDark.withValues(alpha: 0.12),
       shape: RoundedRectangleBorder(
@@ -148,7 +149,7 @@ class _ScalePlantaoEditPageState extends State<_ScalePlantaoEditPage> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Colors.white,
+              context.appSurface,
               AppColors.primary.withValues(alpha: 0.03),
             ],
           ),
@@ -189,10 +190,12 @@ class _ScalePlantaoEditPageState extends State<_ScalePlantaoEditPage> {
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w900,
-                          color: Color(0xFF0F172A),
+                          color: context.isDarkMode
+                              ? context.appTextPrimary
+                              : const Color(0xFF0F172A),
                           height: 1.15,
                         ),
                       ),
@@ -203,7 +206,9 @@ class _ScalePlantaoEditPageState extends State<_ScalePlantaoEditPage> {
                           fontSize: 12,
                           height: 1.35,
                           fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade700,
+                          color: context.isDarkMode
+                              ? context.appTextSecondary
+                              : Colors.grey.shade700,
                         ),
                       ),
                     ],
@@ -322,11 +327,13 @@ class _ScalePlantaoEditPageState extends State<_ScalePlantaoEditPage> {
         SafeArea(
           bottom: false,
           child: DecoratedBox(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Color(0xFFF8FAFC), Color(0xFFE8EDF5)],
+                colors: context.isDarkMode
+                    ? [context.appScaffold, context.appScaffold]
+                    : const [Color(0xFFF8FAFC), Color(0xFFE8EDF5)],
               ),
             ),
             child: Builder(
@@ -341,7 +348,9 @@ class _ScalePlantaoEditPageState extends State<_ScalePlantaoEditPage> {
                   padding: EdgeInsets.fromLTRB(16, 12, 16, 16 + kb),
                   children: [
                     Material(
-                      color: Colors.white.withValues(alpha: 0.98),
+                      color: context.isDarkMode
+                          ? context.appSurface
+                          : Colors.white.withValues(alpha: 0.98),
                       elevation: 0,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
@@ -377,7 +386,9 @@ class _ScalePlantaoEditPageState extends State<_ScalePlantaoEditPage> {
                                   fontSize: 12.5,
                                   height: 1.4,
                                   fontWeight: FontWeight.w600,
-                                  color: Colors.grey.shade800,
+                                  color: context.isDarkMode
+                                      ? context.appTextSecondary
+                                      : Colors.grey.shade800,
                                 ),
                               ),
                             ),

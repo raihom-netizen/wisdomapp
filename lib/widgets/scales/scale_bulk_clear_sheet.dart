@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../theme/theme_context.dart';
+
 /// Opções de limpeza de escalas — chips modernos (padrão Agenda WISDOMAPP).
 class ScaleBulkClearSheet extends StatelessWidget {
   const ScaleBulkClearSheet({
@@ -23,9 +25,9 @@ class ScaleBulkClearSheet extends StatelessWidget {
     final monthLabel = DateFormat('MMMM/yyyy', 'pt_BR').format(ref);
     return SafeArea(
       child: Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+        decoration: BoxDecoration(
+          color: context.appSurface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
         ),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
@@ -39,7 +41,9 @@ class ScaleBulkClearSheet extends StatelessWidget {
                   height: 5,
                   margin: const EdgeInsets.only(bottom: 14),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
+                    color: context.isDarkMode
+                        ? context.appChipIdleBorder
+                        : Colors.grey.shade300,
                     borderRadius: BorderRadius.circular(999),
                   ),
                 ),
@@ -57,7 +61,7 @@ class ScaleBulkClearSheet extends StatelessWidget {
                     child: const Icon(Icons.delete_sweep_rounded, color: Colors.white, size: 24),
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -66,17 +70,19 @@ class ScaleBulkClearSheet extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w900,
-                            color: Color(0xFF1A237E),
+                            color: context.appDeepTitle,
                             letterSpacing: -0.3,
                           ),
                         ),
-                        SizedBox(height: 2),
+                        const SizedBox(height: 2),
                         Text(
                           'Limpeza rápida por período',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFF64748B),
+                            color: context.isDarkMode
+                                ? context.appTextMuted
+                                : const Color(0xFF64748B),
                           ),
                         ),
                       ],
@@ -92,7 +98,13 @@ class ScaleBulkClearSheet extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 'Para um dia específico, toque na data no calendário. Esta ação não pode ser desfeita.',
-                style: TextStyle(fontSize: 13, color: Colors.grey.shade700, height: 1.35),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: context.isDarkMode
+                      ? context.appTextSecondary
+                      : Colors.grey.shade700,
+                  height: 1.35,
+                ),
               ),
               const SizedBox(height: 16),
               _ClearOptionTile(
@@ -210,10 +222,12 @@ class _ClearOptionTile extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 15,
-                        color: Color(0xFF0F172A),
+                        color: context.isDarkMode
+                            ? context.appTextPrimary
+                            : const Color(0xFF0F172A),
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -222,7 +236,9 @@ class _ClearOptionTile extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade700,
+                        color: context.isDarkMode
+                            ? context.appTextSecondary
+                            : Colors.grey.shade700,
                         height: 1.25,
                       ),
                     ),

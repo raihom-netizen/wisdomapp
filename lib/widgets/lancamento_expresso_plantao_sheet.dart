@@ -16,6 +16,7 @@ import '../models/scale_rates.dart';
 import '../models/shift_location.dart';
 import '../services/scale_rates_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/uppercase_text_input_formatter.dart';
 import 'commitment_description_picker.dart';
 import 'employer_vinculo_chips.dart';
@@ -54,7 +55,9 @@ Future<void> showLancamentoExpressoPlantaoSheet({
     MaterialPageRoute<void>(
       fullscreenDialog: true,
       builder: (sheetCtx) => Scaffold(
-        backgroundColor: const Color(0xFFF1F5F9),
+        backgroundColor: sheetCtx.isDarkMode
+            ? sheetCtx.appScaffold
+            : const Color(0xFFF1F5F9),
         appBar: AppBar(
           elevation: 0,
           scrolledUnderElevation: 0,
@@ -401,7 +404,7 @@ class _LancamentoExpressoBodyState extends State<_LancamentoExpressoBody> {
       hintText: hintText,
       isDense: true,
       filled: true,
-      fillColor: Colors.white,
+      fillColor: context.isDarkMode ? context.appInputFill : Colors.white,
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
@@ -560,9 +563,13 @@ class _LancamentoExpressoBodyState extends State<_LancamentoExpressoBody> {
   Widget _acoesEdicaoBar() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appSurface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.deepBlue.withValues(alpha: 0.10)),
+        border: Border.all(
+          color: context.isDarkMode
+              ? context.appBorderSubtle
+              : AppColors.deepBlue.withValues(alpha: 0.10),
+        ),
         boxShadow: [
           BoxShadow(
             color: AppColors.deepBlueDark.withValues(alpha: 0.05),
@@ -649,9 +656,13 @@ class _LancamentoExpressoBodyState extends State<_LancamentoExpressoBody> {
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appSurface,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.deepBlue.withValues(alpha: 0.1)),
+        border: Border.all(
+          color: context.isDarkMode
+              ? context.appBorderSubtle
+              : AppColors.deepBlue.withValues(alpha: 0.1),
+        ),
         boxShadow: [
           BoxShadow(
             color: AppColors.deepBlueDark.withValues(alpha: 0.07),
@@ -690,10 +701,10 @@ class _LancamentoExpressoBodyState extends State<_LancamentoExpressoBody> {
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w900,
                           fontSize: 13.5,
-                          color: AppColors.textPrimary,
+                          color: context.appTextPrimary,
                           letterSpacing: -0.1,
                           height: 1.15,
                         ),
@@ -705,7 +716,7 @@ class _LancamentoExpressoBodyState extends State<_LancamentoExpressoBody> {
                             subtitle,
                             style: TextStyle(
                               fontSize: 11.5,
-                              color: AppColors.textSecondary,
+                              color: context.appTextSecondary,
                               height: 1.25,
                               fontWeight: FontWeight.w500,
                             ),
@@ -1294,7 +1305,7 @@ class _LancamentoExpressoBodyState extends State<_LancamentoExpressoBody> {
                       'Avulso e seguro: fica só no calendário e nos relatórios (coleção da escala). Não é gravado no pré-cadastro de Plantões. Para reutilizar um nome, cadastre depois em Configurações → Plantões.',
                       style: TextStyle(
                           fontSize: 12.5,
-                          color: AppColors.textSecondary,
+                          color: context.appTextSecondary,
                           height: 1.35,
                           fontWeight: FontWeight.w500),
                     ),
@@ -1363,10 +1374,10 @@ class _LancamentoExpressoBodyState extends State<_LancamentoExpressoBody> {
                             child: Text(
                               DateFormat('EEEE, d \'de\' MMMM', 'pt_BR')
                                   .format(_day),
-                              style: const TextStyle(
+                              style: TextStyle(
                                   fontWeight: FontWeight.w800,
                                   fontSize: 13.5,
-                                  color: AppColors.textPrimary),
+                                  color: context.appTextPrimary),
                             ),
                           ),
                         ],
@@ -1424,10 +1435,10 @@ class _LancamentoExpressoBodyState extends State<_LancamentoExpressoBody> {
                             ),
                             child: Text(
                               _startCtrl.text.isEmpty ? '08:00' : _startCtrl.text,
-                              style: const TextStyle(
+                              style: TextStyle(
                                   fontSize: 15.5,
                                   fontWeight: FontWeight.w800,
-                                  color: AppColors.textPrimary),
+                                  color: context.appTextPrimary),
                             ),
                           ),
                         ),
@@ -1446,10 +1457,10 @@ class _LancamentoExpressoBodyState extends State<_LancamentoExpressoBody> {
                             ),
                             child: Text(
                               _endCtrl.text.isEmpty ? '18:00' : _endCtrl.text,
-                              style: const TextStyle(
+                              style: TextStyle(
                                   fontSize: 15.5,
                                   fontWeight: FontWeight.w800,
-                                  color: AppColors.textPrimary),
+                                  color: context.appTextPrimary),
                             ),
                           ),
                         ),
@@ -1496,11 +1507,11 @@ class _LancamentoExpressoBodyState extends State<_LancamentoExpressoBody> {
                   ),
                   if (_financeiro) ...[
                     const SizedBox(height: 6),
-                    const Text('Vínculo',
+                    Text('Vínculo',
                         style: TextStyle(
                             fontWeight: FontWeight.w900,
                             fontSize: 13,
-                            color: AppColors.textPrimary)),
+                            color: context.appTextPrimary)),
                     const SizedBox(height: 8),
                     EmployerVinculoChips.selectionRow(
                       dense: true,
@@ -1532,7 +1543,7 @@ class _LancamentoExpressoBodyState extends State<_LancamentoExpressoBody> {
                                     : 'Por hora conforme tabela da escala e o plantão «${_privateTemplate!.name}» (Configurações → Plantões).',
                                 style: TextStyle(
                                     fontSize: 12.5,
-                                    color: AppColors.textSecondary,
+                                    color: context.appTextSecondary,
                                     height: 1.35),
                               )
                             else if (_privateTemplate == null &&
@@ -1541,7 +1552,7 @@ class _LancamentoExpressoBodyState extends State<_LancamentoExpressoBody> {
                                 'Nenhum plantão Particular com financeiro no pré-cadastro. Usando a tabela de horas da escala (Configurações → Escala). Use a opção abaixo para informar valor por hora ou fixo.',
                                 style: TextStyle(
                                     fontSize: 12.5,
-                                    color: AppColors.textSecondary,
+                                    color: context.appTextSecondary,
                                     height: 1.35),
                               ),
                             SwitchListTile(
@@ -1759,7 +1770,7 @@ class _LancamentoExpressoBodyState extends State<_LancamentoExpressoBody> {
                           'Valor estimado para o 1º dia (${DateFormat('dd/MM').format(_daysSorted.first)}); nos demais dias o total segue o dia da semana.',
                           style: TextStyle(
                               fontSize: 11.5,
-                              color: AppColors.textMuted,
+                              color: context.appTextMuted,
                               height: 1.35),
                         ),
                       ),
@@ -1768,7 +1779,7 @@ class _LancamentoExpressoBodyState extends State<_LancamentoExpressoBody> {
                       children: [
                         Text('Diurnas',
                             style: TextStyle(
-                                color: AppColors.textSecondary,
+                                color: context.appTextSecondary,
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600)),
                         Text(
@@ -1782,7 +1793,7 @@ class _LancamentoExpressoBodyState extends State<_LancamentoExpressoBody> {
                       children: [
                         Text('Noturnas',
                             style: TextStyle(
-                                color: AppColors.textSecondary,
+                                color: context.appTextSecondary,
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600)),
                         Text(
@@ -1795,18 +1806,22 @@ class _LancamentoExpressoBodyState extends State<_LancamentoExpressoBody> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Total',
+                        Text('Total',
                             style: TextStyle(
                                 fontWeight: FontWeight.w900,
                                 fontSize: 15,
-                                color: AppColors.deepBlue)),
+                                color: context.isDarkMode
+                                    ? context.appTextPrimary
+                                    : AppColors.deepBlue)),
                         Text(
                           CurrencyFormats.formatBRL(
                               (_valorCalculado!['total'] ?? 0) as num),
-                          style: const TextStyle(
+                          style: TextStyle(
                               fontWeight: FontWeight.w900,
                               fontSize: 17,
-                              color: AppColors.deepBlue),
+                              color: context.isDarkMode
+                                  ? context.appScalesMoneyValue
+                                  : AppColors.deepBlue),
                         ),
                       ],
                     ),
@@ -1824,7 +1839,9 @@ class _LancamentoExpressoBodyState extends State<_LancamentoExpressoBody> {
           padding: EdgeInsets.fromLTRB(
               14, 8, 14, 8 + (padBottom > 0 ? 0 : safeBottom)),
           decoration: BoxDecoration(
-            color: const Color(0xFFF1F5F9),
+            color: context.isDarkMode
+                ? context.appScaffold
+                : const Color(0xFFF1F5F9),
             boxShadow: [
               BoxShadow(
                   color: Colors.black.withValues(alpha: 0.07),

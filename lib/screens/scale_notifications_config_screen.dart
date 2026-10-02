@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../services/scale_notifications_service.dart';
 
 /// Opções de antecedência do lembrete (minutos).
@@ -165,12 +166,12 @@ class _ScaleNotificationsConfigScreenState extends State<ScaleNotificationsConfi
                   const SizedBox(height: 4),
                   Text(
                     'Lembretes de plantão e compromissos também são enviados por e-mail (além do aviso na tela).',
-                    style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                    style: TextStyle(fontSize: 13, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Avise-me antes (plantão ou compromisso) — ex.: 1 dia antes',
-                    style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
+                    style: TextStyle(fontSize: 14, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700),
                   ),
                   if (_reminderEnabled) ...[
                     const SizedBox(height: 20),
@@ -209,7 +210,7 @@ class _ScaleNotificationsConfigScreenState extends State<ScaleNotificationsConfi
             const SizedBox(height: 16),
             Text(
               'Lembretes locais estão disponíveis no app instalado (dispositivos suportados).',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              style: TextStyle(fontSize: 12, color: context.isDarkMode ? context.appTextMuted : Colors.grey.shade600),
               textAlign: TextAlign.center,
             ),
           ],
@@ -217,7 +218,7 @@ class _ScaleNotificationsConfigScreenState extends State<ScaleNotificationsConfi
             const SizedBox(height: 12),
             Text(
               'Na web e no atalho do celular, os avisos aparecem quando o app está aberto. Conceda permissão quando o navegador solicitar.',
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+              style: TextStyle(fontSize: 11, color: context.isDarkMode ? context.appTextMuted : Colors.grey.shade600),
               textAlign: TextAlign.center,
             ),
           ],

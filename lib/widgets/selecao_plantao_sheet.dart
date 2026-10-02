@@ -9,6 +9,7 @@ import '../models/scale_rates.dart';
 import '../services/scale_rates_cache_notifier.dart';
 import '../services/scale_rates_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../constants/currency_formats.dart';
 import 'package:intl/intl.dart';
 import 'employer_vinculo_chips.dart';
@@ -826,7 +827,8 @@ class _SelecaoPlantaoSheetState extends State<SelecaoPlantaoSheet> {
     final sumFooter = _totalFinanceiroSelecionado();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F4F9),
+      backgroundColor:
+          context.isDarkMode ? context.appScaffold : const Color(0xFFF0F4F9),
       resizeToAvoidBottomInset: scaffoldKeyboardResizeToAvoidBottomInset(),
       appBar: AppBar(
         automaticallyImplyLeading: false,
@@ -861,7 +863,7 @@ class _SelecaoPlantaoSheetState extends State<SelecaoPlantaoSheet> {
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Text(
                         'Marque um ou vários plantões; o valor com financeiro ativo aparece na linha e no total. Toque em INSERIR para lançar.',
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade800, height: 1.35),
+                        style: TextStyle(fontSize: 12, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade800, height: 1.35),
                       ),
                     ),
                   _premiumExpressoButton(
@@ -893,7 +895,7 @@ class _SelecaoPlantaoSheetState extends State<SelecaoPlantaoSheet> {
                       padding: const EdgeInsets.only(top: 6),
                       child: Text(
                         'No calendário: marque um dia ou vários no mês; os itens abaixo serão lançados em todas as datas selecionadas.',
-                        style: TextStyle(fontSize: 11, color: Colors.grey.shade600, height: 1.3),
+                        style: TextStyle(fontSize: 11, color: context.isDarkMode ? context.appTextMuted : Colors.grey.shade600, height: 1.3),
                       ),
                     ),
                   if (!widget.trocar && widget.onPeriodoAutomatico != null) ...[
@@ -983,7 +985,7 @@ class _SelecaoPlantaoSheetState extends State<SelecaoPlantaoSheet> {
                   if (_locationsCache.isNotEmpty) ...[
                     Text(
                       'Filtrar por vínculo',
-                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5, color: Colors.grey.shade800),
+                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade800),
                     ),
                     const SizedBox(height: 8),
                     EmployerVinculoChips.filterRow(
@@ -1002,7 +1004,7 @@ class _SelecaoPlantaoSheetState extends State<SelecaoPlantaoSheet> {
                           const SizedBox(height: 10),
                           Text(
                             'Nenhum plantão no pré-cadastro. Use «Lista de plantões recorrentes» acima para cadastrar. O lançamento expresso não grava no pré-cadastro.',
-                            style: TextStyle(color: Colors.grey.shade600, fontSize: 14, height: 1.35),
+                            style: TextStyle(color: context.isDarkMode ? context.appTextMuted : Colors.grey.shade600, fontSize: 14, height: 1.35),
                             textAlign: TextAlign.center,
                           ),
                         ],
@@ -1017,7 +1019,7 @@ class _SelecaoPlantaoSheetState extends State<SelecaoPlantaoSheet> {
                           const SizedBox(height: 10),
                           Text(
                             'Nenhum plantão com este vínculo. Escolha outro filtro ou cadastre em «Lista de plantões recorrentes».',
-                            style: TextStyle(color: Colors.grey.shade600, fontSize: 13.5, height: 1.35),
+                            style: TextStyle(color: context.isDarkMode ? context.appTextMuted : Colors.grey.shade600, fontSize: 13.5, height: 1.35),
                             textAlign: TextAlign.center,
                           ),
                         ],
@@ -1061,7 +1063,9 @@ class _SelecaoPlantaoSheetState extends State<SelecaoPlantaoSheet> {
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w700,
-                                    color: Colors.grey.shade800,
+                                    color: context.isDarkMode
+                                        ? context.appTextSecondary
+                                        : Colors.grey.shade800,
                                   ),
                                 ),
                                 if (_daysSorted.length > 1)
@@ -1071,7 +1075,9 @@ class _SelecaoPlantaoSheetState extends State<SelecaoPlantaoSheet> {
                                       '${_daysSorted.length} dias no calendário — cada data usa horas/valor conforme o dia da semana.',
                                       style: TextStyle(
                                         fontSize: 11,
-                                        color: Colors.grey.shade600,
+                                        color: context.isDarkMode
+                                            ? context.appTextMuted
+                                            : Colors.grey.shade600,
                                         height: 1.25,
                                       ),
                                     ),
@@ -1081,10 +1087,12 @@ class _SelecaoPlantaoSheetState extends State<SelecaoPlantaoSheet> {
                           ),
                           Text(
                             CurrencyFormats.formatBRL(sumFooter),
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.w900,
                               fontSize: 20,
-                              color: Color(0xFF1A237E),
+                              color: context.isDarkMode
+                                  ? context.appScalesMoneyValue
+                                  : const Color(0xFF1A237E),
                             ),
                           ),
                         ],
@@ -1119,9 +1127,9 @@ class _SelecaoPlantaoSheetState extends State<SelecaoPlantaoSheet> {
                         child: OutlinedButton(
                           onPressed: _loading ? null : () => Navigator.pop(context, false),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFF1A237E),
+                            foregroundColor: context.appDeepTitle,
                             side: BorderSide(
-                              color: const Color(0xFF1A237E).withValues(alpha: 0.45),
+                              color: context.appDeepTitle.withValues(alpha: 0.45),
                               width: 1.5,
                             ),
                             padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1226,7 +1234,10 @@ class _LocationTile extends StatelessWidget {
             ),
             subtitle: Text(
               '${location.startTime} – ${location.endTime}${location.financialEnabled ? '' : ' · compromisso'}',
-              style: TextStyle(fontSize: narrow ? 11 : 12, color: Colors.grey.shade600),
+              style: TextStyle(
+                fontSize: narrow ? 11 : 12,
+                color: context.isDarkMode ? context.appTextMuted : Colors.grey.shade600,
+              ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
@@ -1243,7 +1254,13 @@ class _LocationTile extends StatelessWidget {
                           style: TextStyle(
                             fontWeight: FontWeight.w800,
                             fontSize: narrow ? 11.5 : 13,
-                            color: location.financialEnabled ? const Color(0xFF1A237E) : Colors.grey.shade700,
+                            color: context.isDarkMode
+                                ? (location.financialEnabled
+                                    ? context.appScalesMoneyValue
+                                    : context.appTextSecondary)
+                                : (location.financialEnabled
+                                    ? const Color(0xFF1A237E)
+                                    : Colors.grey.shade700),
                           ),
                           textAlign: TextAlign.end,
                         ),

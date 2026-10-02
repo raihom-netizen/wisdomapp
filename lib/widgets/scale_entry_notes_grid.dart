@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../constants/field_text_limits.dart';
 import '../theme/app_colors.dart';
 import '../theme/gemini_theme.dart';
+import '../theme/theme_context.dart';
 import '../utils/keyboard_form_scaffold.dart';
 import '../utils/scale_entry_sei_ocorrencia.dart';
 import '../utils/uppercase_text_input_formatter.dart';
@@ -87,7 +88,7 @@ class _ScaleEntryNotesGridBlockState extends State<ScaleEntryNotesGridBlock> {
                   style: TextStyle(
                     fontSize: widget.fontSize,
                     fontWeight: FontWeight.w500,
-                    color: AppColors.textSecondary,
+                    color: context.appTextSecondary,
                     fontStyle: FontStyle.italic,
                     height: 1.35,
                   ),
@@ -276,10 +277,12 @@ class _ScaleNotesPreviewPageState extends State<_ScaleNotesPreviewPage> {
                             widget.entryTitle.isEmpty
                                 ? 'Plantão'
                                 : widget.entryTitle,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.w800,
                               fontSize: 14,
-                              color: AppColors.deepBlueDark,
+                              color: context.isDarkMode
+                                  ? context.appTextPrimary
+                                  : AppColors.deepBlueDark,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -288,7 +291,7 @@ class _ScaleNotesPreviewPageState extends State<_ScaleNotesPreviewPage> {
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
-                              color: AppColors.textMuted.withValues(alpha: 0.95),
+                              color: context.appTextMuted.withValues(alpha: 0.95),
                             ),
                           ),
                         ],
@@ -304,7 +307,7 @@ class _ScaleNotesPreviewPageState extends State<_ScaleNotesPreviewPage> {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               child: Material(
                 elevation: 0,
-                color: Colors.white,
+                color: context.appSurface,
                 borderRadius: BorderRadius.circular(GeminiTheme.cardRadius),
                 child: Container(
                   decoration: BoxDecoration(

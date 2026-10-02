@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../constants/date_time_formats.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import 'keyed_stream_builder.dart';
 
 /// Filtro da lista de ocorrências exibida pelo sheet do painel do módulo
@@ -59,9 +60,9 @@ Future<void> showProdutividadeEmAbertoSheet(
       maxChildSize: 0.95,
       expand: false,
       builder: (ctx, scrollController) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        decoration: BoxDecoration(
+          color: ctx.appSurface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(
           children: [
@@ -70,7 +71,7 @@ Future<void> showProdutividadeEmAbertoSheet(
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.grey.shade300,
+                color: ctx.isDarkMode ? ctx.appChipIdleBorder : Colors.grey.shade300,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -118,17 +119,17 @@ Future<void> showProdutividadeEmAbertoSheet(
                   ),
                   const Spacer(),
                   Material(
-                    color: Colors.grey.shade100,
+                    color: ctx.isDarkMode ? ctx.appSurfaceHigh : Colors.grey.shade100,
                     shape: const CircleBorder(),
                     child: InkWell(
                       customBorder: const CircleBorder(),
                       onTap: () => Navigator.of(ctx).pop(),
-                      child: const Padding(
-                        padding: EdgeInsets.all(8),
+                      child: Padding(
+                        padding: const EdgeInsets.all(8),
                         child: Icon(
                           Icons.close_rounded,
                           size: 22,
-                          color: Color(0xFF1A237E),
+                          color: ctx.appDeepTitle,
                           semanticLabel: 'Fechar',
                         ),
                       ),
@@ -159,10 +160,10 @@ Future<void> showProdutividadeEmAbertoSheet(
                           filter == ProdutividadeAbertoFilter.emAberto
                               ? 'Ocorrências em aberto'
                               : 'Folgas tiradas',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w800,
-                            color: Color(0xFF1A237E),
+                            color: ctx.appDeepTitle,
                           ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
@@ -173,7 +174,7 @@ Future<void> showProdutividadeEmAbertoSheet(
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: Colors.grey.shade700,
+                            color: ctx.isDarkMode ? ctx.appTextSecondary : Colors.grey.shade700,
                           ),
                         ),
                       ],
@@ -251,7 +252,7 @@ Future<void> showProdutividadeEmAbertoSheet(
                                   : 'Nenhuma folga tirada neste período.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: Colors.grey.shade700,
+                                color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -260,7 +261,7 @@ Future<void> showProdutividadeEmAbertoSheet(
                               'Período: $periodLabel',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: Colors.grey.shade500,
+                                color: context.isDarkMode ? context.appTextMuted : Colors.grey.shade500,
                                 fontSize: 12,
                               ),
                             ),

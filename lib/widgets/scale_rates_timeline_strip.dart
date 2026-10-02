@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../constants/date_time_formats.dart';
 import '../models/scale_rates_period.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 
 /// Linha do tempo de períodos de vigência (Goiás global ou personalizado do usuário).
 class ScaleRatesTimelineStrip extends StatelessWidget {
@@ -30,26 +31,29 @@ class ScaleRatesTimelineStrip extends StatelessWidget {
     return 'Histórico';
   }
 
-  ({Color bg, Color fg, Color accent, IconData icon}) _statusTheme(String status) {
+  ({Color bg, Color fg, Color accent, IconData icon}) _statusTheme(
+    String status, {
+    bool dark = false,
+  }) {
     switch (status) {
       case 'Vigente':
         return (
           bg: const Color(0xFFDCFCE7),
-          fg: const Color(0xFF166534),
+          fg: dark ? const Color(0xFF86EFAC) : const Color(0xFF166534),
           accent: const Color(0xFF22C55E),
           icon: Icons.check_circle_rounded,
         );
       case 'Agendado':
         return (
           bg: const Color(0xFFFFEDD5),
-          fg: const Color(0xFF9A3412),
+          fg: dark ? const Color(0xFFFDBA74) : const Color(0xFF9A3412),
           accent: AppColors.logoOrange,
           icon: Icons.schedule_rounded,
         );
       default:
         return (
           bg: const Color(0xFFE2E8F0),
-          fg: const Color(0xFF475569),
+          fg: dark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
           accent: const Color(0xFF64748B),
           icon: Icons.history_rounded,
         );
@@ -70,14 +74,17 @@ class ScaleRatesTimelineStrip extends StatelessWidget {
       return Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.grey.shade100,
+          color: context.isDarkMode ? context.appSurfaceHigh : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(18),
         ),
         child: Text(
           readOnly
               ? 'Nenhum período cadastrado ainda.'
               : 'Toque em "Criar novo padrão" para iniciar sua linha do tempo.',
-          style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+          style: TextStyle(
+            color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
+            fontSize: 13,
+          ),
         ),
       );
     }
@@ -106,7 +113,10 @@ class ScaleRatesTimelineStrip extends StatelessWidget {
           ...sorted.asMap().entries.map((entry) {
             final i = entry.key;
             final p = entry.value;
-            final theme = _statusTheme(_statusLabel(p, sorted));
+            final theme = _statusTheme(
+              _statusLabel(p, sorted),
+              dark: context.isDarkMode,
+            );
             final until = p.effectiveUntil(sorted);
             final row = Row(
               crossAxisAlignment: CrossAxisAlignment.start,

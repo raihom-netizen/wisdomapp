@@ -13,6 +13,7 @@ import '../services/finance_accounts_service.dart';
 import '../services/transaction_save_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/gemini_theme.dart';
+import '../theme/theme_context.dart';
 import '../utils/firestore_user_doc_id.dart';
 import '../utils/premium_upgrade.dart';
 import '../utils/scale_closure_summary.dart';
@@ -88,7 +89,7 @@ class ScaleMonthClosureInviteCard extends StatelessWidget {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                Colors.white,
+                context.appSurface,
                 AppColors.primary.withValues(alpha: 0.06),
                 AppColors.accent.withValues(alpha: 0.08),
               ],
@@ -131,7 +132,7 @@ class ScaleMonthClosureInviteCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: fsTitle,
                         fontWeight: FontWeight.w900,
-                        color: AppColors.textPrimary,
+                        color: context.appTextPrimary,
                         letterSpacing: -0.2,
                       ),
                     ),
@@ -145,7 +146,7 @@ class ScaleMonthClosureInviteCard extends StatelessWidget {
                 periodLabel,
                 style: TextStyle(
                     fontSize: fsSub,
-                    color: AppColors.textSecondary,
+                    color: context.appTextSecondary,
                     fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 8),
@@ -156,7 +157,7 @@ class ScaleMonthClosureInviteCard extends StatelessWidget {
                 style: TextStyle(
                     fontSize: 11,
                     height: 1.35,
-                    color: AppColors.textSecondary,
+                    color: context.appTextSecondary,
                     fontWeight: FontWeight.w500),
               ),
             ],
@@ -570,7 +571,9 @@ class _ScaleMonthClosureBodyState extends State<_ScaleMonthClosureBody> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.grey.shade300,
+                color: context.isDarkMode
+                    ? context.appChipIdleBorder
+                    : Colors.grey.shade300,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -616,7 +619,11 @@ class _ScaleMonthClosureBodyState extends State<_ScaleMonthClosureBody> {
     return [
       Text(congrats,
           style: TextStyle(
-              fontSize: 13, height: 1.4, color: Colors.grey.shade800)),
+              fontSize: 13,
+              height: 1.4,
+              color: context.isDarkMode
+                  ? context.appTextSecondary
+                  : Colors.grey.shade800)),
       const SizedBox(height: 14),
       if (!widget.allowEditPeriodFromSource)
         Text(
@@ -631,7 +638,9 @@ class _ScaleMonthClosureBodyState extends State<_ScaleMonthClosureBody> {
             style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
-                color: Colors.grey.shade800)),
+                color: context.isDarkMode
+                    ? context.appTextSecondary
+                    : Colors.grey.shade800)),
         const SizedBox(height: 8),
         Row(
           children: [
@@ -658,14 +667,18 @@ class _ScaleMonthClosureBodyState extends State<_ScaleMonthClosureBody> {
       ],
       const SizedBox(height: 6),
       Text(_periodHuman,
-          style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+          style: TextStyle(
+              fontSize: 11,
+              color: context.isDarkMode
+                  ? context.appTextMuted
+                  : Colors.grey.shade600)),
       const SizedBox(height: 16),
       Text(
         'Marque uma ou mais linhas (várias ao mesmo tempo). Cada vínculo gera um lançamento separado no passo seguinte.',
         style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w800,
-            color: AppColors.textPrimary,
+            color: context.appTextPrimary,
             height: 1.35),
       ),
       const SizedBox(height: 10),
@@ -708,8 +721,9 @@ class _ScaleMonthClosureBodyState extends State<_ScaleMonthClosureBody> {
   Widget _lineCard(ScaleClosureLine line) {
     final sel = _selected.contains(line.typeKey);
     final enabled = line.isSelectableForClosure;
+    final dark = context.isDarkMode;
     final color = line.typeKey == 'state'
-        ? AppColors.deepBlue
+        ? (dark ? AppColors.primary : AppColors.deepBlue)
         : line.typeKey == 'municipality'
             ? AppColors.accent
             : const Color(0xFF7C3AED);
@@ -744,18 +758,18 @@ class _ScaleMonthClosureBodyState extends State<_ScaleMonthClosureBody> {
                       end: Alignment.bottomRight,
                       colors: [
                         color.withValues(alpha: 0.14),
-                        Colors.white,
+                        context.appSurface,
                         color.withValues(alpha: 0.06),
                       ],
                     )
                   : null,
-              color: sel ? null : Colors.white,
+              color: sel ? null : context.appSurface,
               border: Border.all(
                 color: enabled
                     ? (sel
                         ? color
                         : AppColors.logoSilver.withValues(alpha: 0.55))
-                    : Colors.grey.shade300,
+                    : (dark ? context.appChipIdleBorder : Colors.grey.shade300),
                 width: sel ? 2.2 : 1.1,
               ),
               boxShadow: [
@@ -802,7 +816,7 @@ class _ScaleMonthClosureBodyState extends State<_ScaleMonthClosureBody> {
                         '${line.countReal} serviço(s) realizado(s) · ${hd}h diurnas · ${hn}h noturnas',
                         style: TextStyle(
                             fontSize: 12,
-                            color: AppColors.textSecondary,
+                            color: context.appTextSecondary,
                             height: 1.25,
                             fontWeight: FontWeight.w600),
                       ),
@@ -822,7 +836,9 @@ class _ScaleMonthClosureBodyState extends State<_ScaleMonthClosureBody> {
                         style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w900,
-                            color: AppColors.deepBlue),
+                            color: dark
+                                ? context.appScalesMoneyValue
+                                : AppColors.deepBlue),
                       ),
                       if (line.valuePend > 0.001) ...[
                         const SizedBox(height: 2),
@@ -831,7 +847,7 @@ class _ScaleMonthClosureBodyState extends State<_ScaleMonthClosureBody> {
                           style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
-                              color: AppColors.textMuted),
+                              color: context.appTextMuted),
                         ),
                       ],
                       if (!enabled)
@@ -841,7 +857,9 @@ class _ScaleMonthClosureBodyState extends State<_ScaleMonthClosureBody> {
                             'Sem valor neste período para lançar.',
                             style: TextStyle(
                                 fontSize: 11,
-                                color: Colors.grey.shade600,
+                                color: dark
+                                    ? context.appTextMuted
+                                    : Colors.grey.shade600,
                                 fontStyle: FontStyle.italic),
                           ),
                         ),
@@ -857,8 +875,9 @@ class _ScaleMonthClosureBodyState extends State<_ScaleMonthClosureBody> {
   }
 
   Widget _buildLineEditorCard(ScaleClosureLine l) {
+    final dark = context.isDarkMode;
     final color = l.typeKey == 'state'
-        ? AppColors.deepBlue
+        ? (dark ? AppColors.primary : AppColors.deepBlue)
         : l.typeKey == 'municipality'
             ? AppColors.accent
             : const Color(0xFF7C3AED);
@@ -887,7 +906,7 @@ class _ScaleMonthClosureBodyState extends State<_ScaleMonthClosureBody> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Colors.white,
+            context.appSurface,
             color.withValues(alpha: 0.07),
           ],
         ),
@@ -944,7 +963,9 @@ class _ScaleMonthClosureBodyState extends State<_ScaleMonthClosureBody> {
                           fontSize: 18,
                           fontWeight: FontWeight.w900,
                           color: st == 'paid'
-                              ? AppColors.deepBlue
+                              ? (dark
+                                  ? context.appScalesMoneyValue
+                                  : AppColors.deepBlue)
                               : AppColors.financePendente,
                         ),
                       ),
@@ -955,7 +976,7 @@ class _ScaleMonthClosureBodyState extends State<_ScaleMonthClosureBody> {
                         style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: AppColors.textMuted),
+                            color: context.appTextMuted),
                       ),
                     ],
                   ),
@@ -968,7 +989,7 @@ class _ScaleMonthClosureBodyState extends State<_ScaleMonthClosureBody> {
               style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w900,
-                  color: AppColors.textPrimary),
+                  color: context.appTextPrimary),
             ),
             const SizedBox(height: 6),
             SegmentedButton<String>(
@@ -1010,7 +1031,7 @@ class _ScaleMonthClosureBodyState extends State<_ScaleMonthClosureBody> {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                   fontSize: 10,
-                  color: AppColors.textMuted,
+                  color: context.appTextMuted,
                   height: 1.25,
                   fontWeight: FontWeight.w500),
             ),
@@ -1020,7 +1041,7 @@ class _ScaleMonthClosureBodyState extends State<_ScaleMonthClosureBody> {
               decoration: InputDecoration(
                 labelText: 'Categoria',
                 filled: true,
-                fillColor: Colors.white,
+                fillColor: dark ? context.appInputFill : Colors.white,
                 border:
                     OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                 enabledBorder: OutlineInputBorder(
@@ -1040,7 +1061,7 @@ class _ScaleMonthClosureBodyState extends State<_ScaleMonthClosureBody> {
                 labelText: 'Descrição / histórico',
                 alignLabelWithHint: true,
                 filled: true,
-                fillColor: Colors.white,
+                fillColor: dark ? context.appInputFill : Colors.white,
                 border:
                     OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                 enabledBorder: OutlineInputBorder(
@@ -1101,7 +1122,7 @@ class _ScaleMonthClosureBodyState extends State<_ScaleMonthClosureBody> {
         'A anti-duplicação distingue realizado e pendente para o mesmo período.',
         style: TextStyle(
             fontSize: 12,
-            color: AppColors.textSecondary,
+            color: context.appTextSecondary,
             height: 1.4,
             fontWeight: FontWeight.w600),
       ),
@@ -1112,7 +1133,10 @@ class _ScaleMonthClosureBodyState extends State<_ScaleMonthClosureBody> {
         children: [
           ActionChip(
             avatar: Icon(Icons.done_all_rounded,
-                size: 18, color: AppColors.deepBlue),
+                size: 18,
+                color: context.isDarkMode
+                    ? AppColors.primary
+                    : AppColors.deepBlue),
             label: const Text('Recebido em todas'),
             onPressed: lines.every((l) => l.valueReal <= 0.001)
                 ? null
@@ -1158,7 +1182,11 @@ class _ScaleMonthClosureBodyState extends State<_ScaleMonthClosureBody> {
         title: const Text('Mesma data em todas as linhas'),
         subtitle: Text(
           'Desligue para escolher uma data por vínculo.',
-          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          style: TextStyle(
+              fontSize: 11,
+              color: context.isDarkMode
+                  ? context.appTextMuted
+                  : Colors.grey.shade600),
         ),
         value: _syncPaymentDatesAcrossLines,
         onChanged: (v) {
@@ -1191,14 +1219,20 @@ class _ScaleMonthClosureBodyState extends State<_ScaleMonthClosureBody> {
       ] else
         Text(
           'Datas por vínculo: use o botão no cartão de cada linha.',
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+          style: TextStyle(
+              fontSize: 12,
+              color: context.isDarkMode
+                  ? context.appTextSecondary
+                  : Colors.grey.shade700),
         ),
       const SizedBox(height: 16),
       Text('Conta (depósito / destino)',
           style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w800,
-              color: Colors.grey.shade800)),
+              color: context.isDarkMode
+                  ? context.appTextSecondary
+                  : Colors.grey.shade800)),
       const SizedBox(height: 6),
       if (_loadingAccounts)
         const Padding(
@@ -1265,17 +1299,19 @@ class _ScaleMonthClosureBodyState extends State<_ScaleMonthClosureBody> {
                   '${lines.length} lançamento(s)',
                   style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.textMuted,
+                      color: context.appTextMuted,
                       fontWeight: FontWeight.w600),
                 ),
               ],
             ),
             Text(
               CurrencyFormats.formatBRL(total),
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w900,
-                  color: AppColors.deepBlue),
+                  color: context.isDarkMode
+                      ? context.appScalesMoneyValue
+                      : AppColors.deepBlue),
             ),
           ],
         ),

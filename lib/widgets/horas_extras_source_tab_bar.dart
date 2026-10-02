@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 
 /// Abas coloridas — Goiás / CLT / Personalizar (seletor visível da aba ativa).
 class HorasExtrasSourceTabBar extends StatelessWidget {
@@ -37,9 +37,9 @@ class HorasExtrasSourceTabBar extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(
-        color: const Color(0xFFF1F5F9),
+        color: context.appInputFill,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: context.appChipIdleBorder),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
@@ -73,7 +73,11 @@ class HorasExtrasSourceTabBar extends StatelessWidget {
                               end: Alignment.bottomRight,
                             )
                           : null,
-                      color: selected ? null : Colors.white.withValues(alpha: 0.7),
+                      color: selected
+                          ? null
+                          : (context.isDarkMode
+                              ? context.appSurface
+                              : Colors.white.withValues(alpha: 0.7)),
                       border: Border.all(
                         color: selected
                             ? t.colors.first.withValues(alpha: 0.5)
@@ -96,7 +100,9 @@ class HorasExtrasSourceTabBar extends StatelessWidget {
                         Icon(
                           t.icon,
                           size: 22,
-                          color: selected ? Colors.white : t.colors.first,
+                          color: selected
+                              ? Colors.white
+                              : (context.isDarkMode ? t.colors.last : t.colors.first),
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -108,7 +114,7 @@ class HorasExtrasSourceTabBar extends StatelessWidget {
                             fontSize: 11.5,
                             fontWeight: FontWeight.w800,
                             letterSpacing: 0.1,
-                            color: selected ? Colors.white : AppColors.textSecondary,
+                            color: selected ? Colors.white : context.appTextSecondary,
                           ),
                         ),
                         if (selected) ...[
