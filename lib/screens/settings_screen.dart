@@ -36,6 +36,8 @@ import '../services/delegate_access_service.dart';
 import '../services/ios_payments_gate.dart';
 import '../services/user_settings_docs_cache.dart';
 import '../widgets/app_theme_mode_card.dart';
+import '../widgets/call_block_settings_card.dart';
+import '../services/call_block_service.dart';
 
 class _BiometricSwitchTile extends StatefulWidget {
   const _BiometricSwitchTile();
@@ -958,6 +960,13 @@ class SettingsScreen extends StatelessWidget {
                 initialAuthorizedEmail: profile?.authorizedDelegateEmail,
               ),
             const SizedBox(height: 14),
+            // Bloqueio de chamadas de desconhecidos — só no app Android (nem
+            // card nem tela na web/iPhone). Mesma posição do Controle Total:
+            // logo abaixo de «Compartilhamento de dados».
+            if (CallBlockService.platformSupported) ...[
+              const CallBlockSettingsCard(),
+              const SizedBox(height: 14),
+            ],
             if (!showAppBar) ...[
               Container(
                 padding: const EdgeInsets.all(14),

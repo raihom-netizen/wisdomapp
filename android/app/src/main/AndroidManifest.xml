@@ -26,6 +26,10 @@
     <!-- Despertador: o app acorda para desenhar o alarme (botões Adiar/Encerrar)
          quando o push chega com o aparelho em repouso. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- «Bloquear chamadas de desconhecidos» (Configurações, só Android 10+): saber se
+         quem liga está salvo nos contatos. Função principal que exige a agenda inteira —
+         precisa da declaração «Permissões de contato» no Play Console (prazo 27/01/2027). -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
     <application
         android:label="@string/app_name"
         android:name="${applicationName}"
@@ -118,6 +122,19 @@
                 <action android:name="com.wisdomapp.app.WIDGET_SYNC_ALARM" />
             </intent-filter>
         </receiver>
+        <!-- Configurações → «Bloquear chamadas de desconhecidos» (Android 10+).
+             Só é acionado quando o usuário escolhe o app como triagem de chamadas
+             (RoleManager.ROLE_CALL_SCREENING). Recebe apenas o NÚMERO de quem
+             liga; não usa READ_CALL_LOG nem READ_PHONE_STATE (Play Policy). -->
+        <service
+            android:name=".CallBlockScreeningService"
+            android:exported="true"
+            android:permission="android.permission.BIND_SCREENING_SERVICE"
+            tools:targetApi="q">
+            <intent-filter>
+                <action android:name="android.telecom.CallScreeningService" />
+            </intent-filter>
+        </service>
         <!-- Botões da notificação do despertador («Adiar 3/5 min», «Encerrar»):
              o flutter_local_notifications só entrega a ação com este receiver. -->
         <receiver

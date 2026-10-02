@@ -35,6 +35,27 @@ class MainActivity : FlutterFragmentActivity() {
     /** Índice do módulo [HomeShell] vindo do widget (ou -1). */
     private var pendingOpenModuleIndex: Int = -1
 
+    /** Configurações → «Bloquear chamadas de desconhecidos» (Android 10+). */
+    private val callBlock by lazy { CallBlockChannel(this) }
+
+    @Deprecated("Deprecated in Java")
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        callBlock.onActivityResult(requestCode, resultCode)
+    }
+
+    @Deprecated("Deprecated in Java")
+    @Suppress("DEPRECATION")
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        callBlock.onRequestPermissionsResult(requestCode)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         captureOpenModuleFromIntent(intent)
@@ -64,6 +85,7 @@ class MainActivity : FlutterFragmentActivity() {
             "com.raihom.controletotalapp/numeric_keypad",
             NumericKeypadViewFactory(flutterEngine.dartExecutor.binaryMessenger),
         )
+        callBlock.register(flutterEngine.dartExecutor.binaryMessenger)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, keyboardChannelName)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
