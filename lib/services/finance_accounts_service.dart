@@ -36,7 +36,16 @@ class FinanceAccountsService {
   /// já tem contas cadastradas.
   Stream<List<FinanceAccount>> streamAccounts(String uid) async* {
     final user = fa.FirebaseAuth.instance.currentUser;
-    if (user != null) {
+    final key = firestoreUserDocIdForAppShell(uid);
+    // Na Web o Firestore roda SEM cache em disco (persistenceEnabled: false +
+    // long-polling): o `Source.cache` abaixo volta vazio e a 1ª lista só vinha
+    // do servidor — o Financeiro ficava segundos no esqueleto cinza. A última
+    // lista que QUALQUER tela recebeu (o Início já escuta as contas) sai na hora.
+    final memo = _lastKnownByUid[key];
+    if (user != null && memo != null) {
+      yield List<FinanceAccount>.of(memo);
+    }
+    if (user != null && memo == null) {
       // Tentativa de seed instantâneo via cache local (IndexedDB / disk).
       try {
         final cachedSnap =
@@ -44,6 +53,7 @@ class FinanceAccountsService {
         if (cachedSnap.docs.isNotEmpty) {
           final list = cachedSnap.docs.map(FinanceAccount.fromDoc).toList();
           sortFinanceAccounts(list);
+          _lastKnownByUid[key] = list;
           yield list;
         }
       } catch (_) {
@@ -57,13 +67,24 @@ class FinanceAccountsService {
       return _col(uid).snapshots().map((snap) {
         final list = snap.docs.map(FinanceAccount.fromDoc).toList();
         sortFinanceAccounts(list);
+        _lastKnownByUid[key] = list;
         return list;
       });
     });
   }
 
+  /// Última lista de contas recebida nesta sessão (memória), por usuário.
+  static final Map<String, List<FinanceAccount>> _lastKnownByUid = {};
+
+  /// Contas já conhecidas nesta sessão — pintura instantânea antes do servidor.
+  static List<FinanceAccount>? peekLastKnown(String uid) {
+    final l = _lastKnownByUid[firestoreUserDocIdForAppShell(uid)];
+    return l == null ? null : List<FinanceAccount>.of(l);
+  }
+
   Future<List<FinanceAccount>> listOnce(String uid) async {
     if (firestoreUserDocIdStrictFromSession().isEmpty) return const [];
+    final key = firestoreUserDocIdForAppShell(uid);
     // Cache local primeiro — abertura do Financeiro/Agenda sem esperar rede.
     try {
       final cached = await _col(uid).get(const GetOptions(source: Source.cache));
@@ -81,6 +102,7 @@ class FinanceAccountsService {
     );
     final list = snap.docs.map(FinanceAccount.fromDoc).toList();
     sortFinanceAccounts(list);
+    _lastKnownByUid[key] = list;
     return list;
   }
 

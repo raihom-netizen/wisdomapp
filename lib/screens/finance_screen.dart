@@ -1071,6 +1071,18 @@ class _FinanceScreenState extends State<FinanceScreen>
     _financeUserStreamsBound = true;
     _lastBoundFinanceAuthUid = cu.uid;
     _lastBoundFinanceDataUid = fsUid;
+    // Contas já conhecidas nesta sessão (o Início escuta as mesmas): pinta os
+    // cards na hora em vez do esqueleto cinza enquanto a escuta espera o
+    // servidor — na Web não há cache em disco, a 1ª lista vinha só da rede.
+    if (!_financeAccountsStreamPrimed || _financeAccounts.isEmpty) {
+      final seed = FinanceAccountsService.peekLastKnown(fsUid);
+      if (seed != null) {
+        setState(() {
+          _financeAccounts = seed;
+          _financeAccountsStreamPrimed = true;
+        });
+      }
+    }
     _financeAccSub = FinanceAccountsService().streamAccounts(fsUid).listen(
       (list) {
         if (!mounted) return;
@@ -4224,12 +4236,10 @@ class _FinanceScreenState extends State<FinanceScreen>
   /// Painel por conta: gráficos por categoria + edição / exclusão (toque no cartão banco/cartão).
   void _openFinanceAccountCategoryBreakdown(
       BuildContext context, FinanceAccount account) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
+    // Tela cheia (página com AppBar e «Voltar»), como a ficha do banco no CT.
+    Navigator.of(context).push<void>(MaterialPageRoute<void>(
       builder: (ctx) => FinanceAccountCategorySheet(
+        fullScreenPage: true,
         uid: firestoreUserDocIdForAppShell(widget.uid),
         profile: widget.profile,
         account: account,
@@ -4251,17 +4261,14 @@ class _FinanceScreenState extends State<FinanceScreen>
         financeAccounts: _financeAccounts,
         optimisticPaidIds: _optimisticPaidIds,
       ),
-    );
+    ));
   }
 
   /// Consolidado **Todas as contas**: mesmos gráficos e edição que um banco/cartão, sem filtrar por conta.
   void _openAllAccountsCategoryBreakdown(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
+    Navigator.of(context).push<void>(MaterialPageRoute<void>(
       builder: (ctx) => FinanceAccountCategorySheet(
+        fullScreenPage: true,
         uid: firestoreUserDocIdForAppShell(widget.uid),
         profile: widget.profile,
         account: null,
@@ -4283,7 +4290,7 @@ class _FinanceScreenState extends State<FinanceScreen>
         financeAccounts: _financeAccounts,
         optimisticPaidIds: _optimisticPaidIds,
       ),
-    );
+    ));
   }
 
   List<double> _sparklineTodasContas(
