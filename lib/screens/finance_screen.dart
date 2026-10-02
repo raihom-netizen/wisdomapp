@@ -190,6 +190,18 @@ class _FinanceScreenState extends State<FinanceScreen>
   StreamSubscription<bool>? _stripHideZeroSub;
   bool _stripHideZeroBalances = false;
   bool _financeAccountsStreamPrimed = false;
+  /// Erro/prazo da lista de contas sem nada na tela (mostra «Tentar de novo»).
+  Object? _financeAccountsErro;
+  Timer? _financeAccountsPrazo;
+
+  void _retryFinanceAccounts() {
+    setState(() {
+      _financeAccountsErro = null;
+      _financeAccountsStreamPrimed = false;
+      _financeUserStreamsBound = false;
+    });
+    _bindFinanceUserDataStreams();
+  }
 
   /// Lista principal: evita renderizar milhares de cards de uma vez.
   static const int _txPageSize = 150;
@@ -238,6 +250,12 @@ class _FinanceScreenState extends State<FinanceScreen>
   bool _mainPeriodServerPagingActive = false;
   ({double income, double expense})? _mainPeriodServerKpis;
   ({double income, double expense})? _periodMergedKpis;
+
+  /// Depósitos (−) / resgates (+) de meta pagos no período (`goalReserve`).
+  /// Ficam FORA de Receitas/Despesas (igual ao servidor), mas mexem no saldo:
+  /// sem somar isto de volta, com a lista paginada o «Todas as contas» ficava
+  /// MAIOR que o real pelo valor guardado na meta.
+  double _mainPeriodGoalReserveNet = 0;
   bool _mainPeriodLoadingMore = false;
 
   /// Lista principal paginada no Firestore: só ~200 docs em memória — saldos por
@@ -409,31 +427,26 @@ class _FinanceScreenState extends State<FinanceScreen>
     }
   }
 
-  /// Recurso para casos em que o cache local do Firestore está corrompido
-  /// (IndexedDB / disk): chama `terminate()` + `clearPersistence()` e força
-  /// nova leitura. Resolve o «Erro ao carregar lançamentos» sem o usuário ter
-  /// de sair e entrar de novo.
+  /// «Erro ao carregar lançamentos»: renova a sessão e relê do servidor sem o
+  /// usuário ter de sair e entrar de novo.
   Future<void> _onClearCacheAndRetry() async {
     if (!mounted) return;
     setState(() {
       _mainPeriodLoadError = null;
       _mainPeriodLoading = true;
     });
-    // Web: sem terminate() — ele mata TODAS as escutas abertas do app
-    // (outros módulos ficavam girando para sempre). Lá não há cache em disco.
-    if (!kIsWeb) {
-      try {
-        await FirebaseFirestore.instance.terminate();
-      } catch (_) {}
-      try {
-        await FirebaseFirestore.instance.clearPersistence();
-      } catch (_) {}
-    }
+    // Sem terminate()/clearPersistence() em NENHUMA plataforma: terminate
+    // encerra TODAS as escutas abertas do app (Início, Agenda, cursos… ficavam
+    // girando até reabrir o app). Basta renovar o token e reabrir as leituras
+    // deste módulo (que vão ao servidor).
+    FinanceServerTotals.invalidateForUser(firestoreUserDocIdForAppShell(widget.uid));
+    FinanceOpeningBalanceService.invalidateForUser(widget.uid);
+    _buildFutures.clear();
     await _onRetryLoadTransactions();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Cache local limpo. Buscando do servidor…'),
+        content: Text('Buscando de novo no servidor…'),
         duration: Duration(seconds: 2),
       ),
     );
@@ -682,6 +695,7 @@ class _FinanceScreenState extends State<FinanceScreen>
     _financeBalanceContextKeyApplied = key;
     _mainPeriodServerKpis = null;
     _periodMergedKpis = null;
+    _mainPeriodGoalReserveNet = 0;
     _serverPagingStripPaidNetByAccount = const {};
     _serverPagingStripNetForGen = -1;
   }
@@ -738,6 +752,7 @@ class _FinanceScreenState extends State<FinanceScreen>
     FinanceOpeningBalanceService.revision
         .removeListener(_onOpeningBalanceRevision);
     _authStateSub?.cancel();
+    _financeAccountsPrazo?.cancel();
     _financeAccSub?.cancel();
     _stripHideZeroSub?.cancel();
     _pendentesRetry?.cancel();
@@ -801,6 +816,7 @@ class _FinanceScreenState extends State<FinanceScreen>
       if (deduped.isNotEmpty && !partialList) {
         _mainPeriodServerKpis = (income: paid.income, expense: paid.expense);
         _periodMergedKpis = (income: paid.income, expense: paid.expense);
+        _mainPeriodGoalReserveNet = _goalReserveNetFromDocs(deduped);
         _serverPagingStripPaidNetByAccount = strip;
         _serverPagingStripNetForGen = _mainPeriodLoadGeneration;
       }
@@ -1049,8 +1065,15 @@ class _FinanceScreenState extends State<FinanceScreen>
           lancamentoCount: count,
           cartaoCount: cards.length,
           compact: true,
+          // Com erro o toque não fazia nada: agora avisa e tenta de novo.
           onTap: snap.hasError
-              ? () {}
+              ? () {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('Faturas não carregaram. Tentando de novo…'),
+                    duration: Duration(seconds: 2),
+                  ));
+                  unawaited(_onRetryLoadTransactions());
+                }
               : () => _openFaturaEmAbertoHub(context, faturaByCard),
         );
       },
@@ -1115,6 +1138,7 @@ class _FinanceScreenState extends State<FinanceScreen>
         if (!mounted) return;
         setState(() {
           _financeAccounts = list;
+          _financeAccountsErro = null;
           _financeAccountsStreamPrimed = true;
           if (_financeAccountFilterId != null &&
               !list.any((a) => a.id == _financeAccountFilterId)) {
@@ -1125,12 +1149,23 @@ class _FinanceScreenState extends State<FinanceScreen>
       onError: (Object e, StackTrace st) {
         debugPrint('FinanceAccountsStream: $e\n$st');
         if (!mounted) return;
+        // Mantém os cards que já estavam na tela (antes zerava a lista e
+        // aparecia «Cadastre suas contas», como se os bancos tivessem sumido).
         setState(() {
-          _financeAccounts = const [];
+          _financeAccountsErro = _financeAccounts.isEmpty ? e : null;
           _financeAccountsStreamPrimed = true;
         });
       },
     );
+    // Prazo para o esqueleto dos cards: sem resposta, vira «Tentar de novo».
+    _financeAccountsPrazo?.cancel();
+    _financeAccountsPrazo = Timer(const Duration(seconds: 20), () {
+      if (!mounted || _financeAccountsStreamPrimed) return;
+      setState(() {
+        _financeAccountsErro = TimeoutException('contas');
+        _financeAccountsStreamPrimed = true;
+      });
+    });
     _stripHideZeroSub = FinanceAdvancedSettingsService()
         .watchStripHideZeroBalances(fsUid)
         .listen(
@@ -1887,9 +1922,20 @@ class _FinanceScreenState extends State<FinanceScreen>
         typeFilter: _typeFilter,
       );
       if (!mounted) return;
+      // Totais do servidor: a reserva de meta vem à parte (goalReserveNet).
+      // Caminho local (servidor falhou): FinancePeriodSummary já soma tudo, sem
+      // cache do servidor → 0.
+      final srv = FinanceServerTotals.peekCached(
+        uid: firestoreUserDocIdForAppShell(widget.uid),
+        from: DateTime(_from.year, _from.month, _from.day),
+        to: DateTime(_to.year, _to.month, _to.day, 23, 59, 59),
+        statusFilter: _statusFilter == 'all' ? 'paid' : _statusFilter,
+        typeFilter: _typeFilter == 'income' || _typeFilter == 'expense' ? _typeFilter : 'all',
+      );
       setState(() {
         _mainPeriodServerKpis = (income: r.income, expense: r.expense);
         _periodMergedKpis = (income: r.income, expense: r.expense);
+        _mainPeriodGoalReserveNet = srv?.goalReserveNet ?? 0;
       });
     } catch (_) {}
   }
@@ -3734,6 +3780,9 @@ class _FinanceScreenState extends State<FinanceScreen>
           effective.isAfter(re)) {
         continue;
       }
+      // Depósito/resgate de meta: reserva, não receita nem despesa (mesma
+      // regra do servidor) — volta no saldo por [_goalReserveNetFromDocs].
+      if (d['goalReserve'] == true) continue;
       final amount = _financeAmountToDouble(d['amount']);
       final type = (d['type'] ?? 'expense').toString();
       if (type == 'income') {
@@ -3743,6 +3792,28 @@ class _FinanceScreenState extends State<FinanceScreen>
       }
     }
     return (income: inc, expense: exp);
+  }
+
+  /// Líquido PAGO das reservas de meta no período (resgate +, depósito −).
+  double _goalReserveNetFromDocs(
+      List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
+    final rs = DateTime(_from.year, _from.month, _from.day);
+    final re = DateTime(_to.year, _to.month, _to.day, 23, 59, 59);
+    var net = 0.0;
+    final seen = <String>{};
+    for (final doc in docs) {
+      if (!seen.add(doc.id)) continue;
+      final d = _txDataForMainPeriodDoc(doc);
+      if (d['goalReserve'] != true) continue;
+      if ((d['status'] ?? 'paid').toString() != 'paid') continue;
+      final effective = FinanceLineOpening.effectiveDateTimeFromMap(d);
+      if (effective == null || effective.isBefore(rs) || effective.isAfter(re)) {
+        continue;
+      }
+      final amount = _financeAmountToDouble(d['amount']).abs();
+      net += (d['type'] ?? 'expense').toString() == 'income' ? amount : -amount;
+    }
+    return net;
   }
 
   /// Saldo acumulado consolidado («Todas as contas») — abertura + movimentos pagos do período.
@@ -3771,7 +3842,7 @@ class _FinanceScreenState extends State<FinanceScreen>
     ({double income, double expense})? serverKpis,
   }) {
     if (_mainPeriodServerPagingActive && serverKpis != null) {
-      return serverKpis.income - serverKpis.expense;
+      return serverKpis.income - serverKpis.expense + _mainPeriodGoalReserveNet;
     }
     return fallbackFromVisiblePaidDocs;
   }
@@ -4555,6 +4626,12 @@ class _FinanceScreenState extends State<FinanceScreen>
                   ),
                 ),
               ),
+            )
+          else if (_financeAccounts.isEmpty && _financeAccountsErro != null)
+            FinanceLoadErrorBox(
+              error: _financeAccountsErro,
+              message: 'Não foi possível carregar seus bancos e cartões.',
+              onRetry: _retryFinanceAccounts,
             )
           else if (_financeAccounts.isEmpty)
             Container(
@@ -8274,7 +8351,9 @@ class _FinanceScreenState extends State<FinanceScreen>
                           }
                           final periodNetPaid = _periodNetPaidConsolidated(
                             fallbackFromVisiblePaidDocs:
-                                paidTotals.income - paidTotals.expense,
+                                paidTotals.income -
+                                    paidTotals.expense +
+                                    _goalReserveNetFromDocs(docs),
                             serverKpis: sk,
                           );
                           final balance = periodNetPaid;
@@ -9582,7 +9661,7 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet>
       to: to,
       statusFilter: _statusLocal,
       financeAccountId: widget.financeAccountFilterId,
-    );
+    ).timeout(const Duration(seconds: 45));
     final rows = <Map<String, dynamic>>[];
     for (final doc in docs) {
       final d = doc.data();
@@ -9774,6 +9853,19 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet>
             child: FutureBuilder<List<Map<String, dynamic>>>(
               future: _docsFuture,
               builder: (context, snap) {
+                // Erro/prazo: antes a folha girava para sempre.
+                if (snap.hasError && !snap.hasData) {
+                  return ListView(
+                    controller: controller,
+                    padding: const EdgeInsets.fromLTRB(16, 24, 16, 28),
+                    children: [
+                      FinanceLoadErrorBox(
+                        error: snap.error,
+                        onRetry: _scheduleDocsReload,
+                      ),
+                    ],
+                  );
+                }
                 if (!snap.hasData) {
                   return ListView(
                     controller: controller,

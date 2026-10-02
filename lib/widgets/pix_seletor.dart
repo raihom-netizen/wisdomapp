@@ -130,7 +130,10 @@ class _EscolherPixPageState extends State<_EscolherPixPage> {
     if (padrao) {
       setState(() => _salvando = true);
       try {
-        await FinancePixService.instance.definirPixPadrao(widget.uid, s.conta.id, s.chave);
+        // Prazo: offline a gravação não confirma e o botão ficava girando.
+        await FinancePixService.instance
+            .definirPixPadrao(widget.uid, s.conta.id, s.chave)
+            .timeout(const Duration(seconds: 15));
       } catch (_) {
         if (mounted) {
           setState(() => _salvando = false);

@@ -14,6 +14,7 @@ import '../models/user_profile.dart';
 import '../theme/app_colors.dart';
 import '../theme/theme_context.dart';
 import 'finance_transaction_sort_bar.dart';
+import '../utils/finance_shared_stream.dart';
 import '../utils/finance_account_balance_utils.dart';
 import '../utils/finance_fatura_transaction_sort.dart';
 import '../utils/finance_category_grouping.dart';
@@ -579,6 +580,16 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
       .where('status', isEqualTo: 'pending')
       .orderBy('date', descending: false)
       .limit(500);
+
+  /// Escuta guardada no State (uma só, mesmo com o StreamBuilder sumindo e
+  /// voltando ao trocar o filtro). Antes `.snapshots()` era chamado dentro do
+  /// `build`: cada redesenho abria/fechava a mesma escuta — na Web é o gatilho
+  /// do INTERNAL ASSERTION do Firestore.
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _pendingOnCardStream =
+      FinanceSharedStream<QuerySnapshot<Map<String, dynamic>>>(
+    () => _pendingOnCardQuery.snapshots(includeMetadataChanges: false),
+    linger: const Duration(seconds: 2),
+  ).stream;
 
   double _sumDocs(Iterable<QueryDocumentSnapshot<Map<String, dynamic>>> docs, {Set<String>? onlyIds}) {
     var s = 0.0;
@@ -1616,7 +1627,7 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
   }) {
     if (_needsPendingStream) {
       return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: _pendingOnCardQuery.snapshots(includeMetadataChanges: false),
+        stream: _pendingOnCardStream,
         builder: (context, snap) {
           if (snap.hasError) {
             return ListView(

@@ -45,8 +45,11 @@ class _CategoriesConfigScreenState extends State<CategoriesConfigScreen> with Si
   }
 
   Future<void> _load() async {
-    final c = await _service.load(widget.uid);
-    if (mounted) {
+    // try/finally: qualquer falha libera a tela (antes o spinner podia ficar
+    // para sempre). A leitura do serviço já tem prazo.
+    try {
+      final c = await _service.load(widget.uid);
+      if (!mounted) return;
       setState(() {
         _income = UserCategoriesService.sortedWithoutIncluirNova(c.income);
         _expense = UserCategoriesService.sortedWithoutIncluirNova(c.expense);
@@ -54,8 +57,16 @@ class _CategoriesConfigScreenState extends State<CategoriesConfigScreen> with Si
           ..sort(UserCategoriesService.compareNamesPt);
         _hiddenExpense = List<String>.from(c.hiddenDefaultExpense)
           ..sort(UserCategoriesService.compareNamesPt);
-        _loading = false;
       });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Text('Não foi possível carregar as categorias.'),
+          action: SnackBarAction(label: 'Tentar de novo', onPressed: () => unawaited(_load())),
+        ));
+      }
+    } finally {
+      if (mounted && _loading) setState(() => _loading = false);
     }
   }
 
@@ -192,7 +203,7 @@ class _CategoriesConfigScreenState extends State<CategoriesConfigScreen> with Si
             children: [
               const CircularProgressIndicator(strokeWidth: 3, color: AppColors.primary),
               const SizedBox(height: 16),
-              Text('A carregar categorias…', style: TextStyle(fontWeight: FontWeight.w600, color: context.appTextSecondary)),
+              Text('Carregando categorias…', style: TextStyle(fontWeight: FontWeight.w600, color: context.appTextSecondary)),
             ],
           ),
         ),

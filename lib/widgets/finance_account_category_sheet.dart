@@ -145,6 +145,25 @@ class _FinanceAccountCategorySheetState extends State<FinanceAccountCategoryShee
 
   void _onFinanceHubRevision() => unawaited(_reloadPeriodDocs());
 
+  /// Abertura guardada por período + revisão (antes um Future novo a cada
+  /// redesenho da ficha), com prazo — sem resposta fica o valor do Financeiro.
+  String? _aberturaKey;
+  Future<({double total, Map<String, double> byAccount})>? _aberturaFuture;
+
+  Future<({double total, Map<String, double> byAccount})> _aberturaPara(DateTime periodStart) {
+    final key =
+        '${periodStart.millisecondsSinceEpoch}|${FinanceOpeningBalanceService.revision.value}|${FinanceTransactionsHub.revision.value}';
+    if (key != _aberturaKey || _aberturaFuture == null) {
+      _aberturaKey = key;
+      _aberturaFuture = FinanceOpeningBalanceService.load(
+        uid: widget.uid,
+        periodStart: periodStart,
+        loadAccounts: true,
+      ).timeout(const Duration(seconds: 30));
+    }
+    return _aberturaFuture!;
+  }
+
   Future<void> _reloadPeriodDocs() async {
     if (!mounted) return;
     final gen = ++_loadGen;
@@ -384,11 +403,7 @@ class _FinanceAccountCategorySheetState extends State<FinanceAccountCategoryShee
                     );
 
                     return FutureBuilder<({double total, Map<String, double> byAccount})>(
-                      future: FinanceOpeningBalanceService.load(
-                        uid: widget.uid,
-                        periodStart: periodStart,
-                        loadAccounts: true,
-                      ),
+                      future: _aberturaPara(periodStart),
                       initialData: openingPeek,
                       builder: (context, openSnap) {
                         final openingTotal = openSnap.data?.total ?? widget.openingBalanceHint ?? 0.0;

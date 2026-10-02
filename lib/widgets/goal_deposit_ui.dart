@@ -266,7 +266,10 @@ class GoalDepositWeeksUnmarkBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF7ED),
+        // Modo escuro: laranja translúcido (o creme fixo virava um bloco claro).
+        color: Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFFEA580C).withValues(alpha: 0.14)
+            : const Color(0xFFFFF7ED),
         borderRadius: BorderRadius.circular(12),
         border:
             Border.all(color: const Color(0xFFEA580C).withValues(alpha: 0.35)),
@@ -279,10 +282,12 @@ class GoalDepositWeeksUnmarkBanner extends StatelessWidget {
           Expanded(
             child: Text(
               info.deleteImpactMessage(),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF9A3412),
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? const Color(0xFFFDBA74)
+                    : const Color(0xFF9A3412),
                 height: 1.35,
               ),
             ),

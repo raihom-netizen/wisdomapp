@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../utils/finance_transactions_hub.dart';
 import '../services/fixed_expense_service.dart';
 import '../services/fixed_income_service.dart';
 import '../theme/app_colors.dart';
@@ -122,13 +123,35 @@ class FinanceSmartTipsInsightBlock extends StatelessWidget {
   /// Dentro do sheet de preview: omite cabeçalho duplicado da tela principal.
   final bool previewMode;
 
+  /// Fixas cadastradas por usuário, reaproveitadas entre redesenhos (antes
+  /// cada rebuild do Financeiro relia despesas e receitas fixas do servidor).
+  /// Renova quando um lançamento muda (hub) ou depois de 2 minutos.
+  static final Map<String, (int, DateTime, Future<List<List<Map<String, dynamic>>>>)>
+      _fixasMemo = {};
+
+  static Future<List<List<Map<String, dynamic>>>> _fixasDe(String uid) {
+    final rev = FinanceTransactionsHub.revision.value;
+    final hit = _fixasMemo[uid];
+    if (hit != null &&
+        hit.$1 == rev &&
+        DateTime.now().difference(hit.$2) < const Duration(minutes: 2)) {
+      return hit.$3;
+    }
+    final f = Future.wait([
+      FixedExpenseService().list(uid),
+      FixedIncomeService().list(uid),
+    ]);
+    _fixasMemo[uid] = (rev, DateTime.now(), f);
+    f.then<void>((_) {}, onError: (Object _) {
+      if (identical(_fixasMemo[uid]?.$3, f)) _fixasMemo.remove(uid);
+    });
+    return f;
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<List<Map<String, dynamic>>>>(
-      future: Future.wait([
-        FixedExpenseService().list(uid),
-        FixedIncomeService().list(uid),
-      ]),
+      future: _fixasDe(uid),
       builder: (context, snap) {
         double? fixedMonthly;
         double? fixedIncomeMonthly;

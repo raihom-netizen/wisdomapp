@@ -65,6 +65,9 @@ class MetaFinanceiraScreen extends StatefulWidget {
 enum _GoalListSort { prazo, titulo, valorAlvoDesc }
 
 class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
+  /// Entra na chave da escuta das metas: «Atualizar» depois de erro reabre a
+  /// consulta (antes o botão só redesenhava a mesma escuta já encerrada).
+  int _metasTentativa = 0;
   StreamSubscription<fa.User?>? _authStateSub;
 
   _GoalListSort _goalListSort = _GoalListSort.prazo;
@@ -1133,7 +1136,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
     // auth) não reabre a consulta.
     return KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       key: ValueKey<String>('meta-goals-$id'),
-      streamKey: 'users/$id/goals|active',
+      streamKey: 'users/$id/goals|active|$_metasTentativa',
       create: () => FirebaseFirestore.instance
           .collection('users')
           .doc(id)
@@ -1158,9 +1161,9 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
                             : Colors.grey.shade700)),
                 const SizedBox(height: 16),
                 FilledButton.icon(
-                    onPressed: () => setState(() {}),
+                    onPressed: () => setState(() => _metasTentativa++),
                     icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('Atualizar')),
+                    label: const Text('Tentar de novo')),
               ],
             ),
           );

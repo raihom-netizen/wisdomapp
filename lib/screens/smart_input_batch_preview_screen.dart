@@ -189,6 +189,18 @@ class _SmartInputBatchPreviewScreenState extends State<SmartInputBatchPreviewScr
   }
 
   Future<void> _bootstrap() async {
+    // try/finally: uma sugestão que falhe não pode deixar a prévia no spinner.
+    try {
+      await _montarLinhas();
+    } catch (e) {
+      debugPrint('SmartInputBatchPreview bootstrap: $e');
+    } finally {
+      _recomputeDuplicates();
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _montarLinhas() async {
     for (final r in widget.initialParsed) {
       if (!r.hasMinimumForConfirmation) continue;
       final isInc = r.type == 'income';
@@ -214,9 +226,9 @@ class _SmartInputBatchPreviewScreenState extends State<SmartInputBatchPreviewScr
         ),
       );
     }
-    _recomputeDuplicates();
-    if (mounted) setState(() => _loading = false);
   }
+
+  bool _dicasIndisponiveis = false;
 
   Future<String> _resolveInitialCategory({
     required String descricao,
@@ -225,8 +237,17 @@ class _SmartInputBatchPreviewScreenState extends State<SmartInputBatchPreviewScr
     if (allowed.isEmpty || descricao.isEmpty) return '';
     final direct = SmartCategoryHintsService.matchAllowedCategoryInDescription(descricao, allowed);
     if (direct != null && direct.trim().isNotEmpty) return direct.trim();
-    final hinted = await SmartCategoryHintsService.suggestCategory(widget.uid, descricao, allowed);
-    if (hinted != null && hinted.trim().isNotEmpty) return hinted.trim();
+    // Com prazo: a sugestão lê o servidor (1ª vez) e, sem resposta, a prévia
+    // em lote ficava girando. Sem sugestão = categoria em branco (escolhe na linha).
+    if (_dicasIndisponiveis) return '';
+    try {
+      final hinted = await SmartCategoryHintsService.suggestCategory(widget.uid, descricao, allowed)
+          .timeout(const Duration(seconds: 6));
+      if (hinted != null && hinted.trim().isNotEmpty) return hinted.trim();
+    } catch (_) {
+      // Uma falha basta: as outras linhas não esperam 6 s cada.
+      _dicasIndisponiveis = true;
+    }
     return '';
   }
 

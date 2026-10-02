@@ -240,7 +240,8 @@ class _FinanceBulkAssignScreenState extends State<FinanceBulkAssignScreen> {
           .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(f))
           .where('date', isLessThanOrEqualTo: Timestamp.fromDate(t))
           .orderBy('date', descending: true)
-          .get();
+          .get()
+          .timeout(const Duration(seconds: 30));
       final list = snap.docs.where((doc) {
         final d = doc.data();
         return _passesOrigem(d) && _passesTipo(d);
