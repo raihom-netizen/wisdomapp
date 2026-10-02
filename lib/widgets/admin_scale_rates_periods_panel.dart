@@ -8,6 +8,7 @@ import '../services/scale_rates_period_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/theme_context.dart';
 import 'admin_scale_rates_period_editor_page.dart';
+import 'keyed_stream_builder.dart';
 
 /// Painel Admin — histórico de períodos AC4 GO, agendamento e sincronização Firestore.
 class AdminScaleRatesPeriodsPanel extends StatefulWidget {
@@ -255,8 +256,9 @@ class _AdminScaleRatesPeriodsPanelState
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<ScaleRatesPeriod>>(
-      stream: ScaleRatesPeriodService().watchPeriods(),
+    return KeyedStreamBuilder<List<ScaleRatesPeriod>>(
+      streamKey: 'scale-rates-periods',
+      create: () => ScaleRatesPeriodService().watchPeriods(),
       builder: (context, snap) {
         final periods = snap.data ?? ScaleRatesPeriodRegistry.bootstrapPeriods();
         final sorted = ScaleRatesPeriod.sortAsc(periods);

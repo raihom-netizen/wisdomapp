@@ -17,6 +17,7 @@ import '../services/billing_service.dart';
 import '../services/logs_service.dart';
 import '../models/user_profile.dart';
 import '../utils/admin_responsive.dart';
+import 'keyed_stream_builder.dart';
 import '../services/functions_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/debounced_text_controller.dart';
@@ -1739,8 +1740,9 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
             child: _buildNovoConvenioFormSection(showTitleBlock: false),
           ),
           const SizedBox(height: 12),
-          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
+          KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            streamKey: 'partnerships-by-name',
+            create: () => FirebaseFirestore.instance
                 .collection('partnerships')
                 .orderBy('name')
                 .snapshots(),
@@ -2180,8 +2182,9 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
                             ),
                           ),
                           const SizedBox(height: 12),
-                          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                            stream: FirebaseFirestore.instance
+                          KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                            streamKey: id,
+                            create: () => FirebaseFirestore.instance
                                 .collection('partnerships')
                                 .doc(id)
                                 .collection('submissions')
@@ -5263,8 +5266,9 @@ class _PartnershipUsersPanelState extends State<PartnershipUsersPanel> {
               ),
             ),
             const SizedBox(height: 8),
-            StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: fs
+            KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              streamKey: 'users-with-partnership',
+              create: () => fs
                   .collection('users')
                   .where('partnershipId', isNotEqualTo: '')
                   .limit(500)
@@ -5312,8 +5316,9 @@ class _PartnershipUsersPanelState extends State<PartnershipUsersPanel> {
             ),
           ),
           const SizedBox(height: 8),
-          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: fs
+          KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            streamKey: pid,
+            create: () => fs
                 .collection('users')
                 .where('partnershipId', isEqualTo: pid)
                 .limit(400)
@@ -5323,8 +5328,9 @@ class _PartnershipUsersPanelState extends State<PartnershipUsersPanel> {
               if (!includePlanQuery) {
                 return _usersListFromDocs(byPidDocs);
               }
-              return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: fs
+              return KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                streamKey: planCode,
+                create: () => fs
                     .collection('users')
                     .where('plan', isEqualTo: planCode)
                     .limit(400)
@@ -6424,8 +6430,9 @@ class AdminPartnershipUsersPreviewPage extends StatelessWidget {
         ),
       ),
       body: SafeArea(
-        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
+        child: KeyedStreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          streamKey: 'partnerships-catalog',
+          create: () => FirebaseFirestore.instance
               .collection('partnerships')
               .limit(200)
               .snapshots(),

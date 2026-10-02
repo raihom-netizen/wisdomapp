@@ -3,7 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../theme/theme_context.dart';
+import '../../utils/admin_load_guard.dart';
 import 'admin_ui_kit.dart';
+
+Future<Map<String, dynamic>?> _loadCompareUser(String uid) async {
+  final snap =
+      await FirebaseFirestore.instance.collection('users').doc(uid).get();
+  return snap.data();
+}
 
 /// Compara dois utilizadores lado a lado.
 Future<void> showAdminUserCompareSheet(
@@ -11,6 +18,12 @@ Future<void> showAdminUserCompareSheet(
   required String uidA,
   required String uidB,
 }) async {
+  // Leitura criada UMA vez: o builder do DraggableScrollableSheet roda a cada
+  // arrasto — com o Future no build, cada quadro relia os 2 perfis.
+  final dados = AdminLoadGuard.comPrazo(
+    Future.wait([_loadCompareUser(uidA), _loadCompareUser(uidB)]),
+    oQue: 'os dois usuários',
+  );
   await showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -23,6 +36,7 @@ Future<void> showAdminUserCompareSheet(
         scrollController: scroll,
         uidA: uidA,
         uidB: uidB,
+        dados: dados,
       ),
     ),
   );
@@ -37,18 +51,29 @@ class _CompareBody extends StatelessWidget {
     required this.scrollController,
     required this.uidA,
     required this.uidB,
+    required this.dados,
   });
+
+  final Future<List<Map<String, dynamic>?>> dados;
 
   @override
   Widget build(BuildContext context) {
     return Material(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       child: FutureBuilder<List<Map<String, dynamic>?>>(
-        future: Future.wait([
-          _load(uidA),
-          _load(uidB),
-        ]),
+        future: dados,
         builder: (context, snap) {
+          if (snap.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  AdminLoadGuard.mensagem(snap.error),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            );
+          }
           if (!snap.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -87,12 +112,6 @@ class _CompareBody extends StatelessWidget {
         },
       ),
     );
-  }
-
-  Future<Map<String, dynamic>?> _load(String uid) async {
-    final snap =
-        await FirebaseFirestore.instance.collection('users').doc(uid).get();
-    return snap.data();
   }
 
   String _v(Map<String, dynamic>? m, String key) =>
