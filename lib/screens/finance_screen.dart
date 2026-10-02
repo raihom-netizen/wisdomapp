@@ -74,6 +74,9 @@ import '../widgets/finance_transaction_edit_dialog.dart';
 import '../widgets/finance_transaction_list_tile.dart';
 import '../utils/finance_fatura_transaction_sort.dart';
 import '../widgets/finance_transaction_sort_bar.dart';
+import '../services/finance_sort_preference.dart';
+import '../widgets/finance_graficos_modernos.dart';
+import '../theme/theme_context.dart';
 import 'finance_transactions_fullscreen_page.dart';
 import 'finance_categories_fullscreen_page.dart';
 import 'finance_assistant_insights_page.dart';
@@ -116,7 +119,8 @@ class FinanceScreen extends StatefulWidget {
   State<FinanceScreen> createState() => _FinanceScreenState();
 }
 
-class _FinanceScreenState extends State<FinanceScreen> {
+class _FinanceScreenState extends State<FinanceScreen>
+    with FinanceSortPreferenceListener {
   static const Color _kPdfActionOrange = Color(0xFFEA580C);
 
   /// Filtro de período simples: Mensal, Anual ou Por período.
@@ -137,7 +141,13 @@ class _FinanceScreenState extends State<FinanceScreen> {
 
   /// Filtro rápido da grid principal: Todos / Despesas / Receitas (só visualização).
   String _gridListTypeFilter = 'all';
-  FinanceFaturaTxSortMode _gridSortMode = FinanceFaturaTxSortMode.dateDesc;
+  // Começa na ordem que o usuário gravou (padrão: mais antiga primeiro) e
+  // acompanha a escolha feita em qualquer grid (port Controle Total).
+  FinanceFaturaTxSortMode _gridSortMode = FinanceSortPreference.atual.value;
+
+  @override
+  void aoMudarOrdem(FinanceFaturaTxSortMode modo) =>
+      setState(() => _gridSortMode = modo);
   String? _categoryFilter;
   late Future<List<String>> _categoryFilterOptionsFuture;
   bool _categoryFilterOptionsPrimed = false;
@@ -4612,8 +4622,66 @@ class _FinanceScreenState extends State<FinanceScreen> {
     );
   }
 
+  /// Meio card de pendentes (Receitas | Despesas lado a lado no topo do
+  /// Financeiro): ícone, título, valor grande e quantidade — ocupa metade da
+  /// altura da faixa larga de antes.
+  Widget _meiaPendente(
+    BuildContext context, {
+    required String titulo,
+    required IconData icone,
+    required List<Color> cores,
+    required double total,
+    required int qtd,
+    VoidCallback? onTap,
+    String? aviso,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Ink(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: LinearGradient(colors: cores, begin: Alignment.topLeft, end: Alignment.bottomRight),
+            boxShadow: [BoxShadow(color: cores.last.withValues(alpha: 0.30), blurRadius: 10, offset: const Offset(0, 4))],
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+            Row(children: [
+              Container(
+                padding: const EdgeInsets.all(5),
+                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.22), borderRadius: BorderRadius.circular(8)),
+                child: Icon(icone, color: Colors.white, size: 16),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(titulo,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12)),
+              ),
+            ]),
+            const SizedBox(height: 6),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(aviso ?? CurrencyFormats.formatBRL(total),
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w900, fontSize: aviso == null ? 18 : 12.5)),
+            ),
+            Text(aviso == null ? '$qtd em aberto · ver' : (onTap != null ? 'toque para resolver' : 'aguarde'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 10.5, fontWeight: FontWeight.w600)),
+          ]),
+        ),
+      ),
+    );
+  }
+
   /// Quadro azul: receitas pendentes. Respeita preferências de receitas fixas (mostrar / próximos meses).
-  Widget _buildReceitasPendentesBand(BuildContext context) {
+  Widget _buildReceitasPendentesBand(BuildContext context, {bool meia = false}) {
     return StreamBuilder<Map<String, dynamic>>(
       stream: _fixedIncomePrefsStream,
       initialData: _lastFixedIncomePrefs,
@@ -4636,6 +4704,17 @@ class _FinanceScreenState extends State<FinanceScreen> {
             if (snap.hasError) {
               _agendarRetentativaPendentes(snap.error);
               if (_lastPendingIncomesSnap == null) {
+                if (meia) {
+                  return _meiaPendente(
+                    context,
+                    titulo: 'Receitas pendentes',
+                    icone: Icons.schedule_rounded,
+                    cores: const [Color(0xFF64748B), Color(0xFF475569)],
+                    total: 0,
+                    qtd: 0,
+                    aviso: 'Reconectando…',
+                  );
+                }
                 return _buildPendingStreamErrorBar(
                   'Receitas pendentes',
                   snap.error,
@@ -4676,6 +4755,17 @@ class _FinanceScreenState extends State<FinanceScreen> {
             });
             const blueLight = Color(0xFF0EA5E9);
             const blueLightDark = Color(0xFF0284C7);
+            if (meia) {
+              return _meiaPendente(
+                context,
+                titulo: 'Receitas pendentes',
+                icone: Icons.south_west_rounded,
+                cores: const [Color(0xFF38BDF8), Color(0xFF0284C7)],
+                total: total,
+                qtd: list.length,
+                onTap: () => _abrirListaReceitasPendentes(context, list),
+              );
+            }
             return Material(
               color: Colors.transparent,
               child: InkWell(
@@ -4765,7 +4855,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
   }
 
   /// Quadro laranja: despesas pendentes. Respeita preferências (mostrar fixas, próximos X meses).
-  Widget _buildDespesasPendentesBand(BuildContext context) {
+  Widget _buildDespesasPendentesBand(BuildContext context, {bool meia = false}) {
     if (!widget.isShellVisible) {
       return const SizedBox.shrink();
     }
@@ -4791,6 +4881,17 @@ class _FinanceScreenState extends State<FinanceScreen> {
             if (snap.hasError) {
               _agendarRetentativaPendentes(snap.error);
               if (_lastPendingExpensesSnap == null) {
+                if (meia) {
+                  return _meiaPendente(
+                    context,
+                    titulo: 'Despesas pendentes',
+                    icone: Icons.schedule_rounded,
+                    cores: const [Color(0xFF64748B), Color(0xFF475569)],
+                    total: 0,
+                    qtd: 0,
+                    aviso: 'Reconectando…',
+                  );
+                }
                 return _buildPendingStreamErrorBar(
                   'Despesas pendentes',
                   snap.error,
@@ -4829,6 +4930,17 @@ class _FinanceScreenState extends State<FinanceScreen> {
               if (ta == null || tb == null) return 0;
               return ta.compareTo(tb);
             });
+            if (meia) {
+              return _meiaPendente(
+                context,
+                titulo: 'Despesas pendentes',
+                icone: Icons.north_east_rounded,
+                cores: const [Color(0xFFFB923C), Color(0xFFEA580C)],
+                total: total,
+                qtd: list.length,
+                onTap: () => _abrirListaDespesasPendentes(context, list),
+              );
+            }
             return Material(
               color: Colors.transparent,
               child: InkWell(
@@ -6532,6 +6644,80 @@ class _FinanceScreenState extends State<FinanceScreen> {
     );
   }
 
+  /// Card moderno com título pequeno e DOIS botões lado a lado.
+  Widget _cardAcoes(
+    BuildContext context, {
+    required String titulo,
+    required IconData icone,
+    required Color cor,
+    required Widget esquerda,
+    required Widget direita,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+      decoration: BoxDecoration(
+        color: context.appSurface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: cor.withValues(alpha: 0.22)),
+        boxShadow: [
+          BoxShadow(color: cor.withValues(alpha: 0.10), blurRadius: 12, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          Icon(icone, size: 15, color: cor),
+          const SizedBox(width: 5),
+          Text(titulo,
+              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w900, color: cor, letterSpacing: 0.3)),
+        ]),
+        const SizedBox(height: 6),
+        IntrinsicHeight(
+          child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Expanded(child: esquerda),
+            const SizedBox(width: 8),
+            Expanded(child: direita),
+          ]),
+        ),
+      ]),
+    );
+  }
+
+  /// Botão compacto em degradê (mesma altura dos botões de lançamento).
+  Widget _botaoCompacto(
+    BuildContext context, {
+    required String rotulo,
+    required IconData icone,
+    required List<Color> cores,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            gradient: LinearGradient(colors: cores),
+            boxShadow: [BoxShadow(color: cores.last.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 3))],
+          ),
+          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(icone, size: 18, color: Colors.white),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(rotulo,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13)),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
   /// Topo de acoes/filtros — rola com a lista (paridade Controle Total).
   Widget _buildFinanceTopChrome(BuildContext context,
       {required bool isNarrow}) {
@@ -7108,32 +7294,55 @@ class _FinanceScreenState extends State<FinanceScreen> {
           ],
         ),
       ),
-  secondChild: Padding(
-    padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-    child: Column(
-      children: [
-        Row(
+      // Topo compacto (padrão): cards modernos de dois botões — Lançar,
+      // Fixas, Pendentes e Movimentar — e Filtros por último (pedido de
+      // 21/09/2026). (Frota e Vendas não existem no WISDOMAPP.)
+      secondChild: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-                child: _buildPremiumReceitaButton(context,
-                    dense: true)),
-            const SizedBox(width: 8),
-            Expanded(
-                child: _buildPremiumDespesaButton(context,
-                    dense: true)),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-                child: _buildDespesasFixasButtonCompact(context,
-                    dense: true)),
-            const SizedBox(width: 8),
-            Expanded(
-                child: _buildReceitasFixasButtonCompact(context,
-                    dense: true)),
-            const SizedBox(width: 6),
+            _cardAcoes(
+              context,
+              titulo: 'Lançar',
+              icone: Icons.add_circle_outline_rounded,
+              cor: const Color(0xFF16A34A),
+              esquerda: _buildPremiumReceitaButton(context, dense: true),
+              direita: _buildPremiumDespesaButton(context, dense: true),
+            ),
+            _cardAcoes(
+              context,
+              titulo: 'Fixas',
+              icone: Icons.event_repeat_rounded,
+              cor: const Color(0xFF2563EB),
+              esquerda: _buildDespesasFixasButtonCompact(context, dense: true),
+              direita: _buildReceitasFixasButtonCompact(context, dense: true),
+            ),
+            _cardAcoes(
+              context,
+              titulo: 'Pendentes',
+              icone: Icons.schedule_rounded,
+              cor: const Color(0xFFEA580C),
+              esquerda: _buildReceitasPendentesBand(context, meia: true),
+              direita: _buildDespesasPendentesBand(context, meia: true),
+            ),
+            _cardAcoes(
+              context,
+              titulo: 'Movimentar',
+              icone: Icons.swap_horiz_rounded,
+              cor: const Color(0xFF7C3AED),
+              esquerda: _buildTransferenciaButton(context, dense: true),
+              direita: _botaoCompacto(
+                context,
+                rotulo: 'Por mensagem',
+                icone: Icons.sms_outlined,
+                cores: const [AppColors.deepBlueDark, AppColors.primary],
+                onTap: widget.profile.hasActiveLicense
+                    ? () => unawaited(_abrirLancamentoInteligente())
+                    : () => mostrarAvisoSeLicencaInativa(context, widget.profile),
+              ),
+            ),
+            // Filtros por último, na largura toda.
             Material(
               color: Colors.transparent,
               child: InkWell(
@@ -7141,128 +7350,48 @@ class _FinanceScreenState extends State<FinanceScreen> {
                   _topoExpandido = true;
                   _filtrosPainelAberto = true;
                 }),
-                borderRadius: BorderRadius.circular(14),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 10, horizontal: 12),
+                borderRadius: BorderRadius.circular(16),
+                child: Ink(
+                  padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 14),
                   decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                        color: AppColors.primary
-                            .withValues(alpha: 0.12)),
+                    borderRadius: BorderRadius.circular(16),
+                    color: context.appSurface,
+                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.deepBlueDark
-                            .withValues(alpha: 0.08),
-                        blurRadius: 14,
-                        offset: const Offset(0, 6),
+                        color: AppColors.deepBlueDark.withValues(alpha: 0.08),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
                       ),
                     ],
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              AppColors.primary
-                                  .withValues(alpha: 0.85),
-                              AppColors.accent
-                                  .withValues(alpha: 0.9),
-                            ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(Icons.tune_rounded,
-                            color: Colors.white, size: 18),
+                  child: Row(children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(colors: [AppColors.primary, AppColors.accent]),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Filtros',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            color: AppColors.primary,
-                            fontSize: 12,
-                            letterSpacing: 0.2),
-                      ),
-                    ],
-                  ),
+                      child: const Icon(Icons.tune_rounded, color: Colors.white, size: 18),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('Filtros',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w900, fontSize: 13.5, color: context.appTextPrimary)),
+                        Text('Período, status, conta e categoria',
+                            style: TextStyle(fontSize: 11, color: context.appTextSecondary)),
+                      ]),
+                    ),
+                    Icon(Icons.chevron_right_rounded, color: context.appTextMuted),
+                  ]),
                 ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        _buildTransferenciaButton(context, dense: true),
-        const SizedBox(height: 8),
-        Material(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: widget.profile.hasActiveLicense
-                ? () => unawaited(_abrirLancamentoInteligente())
-                : () => mostrarAvisoSeLicencaInativa(
-                    context, widget.profile),
-            borderRadius: BorderRadius.circular(16),
-            child: Ink(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                gradient: const LinearGradient(
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                  colors: [
-                    AppColors.deepBlueDark,
-                    AppColors.deepBlue,
-                    AppColors.primary
-                  ],
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color:
-                        AppColors.primary.withValues(alpha: 0.32),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: const Padding(
-                padding: EdgeInsets.symmetric(
-                    vertical: 12, horizontal: 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.sms_outlined,
-                        size: 22, color: Colors.white),
-                    SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        'Lançamento por mensagem (SMS / banco)',
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 13,
-                          height: 1.2,
-                          letterSpacing: 0.1,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    ),
-  ),
+      ),
   crossFadeState: _topoExpandido
       ? CrossFadeState.showFirst
       : CrossFadeState.showSecond,
@@ -7567,11 +7696,15 @@ class _FinanceScreenState extends State<FinanceScreen> {
                                 padding: EdgeInsets.only(bottom: bottomPad),
                                 children: [
                                   _buildFinanceTopChrome(context, isNarrow: isNarrow),
+                                  // No topo compacto os pendentes já estão no card «Pendentes».
+                                  if (_topoExpandido)
                                   Padding(
                                     padding:
                                         const EdgeInsets.fromLTRB(12, 8, 12, 4),
                                     child: _buildReceitasPendentesBand(context),
                                   ),
+                                  // No topo compacto os pendentes já estão no card «Pendentes».
+                                  if (_topoExpandido)
                                   Padding(
                                     padding:
                                         const EdgeInsets.fromLTRB(12, 4, 12, 8),
@@ -7792,12 +7925,16 @@ class _FinanceScreenState extends State<FinanceScreen> {
                                         ),
                                       ),
                                     // Despesas e receitas pendentes (igual painel)
+                                    // No topo compacto os pendentes já estão no card «Pendentes».
+                                    if (_topoExpandido)
                                     Padding(
                                       padding: const EdgeInsets.fromLTRB(
                                           12, 8, 12, 4),
                                       child:
                                           _buildReceitasPendentesBand(context),
                                     ),
+                                    // No topo compacto os pendentes já estão no card «Pendentes».
+                                    if (_topoExpandido)
                                     Padding(
                                       padding: const EdgeInsets.fromLTRB(
                                           12, 4, 12, 8),
@@ -7828,6 +7965,29 @@ class _FinanceScreenState extends State<FinanceScreen> {
                                       totalIncome: totalIncome,
                                       totalExpense: totalExpense,
                                       saldoAcumulado: saldoAcumulado,
+                                    ),
+                                    // Três perguntas em três desenhos: como foi o
+                                    // mês, para onde foi o dinheiro e se o saldo
+                                    // sobe ou cai (port Controle Total). Usa os
+                                    // lançamentos que a tela já carregou — nada
+                                    // é relido do Firestore.
+                                    FinanceGraficosModernos(
+                                      docs: docs,
+                                      saldoAbertura: saldoAbertura,
+                                      uid: widget.uid,
+                                      onAbrirCategoria: (cat, de, ate) =>
+                                          unawaited(_openFinanceInsightSheet(
+                                        scope: FinanceInsightScope.expense,
+                                        initialFrom: de,
+                                        initialTo: ate,
+                                        initialCategoryExact: cat,
+                                      )),
+                                      onAbrirPeriodo: (de, ate) =>
+                                          unawaited(_openFinanceInsightSheet(
+                                        scope: FinanceInsightScope.expense,
+                                        initialFrom: de,
+                                        initialTo: ate,
+                                      )),
                                     ),
                                     FinanceSmartTipsCompactBar(
                                       onVejaMais: () =>
@@ -8730,10 +8890,22 @@ class FinanceInsightSheet extends StatefulWidget {
   State<FinanceInsightSheet> createState() => FinanceInsightSheetState();
 }
 
-class FinanceInsightSheetState extends State<FinanceInsightSheet> {
+class FinanceInsightSheetState extends State<FinanceInsightSheet>
+    with FinanceSortPreferenceListener {
   static const int _kInsightPageSize = 30;
   late FinanceInsightScope _scope;
-  String _sortMode = 'date_desc';
+  // A mesma ordem gravada das outras grids. Este painel não tem «Categoria»:
+  // se for a escolhida, cai no padrão do sistema (mais antiga primeiro).
+  late String _sortMode = _chaveSuportada(FinanceSortPreference.atual.value);
+
+  static String _chaveSuportada(FinanceFaturaTxSortMode m) =>
+      m == FinanceFaturaTxSortMode.category
+          ? FinanceSortPreference.padrao.storageKey
+          : m.storageKey;
+
+  @override
+  void aoMudarOrdem(FinanceFaturaTxSortMode modo) =>
+      setState(() => _sortMode = _chaveSuportada(modo));
   String _periodFilter = 'Mensal';
   String _selectedCategory = '__all__';
   late DateTime _from;
@@ -9676,6 +9848,11 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet> {
                                         onChanged: (v) {
                                           if (v != null) {
                                             setState(() => _sortMode = v);
+                                            // Grava para todas as grids.
+                                            FinanceSortPreference.definir(
+                                              fa.FirebaseAuth.instance.currentUser?.uid ?? '',
+                                              FinanceFaturaTxSortModeUi.fromKey(v),
+                                            );
                                           }
                                         },
                                       ),

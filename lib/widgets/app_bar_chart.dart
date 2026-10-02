@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/theme_context.dart';
 import 'package:fl_chart/fl_chart.dart';
 
 import '../constants/currency_formats.dart';
@@ -11,6 +12,10 @@ class AppBarChart extends StatelessWidget {
   final Color barColor;
   final double height;
 
+  /// Chamado com o índice da barra tocada. Opcional — sem ele o gráfico
+  /// continua só ilustrativo, como antes.
+  final ValueChanged<int>? onBarTap;
+
   const AppBarChart({
     super.key,
     required this.title,
@@ -18,6 +23,7 @@ class AppBarChart extends StatelessWidget {
     required this.labels,
     this.barColor = const Color(0xFF2D5BFF),
     this.height = 180,
+    this.onBarTap,
   });
 
   double _leftAxisReservedSize(double maxY) {
@@ -31,7 +37,7 @@ class AppBarChart extends StatelessWidget {
     if (values.isEmpty || labels.isEmpty) {
       return _chartShell(
         title: title,
-        child: SizedBox(height: height * 0.5, child: const Center(child: Text('Sem dados'))),
+        child: SizedBox(height: height * 0.5, child: Center(child: Text('Sem dados'))),
       );
     }
     final maxY = values.reduce((a, b) => a > b ? a : b);
@@ -48,6 +54,11 @@ class AppBarChart extends StatelessWidget {
             maxY: maxVal,
             barTouchData: BarTouchData(
               enabled: true,
+              touchCallback: (event, response) {
+                if (onBarTap == null || event is! FlTapUpEvent) return;
+                final idx = response?.spot?.touchedBarGroupIndex ?? -1;
+                if (idx >= 0 && idx < labels.length) onBarTap!(idx);
+              },
               touchTooltipData: BarTouchTooltipData(
                 getTooltipColor: (_) => const Color(0xFF0F172A).withValues(alpha: 0.92),
                 tooltipPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -74,7 +85,7 @@ class AppBarChart extends StatelessWidget {
                         child: Text(
                           labels[i],
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 9.5, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
+                          style: TextStyle(fontSize: 9.5, color: context.appTextSecondary, fontWeight: FontWeight.w600),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -96,7 +107,7 @@ class AppBarChart extends StatelessWidget {
                       padding: const EdgeInsets.only(right: 4),
                       child: Text(
                         CurrencyFormats.formatBRLTight(value),
-                        style: TextStyle(fontSize: 10, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
+                        style: TextStyle(fontSize: 10, color: context.appTextSecondary, fontWeight: FontWeight.w600),
                         maxLines: 1,
                         textAlign: TextAlign.right,
                       ),
@@ -157,7 +168,7 @@ class AppBarChart extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
-          const SizedBox(height: 14),
+          SizedBox(height: 14),
           child,
         ],
       ),

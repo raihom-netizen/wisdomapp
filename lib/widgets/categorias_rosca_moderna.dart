@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../constants/currency_formats.dart';
 import '../theme/theme_context.dart';
+import '../utils/finance_line_opening.dart';
 
 /// Uma fatia do gráfico de categorias.
 class CategoriaFatia {
@@ -59,8 +60,8 @@ bool _generica(String c) {
 List<CategoriaFatia> agruparCategorias(Iterable<Map<String, dynamic>> despesas) {
   final mapa = <String, CategoriaFatia>{};
   for (final d in despesas) {
-    // Fixa quitada como controle (Finance Pro no Controle Total): fora do gráfico.
-    if ((d['status'] ?? 'paid').toString() == 'paid' && d['baixaSemSaldo'] == true) continue;
+    // Fixa quitada como controle (Finance Pro): o débito do banco já entra.
+    if ((d['status'] ?? 'paid').toString() == 'paid' && FinanceLineOpening.foraDoSaldo(d)) continue;
     final c = categoriaDoGrafico(d);
     final v = ((d['amount'] as num?) ?? 0).toDouble().abs();
     final f = mapa.putIfAbsent(
