@@ -28,8 +28,17 @@
 # só silencia avisos caso alguma lib transitiva referencie.
 -dontwarn com.mercadopago.**
 
-# App Widget (provider Escalas)
+# App Widgets (3 tamanhos + service + alarm)
 -keep class com.wisdomapp.app.ControleTotalWidgetProvider { *; }
+-keep class com.wisdomapp.app.ControleTotalWidgetSmallProvider { *; }
+-keep class com.wisdomapp.app.ControleTotalWidgetMediumProvider { *; }
+-keep class com.wisdomapp.app.ControleTotalWidgetService { *; }
+-keep class com.wisdomapp.app.ControleTotalWidgetFactory { *; }
+-keep class com.wisdomapp.app.WidgetSyncAlarmReceiver { *; }
+-keep class com.wisdomapp.app.WidgetSyncAlarmScheduler { *; }
+-keep class com.wisdomapp.app.WidgetPayloadRollover { *; }
+-keep class com.wisdomapp.app.WidgetRedrawHelper { *; }
+-keep class com.wisdomapp.app.WidgetJsonHelper { *; }
 
 # Gson usa sun.misc.Unsafe para instanciar modelos sem construtor.
 -dontwarn sun.misc.Unsafe

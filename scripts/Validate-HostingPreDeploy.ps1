@@ -26,6 +26,14 @@ Write-Host "[BLINDAGEM] Raiz e firebase.json OK." -ForegroundColor Green
 
 $publicDir = Join-Path $repoRoot "build\web"
 $requiredFiles = @("index.html", "flutter_bootstrap.js", "main.dart.js", "version.json", "google_calendar_oauth.html", "google-oauth-config.js")
+$bootstrapCheck = Join-Path $publicDir "flutter_bootstrap.js"
+if (Test-Path $bootstrapCheck) {
+  $bootTxt = Get-Content $bootstrapCheck -Raw -Encoding UTF8
+  if ($bootTxt -notmatch '_flutter\.loader\.load\s*\(') {
+    Write-Host '[BLINDAGEM] ERRO: flutter_bootstrap.js sem _flutter.loader.load() — a web fica no splash.' -ForegroundColor Red
+    exit 1
+  }
+}
 foreach ($f in $requiredFiles) {
     $path = Join-Path $publicDir $f
     if (-not (Test-Path $path)) {

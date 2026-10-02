@@ -19,6 +19,10 @@
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
     <!-- Exigido pelo Play Console quando o app declara uso de ID de publicidade (ex.: analytics). tools:merge evita remoção por dependências. -->
     <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="merge" />
+    <!-- Widgets: alarme meia-noite / meio-dia + boot -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" tools:ignore="ExactAlarm" />
     <application
         android:label="@string/app_name"
         android:name="${applicationName}"
@@ -76,6 +80,40 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/home_widget_controle_total" />
+        </receiver>
+        <receiver
+            android:name=".ControleTotalWidgetSmallProvider"
+            android:label="@string/widget_calendar_small_label"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/home_widget_controle_total_small" />
+        </receiver>
+        <receiver
+            android:name=".ControleTotalWidgetMediumProvider"
+            android:label="@string/widget_calendar_medium_label"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/home_widget_controle_total_medium" />
+        </receiver>
+        <service
+            android:name=".ControleTotalWidgetService"
+            android:exported="false"
+            android:permission="android.permission.BIND_REMOTEVIEWS" />
+        <receiver
+            android:name=".WidgetSyncAlarmReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="com.wisdomapp.app.WIDGET_SYNC_ALARM" />
+            </intent-filter>
         </receiver>
     </application>
     <!-- Required to query activities that can process text, see:

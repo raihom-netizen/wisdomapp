@@ -11,7 +11,7 @@
         android:id="@+id/widget_title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Controle Total"
+        android:text="@string/widget_brand_name"
         android:textColor="#2D5BFF"
         android:textSize="14sp"
         android:textStyle="bold" />

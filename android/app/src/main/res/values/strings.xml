@@ -1,7 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">WISDOMAPP</string>
-    <!-- Widget da tela inicial: Escalas do mês. -->
-    <string name="widget_scales_label">WISDOMAPP — Escalas</string>
-    <string name="widget_scales_description">Calendário do mês com seus plantões e próximo evento. Toque para abrir Escalas.</string>
+    <string name="widget_brand_name">WISDOMAPP</string>
+    <!-- Widget grande 4×3 — lista do dia + financeiro -->
+    <string name="widget_scales_label">WISDOMAPP — Agenda</string>
+    <string name="widget_scales_description">Compromissos, plantões e financeiro de hoje. Toque para abrir o app.</string>
+    <!-- Widget pequeno 2×2 -->
+    <string name="widget_calendar_small_label">WISDOMAPP — Hoje</string>
+    <string name="widget_calendar_small_description">Dia de hoje, compromissos e amanhã. Toque para abrir.</string>
+    <!-- Widget médio 4×2 -->
+    <string name="widget_calendar_medium_label">WISDOMAPP — Semana</string>
+    <string name="widget_calendar_medium_description">Hoje em destaque e próximos dias com compromissos e financeiro. Toque para abrir.</string>
 </resources>

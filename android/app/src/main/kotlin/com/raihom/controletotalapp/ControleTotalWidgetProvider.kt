@@ -1,15 +1,16 @@
-package com.wisdomapp.app
+﻿package com.wisdomapp.app
 
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
-import android.os.Build
+import android.net.Uri
+import android.view.View
 import android.widget.RemoteViews
 import es.antonborri.home_widget.HomeWidgetProvider
+import org.json.JSONObject
 
-// Widget da tela inicial: **apenas Escalas** (calendário do mês). Toque abre o módulo Escalas.
+/// Widget premium — shell + lista; fail-safe instantâneo se JSON falhar.
 class ControleTotalWidgetProvider : HomeWidgetProvider() {
 
     override fun onUpdate(
@@ -18,114 +19,139 @@ class ControleTotalWidgetProvider : HomeWidgetProvider() {
         appWidgetIds: IntArray,
         widgetData: android.content.SharedPreferences,
     ) {
+        WidgetPayloadRollover.maybeRollover(context)
         appWidgetIds.forEach { widgetId ->
             val views = try {
-                buildScales(context, widgetData)
+                buildListWidget(context, widgetData, widgetId)
             } catch (_: Throwable) {
-                // Blindagem: se algo der errado ao montar o RemoteViews,
-                // renderiza um layout mínimo válido para evitar o erro
-                // "Não é possível carregar o widget" no launcher (MIUI/Xiaomi).
-                RemoteViews(context.packageName, R.layout.controle_total_widget)
+                buildFailSafeWidget(context, widgetData)
             }
             try {
-                attachClickOpenScales(context, views)
+                attachClickOpenApp(context, views, widgetData)
             } catch (_: Throwable) {
-                // Ignora: clique é desejável mas não pode impedir o widget de aparecer.
             }
             try {
                 appWidgetManager.updateAppWidget(widgetId, views)
+                appWidgetManager.notifyAppWidgetViewDataChanged(
+                    widgetId,
+                    R.id.widget_events_list,
+                )
             } catch (_: Throwable) {
-                // Última defesa: nunca propagar exceção para o sistema.
             }
         }
     }
 
-    private fun attachClickOpenScales(context: Context, views: RemoteViews) {
-        val flags = PendingIntent.FLAG_UPDATE_CURRENT or
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                PendingIntent.FLAG_IMMUTABLE
-            } else {
-                0
-            }
-        val launch = Intent(context, MainActivity::class.java).apply {
-            setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            putExtra(EXTRA_OPEN_MODULE, OPEN_MODULE_SCALES)
-        }
-        val pi = PendingIntent.getActivity(context, OPEN_MODULE_SCALES, launch, flags)
-        views.setOnClickPendingIntent(R.id.widget_root, pi)
-    }
-
-    private fun buildScales(
+    private fun buildFailSafeWidget(
         context: Context,
         widgetData: android.content.SharedPreferences,
     ): RemoteViews {
-        val views = RemoteViews(context.packageName, R.layout.widget_scales_calendar)
-        val title = widgetData.getString("widget_cal_title", "Escalas") ?: "Escalas"
-        views.setTextViewText(R.id.widget_scales_month, title)
-
-        val payload = widgetData.getString("widget_cal_payload", null)
-        val cells = if (payload.isNullOrBlank()) {
-            emptyList()
-        } else {
-            payload.split(";")
-        }
-
-        for (i in 0 until 42) {
-            val id = context.resources.getIdentifier("wcal_$i", "id", context.packageName)
-            if (id == 0) continue
-            val raw = cells.getOrNull(i) ?: ""
-            val parts = raw.split(",")
-            val day = parts.getOrNull(0)?.toIntOrNull() ?: 0
-            val bgHex = parts.getOrNull(2) ?: "FFF1F5F9"
-            val fgHex = parts.getOrNull(3) ?: "FF1A1C1E"
-            val dots = parts.getOrNull(4)?.toIntOrNull() ?: 0
-
-            if (day <= 0) {
-                views.setTextViewText(id, "")
-                views.setInt(id, "setBackgroundColor", parseArgbHex("FFF8FAFC"))
-                continue
-            }
-
-            val fg = parseArgbHex(fgHex)
-            val bg = parseArgbHex(bgHex)
-            val dotStr = when {
-                dots > 1 -> "\n" + "•".repeat(dots.coerceAtMost(3))
-                else -> ""
-            }
-            views.setTextViewText(id, "$day$dotStr")
-            views.setTextColor(id, fg)
-            views.setInt(id, "setBackgroundColor", bg)
-        }
-
-        val dateStr = widgetData.getString("next_scale_date", "") ?: ""
-        val label = widgetData.getString("next_scale_label", "") ?: ""
-        val timeStr = widgetData.getString("next_scale_time", "") ?: ""
-        val hint = when {
-            dateStr.isNotEmpty() && timeStr.isNotEmpty() ->
-                "Próximo: $label • $dateStr $timeStr — toque para Escalas"
-            dateStr.isNotEmpty() ->
-                "Próximo: $label • $dateStr — toque para Escalas"
-            label.isNotEmpty() && label != "Nenhum plantão em breve" ->
-                "Próximo: $label — toque para Escalas"
-            else ->
-                "Toque para abrir Escalas"
-        }
-        views.setTextViewText(R.id.widget_scales_hint, hint)
+        val views = RemoteViews(context.packageName, R.layout.widget_list_container)
+        views.setTextViewText(R.id.wdb_brand, context.getString(R.string.widget_brand_name))
+        views.setTextViewText(R.id.wdb_hint, "Toque para abrir")
+        views.setViewVisibility(R.id.wdb_updated, View.GONE)
+        views.setViewVisibility(R.id.widget_events_list, View.GONE)
+        views.setViewVisibility(R.id.widget_list_empty, View.VISIBLE)
+        views.setTextViewText(
+            R.id.widget_empty_text,
+            "Sem compromissos para hoje",
+        )
         return views
     }
 
-    private fun parseArgbHex(hexRaw: String): Int {
-        val hex = hexRaw.trim().lowercase()
-        if (hex.length != 8) return Color.parseColor("#F1F5F9")
-        return try {
-            java.lang.Integer.parseUnsignedInt(hex, 16)
-        } catch (_: Exception) {
-            Color.parseColor("#F1F5F9")
+    private fun attachClickOpenApp(
+        context: Context,
+        views: RemoteViews,
+        widgetData: android.content.SharedPreferences,
+    ) {
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        val module = resolveOpenModule(widgetData)
+        val launch = Intent(context, MainActivity::class.java).apply {
+            setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            putExtra(EXTRA_OPEN_MODULE, module)
         }
+        val pi = PendingIntent.getActivity(context, module, launch, flags)
+        views.setOnClickPendingIntent(R.id.widget_root, pi)
+    }
+
+    private fun resolveOpenModule(widgetData: android.content.SharedPreferences): Int {
+        val fromWidget = widgetData.getInt("widget_open_module", -1)
+        if (fromWidget in 0..9) return fromWidget
+        val fromFlutter = widgetData.getInt("flutter.home_start_mod_idx_v1", -1)
+        if (fromFlutter in 0..9) return fromFlutter
+        return OPEN_MODULE_HOME
+    }
+
+    private fun buildListWidget(
+        context: Context,
+        widgetData: android.content.SharedPreferences,
+        appWidgetId: Int,
+    ): RemoteViews {
+        val views = RemoteViews(context.packageName, R.layout.widget_list_container)
+
+        var brand = context.getString(R.string.widget_brand_name)
+        var hint = "Toque para abrir"
+        var updated = ""
+        var hasRows = false
+
+        val jsonRaw = widgetData.getString(JSON_KEY, null)
+        if (!jsonRaw.isNullOrBlank()) {
+            try {
+                val root = JSONObject(jsonRaw)
+                brand = root.optString("brand", brand)
+                hint = root.optString("hint", hint)
+                updated = root.optString("updated", root.optString("updatedAt", ""))
+                val rows = root.optJSONArray("rows")
+                hasRows = rows != null && rows.length() > 0
+                if (!hasRows) {
+                    val legacy = root.optJSONArray("listItems")
+                    hasRows = legacy != null && legacy.length() > 0
+                }
+            } catch (_: Throwable) {
+                return buildFailSafeWidget(context, widgetData)
+            }
+        }
+
+        views.setTextViewText(R.id.wdb_brand, brand)
+        views.setTextViewText(R.id.wdb_hint, hint)
+        if (updated.isNotBlank()) {
+            views.setViewVisibility(R.id.wdb_updated, View.VISIBLE)
+            views.setTextViewText(R.id.wdb_updated, updated)
+        } else {
+            views.setViewVisibility(R.id.wdb_updated, View.GONE)
+        }
+
+        if (!hasRows) {
+            views.setViewVisibility(R.id.widget_events_list, View.GONE)
+            views.setViewVisibility(R.id.widget_list_empty, View.VISIBLE)
+            views.setTextViewText(
+                R.id.widget_list_empty,
+                "Sem compromissos para hoje",
+            )
+            return views
+        }
+
+        views.setViewVisibility(R.id.widget_events_list, View.VISIBLE)
+        views.setViewVisibility(R.id.widget_list_empty, View.GONE)
+
+        val serviceIntent = Intent(context, ControleTotalWidgetService::class.java).apply {
+            putExtra(EXTRA_WIDGET_ID, appWidgetId)
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+            data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
+        }
+
+        @Suppress("DEPRECATION")
+        views.setRemoteAdapter(R.id.widget_events_list, serviceIntent)
+        views.setEmptyView(R.id.widget_events_list, R.id.widget_list_empty)
+
+        return views
     }
 
     companion object {
+        const val JSON_KEY = "widget_events_json"
+        const val EXTRA_WIDGET_ID = "ct_widget_id"
         const val EXTRA_OPEN_MODULE = "ct_open_module"
+        const val OPEN_MODULE_HOME = 0
         const val OPEN_MODULE_SCALES = 3
     }
 }
+

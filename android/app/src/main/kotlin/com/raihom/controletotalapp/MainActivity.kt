@@ -12,6 +12,9 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 private const val launcherChannelName = "controletotal/launcher"
+private const val widgetSyncChannelName = "controletotal/widget_sync"
+private const val widgetSyncPrefs = "controletotal_widget_sync"
+private const val widgetSyncDueKey = "sync_due_ms"
 
 /**
  * FlutterFragmentActivity é necessário para o diálogo de biometria/digital aparecer no Android.
@@ -30,6 +33,10 @@ class MainActivity : FlutterFragmentActivity() {
         enableEdgeToEdge()
         captureOpenModuleFromIntent(intent)
         super.onCreate(savedInstanceState)
+        try {
+            WidgetSyncAlarmScheduler.scheduleNext(applicationContext)
+        } catch (_: Throwable) {
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -111,6 +118,84 @@ class MainActivity : FlutterFragmentActivity() {
                         result.success(v)
                     }
 
+                    else -> result.notImplemented()
+                }
+            }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, widgetSyncChannelName)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "scheduleAlarms" -> {
+                        try {
+                            WidgetSyncAlarmScheduler.scheduleNext(applicationContext)
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.error("SCHEDULE_FAILED", e.message, null)
+                        }
+                    }
+                    "scheduleExpiryAlarm" -> {
+                        try {
+                            val expiryMs = (call.arguments as? Number)?.toLong() ?: 0L
+                            if (expiryMs > 0L) {
+                                WidgetSyncAlarmScheduler.scheduleExpiryAlarm(
+                                    applicationContext,
+                                    expiryMs,
+                                )
+                            }
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.error("SCHEDULE_EXPIRY_FAILED", e.message, null)
+                        }
+                    }
+                    "consumeSyncDue" -> {
+                        try {
+                            val prefs = applicationContext.getSharedPreferences(
+                                widgetSyncPrefs,
+                                Context.MODE_PRIVATE,
+                            )
+                            val dueMs = prefs.getLong(widgetSyncDueKey, 0L)
+                            if (dueMs <= 0L) {
+                                result.success(false)
+                                return@setMethodCallHandler
+                            }
+                            prefs.edit().remove(widgetSyncDueKey).apply()
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.error("CONSUME_FAILED", e.message, null)
+                        }
+                    }
+                    "forceWidgetRedraw" -> {
+                        try {
+                            WidgetRedrawHelper.requestAllWidgetsRedraw(applicationContext)
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.error("REDRAW_FAILED", e.message, null)
+                        }
+                    }
+                    "persistWidgetJson" -> {
+                        try {
+                            @Suppress("UNCHECKED_CAST")
+                            val args = call.arguments as? Map<String, Any?>
+                            val json = args?.get("json") as? String
+                            val key = (args?.get("key") as? String)
+                                ?: ControleTotalWidgetProvider.JSON_KEY
+                            if (json.isNullOrBlank()) {
+                                result.error("BAD_ARGS", "json required", null)
+                                return@setMethodCallHandler
+                            }
+                            val ok = applicationContext
+                                .getSharedPreferences(
+                                    "HomeWidgetPreferences",
+                                    Context.MODE_PRIVATE,
+                                )
+                                .edit()
+                                .putString(key, json)
+                                .commit()
+                            WidgetRedrawHelper.requestAllWidgetsRedraw(applicationContext)
+                            result.success(ok)
+                        } catch (e: Exception) {
+                            result.error("PERSIST_FAILED", e.message, null)
+                        }
+                    }
                     else -> result.notImplemented()
                 }
             }
