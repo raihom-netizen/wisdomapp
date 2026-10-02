@@ -39,6 +39,9 @@ function aggregateTransactions(docs) {
   const categorias = {};
   for (const doc of docs) {
     const d = doc.data();
+    // Depósito em meta (`goalReserve`) é reserva, não entrada nem gasto de
+    // consumo — fica fora da análise (02/10/2026).
+    if (d.goalReserve === true) continue;
     const type = (d.type || "expense").toString();
     const amt = Math.abs(parseFloat(d.amount) || 0);
     if (type === "income") totalEntrada += amt;

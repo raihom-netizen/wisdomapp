@@ -29,6 +29,15 @@ const agendaDespertador = require("./agenda_despertador");
 const agendaDespertarItem = require("./agenda_despertar_item");
 const agendaPeriodSnapshot = require("./agendaPeriodSnapshot");
 const googleCalendarOAuth = require("./googleCalendarOAuth");
+// Permissões do Painel Admin (02/10/2026): master = só e-mail de dono
+// verificado no token; níveis admin/suporte/editor pelo users.adminLevel.
+const {
+  requireMaster,
+  requireAdminLevel,
+  isMasterToken,
+  MASTER_EMAILS,
+  logAdmin,
+} = require("./admin_auth");
 
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_MIME = new Set([
@@ -1704,7 +1713,7 @@ exports.ctAdminPushAppVersion = onCall(async (req) => {
   if (!req.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
   }
-  await requireAdminPanel(req.auth.uid);
+  await requireMaster(req);
 
   const version = (req.data?.version || "").toString().trim();
   const buildNumberRaw = req.data?.buildNumber;
@@ -1765,14 +1774,15 @@ function decodeAdminFirestoreValue(v) {
  * textos do módulo Cursos (ctAdminSaveWisdomCoursesModuleConfig) continuam
  * só admin/master/gestor.
  */
-async function requireCourseContentEditor(uid, { aceitaEditorConteudo = false } = {}) {
+async function requireCourseContentEditor(uid, { aceitaEditorConteudo = false } = {}, token = null) {
+  // Dono (master) pelo e-mail VERIFICADO do token — o campo `email` do doc
+  // users/{uid} é editável pelo próprio usuário e não serve de prova.
+  if (isMasterToken(token)) return;
   const userSnap = await admin.firestore().doc(`users/${uid}`).get();
   const data = userSnap.data() || {};
   const role = (data.role || "").toString().toLowerCase();
-  const email = (reqEmail(data) || "").toLowerCase();
   if (role === "admin" || role === "master" || role === "gestor") return;
   if (aceitaEditorConteudo && role === "editor_conteudo") return;
-  if (email === "raihom@gmail.com") return;
   throw new functions.https.HttpsError(
     "permission-denied",
     "Acesso restrito a administradores/gestores."
@@ -1788,7 +1798,7 @@ exports.ctAdminUpsertCourseVideo = onCall(async (req) => {
   if (!req.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
   }
-  await requireCourseContentEditor(req.auth.uid, { aceitaEditorConteudo: true });
+  await requireCourseContentEditor(req.auth.uid, { aceitaEditorConteudo: true }, req.auth.token);
 
   const docId = (req.data?.docId || "").toString().trim();
   const create = req.data?.create === true;
@@ -1821,7 +1831,7 @@ exports.ctAdminDeleteCourseVideos = onCall(async (req) => {
   if (!req.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
   }
-  await requireCourseContentEditor(req.auth.uid, { aceitaEditorConteudo: true });
+  await requireCourseContentEditor(req.auth.uid, { aceitaEditorConteudo: true }, req.auth.token);
 
   const ids = Array.isArray(req.data?.docIds) ? req.data.docIds : [];
   const docIds = ids.map((x) => (x || "").toString().trim()).filter(Boolean);
@@ -1845,7 +1855,7 @@ exports.ctAdminSaveWisdomCoursesModuleConfig = onCall(async (req) => {
   if (!req.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
   }
-  await requireCourseContentEditor(req.auth.uid);
+  await requireCourseContentEditor(req.auth.uid, {}, req.auth.token);
 
   const raw = req.data?.data;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
@@ -2836,6 +2846,12 @@ exports.ctFinancePeriodTotals = onCall(
 
     let income = 0;
     let expense = 0;
+    // Depósito/retirada de meta (`goalReserve: true`, 02/10/2026): reserva que
+    // sai/volta da conta — NÃO entra em Receitas nem Despesas do período, mas
+    // continua mexendo no saldo (por conta e total). Ex.: receita 1000, gasto
+    // 300 e depósito na meta 200 → income 1000, expense 300, goalReserveNet
+    // −200, balance = abertura + 1000 − 300 − 200 (igual a antes).
+    let goalReserveNet = 0;
     const periodByAccount = {};
     await _iterateQueryPaged(qPeriod, async (doc) => {
       const x = doc.data() || {};
@@ -2849,7 +2865,9 @@ exports.ctFinancePeriodTotals = onCall(
       const type = (x.type || "expense").toString();
       if (typeFilter === "income" && type !== "income") return;
       if (typeFilter === "expense" && type !== "expense") return;
-      if (type === "income") income += amount;
+      if (x.goalReserve === true) {
+        goalReserveNet += type === "income" ? amount : -amount;
+      } else if (type === "income") income += amount;
       else expense += amount;
       const acc = ((x.financeAccountId || "") + "").toString().trim();
       if (!acc) return;
@@ -2884,7 +2902,8 @@ exports.ctFinancePeriodTotals = onCall(
       expense,
       periodByAccount,
       pendingExpenseCount,
-      balance: openingTotal + income - expense,
+      goalReserveNet,
+      balance: openingTotal + income - expense + goalReserveNet,
     };
   },
 );
@@ -2952,7 +2971,7 @@ exports.ctAutoConfirmScalesByEndTimeScheduled =
  */
 exports.ctEnviarLembretesRetroativos = onCall(async (req) => {
   if (!req.auth) throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
-  await requireAdminPanel(req.auth.uid);
+  await requireAdminLevel(req, ["admin"]);
   const result = await runEnviarLembretesRetroativos();
   return result;
 });
@@ -2960,7 +2979,7 @@ exports.ctEnviarLembretesRetroativos = onCall(async (req) => {
 /** Recalcula plantões GO (>= 2º período, ex. 01/07/2026) para todos os usuários no padrão global. */
 exports.ctRecalcGoiasScaleRatesAllUsers = onCall(async (req) => {
   if (!req.auth) throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
-  await requireAdminPanel(req.auth.uid);
+  await requireAdminLevel(req, ["admin"]);
   const force = req.data?.force === true;
   const db = admin.firestore();
   return goiasScaleRatesRecalc.runGoiasScaleRatesRecalcAllUsers(db, { force });
@@ -3386,7 +3405,8 @@ async function resolveUidFromPayment(payment, opts = {}) {
       }
     }
   }
-  console.error(`mpWebhook: ERRO - Usuário não localizado no banco. paymentId=${paymentId}, external_reference=${extRef}, email=${email}, metadata=${JSON.stringify(meta)}`);
+  const emailLog = (payment.payer?.email || meta.email || "").toString().trim().toLowerCase();
+  console.error(`mpWebhook: ERRO - Usuário não localizado no banco. paymentId=${paymentId}, external_reference=${extRef}, email=${emailLog}, metadata=${JSON.stringify(meta)}`);
   return null;
 }
 
@@ -3624,7 +3644,7 @@ exports.ctFetchMpPaymentById = onCall(async (req) => {
   if (!req.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
   }
-  await requireAdminPanel(req.auth.uid);
+  await requireAdminLevel(req, ["admin", "suporte"]);
   const paymentId = String(req.data?.paymentId ?? req.data?.id ?? "").trim();
   if (!paymentId || !/^\d+$/.test(paymentId)) {
     throw new functions.https.HttpsError("invalid-argument", "Informe paymentId (número do pagamento no MP).");
@@ -3757,7 +3777,7 @@ async function runMpSyncPayments() {
 
 exports.ctSyncAllMpPayments = onCall(async (req) => {
   if (!req.auth) throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
-  await requireAdminPanel(req.auth.uid);
+  await requireMaster(req);
   const result = await runMpSyncPayments();
   if (!result.ok) throw new functions.https.HttpsError("failed-precondition", result.error || "Erro ao sincronizar.");
   return { ok: true, processed: result.processed, message: `${result.processed} pagamento(s) processado(s).` };
@@ -3769,7 +3789,7 @@ exports.ctSyncAllMpPayments = onCall(async (req) => {
  */
 exports.ctPurgeMpPayments = onCall(async (req) => {
   if (!req.auth) throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
-  await requireAdminPanel(req.auth.uid);
+  await requireMaster(req);
   const db = admin.firestore();
   let deleted = 0;
   for (;;) {
@@ -4116,7 +4136,7 @@ exports.ctSyncMpPayment = onCall(async (req) => {
   if (!req.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
   }
-  await requireAdminPanel(req.auth.uid);
+  await requireAdminLevel(req, ["admin", "suporte"]);
 
   const paymentId = (req.data?.paymentId || req.data?.payment_id || "").toString().trim();
   if (!paymentId || !/^\d+$/.test(paymentId)) {
@@ -4183,7 +4203,7 @@ exports.ctGetMpAdminConfig = onCall(async (req) => {
   if (!req.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
   }
-  await requireAdminPanel(req.auth.uid);
+  await requireMaster(req);
   const cfg = await loadMpAdminConfigFromDb();
   return { ok: true, ...cfg };
 });
@@ -4193,7 +4213,7 @@ exports.ctSaveMpAdminConfig = onCall(async (req) => {
   if (!req.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
   }
-  await requireAdminPanel(req.auth.uid);
+  await requireMaster(req);
 
   const d = req.data || {};
   const owner = d.owner || {};
@@ -4419,7 +4439,7 @@ exports.sincronizarManual = onCall(async (req) => {
   const isAdminByClaim = req.auth.token?.admin === true;
   if (!isAdminByClaim) {
     try {
-      await requireAdminPanel(req.auth.uid);
+      await requireAdminLevel(req, ["admin", "suporte"]);
     } catch (_) {
       return { success: false, message: "Acesso restrito ao Administrador." };
     }
@@ -4491,7 +4511,7 @@ exports.sincronizarManual = onCall(async (req) => {
 /** Sincroniza pagamento PIX do usuário pelo e-mail. Usa o pending_payment salvo ao gerar o PIX. Admin. */
 exports.ctSyncMpPaymentByEmail = onCall(async (req) => {
   if (!req.auth) throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
-  await requireAdminPanel(req.auth.uid);
+  await requireAdminLevel(req, ["admin", "suporte"]);
 
   const email = (req.data?.email || req.data?.userEmail || "").toString().trim().toLowerCase();
   if (!email) throw new functions.https.HttpsError("invalid-argument", "Informe o e-mail do usuário (ex.: usuario@email.com).");
@@ -4671,7 +4691,7 @@ exports.ctSendMaintenancePromoEmails = onCall(
       if (!req.auth) {
         throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
       }
-      await requireAdminPanel(req.auth.uid);
+      await requireMaster(req);
 
       const linkUrl = (req.data?.linkUrl || "").toString().trim();
       const messageText = (req.data?.messageText || "").toString().trim();
@@ -4801,7 +4821,7 @@ exports.ctSendMaintenancePromoTestEmail = onCall(async (req) => {
     if (!req.auth) {
       throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
     }
-    await requireAdminPanel(req.auth.uid);
+    await requireMaster(req);
 
     const linkUrl = (req.data?.linkUrl || "").toString().trim();
     const messageText = (req.data?.messageText || "").toString().trim();
@@ -7571,28 +7591,12 @@ exports.verificarCompromissosDiarios = onSchedule(
   }
 );
 
-const PACKAGE_NAME = "br.com.controletotalapp";
+/** Pacote Android do WisdomApp (android/app/build.gradle → applicationId). */
+const PACKAGE_NAME = "com.wisdomapp.app";
 
-/** Verifica se o usuário é admin (cargo: publicação nas lojas). */
-async function requireAdmin(uid) {
-  const userSnap = await admin.firestore().doc(`users/${uid}`).get();
-  const data = userSnap.data() || {};
-  const role = (data.role || "").toString().toLowerCase();
-  if (role !== "admin" && role !== "master") {
-    throw new functions.https.HttpsError("permission-denied", "Apenas administradores podem publicar nas lojas.");
-  }
-}
-
-/** Verifica se o usuário tem acesso ao painel admin (role admin ou master). */
-async function requireAdminPanel(uid) {
-  const userSnap = await admin.firestore().doc(`users/${uid}`).get();
-  const data = userSnap.data() || {};
-  const role = (data.role || "").toString().toLowerCase();
-  const isAdmin = role === "admin" || role === "master";
-  if (!isAdmin) {
-    throw new functions.https.HttpsError("permission-denied", "Acesso restrito a administradores.");
-  }
-}
+// 02/10/2026: `requireAdmin(uid)` e `requireAdminPanel(uid)` (role admin/master
+// lido do doc) saíram. Use `requireMaster(req)` (e-mail de dono verificado no
+// token) ou `requireAdminLevel(req, [...níveis])` de ./admin_auth.js.
 
 function normalizeEmail(v) {
   return (v || "").toString().trim().toLowerCase();
@@ -7867,7 +7871,7 @@ exports.ctRemoveEmailsFromPartnership = onCall(async (req) => {
   if (!req.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
   }
-  await requireAdminPanel(req.auth.uid);
+  await requireAdminLevel(req, ["admin", "suporte"]);
   const partnershipId = (req.data?.partnershipId || "").toString().trim().toLowerCase();
   const raw = Array.isArray(req.data?.emails) ? req.data.emails : [];
   return removeEmailsFromPartnership(partnershipId, raw, (req.data?.source || "admin_panel").toString());
@@ -8124,7 +8128,7 @@ exports.ctUpsertPartnershipMembers = onCall(async (req) => {
   if (!req.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
   }
-  await requireAdminPanel(req.auth.uid);
+  await requireAdminLevel(req, ["admin", "suporte"]);
   const partnershipId = (req.data?.partnershipId || "").toString().trim().toLowerCase();
   const raw = Array.isArray(req.data?.emails) ? req.data.emails : [];
   const source = (req.data?.source || "admin_csv").toString().trim() || "admin_csv";
@@ -8253,7 +8257,7 @@ exports.ctCreateOrUpdatePartnership = onCall(async (req) => {
   if (!req.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
   }
-  await requireAdminPanel(req.auth.uid);
+  await requireAdminLevel(req, ["admin", "suporte"]);
   const id = (req.data?.id || req.data?.slug || "").toString().trim().toLowerCase();
   if (!id) throw new functions.https.HttpsError("invalid-argument", "id/slug obrigatório.");
   const name = (req.data?.name || id.toUpperCase()).toString().trim();
@@ -8344,7 +8348,7 @@ exports.ctRenewPartnershipLicenses = onCall(async (req) => {
   if (!req.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
   }
-  await requireAdminPanel(req.auth.uid);
+  await requireAdminLevel(req, ["admin", "suporte"]);
   const partnershipId = (req.data?.partnershipId || "").toString().trim().toLowerCase();
   const onlyActive = req.data?.onlyActive !== false;
   const unionPlanMatch = req.data?.unionPlanMatch === true;
@@ -8355,7 +8359,7 @@ exports.ctBulkMigrateUsersToPartnership = onCall(async (req) => {
   if (!req.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
   }
-  await requireAdminPanel(req.auth.uid);
+  await requireMaster(req);
   const partnershipId = (req.data?.partnershipId || "").toString().trim().toLowerCase();
   const rawUids = req.data?.uids;
   if (!partnershipId) {
@@ -8408,7 +8412,7 @@ exports.ctSyncPartnershipCsvSource = onCall(async (req) => {
   if (!req.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
   }
-  await requireAdminPanel(req.auth.uid);
+  await requireAdminLevel(req, ["admin", "suporte"]);
   const partnershipId = (req.data?.partnershipId || "").toString().trim().toLowerCase();
   const csvUrlRaw = (req.data?.csvUrl || "").toString().trim();
   if (!partnershipId) {
@@ -8436,7 +8440,7 @@ exports.ctImportPartnershipCsvManual = onCall(async (req) => {
   if (!req.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
   }
-  await requireAdminPanel(req.auth.uid);
+  await requireAdminLevel(req, ["admin", "suporte"]);
   const partnershipId = (req.data?.partnershipId || "").toString().trim().toLowerCase();
   const csvText = (req.data?.csvText ?? "").toString();
   if (!partnershipId) {
@@ -8451,7 +8455,7 @@ exports.ctSyncAssegoCsvSource = onCall(async (req) => {
   if (!req.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
   }
-  await requireAdminPanel(req.auth.uid);
+  await requireAdminLevel(req, ["admin", "suporte"]);
   const csvUrlRaw = (req.data?.csvUrl || "").toString().trim();
   const pRef = admin.firestore().collection("partnerships").doc("assego");
   const pSnap = await pRef.get();
@@ -8512,7 +8516,7 @@ exports.ctApplyPartnershipOnUserCreate = onDocumentCreated("users/{uid}", async 
 // Compatibilidade ASSEGO existente.
 exports.ctUpsertAssegoMembers = onCall(async (req) => {
   if (!req.auth) throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
-  await requireAdminPanel(req.auth.uid);
+  await requireAdminLevel(req, ["admin", "suporte"]);
   await ensurePartnershipExists("assego", {
     name: "ASSEGO",
     slug: "assego",
@@ -8525,7 +8529,7 @@ exports.ctUpsertAssegoMembers = onCall(async (req) => {
 
 exports.ctRenewAssegoLicenses = onCall(async (req) => {
   if (!req.auth) throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
-  await requireAdminPanel(req.auth.uid);
+  await requireAdminLevel(req, ["admin", "suporte"]);
   await ensurePartnershipExists("assego", {
     name: "ASSEGO",
     slug: "assego",
@@ -9025,7 +9029,7 @@ exports.ctMigrateUserEmailPremium = onCall(
     if (!req.auth) {
       throw new functions.https.HttpsError("unauthenticated", "Login obrigatorio.");
     }
-    await requireAdminPanel(req.auth.uid);
+    await requireMaster(req);
 
     const sourceEmail = normalizeEmail(req.data?.sourceEmail || req.data?.fromEmail || "");
     const targetEmail = normalizeEmail(req.data?.targetEmail || req.data?.toEmail || "");
@@ -9211,7 +9215,7 @@ exports.ctDeleteUserTotal = onCall(
     if (!req.auth) {
       throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
     }
-    await requireAdminPanel(req.auth.uid);
+    await requireMaster(req);
 
     const targetUid = (req.data?.uid || "").toString().trim();
     if (!targetUid) {
@@ -9223,6 +9227,9 @@ exports.ctDeleteUserTotal = onCall(
 
     const userDocRef = admin.firestore().doc(`users/${targetUid}`);
     const targetSnap = await userDocRef.get();
+    if (MASTER_EMAILS.includes(((targetSnap.data() || {}).email || "").toString().trim().toLowerCase())) {
+      throw new functions.https.HttpsError("permission-denied", "Conta de dono (master) não pode ser excluída pelo painel.");
+    }
     if (targetSnap.exists) {
       const d = targetSnap.data() || {};
       const tr = (d.role || "").toString().toLowerCase();
@@ -9286,7 +9293,7 @@ exports.ctAdminListInactiveUsers = onCall(
     if (!req.auth) {
       throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
     }
-    await requireAdminPanel(req.auth.uid);
+    await requireAdminLevel(req, ["admin", "suporte"]);
 
     const pageSizeRaw = Number(req.data?.pageSize || 250);
     const pageSize = Number.isFinite(pageSizeRaw)
@@ -9414,7 +9421,7 @@ exports.ctSubmitToPlayStore = onCall(async (req) => {
   if (!req.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
   }
-  await requireAdmin(req.auth.uid);
+  await requireMaster(req);
 
   const storagePath = (req.data?.storagePath || "releases/app-release.aab").toString().trim();
   if (!storagePath.startsWith("releases/")) {
@@ -9504,7 +9511,7 @@ exports.ctTestBackupToDrive = onCall(async (req) => {
   if (!req.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
   }
-  await requireAdminPanel(req.auth.uid);
+  await requireMaster(req);
 
   const db = admin.firestore();
   const snap = await db.collection("settings").doc("googledrive").get();
@@ -9587,7 +9594,7 @@ function sanitizeMap(obj) {
  */
 exports.ctCreateFirebaseBackup = onCall(async (req) => {
   if (!req.auth) throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
-  await requireAdminPanel(req.auth.uid);
+  await requireMaster(req);
 
   const db = admin.firestore();
   const bucket = admin.storage().bucket();
@@ -9652,7 +9659,7 @@ exports.ctCreateFirebaseBackup = onCall(async (req) => {
  */
 exports.ctListFirebaseBackups = onCall(async (req) => {
   if (!req.auth) throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
-  await requireAdminPanel(req.auth.uid);
+  await requireMaster(req);
 
   const bucket = admin.storage().bucket();
   const [files] = await bucket.getFiles({ prefix: "backups/", maxResults: 100 });
@@ -9675,7 +9682,7 @@ exports.ctListFirebaseBackups = onCall(async (req) => {
  */
 exports.ctGetFirebaseBackupDownloadUrl = onCall(async (req) => {
   if (!req.auth) throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
-  await requireAdminPanel(req.auth.uid);
+  await requireMaster(req);
 
   const path = (req.data?.path || req.data?.fileName || "").toString().trim();
   const fullPath = path.startsWith("backups/") ? path : `backups/${path}`;
@@ -9701,7 +9708,7 @@ exports.ctGetFirebaseBackupDownloadUrl = onCall(async (req) => {
  */
 exports.ctRestoreFirebaseBackup = onCall(async (req) => {
   if (!req.auth) throw new functions.https.HttpsError("unauthenticated", "Login obrigatório.");
-  await requireAdminPanel(req.auth.uid);
+  await requireMaster(req);
 
   const path = (req.data?.path || req.data?.fileName || "").toString().trim();
   const fullPath = path.startsWith("backups/") ? path : `backups/${path}`;
@@ -10143,9 +10150,10 @@ exports.ctGenerateFinancialTipWithAI = onCall(
     const uid = req.auth.uid;
     const userSnap = await admin.firestore().doc(`users/${uid}`).get();
     const role = ((userSnap.data() || {}).role || "").toString();
-    const email = (req.auth.token?.email || "").toString();
-    // editor_conteudo (só Cursos + Dicas) também cria dicas com a IA.
-    if (role !== "admin" && role !== "editor_conteudo" && email !== "raihom@gmail.com") {
+    // editor_conteudo (só Cursos + Dicas) também cria dicas com a IA. Dono
+    // pelo e-mail verificado do token (02/10/2026).
+    if (role !== "admin" && role !== "master" && role !== "editor_conteudo" &&
+        !isMasterToken(req.auth.token)) {
       throw new functions.https.HttpsError("permission-denied", "Somente admin.");
     }
     const data = req.data && typeof req.data === "object" ? req.data : {};
@@ -10363,3 +10371,85 @@ exports.ctSendVerificationEmail = onCall(
     return { ok: true };
   },
 );
+
+// ============================================================
+// Painel Admin — papéis da equipe e painéis portados do Controle Total
+// (02/10/2026).
+// ============================================================
+
+const PAPEIS_EQUIPE = ["user", "admin", "gestor", "partner", "socio", "editor_conteudo"];
+const NIVEIS_ADMIN = ["suporte", "editor"];
+
+/**
+ * Promove / troca / remove o papel de um usuário no Painel Admin.
+ * SÓ o master (e-mail de dono verificado no token). Ninguém vira «master»
+ * (master é só o e-mail dos donos) e conta de dono não é alterada aqui.
+ * data: { uid, role: user|admin|gestor|partner|socio|editor_conteudo,
+ *         adminLevel?: suporte|editor|null, name? }
+ * Grava role/adminLevel (e apaga adminCapability/isAdmin antigos) pelo Admin
+ * SDK e registra em activity_logs. Rebaixar NÃO mexe em plano/licença.
+ */
+exports.ctAdminSetUserRole = onCall({ region: "us-central1" }, async (req) => {
+  await requireMaster(req, "Somente o master promove ou remove membros da equipe.");
+  const data = req.data && typeof req.data === "object" ? req.data : {};
+  const uid = (data.uid || "").toString().trim();
+  const role = (data.role || "").toString().trim().toLowerCase();
+  const nivelRaw = data.adminLevel == null ? "" : data.adminLevel.toString().trim().toLowerCase();
+  if (!uid || uid.length > 128) {
+    throw new functions.https.HttpsError("invalid-argument", "uid inválido.");
+  }
+  if (!PAPEIS_EQUIPE.includes(role)) {
+    throw new functions.https.HttpsError("invalid-argument", "Papel inválido (master é só o e-mail dos donos).");
+  }
+  if (nivelRaw && (role !== "admin" || !NIVEIS_ADMIN.includes(nivelRaw))) {
+    throw new functions.https.HttpsError("invalid-argument", "Nível inválido para este papel.");
+  }
+  if (uid === req.auth.uid) {
+    throw new functions.https.HttpsError("invalid-argument", "Não altere o próprio papel por aqui.");
+  }
+  const ref = admin.firestore().doc(`users/${uid}`);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    throw new functions.https.HttpsError("not-found", "Usuário não encontrado.");
+  }
+  const atual = snap.data() || {};
+  const emailAlvo = (atual.email || "").toString().trim().toLowerCase();
+  if (MASTER_EMAILS.includes(emailAlvo)) {
+    throw new functions.https.HttpsError("failed-precondition", "Conta de dono (master) não muda de papel.");
+  }
+  const upd = {
+    role,
+    adminLevel: nivelRaw ? nivelRaw : admin.firestore.FieldValue.delete(),
+    adminCapability: admin.firestore.FieldValue.delete(),
+    isAdmin: admin.firestore.FieldValue.delete(),
+    roleUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    roleUpdatedBy: req.auth.uid,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  if (typeof data.name === "string" && data.name.trim()) {
+    upd.name = data.name.trim().slice(0, 120);
+  }
+  await ref.update(upd);
+  const antes = `${(atual.role || "user").toString()}${atual.adminLevel ? "/" + atual.adminLevel : ""}`;
+  const depois = `${role}${nivelRaw ? "/" + nivelRaw : ""}`;
+  await logAdmin(
+    req,
+    role === "user" ? "Removeu da equipe" : "Definiu papel na equipe",
+    `${emailAlvo || uid}: ${antes} → ${depois}`,
+    { targetUid: uid, targetEmail: emailAlvo || null, roleAntes: antes, roleDepois: depois },
+  );
+  return { ok: true, uid, role, adminLevel: nivelRaw || null };
+});
+
+// «Receitas & Despesas» e «Previsão & planos» (receita real do MP).
+exports.ctAdminResultado = require("./admin_resultado").ctAdminResultado;
+exports.ctAdminPrevisaoReceita = require("./admin_previsao_receita").ctAdminPrevisaoReceita;
+// «Usuários ativos» (+ foto diária 23:55), «Usuários · Painel», e-mails com
+// problema e diagnóstico/teste de notificações (sem Telegram).
+exports.ctAdminUsuariosAtivos = require("./admin_usuarios_ativos").ctAdminUsuariosAtivos;
+exports.ctAdminAtivosDiario = require("./admin_usuarios_ativos").ctAdminAtivosDiario;
+exports.ctAdminUsuariosPainel = require("./admin_usuarios_painel").ctAdminUsuariosPainel;
+exports.ctAdminEmailsComProblema = require("./admin_emails_problema").ctAdminEmailsComProblema;
+exports.ctAdminNotificacoesDiag = require("./admin_notificacoes_diag").ctAdminNotificacoesDiag;
+exports.ctAdminNotificacoesUsuarios = require("./admin_notificacoes_diag").ctAdminNotificacoesUsuarios;
+exports.ctAdminNotificacoesTeste = require("./admin_notificacoes_diag").ctAdminNotificacoesTeste;

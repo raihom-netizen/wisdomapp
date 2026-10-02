@@ -18,6 +18,7 @@
 
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
+const { requireAdminLevel } = require("./admin_auth");
 
 const REGIAO = "us-central1";
 const CACHE_DOC = "admin_stats/modulos_uso";
@@ -26,6 +27,15 @@ const DIA = 86400000;
 
 /** Acima disso o lançamento é tratado como valor de teste (fora das somas). */
 const VALOR_MAXIMO = 10000000;
+
+// 02/10/2026: tetos de leitura — antes lia `users`, cada collectionGroup e
+// TODAS as `transactions` sem limite. Contagens totais saem por `count()`
+// (sem baixar documento); listas por usuário usam os mais recentes até o teto
+// e o resultado diz `parcial: true` quando bateu nele.
+const LIMITE_USUARIOS = 5000;
+const LIMITE_POR_COLECAO = 15000;
+const LIMITE_TRANSACOES = 30000;
+const LIMITE_VIEWERS = 10000;
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -41,12 +51,19 @@ function ms(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
-async function exigirAdmin(db, uid, email) {
-  if (String(email || "").toLowerCase() === "raihom@gmail.com") return;
-  const s = await db.doc(`users/${uid}`).get();
-  const role = String((s.data() || {}).role || "").toLowerCase();
-  if (role !== "admin" && role !== "master") {
-    throw new HttpsError("permission-denied", "Acesso restrito a administradores.");
+/** Lê até [limite] docs (sem orderBy: ordenar por um campo descartaria os
+ *  documentos que não o têm). */
+function lerComTeto(q, limite) {
+  return q.limit(limite).get();
+}
+
+async function contarDocs(q) {
+  try {
+    const a = await q.count().get();
+    return a.data().count || 0;
+  } catch (e) {
+    console.warn("[ctAdminModulosUso] count falhou", e.message);
+    return null;
   }
 }
 
@@ -148,17 +165,39 @@ async function montar(db) {
     for (const c of campos || []) leituras[nome].add(c);
   };
   for (const m of CATALOGO) for (const c of m.colecoes) ler(c.nome, c.campos);
-  ler("transactions", ["type", "amount", "status", "transferPairId"]);
+  ler("transactions", ["type", "amount", "status", "transferPairId", "goalReserve"]);
   const nomes = Object.keys(leituras);
+  const tetoDe = (n) => (n === "transactions" ? LIMITE_TRANSACOES : LIMITE_POR_COLECAO);
   const [usuariosSnap, viewersSnap, ...snaps] = await Promise.all([
+    lerComTeto(
+      db
+        .collection("users")
+        .select("name", "displayName", "email", "role", "plan", "createdAt", "clientTelemetry"),
+      LIMITE_USUARIOS,
+    ),
     db
-      .collection("users")
-      .select("name", "displayName", "email", "role", "plan", "createdAt", "clientTelemetry")
+      .collectionGroup("viewers")
+      .select("lastActivityAt", "lastWatchedAt", "updatedAt", "createdAt")
+      .limit(LIMITE_VIEWERS)
       .get(),
-    db.collectionGroup("viewers").get(),
-    ...nomes.map((n) => db.collectionGroup(n).select(...leituras[n]).get()),
+    ...nomes.map((n) =>
+      lerComTeto(db.collectionGroup(n).select(...leituras[n]), tetoDe(n)),
+    ),
   ]);
   const snapDe = Object.fromEntries(nomes.map((n, i) => [n, snaps[i]]));
+  // Totais reais (sem baixar documentos) e onde a leitura bateu no teto.
+  const [totalUsuarios, ...totaisColecao] = await Promise.all([
+    contarDocs(db.collection("users")),
+    ...nomes.map((n) => contarDocs(db.collectionGroup(n))),
+  ]);
+  const limites = {
+    usuarios: { lidos: usuariosSnap.size, total: totalUsuarios, teto: LIMITE_USUARIOS },
+    viewers: { lidos: viewersSnap.size, teto: LIMITE_VIEWERS },
+  };
+  nomes.forEach((n, i) => {
+    limites[n] = { lidos: snapDe[n].size, total: totaisColecao[i], teto: tetoDe(n) };
+  });
+  const parcial = Object.values(limites).some((l) => l.lidos >= l.teto);
 
   // ── Pessoas + atividade (último acesso do app) ────────────────────────────
   const usuarios = {};
@@ -241,6 +280,7 @@ async function montar(db) {
     qtdReceitas: 0,
     qtdDespesas: 0,
     transferencias: 0,
+    reservasMeta: 0,
     ignorados: 0,
   });
   const tot = zerado();
@@ -261,6 +301,14 @@ async function montar(db) {
     if (d.transferPairId) {
       g.transferencias += 1;
       tot.transferencias += 1;
+      continue;
+    }
+    // Depósito em meta/objetivo (`goalReserve: true`, 02/10/2026): é reserva
+    // que sai da conta, não receita nem despesa de consumo — fica fora das
+    // somas de Receitas/Despesas (o saldo da conta no app continua descontando).
+    if (d.goalReserve === true) {
+      g.reservasMeta += 1;
+      tot.reservasMeta += 1;
       continue;
     }
     const pago = String(d.status || "paid") !== "pending";
@@ -318,7 +366,15 @@ async function montar(db) {
       porUid,
     };
   });
-  return { geradoEm: agora, usuarios, modulos, financeiroTotais: tot, atividade };
+  return {
+    geradoEm: agora,
+    usuarios,
+    modulos,
+    financeiroTotais: tot,
+    atividade,
+    parcial,
+    limites,
+  };
 }
 
 exports.ctAdminModulosUso = onCall(
@@ -327,7 +383,8 @@ exports.ctAdminModulosUso = onCall(
     const uid = req.auth && req.auth.uid;
     if (!uid) throw new HttpsError("unauthenticated", "Entre na sua conta.");
     const db = admin.firestore();
-    await exigirAdmin(db, uid, req.auth.token && req.auth.token.email);
+    // Master (e-mail de dono verificado) ou admin/suporte/financeiro/leitura.
+    await requireAdminLevel(req, ["admin", "suporte", "financeiro", "leitura"]);
     const forcar = !!(req.data && req.data.forcar === true);
     const ref = db.doc(CACHE_DOC);
     if (!forcar) {
