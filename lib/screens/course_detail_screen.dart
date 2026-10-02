@@ -19,6 +19,17 @@ import '../widgets/course/course_yt_palette.dart';
 const _kRed = CourseYt.red;
 const _kGreen = Color(0xFF22C55E);
 
+/// «Voltar» das telas de curso/vídeo: fecha a tela; se não houver tela
+/// anterior (aberta por link direto ou após recarregar na web), vai ao início.
+void courseScreenGoBack(BuildContext context) {
+  final nav = Navigator.of(context);
+  if (nav.canPop()) {
+    nav.pop();
+  } else {
+    nav.pushNamedAndRemoveUntil('/', (_) => false);
+  }
+}
+
 /// Abre a tela do curso (aulas, progresso, continuar de onde parou).
 Future<void> openCourseDetail(
   BuildContext context, {
@@ -310,6 +321,16 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         foregroundColor: fg,
         elevation: 0,
         scrolledUnderElevation: 0.5,
+        // Seta explícita: a implícita do AppBar não aparecia na web (topo só
+        // com «Gostei» e ⋮). Sem tela anterior (link direto/recarga), volta
+        // para o início do app.
+        automaticallyImplyLeading: false,
+        leading: IconButton(
+          tooltip: 'Voltar',
+          icon: const Icon(Icons.arrow_back_rounded),
+          color: fg,
+          onPressed: () => courseScreenGoBack(context),
+        ),
         title: Text(
           _title,
           maxLines: 1,

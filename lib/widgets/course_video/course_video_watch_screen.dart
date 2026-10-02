@@ -250,9 +250,21 @@ class _CourseVideoWatchScreenState extends State<CourseVideoWatchScreen> {
             backgroundColor: CourseYt.background(context),
             foregroundColor: CourseYt.text(context),
             surfaceTintColor: Colors.transparent,
+            automaticallyImplyLeading: false,
             leading: IconButton(
+              tooltip: 'Voltar',
               icon: const Icon(Icons.arrow_back_rounded),
-              onPressed: () => Navigator.pop(context),
+              color: CourseYt.text(context),
+              // Sem tela anterior (link direto/recarga na web): vai ao início
+              // em vez de não fazer nada.
+              onPressed: () {
+                final nav = Navigator.of(context);
+                if (nav.canPop()) {
+                  nav.pop();
+                } else {
+                  nav.pushNamedAndRemoveUntil('/', (_) => false);
+                }
+              },
             ),
             title: Text(
               _title,
