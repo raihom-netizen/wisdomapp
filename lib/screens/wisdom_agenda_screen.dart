@@ -46,6 +46,7 @@ import '../widgets/shell_keyboard_bottom_pad.dart';
 import '../constants/commitment_symbols.dart';
 import '../utils/compromisso_share.dart';
 import '../widgets/agenda_dia_resumo_card.dart';
+import '../utils/finance_shared_stream.dart';
 
 enum _AgendaMesAba { todos, financeiro, particular }
 
@@ -622,16 +623,36 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
 
   Stream<QuerySnapshot<Map<String, dynamic>>> _remindersPeriodStream() {
     final (start, end) = _remindersQueryBounds();
-    return FirebaseFirestore.instance
-        .collection('users')
-        .doc(_userDocId)
-        .collection('reminders')
-        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
-        .where('date', isLessThanOrEqualTo: Timestamp.fromDate(end))
-        .orderBy('date')
-        .limit(2500)
-        .snapshots();
+    // Escuta única compartilhada por usuário+ano, que só fecha 20 s depois de
+    // sair da Agenda: entrar/sair da Agenda (ou o Início com a mesma consulta)
+    // abria e fechava o MESMO alvo do Firestore em sequência — gatilho do
+    // INTERNAL ASSERTION ca9/b815 na web. «Tentar novamente» descarta a antiga.
+    final key = '$_userDocId|${_focusedDay.year}';
+    if (_lastRemindersGen != _streamGeneration) {
+      _remindersShared.descartar(key);
+      _lastRemindersGen = _streamGeneration;
+    }
+    return _remindersShared
+        .obter(
+          key,
+          () => FirebaseFirestore.instance
+              .collection('users')
+              .doc(_userDocId)
+              .collection('reminders')
+              .where('date',
+                  isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+              .where('date', isLessThanOrEqualTo: Timestamp.fromDate(end))
+              .orderBy('date')
+              .limit(2500)
+              .snapshots(),
+        )
+        .stream;
   }
+
+  static final FinanceSharedStreamCache<QuerySnapshot<Map<String, dynamic>>>
+      _remindersShared =
+      FinanceSharedStreamCache<QuerySnapshot<Map<String, dynamic>>>();
+  int _lastRemindersGen = 0;
 
   String _focusedMonthTitle() {
     final raw = DateFormat("MMMM 'de' y", 'pt_BR').format(_focusedDay);
