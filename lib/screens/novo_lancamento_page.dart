@@ -176,8 +176,15 @@ class _NovoLancamentoPageState extends State<NovoLancamentoPage> {
   }
 
   Future<void> _initCategoriesAndDefaultAccount() async {
-    // Carrega (e aquece o cache) das categorias do usuário.
-    await UserCategoriesService().load(widget.uid);
+    // Só aquece o cache das categorias (o seletor relê ao abrir). NÃO segura o
+    // formulário: desde «Escolher categoria» (4140571) o resultado não é usado
+    // aqui, e esperar a leitura deixava a tela em branco com spinner para
+    // sempre quando o Firestore demorava/falhava (Web 10.05+27, 02/10/2026).
+    unawaited(UserCategoriesService()
+        .load(widget.uid)
+        .then<void>((_) {}, onError: (Object e) {
+      debugPrint('NovoLancamentoPage: categorias não carregaram: $e');
+    }));
     if (!mounted) return;
     setState(() {
       // Lançamento novo começa em «Escolher categoria» (port Controle Total,
