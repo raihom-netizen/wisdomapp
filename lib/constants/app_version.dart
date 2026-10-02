@@ -27,13 +27,13 @@ class AppVersion {
   static const String current = '10.05';
 
   /// Build do pubspec (`10.05.0+23` → **23**). Web + Android; iOS usa [iosBuildNumber] quando maior.
-  static const int buildNumber = 30;
+  static const int buildNumber = 31;
 
   /// CFBundleVersion iOS (App Store / TestFlight). Pode ficar à frente de [buildNumber] (hotfix só Apple).
-  static const int iosBuildNumber = 30;
+  static const int iosBuildNumber = 31;
 
   /// Mesmo inteiro que `versionCode` no Android (Play). Atualizar junto com build.gradle em cada release.
-  static const int versionCode = 30;
+  static const int versionCode = 31;
 
   /// Identificador único do release web/Android (iOS pode estar em `10.04+$iosBuildNumber`).
   static String get releaseTag => '$current+$buildNumber';
