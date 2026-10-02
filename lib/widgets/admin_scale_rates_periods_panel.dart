@@ -6,6 +6,7 @@ import '../constants/currency_formats.dart';
 import '../models/scale_rates_period.dart';
 import '../services/scale_rates_period_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import 'admin_scale_rates_period_editor_page.dart';
 
 /// Painel Admin — histórico de períodos AC4 GO, agendamento e sincronização Firestore.
@@ -239,7 +240,7 @@ class _AdminScaleRatesPeriodsPanelState
                         fontSize: 12.5,
                         height: 1.35,
                         fontWeight: FontWeight.w600,
-                        color: theme.fg,
+                        color: context.isDarkMode ? context.appTextPrimary : theme.fg,
                       ),
                     ),
                   ),
@@ -434,7 +435,7 @@ class _AdminScaleRatesPeriodsPanelState
               return Container(
                 margin: const EdgeInsets.only(bottom: 14),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: context.isDarkMode ? context.appSurface : Colors.white,
                   borderRadius: BorderRadius.circular(18),
                   border: Border.all(color: theme.accent.withValues(alpha: 0.35)),
                   boxShadow: [
@@ -531,7 +532,9 @@ class _AdminScaleRatesPeriodsPanelState
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontStyle: FontStyle.italic,
-                                    color: theme.fg.withValues(alpha: 0.85),
+                                    color: context.isDarkMode
+                                        ? context.appTextSecondary
+                                        : theme.fg.withValues(alpha: 0.85),
                                   ),
                                 ),
                               ],

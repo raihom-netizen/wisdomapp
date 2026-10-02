@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../services/admin_painel_geral_service.dart';
 import '../services/course_analytics_service.dart';
+import '../theme/theme_context.dart';
 import '../utils/firestore_reliable_read.dart';
 import '../widgets/admin/admin_page_shell.dart';
 import '../widgets/admin_menu_lateral.dart' show AdminMenuItem;
@@ -243,7 +244,7 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
                 'Atualizado às ${DateFormat('HH:mm').format(d.geradoEm)} · '
                 '${d.usuariosLidos} cadastros lidos. Puxe para atualizar.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 11.5),
+                style: TextStyle(color: AdminUi.apoioOf(context), fontSize: 11.5),
               ),
             ),
           ],
@@ -364,10 +365,10 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
             const SizedBox(width: 10),
             Text(
               t,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w800,
-                color: Color(0xFF0F172A),
+                color: AdminUi.tintaOf(context),
               ),
             ),
             const SizedBox(width: 10),
@@ -418,7 +419,7 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
   ) {
     final pode = _pode(destino);
     return Material(
-      color: Colors.white,
+      color: AdminUi.cardOf(context),
       borderRadius: BorderRadius.circular(18),
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
@@ -448,10 +449,10 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
                   children: [
                     Text(
                       titulo,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w800,
-                        color: Color(0xFF0F172A),
+                        color: AdminUi.tintaOf(context),
                       ),
                     ),
                     if (valor.isNotEmpty)
@@ -472,7 +473,7 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
                         sub,
                         style: TextStyle(
                           fontSize: 11.5,
-                          color: Colors.grey.shade700,
+                          color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                         ),
                       ),
                   ],
@@ -489,9 +490,9 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
   Widget _cartao({required Widget child, EdgeInsets? padding}) => Container(
         padding: padding ?? const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: AdminUi.cardOf(context),
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.grey.shade200),
+          border: Border.all(color: AdminUi.bordaOf(context)),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.04),
@@ -521,10 +522,10 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
               Expanded(
                 child: Text(
                   titulo,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 14,
-                    color: Color(0xFF0F172A),
+                    color: AdminUi.tintaOf(context),
                   ),
                 ),
               ),
@@ -540,7 +541,7 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
                 ),
                 const SizedBox(width: 4),
                 Text(l.$2,
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+                    style: TextStyle(fontSize: 11, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700)),
               ],
             ],
           ),
@@ -561,7 +562,7 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
       padding: const EdgeInsets.only(top: 6),
       child: Text(
         labels[i],
-        style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+        style: TextStyle(fontSize: 10, color: AdminUi.apoioOf(context)),
       ),
     );
   }
@@ -579,7 +580,7 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
         gridData: FlGridData(
           drawVerticalLine: false,
           getDrawingHorizontalLine: (_) =>
-              FlLine(color: Colors.grey.shade200, strokeWidth: 1),
+              FlLine(color: AdminUi.bordaOf(context), strokeWidth: 1),
         ),
         borderData: FlBorderData(show: false),
         barTouchData: BarTouchData(
@@ -601,7 +602,7 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
               reservedSize: inteiro ? 30 : 52,
               getTitlesWidget: (v, meta) => Text(
                 inteiro ? v.toInt().toString() : _moedaCurta.format(v),
-                style: TextStyle(fontSize: 9.5, color: Colors.grey.shade600),
+                style: TextStyle(fontSize: 9.5, color: AdminUi.apoioOf(context)),
               ),
             ),
           ),
@@ -647,7 +648,7 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
         gridData: FlGridData(
           drawVerticalLine: false,
           getDrawingHorizontalLine: (_) =>
-              FlLine(color: Colors.grey.shade200, strokeWidth: 1),
+              FlLine(color: AdminUi.bordaOf(context), strokeWidth: 1),
         ),
         borderData: FlBorderData(show: false),
         barTouchData: BarTouchData(
@@ -668,7 +669,7 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
               reservedSize: 52,
               getTitlesWidget: (v, meta) => Text(
                 _moedaCurta.format(v),
-                style: TextStyle(fontSize: 9.5, color: Colors.grey.shade600),
+                style: TextStyle(fontSize: 9.5, color: AdminUi.apoioOf(context)),
               ),
             ),
           ),
@@ -725,7 +726,7 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
     if (total == 0) {
       return Center(
         child: Text('Sem cadastros',
-            style: TextStyle(color: Colors.grey.shade600)),
+            style: TextStyle(color: AdminUi.apoioOf(context))),
       );
     }
     return Row(
@@ -808,7 +809,7 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: forte ? FontWeight.w800 : FontWeight.w500,
-                  color: const Color(0xFF0F172A),
+                  color: AdminUi.tintaOf(context),
                 ),
               ),
             ),
@@ -817,7 +818,7 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
               style: TextStyle(
                 fontSize: forte ? 15 : 13,
                 fontWeight: forte ? FontWeight.w800 : FontWeight.w700,
-                color: cor ?? const Color(0xFF0F172A),
+                color: cor ?? AdminUi.tintaOf(context),
               ),
             ),
           ],
@@ -855,7 +856,7 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
           Text(
             'Previsão considera só quem já pagou (último valor pago, vencimento '
             'dentro do mês). Teste grátis, cortesia e convênio não entram.',
-            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+            style: TextStyle(fontSize: 11, color: AdminUi.apoioOf(context)),
           ),
         ],
       ),
@@ -888,7 +889,7 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
               child: Text(
                 'Nenhum custo cadastrado. Toque em Editar para lançar servidor, '
                 'domínio, lojas, e-mail… (fica salvo só para você).',
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                style: TextStyle(fontSize: 12, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700),
               ),
             )
           else ...[
@@ -1038,7 +1039,7 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
           Text(
             'Pago no período, líquido após taxas e custo fixo rateado entre '
             'os ${d.ativos} usuários com acesso.',
-            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+            style: TextStyle(fontSize: 11, color: AdminUi.apoioOf(context)),
           ),
           const SizedBox(height: 8),
           if (lista.isEmpty)
@@ -1046,7 +1047,7 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
               padding: const EdgeInsets.symmetric(vertical: 12),
               child: Text(
                 'Nenhum pagamento aprovado vinculado a usuário nos últimos 12 meses.',
-                style: TextStyle(color: Colors.grey.shade700),
+                style: TextStyle(color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700),
               ),
             )
           else
@@ -1057,10 +1058,10 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
                 dataRowMinHeight: 40,
                 dataRowMaxHeight: 52,
                 columnSpacing: 18,
-                headingTextStyle: const TextStyle(
+                headingTextStyle: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 12,
-                  color: Color(0xFF334155),
+                  color: context.isDarkMode ? context.appTextSecondary : const Color(0xFF334155),
                 ),
                 columns: const [
                   DataColumn(label: Text('Usuário')),
@@ -1092,7 +1093,7 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
                                   u.email,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                      fontSize: 11, color: Colors.grey.shade600),
+                                      fontSize: 11, color: AdminUi.apoioOf(context)),
                                 ),
                             ],
                           ),
@@ -1179,7 +1180,7 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
           const SizedBox(height: 10),
           if (top.isEmpty)
             Text('Ainda sem visualizações registradas.',
-                style: TextStyle(color: Colors.grey.shade600))
+                style: TextStyle(color: AdminUi.apoioOf(context)))
           else
             for (final c in top)
               Padding(
@@ -1201,7 +1202,7 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
                         Text(
                           '${c.viewCount} views · ${c.likeCount} curtidas',
                           style: TextStyle(
-                              fontSize: 11.5, color: Colors.grey.shade700),
+                              fontSize: 11.5, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700),
                         ),
                       ],
                     ),
@@ -1214,7 +1215,7 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
                             : c.viewCount / top.first.viewCount,
                         minHeight: 6,
                         color: c.type == 'dica' ? _ambar : _vermelho,
-                        backgroundColor: Colors.grey.shade200,
+                        backgroundColor: AdminUi.bordaOf(context),
                       ),
                     ),
                   ],

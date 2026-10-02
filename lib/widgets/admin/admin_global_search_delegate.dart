@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../utils/admin_user_search.dart';
+import 'admin_ui_kit.dart';
 typedef AdminGlobalSearchSelect = void Function(
   String uid,
   String name,
@@ -46,7 +47,7 @@ class AdminGlobalSearchDelegate extends SearchDelegate<String?> {
       return Center(
         child: Text(
           'Digite pelo menos 2 caracteres',
-          style: TextStyle(color: Colors.grey.shade600),
+          style: TextStyle(color: AdminUi.apoioOf(context)),
         ),
       );
     }

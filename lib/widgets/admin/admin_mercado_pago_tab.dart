@@ -6,7 +6,9 @@ import '../../constants/currency_formats.dart';
 import '../../services/functions_service.dart';
 import '../../services/mp_admin_config_service.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_context.dart';
 import '../../widgets/fast_text_field.dart';
+import 'admin_ui_kit.dart';
 
 /// Painel Mercado Pago dual (Raihom + Johnathan), split interno e preços.
 class AdminMercadoPagoTab extends StatefulWidget {
@@ -441,16 +443,16 @@ class AdminMercadoPagoTabState extends State<AdminMercadoPagoTab>
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.red.shade50,
+        color: context.isDarkMode ? context.appAccentSurface(Colors.red) : Colors.red.shade50,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.red.shade200),
       ),
       child: Row(
         children: [
-          Icon(Icons.error_outline_rounded, color: Colors.red.shade700, size: 20),
+          Icon(Icons.error_outline_rounded, color: context.isDarkMode ? Colors.red.shade300 : Colors.red.shade700, size: 20),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(msg, style: TextStyle(color: Colors.red.shade900, fontSize: 12)),
+            child: Text(msg, style: TextStyle(color: context.isDarkMode ? Colors.red.shade100 : Colors.red.shade900, fontSize: 12)),
           ),
         ],
       ),
@@ -490,7 +492,9 @@ class AdminMercadoPagoTabState extends State<AdminMercadoPagoTab>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: ok ? color.withValues(alpha: 0.12) : Colors.orange.shade50,
+        color: ok
+            ? color.withValues(alpha: 0.12)
+            : (context.isDarkMode ? context.appAccentSurface(Colors.orange) : Colors.orange.shade50),
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: ok ? color.withValues(alpha: 0.45) : Colors.orange.shade300),
       ),
@@ -508,7 +512,7 @@ class AdminMercadoPagoTabState extends State<AdminMercadoPagoTab>
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w800,
-              color: ok ? color : Colors.orange.shade900,
+              color: ok ? color : (context.isDarkMode ? Colors.orange.shade200 : Colors.orange.shade900),
             ),
           ),
         ],
@@ -520,7 +524,7 @@ class AdminMercadoPagoTabState extends State<AdminMercadoPagoTab>
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
-        color: Colors.grey.shade100,
+        color: context.isDarkMode ? context.appSurfaceHigh : Colors.grey.shade100,
       ),
       child: TabBar(
         controller: _tabCtrl,
@@ -531,7 +535,7 @@ class AdminMercadoPagoTabState extends State<AdminMercadoPagoTab>
         indicatorSize: TabBarIndicatorSize.tab,
         dividerColor: Colors.transparent,
         labelColor: Colors.white,
-        unselectedLabelColor: Colors.grey.shade700,
+        unselectedLabelColor: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
         labelStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
         onTap: (_) => setState(() {}),
         tabs: [
@@ -573,7 +577,7 @@ class AdminMercadoPagoTabState extends State<AdminMercadoPagoTab>
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
-        color: Colors.white,
+        color: AdminUi.cardOf(context),
         border: Border.all(color: accent.withValues(alpha: 0.25)),
         boxShadow: [
           BoxShadow(
@@ -609,7 +613,7 @@ class AdminMercadoPagoTabState extends State<AdminMercadoPagoTab>
                       ),
                       Text(
                         subtitle,
-                        style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700),
+                        style: TextStyle(fontSize: 11.5, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700),
                       ),
                     ],
                   ),
@@ -623,7 +627,7 @@ class AdminMercadoPagoTabState extends State<AdminMercadoPagoTab>
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
+                  color: context.isDarkMode ? context.appAccentSurface(Colors.orange) : Colors.orange.shade50,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: Colors.orange.shade200),
                 ),
@@ -631,7 +635,7 @@ class AdminMercadoPagoTabState extends State<AdminMercadoPagoTab>
                   'Preencha Public Key, Access Token e Collector ID de '
                   '${AppBrand.idealizerName}. Suas credenciais (${AppBrand.developerName}) '
                   'já estão gravadas no banco.',
-                  style: TextStyle(fontSize: 11.5, color: Colors.orange.shade900, height: 1.35),
+                  style: TextStyle(fontSize: 11.5, color: context.isDarkMode ? Colors.orange.shade100 : Colors.orange.shade900, height: 1.35),
                 ),
               ),
             ],
@@ -699,7 +703,7 @@ class AdminMercadoPagoTabState extends State<AdminMercadoPagoTab>
           helperMaxLines: 2,
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           filled: true,
-          fillColor: Colors.grey.shade50,
+          fillColor: context.isDarkMode ? context.appInputFill : Colors.grey.shade50,
           prefixIcon: icon != null ? Icon(icon, size: 20) : null,
         ),
       ),
@@ -732,7 +736,7 @@ class AdminMercadoPagoTabState extends State<AdminMercadoPagoTab>
             '${AppBrand.developerName} ${CurrencyFormats.formatBRL(14.90)} + '
             '${AppBrand.idealizerName} ${CurrencyFormats.formatBRL(35.00)}. '
             'Taxas MP são descontadas depois.',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade800, height: 1.35),
+            style: TextStyle(fontSize: 12, color: context.isDarkMode ? context.appTextPrimary : Colors.grey.shade800, height: 1.35),
           ),
           const SizedBox(height: 12),
           SwitchListTile(
@@ -815,7 +819,9 @@ class AdminMercadoPagoTabState extends State<AdminMercadoPagoTab>
           labelText: label,
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           filled: true,
-          fillColor: readOnly ? Colors.grey.shade100 : Colors.white,
+          fillColor: readOnly
+              ? (context.isDarkMode ? context.appSurfaceHigh : Colors.grey.shade100)
+              : AdminUi.cardOf(context),
         ),
       ),
     );
@@ -840,7 +846,9 @@ class AdminMercadoPagoTabState extends State<AdminMercadoPagoTab>
           suffixText: '%',
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           filled: true,
-          fillColor: readOnly ? Colors.grey.shade100 : Colors.white,
+          fillColor: readOnly
+              ? (context.isDarkMode ? context.appSurfaceHigh : Colors.grey.shade100)
+              : AdminUi.cardOf(context),
         ),
       ),
     );

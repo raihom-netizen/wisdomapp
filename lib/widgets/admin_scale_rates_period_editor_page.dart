@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../models/scale_rates.dart';
 import '../models/scale_rates_period.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
+import 'admin/admin_ui_kit.dart';
 import '../constants/currency_formats.dart';
 import '../constants/date_time_formats.dart';
 import 'br_datetime_input.dart';
@@ -203,7 +205,7 @@ class _AdminScaleRatesPeriodEditorPageState
         : 'Editar período';
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F4FA),
+      backgroundColor: context.isDarkMode ? context.appScaffold : const Color(0xFFF0F4FA),
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
@@ -396,13 +398,17 @@ class _AdminScaleRatesPeriodEditorPageState
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: isWeekend
-                              ? const Color(0xFFFFF7ED)
-                              : const Color(0xFFF8FAFC),
+                              ? (context.isDarkMode
+                                  ? context.appAccentSurface(AppColors.logoOrange)
+                                  : const Color(0xFFFFF7ED))
+                              : (context.isDarkMode
+                                  ? context.appChipIdleBg
+                                  : const Color(0xFFF8FAFC)),
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
                             color: isWeekend
                                 ? AppColors.logoOrange.withValues(alpha: 0.25)
-                                : Colors.grey.shade200,
+                                : AdminUi.bordaOf(context),
                           ),
                         ),
                         child: Row(
@@ -490,17 +496,25 @@ class _AdminScaleRatesPeriodEditorPageState
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            const Color(0xFFDCFCE7),
+            context.isDarkMode
+                ? context.appAccentSurface(const Color(0xFF22C55E))
+                : const Color(0xFFDCFCE7),
             widget.brandTeal.withValues(alpha: 0.15),
           ],
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF86EFAC)),
+        border: Border.all(
+            color: context.isDarkMode
+                ? const Color(0xFF86EFAC).withValues(alpha: 0.4)
+                : const Color(0xFF86EFAC)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.verified_user_rounded, color: Color(0xFF15803D)),
+          Icon(Icons.verified_user_rounded,
+              color: context.isDarkMode
+                  ? const Color(0xFF86EFAC)
+                  : const Color(0xFF15803D)),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -510,7 +524,7 @@ class _AdminScaleRatesPeriodEditorPageState
               style: TextStyle(
                 fontSize: 12.5,
                 height: 1.4,
-                color: Colors.green.shade900,
+                color: context.isDarkMode ? Colors.green.shade100 : Colors.green.shade900,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -529,7 +543,7 @@ class _AdminScaleRatesPeriodEditorPageState
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AdminUi.cardOf(context),
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(

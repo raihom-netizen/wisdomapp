@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/theme_context.dart';
 import '../../utils/admin_responsive.dart';
 
 /// Fundo e layout padrão do painel admin (iOS, Android, web instalável).
@@ -7,6 +8,10 @@ class AdminPageShell {
   AdminPageShell._();
 
   static const Color background = Color(0xFFF2F4F8);
+
+  /// Fundo do painel conforme o tema (claro = [background]).
+  static Color backgroundOf(BuildContext context) =>
+      context.isDarkMode ? context.appScaffold : background;
 
   /// Padding horizontal + inferior (home indicator / barra gestos).
   static EdgeInsets pagePadding(BuildContext context, {double top = 0}) {
@@ -26,7 +31,7 @@ class AdminPageShell {
     bool centerOnWideWeb = true,
   }) {
     return ColoredBox(
-      color: background,
+      color: backgroundOf(context),
       child: LayoutBuilder(
         builder: (context, constraints) {
           Widget body = child;

@@ -10,6 +10,7 @@ import 'package:intl/intl.dart';
 import '../utils/admin_user_search.dart';
 import '../services/user_client_telemetry_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../widgets/shell_keyboard_bottom_pad.dart';
 import '../widgets/home_start_module_picker.dart';
 import '../widgets/module_header_premium.dart';
@@ -202,7 +203,7 @@ class _AdminUsuariosInteligenciaTabState
                 hintText: 'Buscar por nome, e-mail ou UID…',
                 prefixIcon: const Icon(Icons.search_rounded),
                 filled: true,
-                fillColor: Colors.white,
+                fillColor: context.isDarkMode ? context.appInputFill : Colors.white,
                 isDense: narrow,
                 contentPadding: EdgeInsets.symmetric(
                   horizontal: 14,
@@ -210,11 +211,11 @@ class _AdminUsuariosInteligenciaTabState
                 ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
+                  borderSide: BorderSide(color: context.isDarkMode ? context.appChipIdleBorder : Colors.grey.shade300),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
+                  borderSide: BorderSide(color: context.isDarkMode ? context.appChipIdleBorder : Colors.grey.shade300),
                 ),
               ),
               onChanged: _onSearchChanged,
@@ -283,9 +284,9 @@ class _AdminUsuariosInteligenciaTabState
       alignment: Alignment.center,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AdminUi.cardOf(context),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: AdminUi.bordaOf(context)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
@@ -298,7 +299,7 @@ class _AdminUsuariosInteligenciaTabState
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.touch_app_rounded,
-              size: 48, color: Colors.grey.shade400),
+              size: 48, color: context.isDarkMode ? context.appTextMuted : Colors.grey.shade400),
           const SizedBox(height: 12),
           Text(
             'Selecione um utilizador à esquerda',
@@ -306,14 +307,14 @@ class _AdminUsuariosInteligenciaTabState
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w700,
-              color: Colors.grey.shade700,
+              color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             'Verá gráficos de volume, último lançamento, versão do app, convênio e totais de pagamento.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade600, height: 1.35),
+            style: TextStyle(fontSize: 13, color: AdminUi.apoioOf(context), height: 1.35),
           ),
         ],
       ),
@@ -328,20 +329,20 @@ class _AdminUsuariosInteligenciaTabState
       return Center(
         child: Text(
           'Nenhum utilizador neste filtro.',
-          style: TextStyle(color: Colors.grey.shade600),
+          style: TextStyle(color: AdminUi.apoioOf(context)),
         ),
       );
     }
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AdminUi.cardOf(context),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: AdminUi.bordaOf(context)),
       ),
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(vertical: 8),
         itemCount: docs.length,
-        separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey.shade100),
+        separatorBuilder: (_, __) => Divider(height: 1, color: context.isDarkMode ? context.appBorderSubtle : Colors.grey.shade100),
         itemBuilder: (context, i) {
           final doc = docs[i];
           final d = doc.data();
@@ -395,7 +396,7 @@ class _AdminUsuariosInteligenciaTabState
                             style: TextStyle(
                               fontWeight: FontWeight.w700,
                               fontSize: 14,
-                              color: Colors.grey.shade900,
+                              color: context.isDarkMode ? context.appTextPrimary : Colors.grey.shade900,
                             ),
                           ),
                           if (_userSubtitle(d).isNotEmpty)
@@ -405,7 +406,7 @@ class _AdminUsuariosInteligenciaTabState
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontSize: 11,
-                                color: Colors.grey.shade600,
+                                color: AdminUi.apoioOf(context),
                               ),
                             ),
                           Padding(
@@ -422,8 +423,8 @@ class _AdminUsuariosInteligenciaTabState
                                     ? FontWeight.w500
                                     : FontWeight.w700,
                                 color: platformRaw == null
-                                    ? Colors.grey.shade500
-                                    : Colors.grey.shade700,
+                                    ? (context.isDarkMode ? context.appTextMuted : Colors.grey.shade500)
+                                    : (context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700),
                                 fontStyle: platformRaw == null
                                     ? FontStyle.italic
                                     : FontStyle.normal,
@@ -439,12 +440,12 @@ class _AdminUsuariosInteligenciaTabState
                         UserClientTelemetryService.platformIcon(platformRaw),
                         size: 22,
                         color: platformRaw == null
-                            ? Colors.grey.shade400
+                            ? (context.isDarkMode ? context.appTextMuted : Colors.grey.shade400)
                             : AppColors.primary,
                       ),
                     ),
                     if (narrow)
-                      Icon(Icons.chevron_right_rounded, color: Colors.grey.shade400),
+                      Icon(Icons.chevron_right_rounded, color: context.isDarkMode ? context.appTextMuted : Colors.grey.shade400),
                   ],
                 ),
               ),
@@ -530,7 +531,7 @@ class _Usuario360DetailState extends State<_Usuario360Detail> {
               child: Container(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: AdminUi.cardOf(ctx),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Column(
@@ -557,9 +558,9 @@ class _Usuario360DetailState extends State<_Usuario360Detail> {
                     ),
                   ],
                 ),
-                const Text(
+                Text(
                   'Cria um documento em notifications — a Cloud Function envia FCM se houver deviceTokens.',
-                  style: TextStyle(fontSize: 12, height: 1.35, color: Colors.black54),
+                  style: TextStyle(fontSize: 12, height: 1.35, color: ctx.isDarkMode ? ctx.appTextSecondary : Colors.black54),
                 ),
                 const SizedBox(height: 14),
                 FastTextField(
@@ -765,9 +766,9 @@ class _Usuario360DetailState extends State<_Usuario360Detail> {
     final onBack = widget.onBack;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AdminUi.cardOf(context),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: AdminUi.bordaOf(context)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
@@ -919,7 +920,7 @@ class _Usuario360DetailState extends State<_Usuario360Detail> {
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.grey.shade700,
+                                color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -1001,7 +1002,7 @@ class _Usuario360DetailState extends State<_Usuario360Detail> {
           Text(
             email,
             style: TextStyle(
-              color: Colors.grey.shade600,
+              color: AdminUi.apoioOf(context),
               fontSize: compact ? 12 : 13,
             ),
             maxLines: 2,
@@ -1013,7 +1014,7 @@ class _Usuario360DetailState extends State<_Usuario360Detail> {
           'UID: ${widget.uid}',
           style: TextStyle(
             fontSize: 10,
-            color: Colors.grey.shade500,
+            color: context.isDarkMode ? context.appTextMuted : Colors.grey.shade500,
             fontFamily: 'monospace',
             height: 1.35,
           ),
@@ -1098,7 +1099,7 @@ class _Usuario360DetailState extends State<_Usuario360Detail> {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
-                    color: Colors.grey.shade600,
+                    color: AdminUi.apoioOf(context),
                     letterSpacing: 0.2,
                   ),
                 ),
@@ -1221,13 +1222,13 @@ class _Usuario360DetailState extends State<_Usuario360Detail> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: context.appChipIdleBg,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: AdminUi.bordaOf(context)),
       ),
       child: Row(
         children: [
-          Icon(Icons.storage_rounded, color: Colors.grey.shade700),
+          Icon(Icons.storage_rounded, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -1238,12 +1239,12 @@ class _Usuario360DetailState extends State<_Usuario360Detail> {
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 13,
-                    color: Colors.grey.shade800,
+                    color: context.isDarkMode ? context.appTextPrimary : Colors.grey.shade800,
                   ),
                 ),
                 Text(
                   label,
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 12, color: AdminUi.apoioOf(context)),
                 ),
               ],
             ),
@@ -1318,7 +1319,7 @@ class _VolumeBarChart extends StatelessWidget {
               reservedSize: compact ? 32 : 36,
               getTitlesWidget: (v, m) => Text(
                 v >= 1000 ? '${(v / 1000).toStringAsFixed(1)}k' : v.toInt().toString(),
-                style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                style: TextStyle(fontSize: 10, color: AdminUi.apoioOf(context)),
               ),
             ),
           ),
@@ -1335,7 +1336,7 @@ class _VolumeBarChart extends StatelessWidget {
                     textAlign: TextAlign.center,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: compact ? 9 : 10, color: Colors.grey.shade700),
+                    style: TextStyle(fontSize: compact ? 9 : 10, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700),
                   ),
                 );
               },
@@ -1347,7 +1348,7 @@ class _VolumeBarChart extends StatelessWidget {
           drawVerticalLine: false,
           horizontalInterval: maxV > 10 ? (maxV / 4).ceilToDouble() : 1,
           getDrawingHorizontalLine: (v) => FlLine(
-            color: Colors.grey.shade200,
+            color: AdminUi.bordaOf(context),
             strokeWidth: 1,
           ),
         ),
@@ -1402,9 +1403,9 @@ class _VolumeMetricsCompact extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: context.appChipIdleBg,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: AdminUi.bordaOf(context)),
       ),
       child: Column(
         children: [
@@ -1420,7 +1421,7 @@ class _VolumeMetricsCompact extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
-                        color: Colors.grey.shade700,
+                        color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                       ),
                     ),
                   ),
@@ -1430,7 +1431,7 @@ class _VolumeMetricsCompact extends StatelessWidget {
                       child: LinearProgressIndicator(
                         value: row.$2 / maxV,
                         minHeight: 10,
-                        backgroundColor: Colors.grey.shade200,
+                        backgroundColor: AdminUi.bordaOf(context),
                         color: row.$3,
                       ),
                     ),
@@ -1491,7 +1492,7 @@ Future<void> openAdminUser360Preview(
               child: Container(
                 constraints: BoxConstraints(maxHeight: size.height * 0.94),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF4F7FA),
+                  color: ctx.isDarkMode ? ctx.appScaffold : const Color(0xFFF4F7FA),
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(

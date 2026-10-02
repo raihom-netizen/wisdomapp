@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../services/user_feedback_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/admin_load_guard.dart';
 import '../utils/debounced_text_controller.dart';
 import '../widgets/fast_text_field.dart';
@@ -225,12 +226,12 @@ class _AdminSugestoesTabState extends State<AdminSugestoesTab>
               ),
               const SizedBox(height: 12),
               Material(
-                color: Colors.white,
+                color: AdminUi.cardOf(context),
                 borderRadius: BorderRadius.circular(14),
                 child: TabBar(
                   controller: _tabCtrl,
                   labelColor: widget.brandBlue,
-                  unselectedLabelColor: Colors.grey.shade600,
+                  unselectedLabelColor: AdminUi.apoioOf(context),
                   indicatorColor: widget.brandBlue,
                   tabs: const [
                     Tab(text: 'Abertos'),
@@ -339,7 +340,7 @@ class _AdminSugestoesTabState extends State<AdminSugestoesTab>
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade700,
+                      color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -377,9 +378,9 @@ class _AdminSugestoesTabState extends State<AdminSugestoesTab>
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AdminUi.cardOf(context),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: AdminUi.bordaOf(context)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -445,7 +446,7 @@ class _AdminSugestoesTabState extends State<AdminSugestoesTab>
     final allSelected =
         visible.isNotEmpty && _selectedIds.length == visible.length;
     return Material(
-      color: Colors.white,
+      color: AdminUi.cardOf(context),
       borderRadius: BorderRadius.circular(12),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -508,20 +509,20 @@ class _AdminSugestoesTabState extends State<AdminSugestoesTab>
       padding: const EdgeInsets.all(28),
       margin: const EdgeInsets.only(top: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AdminUi.cardOf(context),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: AdminUi.bordaOf(context)),
       ),
       child: Column(
         children: [
-          Icon(Icons.inbox_rounded, size: 52, color: Colors.grey.shade400),
+          Icon(Icons.inbox_rounded, size: 52, color: context.isDarkMode ? context.appTextMuted : Colors.grey.shade400),
           const SizedBox(height: 12),
           Text(
             respondedTab
                 ? 'Nenhuma sugestão respondida com estes filtros.'
                 : 'Nenhuma sugestão em aberto com estes filtros.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+            style: TextStyle(fontSize: 14, color: AdminUi.apoioOf(context)),
           ),
         ],
       ),
@@ -566,12 +567,12 @@ class _FeedbackCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AdminUi.cardOf(context),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: selected
               ? AppColors.primary.withValues(alpha: 0.5)
-              : Colors.grey.shade200,
+              : AdminUi.bordaOf(context),
           width: selected ? 2 : 1,
         ),
         boxShadow: [
@@ -617,7 +618,7 @@ class _FeedbackCard extends StatelessWidget {
                           email,
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey.shade600,
+                            color: AdminUi.apoioOf(context),
                           ),
                         ),
                     ],
@@ -679,7 +680,7 @@ class _FeedbackCard extends StatelessWidget {
                 padding: const EdgeInsets.only(left: 4, top: 2),
                 child: Text(
                   DateFormat('dd/MM/yyyy HH:mm').format(createdAt),
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                  style: TextStyle(fontSize: 11, color: context.isDarkMode ? context.appTextMuted : Colors.grey.shade500),
                 ),
               ),
             const SizedBox(height: 10),
@@ -711,7 +712,7 @@ class _FeedbackCard extends StatelessWidget {
                         DateFormat('dd/MM/yyyy HH:mm').format(repliedAt),
                         style: TextStyle(
                           fontSize: 11,
-                          color: Colors.grey.shade500,
+                          color: context.isDarkMode ? context.appTextMuted : Colors.grey.shade500,
                         ),
                       ),
                   ],

@@ -5,6 +5,7 @@ import '../../services/admin_user_internal_notes_service.dart';
 import '../../services/billing_service.dart';
 import '../../services/admin_audit_service.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_context.dart';
 import '../../utils/admin_load_guard.dart';
 
 /// Histórico de auditoria + notas internas + renovar 1 ano na ficha 360°.
@@ -157,7 +158,7 @@ class _AdminUser360ExtrasPanelState extends State<AdminUser360ExtrasPanel> {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w800,
-            color: Colors.grey.shade800,
+            color: context.isDarkMode ? context.appTextPrimary : Colors.grey.shade800,
           ),
         ),
         const SizedBox(height: 8),
@@ -199,7 +200,7 @@ class _AdminUser360ExtrasPanelState extends State<AdminUser360ExtrasPanel> {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w800,
-            color: Colors.grey.shade800,
+            color: context.isDarkMode ? context.appTextPrimary : Colors.grey.shade800,
           ),
         ),
         const SizedBox(height: 8),
@@ -232,7 +233,7 @@ class _AdminUser360ExtrasPanelState extends State<AdminUser360ExtrasPanel> {
             if (entries.isEmpty) {
               return Text(
                 'Sem registos de auditoria para este utilizador.',
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                style: TextStyle(fontSize: 12, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600),
               );
             }
             return Column(
@@ -241,7 +242,7 @@ class _AdminUser360ExtrasPanelState extends State<AdminUser360ExtrasPanel> {
                   contentPadding: EdgeInsets.zero,
                   minVerticalPadding: 8,
                   leading: Icon(Icons.history_rounded,
-                      color: Colors.grey.shade600, size: 22),
+                      color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600, size: 22),
                   title: Text(
                     e.action.replaceAll('_', ' '),
                     style: const TextStyle(
@@ -255,7 +256,7 @@ class _AdminUser360ExtrasPanelState extends State<AdminUser360ExtrasPanel> {
                       if (e.details.isNotEmpty) e.details,
                       if (e.at != null) df.format(e.at!),
                     ].join(' · '),
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                    style: TextStyle(fontSize: 11, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700),
                   ),
                 );
               }).toList(),

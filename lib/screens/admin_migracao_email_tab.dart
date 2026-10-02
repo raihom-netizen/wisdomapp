@@ -2,6 +2,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import '../widgets/fast_text_field.dart';
 import 'package:flutter/services.dart';
+import '../theme/theme_context.dart';
 
 import '../services/admin_audit_service.dart';
 import '../services/functions_service.dart';
@@ -207,16 +208,16 @@ class _AdminMigracaoEmailTabState extends State<AdminMigracaoEmailTab> {
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.isDarkMode ? context.appSurface : Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: context.isDarkMode ? context.appChipIdleBorder : Colors.grey.shade200),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
           const SizedBox(height: 6),
-          Text(lines.join('\n'), style: TextStyle(fontSize: 12, color: Colors.grey.shade800, height: 1.35)),
+          Text(lines.join('\n'), style: TextStyle(fontSize: 12, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade800, height: 1.35)),
         ],
       ),
     );
@@ -225,7 +226,7 @@ class _AdminMigracaoEmailTabState extends State<AdminMigracaoEmailTab> {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: _pageBg,
+      color: context.isDarkMode ? context.appScaffold : _pageBg,
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         child: Column(
@@ -271,7 +272,7 @@ class _AdminMigracaoEmailTabState extends State<AdminMigracaoEmailTab> {
                   Text(
                     'Use quando o cliente quer passar a usar um e-mail novo mantendo todo o histórico. '
                     'Recomendado: simular antes de executar.',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade800, height: 1.4),
+                    style: TextStyle(fontSize: 12, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade800, height: 1.4),
                   ),
                 ],
               ),
@@ -300,7 +301,7 @@ class _AdminMigracaoEmailTabState extends State<AdminMigracaoEmailTab> {
               _mode == 'same_account'
                   ? 'Mesmo UID: apenas atualiza o e-mail de login (dados já estão na conta).'
                   : 'Copia todas as subcoleções e Storage para a conta do e-mail novo.',
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade700, height: 1.3),
+              style: TextStyle(fontSize: 11, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700, height: 1.3),
             ),
             const SizedBox(height: 16),
             FastTextField(
@@ -308,13 +309,13 @@ class _AdminMigracaoEmailTabState extends State<AdminMigracaoEmailTab> {
               enabled: !_busy,
               keyboardType: TextInputType.emailAddress,
               autocorrect: false,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'E-mail de origem (conta antiga)',
                 hintText: 'usuario.antigo@email.com',
-                prefixIcon: Icon(Icons.mail_outline_rounded),
-                border: OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.mail_outline_rounded),
+                border: const OutlineInputBorder(),
                 filled: true,
-                fillColor: Colors.white,
+                fillColor: context.isDarkMode ? context.appInputFill : Colors.white,
               ),
             ),
             const SizedBox(height: 12),
@@ -323,13 +324,13 @@ class _AdminMigracaoEmailTabState extends State<AdminMigracaoEmailTab> {
               enabled: !_busy,
               keyboardType: TextInputType.emailAddress,
               autocorrect: false,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'E-mail de destino (conta nova)',
                 hintText: 'usuario.novo@email.com',
-                prefixIcon: Icon(Icons.mark_email_read_outlined),
-                border: OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.mark_email_read_outlined),
+                border: const OutlineInputBorder(),
                 filled: true,
-                fillColor: Colors.white,
+                fillColor: context.isDarkMode ? context.appInputFill : Colors.white,
               ),
             ),
             if (_mode == 'full_migration') ...[
@@ -379,7 +380,7 @@ class _AdminMigracaoEmailTabState extends State<AdminMigracaoEmailTab> {
                           ? 'Simulando volumes (servidor otimizado) — costuma levar poucos segundos…'
                           : 'Migrando dados no servidor — Firestore, Storage e índices em paralelo…',
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade700, height: 1.35),
+                      style: TextStyle(fontSize: 12, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700, height: 1.35),
                     ),
                   ],
                 ),
@@ -423,7 +424,7 @@ class _AdminMigracaoEmailTabState extends State<AdminMigracaoEmailTab> {
                   child: Text(
                     'Documentos copiados: ${_preview!['docsCopied']} • '
                     'Storage: ${_preview!['storageCopied'] ?? 0}',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
+                    style: TextStyle(fontSize: 12, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade800),
                   ),
                 ),
             ],

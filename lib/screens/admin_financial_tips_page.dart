@@ -10,12 +10,14 @@ import '../models/finance_tip_bank_entry.dart';
 import '../services/financial_tips_home_sync_service.dart';
 import '../services/financial_tips_seed_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/admin_financial_tip_utils.dart';
 import '../utils/insights_engine.dart';
 import '../widgets/admin/admin_financial_tip_editor_sheet.dart';
 import '../widgets/admin/admin_financial_tips_schedule_sheet.dart';
 import '../widgets/admin/admin_page_shell.dart';
 import '../widgets/admin/admin_tip_grid_card.dart';
+import '../widgets/admin/admin_ui_kit.dart';
 import '../widgets/fast_text_field.dart';
 
 /// Painel admin — dicas financeiras (bíblicas + gerais), tempo real, web/mobile.
@@ -290,9 +292,9 @@ class _AdminFinancialTipsPageState extends State<AdminFinancialTipsPage>
         minChildSize: 0.45,
         maxChildSize: 0.92,
         builder: (_, scroll) => Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+          decoration: BoxDecoration(
+            color: AdminUi.cardOf(ctx),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
           ),
           child: ListView(
             controller: scroll,
@@ -303,7 +305,7 @@ class _AdminFinancialTipsPageState extends State<AdminFinancialTipsPage>
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
+                    color: ctx.isDarkMode ? ctx.appBorderSubtle : Colors.grey.shade300,
                     borderRadius: BorderRadius.circular(99),
                   ),
                 ),
@@ -364,7 +366,7 @@ class _AdminFinancialTipsPageState extends State<AdminFinancialTipsPage>
                 const SizedBox(height: 16),
                 Text(
                   desc,
-                  style: TextStyle(fontSize: 14, color: Colors.grey.shade800, height: 1.5),
+                  style: TextStyle(fontSize: 14, color: ctx.isDarkMode ? ctx.appTextPrimary : Colors.grey.shade800, height: 1.5),
                 ),
               ],
               const SizedBox(height: 20),
@@ -635,7 +637,7 @@ class _AdminFinancialTipsPageState extends State<AdminFinancialTipsPage>
                                   },
                                 ),
                           filled: true,
-                          fillColor: Colors.white,
+                          fillColor: AdminUi.cardOf(context),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
                             borderSide: BorderSide.none,
@@ -654,7 +656,7 @@ class _AdminFinancialTipsPageState extends State<AdminFinancialTipsPage>
                           decoration: InputDecoration(
                             labelText: 'Filtrar por livro bíblico',
                             filled: true,
-                            fillColor: Colors.white,
+                            fillColor: AdminUi.cardOf(context),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                           ),
                           items: [
@@ -698,7 +700,7 @@ class _AdminFinancialTipsPageState extends State<AdminFinancialTipsPage>
                       child: Center(
                         child: Text(
                           'Nenhum resultado para o filtro.',
-                          style: TextStyle(color: Colors.grey.shade700),
+                          style: TextStyle(color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700),
                         ),
                       ),
                     )
@@ -916,7 +918,7 @@ class _StatPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AdminUi.cardOf(context),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: color.withValues(alpha: 0.2)),
         boxShadow: [
@@ -939,7 +941,7 @@ class _StatPill extends StatelessWidget {
           const SizedBox(width: 4),
           Text(
             label,
-            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700),
           ),
         ],
       ),
@@ -963,7 +965,7 @@ class _ModernTabBar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
+        color: context.isDarkMode ? context.appSurfaceHigh : Colors.grey.shade100,
         borderRadius: BorderRadius.circular(16),
       ),
       child: TabBar(
@@ -984,7 +986,7 @@ class _ModernTabBar extends StatelessWidget {
         indicatorSize: TabBarIndicatorSize.tab,
         dividerColor: Colors.transparent,
         labelColor: Colors.white,
-        unselectedLabelColor: Colors.grey.shade700,
+        unselectedLabelColor: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
         labelStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
         tabs: [
           Tab(text: 'Bíblicas ($biblicalCount)'),
@@ -1124,7 +1126,7 @@ class _EmptyBootstrap extends StatelessWidget {
             '${kFinancialTipsFirestoreSeedBank.length} gerais com um toque. '
             '3 bíblicas já ficam marcadas para o Início.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey.shade700, height: 1.45),
+            style: TextStyle(color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700, height: 1.45),
           ),
           const SizedBox(height: 24),
           FilledButton.icon(
@@ -1172,7 +1174,7 @@ class _SelectionBar extends StatelessWidget {
     return Material(
       elevation: 8,
       borderRadius: BorderRadius.circular(16),
-      color: Colors.white,
+      color: AdminUi.cardOf(context),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Row(

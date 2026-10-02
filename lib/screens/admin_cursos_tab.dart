@@ -25,6 +25,7 @@ import '../utils/admin_load_guard.dart';
 import '../widgets/admin/course_admin_analytics_panel.dart';
 import '../widgets/admin/course_content_sheet_header.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/course_content_link_helper.dart';
 import '../utils/course_media_url_resolver.dart';
 import '../utils/admin_course_firestore_bridge.dart';
@@ -279,7 +280,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       labelText: label,
       hintText: hint,
       filled: true,
-      fillColor: Colors.white,
+      fillColor: context.isDarkMode ? context.appInputFill : Colors.white,
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -368,7 +369,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
             style: TextStyle(
               fontSize: 11.5,
               height: 1.35,
-              color: Colors.grey.shade700,
+              color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -565,9 +566,9 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       context: context,
       backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        decoration: BoxDecoration(
+          color: ctx.isDarkMode ? ctx.appSurface : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
         child: Column(
@@ -577,7 +578,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
               width: 36,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.grey.shade300,
+                color: ctx.isDarkMode ? ctx.appChipIdleBorder : Colors.grey.shade300,
                 borderRadius: BorderRadius.circular(99),
               ),
             ),
@@ -1418,7 +1419,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                 constraints: BoxConstraints(
                     maxHeight: MediaQuery.sizeOf(ctx).height * 0.94),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
+                  color: ctx.isDarkMode ? ctx.appScaffold : const Color(0xFFF8FAFC),
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
@@ -2498,7 +2499,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                   hintText: 'Pesquisar título ou texto…',
                   prefixIcon: const Icon(Icons.search_rounded),
                   filled: true,
-                  fillColor: Colors.white,
+                  fillColor: context.isDarkMode ? context.appInputFill : Colors.white,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
                     borderSide: BorderSide.none,
@@ -2622,9 +2623,9 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
   Widget _buildConfigCard() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.isDarkMode ? context.appSurface : Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: context.isDarkMode ? context.appChipIdleBorder : Colors.grey.shade200),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
@@ -2637,13 +2638,13 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
+          Text(
             'CONFIGURAÇÃO DO MÓDULO',
             style: TextStyle(
               fontWeight: FontWeight.w900,
               fontSize: 14,
               letterSpacing: 0.5,
-              color: Color(0xFF475569),
+              color: context.isDarkMode ? context.appTextSecondary : const Color(0xFF475569),
             ),
           ),
           const SizedBox(height: 12),
@@ -2720,7 +2721,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                 constraints: BoxConstraints(
                     maxHeight: MediaQuery.sizeOf(ctx).height * 0.94),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
+                  color: ctx.isDarkMode ? ctx.appScaffold : const Color(0xFFF8FAFC),
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
@@ -2858,7 +2859,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.isDarkMode ? context.appSurface : Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: accent.withValues(alpha: 0.25)),
         boxShadow: [
@@ -2906,10 +2907,10 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                     children: [
                       Text(
                         isDica ? 'Publicar dica rápida' : 'Enviar vídeo rápido',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w900,
                           fontSize: 16,
-                          color: Color(0xFF0F172A),
+                          color: context.isDarkMode ? context.appTextPrimary : const Color(0xFF0F172A),
                         ),
                       ),
                       Text(
@@ -2918,7 +2919,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                             : 'Cole o link do YouTube — título e capa vêm sozinhos',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Colors.grey.shade700,
+                          color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                         ),
                       ),
                     ],
@@ -2970,7 +2971,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                     errorText: linkError,
                     errorMaxLines: 3,
                     filled: true,
-                    fillColor: const Color(0xFFF8FAFC),
+                    fillColor: context.appChipIdleBg,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
@@ -3049,7 +3050,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                     child: Text(
                       'Sem capa própria, usamos a do YouTube. Aceita JPG, PNG '
                       'ou WebP até 3840x2160 (12 MB).',
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                      style: TextStyle(fontSize: 11, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600),
                     ),
                   ),
                 const SizedBox(height: 6),
@@ -3072,7 +3073,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                         _validityPermanent ? 'permanente' : 'com validade',
                         _published ? 'publicado' : 'oculto',
                       ].join(' · '),
-                      style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600),
+                      style: TextStyle(fontSize: 11.5, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600),
                     ),
                     children: [
                       if (!isDica) ...[
@@ -3090,7 +3091,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                             'Até ${CourseMediaUrlResolver.maxCourseVideos} vídeos, '
                             '250 MB cada. Cada vídeo vira uma aula.',
                             style: TextStyle(
-                                fontSize: 11, color: Colors.grey.shade600),
+                                fontSize: 11, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600),
                           ),
                         ),
                         for (var i = 0; i < _pickedVideos.length; i++)
@@ -3166,7 +3167,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
-                            color: Colors.grey.shade700,
+                            color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                           ),
                         ),
                       ),
@@ -4046,7 +4047,7 @@ class _Pill extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             gradient: selected ? LinearGradient(colors: gradient) : null,
-            color: selected ? null : Colors.white,
+            color: selected ? null : (context.isDarkMode ? context.appSurface : Colors.white),
             border: Border.all(
               color: selected
                   ? Colors.transparent
@@ -4101,7 +4102,7 @@ class _ValidityPill extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            color: selected ? color : Colors.white,
+            color: selected ? color : (context.isDarkMode ? context.appSurface : Colors.white),
             border: Border.all(
               color: selected ? color : color.withValues(alpha: 0.35),
             ),

@@ -3,6 +3,7 @@ import 'fast_text_field.dart';
 
 import '../services/delegate_access_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 
 /// Painel admin: e-mail autorizado (sub-login) vinculado ao titular da licença.
 class AdminDelegateEmailSection extends StatefulWidget {
@@ -44,10 +45,10 @@ class _AdminDelegateEmailSectionState extends State<AdminDelegateEmailSection> {
               style: const TextStyle(fontSize: 12, height: 1.35),
             ),
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'Não cria usuário/licença nova. O e-mail entra com login próprio '
               'e acessa os dados deste titular (escalas, lançamentos, edição).',
-              style: TextStyle(fontSize: 12, height: 1.35, color: Colors.black54),
+              style: TextStyle(fontSize: 12, height: 1.35, color: ctx.isDarkMode ? ctx.appTextSecondary : Colors.black54),
             ),
             const SizedBox(height: 12),
             FastTextField(
@@ -154,7 +155,7 @@ class _AdminDelegateEmailSectionState extends State<AdminDelegateEmailSection> {
       margin: const EdgeInsets.only(top: 8, bottom: 4),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.amber.shade50,
+        color: context.isDarkMode ? context.appAccentSurface(Colors.amber) : Colors.amber.shade50,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.amber.shade200),
       ),
@@ -164,7 +165,7 @@ class _AdminDelegateEmailSectionState extends State<AdminDelegateEmailSection> {
           Row(
             children: [
               Icon(Icons.group_add_rounded,
-                  size: 18, color: Colors.amber.shade900),
+                  size: 18, color: context.isDarkMode ? Colors.amber.shade300 : Colors.amber.shade900),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -172,7 +173,7 @@ class _AdminDelegateEmailSectionState extends State<AdminDelegateEmailSection> {
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 12,
-                    color: Colors.amber.shade900,
+                    color: context.isDarkMode ? Colors.amber.shade300 : Colors.amber.shade900,
                   ),
                 ),
               ),
@@ -189,7 +190,7 @@ class _AdminDelegateEmailSectionState extends State<AdminDelegateEmailSection> {
             hasEmail
                 ? 'E-mail autorizado: $email'
                 : 'Nenhum e-mail autorizado cadastrado.',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
+            style: TextStyle(fontSize: 12, color: context.isDarkMode ? context.appTextPrimary : Colors.grey.shade800),
           ),
           const SizedBox(height: 4),
           Text(
@@ -198,7 +199,7 @@ class _AdminDelegateEmailSectionState extends State<AdminDelegateEmailSection> {
             style: TextStyle(
               fontSize: 11,
               height: 1.3,
-              color: Colors.grey.shade700,
+              color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
             ),
           ),
           const SizedBox(height: 8),

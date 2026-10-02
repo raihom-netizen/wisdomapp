@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 
 import '../constants/currency_formats.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
+import 'admin/admin_ui_kit.dart';
 
 /// Gráfico de linhas — recebimentos Mercado Pago **bruto** vs **líquido** (após taxas estimadas).
 class AdminMpRevenueLineChart extends StatelessWidget {
@@ -32,7 +34,7 @@ class AdminMpRevenueLineChart extends StatelessWidget {
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(18),
-          side: BorderSide(color: Colors.grey.shade200),
+          side: BorderSide(color: AdminUi.bordaOf(context)),
         ),
         child: Padding(
           padding: const EdgeInsets.all(20),
@@ -46,7 +48,7 @@ class AdminMpRevenueLineChart extends StatelessWidget {
                 child: Center(
                   child: Text(
                     'Sem recebimentos aprovados no período.',
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                    style: TextStyle(color: AdminUi.apoioOf(context), fontSize: 13),
                   ),
                 ),
               ),
@@ -79,7 +81,7 @@ class AdminMpRevenueLineChart extends StatelessWidget {
             radius: 3.5,
             color: color,
             strokeWidth: 1.5,
-            strokeColor: Colors.white,
+            strokeColor: AdminUi.cardOf(context),
           ),
         ),
         belowBarData: BarAreaData(
@@ -100,7 +102,7 @@ class AdminMpRevenueLineChart extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: Colors.grey.shade200),
+        side: BorderSide(color: AdminUi.bordaOf(context)),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 16, 12, 8),
@@ -125,7 +127,7 @@ class AdminMpRevenueLineChart extends StatelessWidget {
                       Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
                       Text(
                         'Bruto (aprovado) × líquido estimado (taxas PIX/cartão)',
-                        style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600, height: 1.25),
+                        style: TextStyle(fontSize: 11.5, color: AdminUi.apoioOf(context), height: 1.25),
                       ),
                     ],
                   ),
@@ -156,7 +158,7 @@ class AdminMpRevenueLineChart extends StatelessWidget {
                     drawVerticalLine: false,
                     horizontalInterval: top > 0 ? top / 4 : 1,
                     getDrawingHorizontalLine: (v) => FlLine(
-                      color: Colors.grey.shade200,
+                      color: AdminUi.bordaOf(context),
                       strokeWidth: 1,
                     ),
                   ),
@@ -173,7 +175,7 @@ class AdminMpRevenueLineChart extends StatelessWidget {
                           if (v < 0) return const SizedBox.shrink();
                           return Text(
                             _shortMoney(v),
-                            style: TextStyle(fontSize: 9, color: Colors.grey.shade600),
+                            style: TextStyle(fontSize: 9, color: AdminUi.apoioOf(context)),
                           );
                         },
                       ),
@@ -191,7 +193,7 @@ class AdminMpRevenueLineChart extends StatelessWidget {
                             padding: const EdgeInsets.only(top: 6),
                             child: Text(
                               labels[i],
-                              style: TextStyle(fontSize: 9, color: Colors.grey.shade700),
+                              style: TextStyle(fontSize: 9, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700),
                             ),
                           );
                         },
@@ -264,7 +266,7 @@ class _LegendDot extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 6),
-        Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.grey.shade800)),
+        Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: context.isDarkMode ? context.appTextPrimary : Colors.grey.shade800)),
       ],
     );
   }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_context.dart';
+import 'admin_ui_kit.dart';
 
 /// Alerta clicável no Resumo — navega para Usuários com filtro aplicado.
 class AdminAlertItem {
@@ -51,7 +53,7 @@ class AdminAlertCenterPanel extends StatelessWidget {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w800,
-                color: Colors.grey.shade900,
+                color: context.isDarkMode ? context.appTextPrimary : Colors.grey.shade900,
               ),
             ),
           ],
@@ -61,7 +63,7 @@ class AdminAlertCenterPanel extends StatelessWidget {
           return Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Material(
-              color: Colors.white,
+              color: AdminUi.cardOf(context),
               borderRadius: BorderRadius.circular(14),
               child: InkWell(
                 onTap: () => onNavigate(item.id),
@@ -104,7 +106,7 @@ class AdminAlertCenterPanel extends StatelessWidget {
                               item.subtitle,
                               style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.grey.shade700,
+                                color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                                 height: 1.3,
                               ),
                             ),
@@ -115,7 +117,7 @@ class AdminAlertCenterPanel extends StatelessWidget {
                         label: Text('${item.count}'),
                         backgroundColor: item.color,
                         child: Icon(Icons.chevron_right_rounded,
-                            color: Colors.grey.shade600),
+                            color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600),
                       ),
                     ],
                   ),

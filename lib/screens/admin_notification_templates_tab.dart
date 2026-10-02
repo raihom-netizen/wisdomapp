@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../widgets/fast_text_field.dart';
 
 /// Painel Admin: templates globais de push/e-mail (`app_config/notification_templates`).
@@ -123,7 +124,7 @@ class _AdminNotificationTemplatesSectionState
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.grey.shade300),
+        side: BorderSide(color: context.isDarkMode ? context.appBorderSubtle : Colors.grey.shade300),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -149,7 +150,7 @@ class _AdminNotificationTemplatesSectionState
             const SizedBox(height: 8),
             Text(
               'Firestore: app_config/notification_templates — cores, rodapé, resumo diário (20h) e banners rich push.',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              style: TextStyle(fontSize: 12, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600),
             ),
             const SizedBox(height: 16),
             FastTextField(

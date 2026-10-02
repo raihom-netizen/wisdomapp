@@ -2,6 +2,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../theme/theme_context.dart';
 import '../utils/admin_load_guard.dart';
 import '../widgets/admin/admin_page_shell.dart';
 import '../widgets/admin/admin_ui_kit.dart';
@@ -238,7 +239,7 @@ class _AdminUsoModulosTabState extends State<AdminUsoModulosTab> {
     final frac = base == 0 ? 0.0 : (usuarios / base).clamp(0.0, 1.0);
     const cor = AdminUi.teal;
     return Material(
-      color: Colors.white,
+      color: AdminUi.cardOf(context),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -249,7 +250,7 @@ class _AdminUsoModulosTabState extends State<AdminUsoModulosTab> {
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: cor.withValues(alpha: 0.25)),
             gradient: LinearGradient(
-              colors: [cor.withValues(alpha: 0.08), Colors.white],
+              colors: [cor.withValues(alpha: 0.08), AdminUi.cardOf(context)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -266,14 +267,14 @@ class _AdminUsoModulosTabState extends State<AdminUsoModulosTab> {
                     ),
                   ),
                   if (usuarios > 0)
-                    Icon(Icons.chevron_right_rounded, color: Colors.grey.shade500),
+                    Icon(Icons.chevron_right_rounded, color: context.isDarkMode ? context.appTextMuted : Colors.grey.shade500),
                 ],
               ),
               Text(
                 (m['descricao'] ?? '').toString(),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600),
+                style: TextStyle(fontSize: 11.5, color: AdminUi.apoioOf(context)),
               ),
               const SizedBox(height: 10),
               Row(
@@ -297,7 +298,7 @@ class _AdminUsoModulosTabState extends State<AdminUsoModulosTab> {
               Text(
                 '${(frac * 100).toStringAsFixed(frac > 0 && frac < 0.01 ? 1 : 0)}% da base'
                 ' · ${_int(m['registros30'])} registros em 30 dias',
-                style: TextStyle(fontSize: 10.5, color: Colors.grey.shade600),
+                style: TextStyle(fontSize: 10.5, color: AdminUi.apoioOf(context)),
               ),
             ],
           ),
@@ -311,7 +312,7 @@ class _AdminUsoModulosTabState extends State<AdminUsoModulosTab> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(v, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
-            Text(r, style: TextStyle(fontSize: 10.5, color: Colors.grey.shade600)),
+            Text(r, style: TextStyle(fontSize: 10.5, color: AdminUi.apoioOf(context))),
           ],
         ),
       );
@@ -425,7 +426,7 @@ class _ListaModuloSheetState extends State<_ListaModuloSheet> {
                   : ListView.separated(
                       itemCount: lista.length,
                       separatorBuilder: (_, __) =>
-                          Divider(height: 1, color: Colors.grey.shade200),
+                          Divider(height: 1, color: AdminUi.bordaOf(context)),
                       itemBuilder: (_, i) {
                         final l = lista[i];
                         return ListTile(

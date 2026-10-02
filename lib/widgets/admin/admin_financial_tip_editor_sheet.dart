@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import '../../constants/currency_formats.dart';
 import '../../models/finance_tip_bank_entry.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_context.dart';
 import '../../utils/insights_engine.dart';
 import '../../widgets/fast_text_field.dart';
 import '../../widgets/shell_keyboard_bottom_pad.dart';
+import 'admin_ui_kit.dart';
 
 /// Editor moderno de dica financeira (criar / editar).
 class AdminFinancialTipEditorSheet {
@@ -165,11 +167,11 @@ class _EditorBodyState extends State<_EditorBody> {
       hintText: hint,
       helperText: helper,
       filled: true,
-      fillColor: const Color(0xFFF8FAFC),
+      fillColor: context.isDarkMode ? context.appInputFill : const Color(0xFFF8FAFC),
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.grey.shade300),
+        borderSide: BorderSide(color: context.isDarkMode ? context.appChipIdleBorder : Colors.grey.shade300),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
@@ -245,9 +247,9 @@ class _EditorBodyState extends State<_EditorBody> {
       maxChildSize: 0.98,
       builder: (_, scrollCtrl) {
         return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+          decoration: BoxDecoration(
+            color: AdminUi.cardOf(context),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
           ),
           child: Column(
             children: [
@@ -256,7 +258,7 @@ class _EditorBodyState extends State<_EditorBody> {
                 height: 4,
                 margin: const EdgeInsets.only(top: 10, bottom: 8),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
+                  color: context.isDarkMode ? context.appBorderSubtle : Colors.grey.shade300,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -355,14 +357,16 @@ class _EditorBodyState extends State<_EditorBody> {
                         final ic = kFinanceTipIconByKey[k] ?? Icons.lightbulb_outline_rounded;
                         final sel = _iconKey == k;
                         return Material(
-                          color: sel ? _accent.withValues(alpha: 0.15) : Colors.grey.shade100,
+                          color: sel
+                              ? _accent.withValues(alpha: 0.15)
+                              : (context.isDarkMode ? context.appSurfaceHigh : Colors.grey.shade100),
                           borderRadius: BorderRadius.circular(12),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(12),
                             onTap: () => setState(() => _iconKey = k),
                             child: Padding(
                               padding: const EdgeInsets.all(10),
-                              child: Icon(ic, color: sel ? _accent : Colors.grey.shade600, size: 22),
+                              child: Icon(ic, color: sel ? _accent : AdminUi.apoioOf(context), size: 22),
                             ),
                           ),
                         );
@@ -425,14 +429,14 @@ class _EditorBodyState extends State<_EditorBody> {
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: context.isDarkMode ? context.appChipIdleBg : const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: AdminUi.bordaOf(context)),
       ),
       child: SwitchListTile(
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
         subtitle: subtitle != null
-            ? Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey.shade600))
+            ? Text(subtitle, style: TextStyle(fontSize: 12, color: AdminUi.apoioOf(context)))
             : null,
         value: value,
         activeTrackColor: _accent.withValues(alpha: 0.5),

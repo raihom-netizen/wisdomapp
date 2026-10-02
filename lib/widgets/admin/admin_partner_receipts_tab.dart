@@ -8,10 +8,12 @@ import '../../constants/app_brand.dart';
 import '../../constants/app_business_rules.dart';
 import '../../constants/currency_formats.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_context.dart';
 import '../../utils/date_picker_a11y.dart';
 import '../../widgets/fast_text_field.dart';
 import '../../widgets/module_header_premium.dart';
 import 'admin_page_shell.dart';
+import 'admin_ui_kit.dart';
 
 /// Recebimentos Mercado Pago — somente a parte do sócio (read-only).
 class AdminPartnerReceiptsTab extends StatefulWidget {
@@ -207,14 +209,14 @@ class _AdminPartnerReceiptsTabState extends State<AdminPartnerReceiptsTab> {
                   children: [
                     Text('Bruto no período',
                         style: TextStyle(
-                            fontSize: 12, color: Colors.grey.shade700)),
+                            fontSize: 12, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700)),
                     Text(fmt.format(_periodGross),
                         style: const TextStyle(
                             fontSize: 20, fontWeight: FontWeight.w900)),
                   ],
                 ),
               ),
-              Container(width: 1, height: 40, color: Colors.grey.shade300),
+              Container(width: 1, height: 40, color: context.isDarkMode ? context.appBorderSubtle : Colors.grey.shade300),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
@@ -222,7 +224,7 @@ class _AdminPartnerReceiptsTabState extends State<AdminPartnerReceiptsTab> {
                   children: [
                     Text('Líquido no período',
                         style: TextStyle(
-                            fontSize: 12, color: Colors.grey.shade700)),
+                            fontSize: 12, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700)),
                     Text(fmt.format(_periodNet),
                         style: TextStyle(
                             fontSize: 20,
@@ -305,7 +307,7 @@ class _AdminPartnerReceiptsTabState extends State<AdminPartnerReceiptsTab> {
                 child: Padding(
                   padding: const EdgeInsets.all(24),
                   child: Text('Erro ao carregar pagamentos.',
-                      style: TextStyle(color: Colors.grey.shade700)),
+                      style: TextStyle(color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700)),
                 ),
               );
             }
@@ -393,12 +395,12 @@ class _AdminPartnerReceiptsTabState extends State<AdminPartnerReceiptsTab> {
                   return Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade50,
+                      color: context.isDarkMode ? context.appChipIdleBg : Colors.grey.shade50,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
                       'Nenhum recebimento da sua parte no período.',
-                      style: TextStyle(color: Colors.grey.shade600),
+                      style: TextStyle(color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600),
                     ),
                   );
                 }
@@ -421,7 +423,7 @@ class _AdminPartnerReceiptsTabState extends State<AdminPartnerReceiptsTab> {
             style: TextStyle(
                 fontWeight: FontWeight.w600,
                 fontSize: 12,
-                color: Colors.grey.shade700)),
+                color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700)),
         const SizedBox(width: 8),
         OutlinedButton(
           onPressed: () async {
@@ -482,12 +484,12 @@ class _AdminPartnerReceiptsTabState extends State<AdminPartnerReceiptsTab> {
       decoration: BoxDecoration(
         color: isApproved
             ? AppColors.success.withValues(alpha: 0.07)
-            : Colors.grey.shade50,
+            : (context.isDarkMode ? context.appChipIdleBg : Colors.grey.shade50),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isApproved
               ? AppColors.success.withValues(alpha: 0.3)
-              : Colors.grey.shade200,
+              : AdminUi.bordaOf(context),
         ),
       ),
       child: Row(
@@ -510,11 +512,11 @@ class _AdminPartnerReceiptsTabState extends State<AdminPartnerReceiptsTab> {
                     overflow: TextOverflow.ellipsis),
                 Text('Plano: $plan',
                     style: TextStyle(
-                        fontSize: 12, color: Colors.grey.shade700)),
+                        fontSize: 12, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700)),
                 if (dt != null)
                   Text(
                     DateFormat('dd/MM/yyyy HH:mm').format(dt),
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                    style: TextStyle(fontSize: 11, color: AdminUi.apoioOf(context)),
                   ),
               ],
             ),
@@ -527,12 +529,14 @@ class _AdminPartnerReceiptsTabState extends State<AdminPartnerReceiptsTab> {
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 15,
-                  color: isApproved ? AppColors.success : Colors.grey.shade700,
+                  color: isApproved
+                      ? AppColors.success
+                      : (context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700),
                 ),
               ),
               Text(
                 'Líq. ${CurrencyFormats.formatBRL(pNet)}',
-                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                style: TextStyle(fontSize: 11, color: AdminUi.apoioOf(context)),
               ),
             ],
           ),

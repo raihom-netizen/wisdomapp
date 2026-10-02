@@ -8,6 +8,7 @@ import '../constants/currency_formats.dart';
 import '../constants/promo_site_urls.dart';
 import '../services/functions_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/debounced_text_controller.dart';
 import '../utils/user_export_csv_save.dart';
 import '../widgets/brl_amount_text_field.dart';
@@ -121,7 +122,7 @@ class _AdminPromocoesTabState extends State<AdminPromocoesTab> {
                       child: Text(
                         'Com «Exibir quadro no site» e promo ativa: banner no app e aviso no iPhone. '
                         'E-mail: configure o texto e destinatários e use «Enviar e-mails» ou o ícone na lista.',
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade700, height: 1.35),
+                        style: TextStyle(fontSize: 12, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700, height: 1.35),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -175,7 +176,7 @@ class _AdminPromocoesTabState extends State<AdminPromocoesTab> {
                     ? Center(
                         child: Text(
                           'Nenhuma promoção cadastrada.',
-                          style: TextStyle(color: Colors.grey.shade600, fontSize: 15),
+                          style: TextStyle(color: AdminUi.apoioOf(context), fontSize: 15),
                         ),
                       )
                     : ListView.builder(
@@ -233,7 +234,7 @@ class _AdminPromocoesTabState extends State<AdminPromocoesTab> {
                               ),
                               padding: const EdgeInsets.all(2),
                               child: Material(
-                                color: Colors.white,
+                                color: AdminUi.cardOf(context),
                                 borderRadius: BorderRadius.circular(20),
                                 clipBehavior: Clip.antiAlias,
                                 child: ListTile(
@@ -246,7 +247,7 @@ class _AdminPromocoesTabState extends State<AdminPromocoesTab> {
                                     '${price != null ? 'Preço R\$ $price · ' : 'Preço padrão do plano · '}'
                                     '${active ? 'Ativa' : 'Inativa'}$noSite$emailHist',
                                     style: TextStyle(
-                                        fontSize: 12, color: Colors.grey.shade700, height: 1.35),
+                                        fontSize: 12, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700, height: 1.35),
                                   ),
                                   isThreeLine: false,
                                   trailing: Row(
@@ -749,7 +750,7 @@ class _PromoUserPickerDialogState extends State<_PromoUserPickerDialog> {
                   Text(
                     'Visíveis: ${visible.length} · Selecionados: ${_selectedUids.length}'
                     '${visible.isNotEmpty ? ' ($visibleSelected nesta lista)' : ''}',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade800),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade800),
                   ),
                 ],
               ),
@@ -765,7 +766,7 @@ class _PromoUserPickerDialogState extends State<_PromoUserPickerDialog> {
                               ? 'Carregando usuários… ou use “Buscar” no servidor.'
                               : 'Nenhum usuário com os filtros atuais. Ajuste plano / e-mail / texto.',
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                          style: TextStyle(color: AdminUi.apoioOf(context), fontSize: 13),
                         ),
                       ),
                     )
@@ -800,7 +801,7 @@ class _PromoUserPickerDialogState extends State<_PromoUserPickerDialog> {
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w800,
-                                color: AppColors.deepBlueDark,
+                                color: context.isDarkMode ? context.appTextPrimary : AppColors.deepBlueDark,
                               ),
                             ),
                           ),
@@ -813,7 +814,7 @@ class _PromoUserPickerDialogState extends State<_PromoUserPickerDialog> {
                             '${doc.id} · $plan',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                            style: TextStyle(fontSize: 11, color: AdminUi.apoioOf(context)),
                           ),
                           controlAffinity: ListTileControlAffinity.leading,
                           dense: true,
@@ -1632,13 +1633,13 @@ class _PromoEditorDialogState extends State<_PromoEditorDialog> {
                               elevation: 0,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(14),
-                                side: BorderSide(color: Colors.grey.shade200),
+                                side: BorderSide(color: AdminUi.bordaOf(context)),
                               ),
                               child: ExpansionTile(
                                 title: const Text('E-mail em massa (envio manual)'),
                                 subtitle: Text(
                                   'Assunto, corpo e destinatários — só envia ao tocar em «Enviar e-mails» no rodapé.',
-                                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                  style: TextStyle(fontSize: 12, color: AdminUi.apoioOf(context)),
                                 ),
                                 childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                                 children: [
@@ -1679,7 +1680,7 @@ class _PromoEditorDialogState extends State<_PromoEditorDialog> {
                                       style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w700,
-                                        color: Colors.grey.shade800,
+                                        color: context.isDarkMode ? context.appTextPrimary : Colors.grey.shade800,
                                       ),
                                     ),
                                   ),
@@ -1731,7 +1732,7 @@ class _PromoEditorDialogState extends State<_PromoEditorDialog> {
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w700,
-                                color: Colors.grey.shade800,
+                                color: context.isDarkMode ? context.appTextPrimary : Colors.grey.shade800,
                               ),
                             ),
                             const SizedBox(height: 4),
@@ -1840,7 +1841,7 @@ class _PromoEditorDialogState extends State<_PromoEditorDialog> {
                                     style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
-                                      color: Colors.grey.shade700,
+                                      color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                                     ),
                                   ),
                                 ),
@@ -2069,13 +2070,13 @@ class _PromoListBroadcastDialogState extends State<_PromoListBroadcastDialog> {
                       _titleLine,
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        color: Colors.grey.shade800,
+                        color: context.isDarkMode ? context.appTextPrimary : Colors.grey.shade800,
                       ),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       'Envio para toda a base (exceto admin/master). Para lista restrita, abra Editar na promoção.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade700, height: 1.35),
+                      style: TextStyle(fontSize: 12, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700, height: 1.35),
                     ),
                     const SizedBox(height: 14),
                     FastTextField(

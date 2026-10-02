@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../theme/theme_context.dart';
 import '../utils/admin_load_guard.dart';
 import '../widgets/admin/admin_page_shell.dart';
 import '../widgets/admin/admin_ui_kit.dart';
@@ -32,7 +33,7 @@ class LogsAtividadePage extends StatelessWidget {
     final body = _LogsBody(isMaster: isMaster);
     if (embeddedInAdmin) return body;
     return Scaffold(
-      backgroundColor: AdminPageShell.background,
+      backgroundColor: AdminPageShell.backgroundOf(context),
       appBar: AppBar(
         leading: Navigator.of(context).canPop()
             ? IconButton(
@@ -327,14 +328,14 @@ class _LogsBodyState extends State<_LogsBody> {
             else
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: AdminUi.cardOf(context),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade200),
+                  border: Border.all(color: AdminUi.bordaOf(context)),
                 ),
                 child: Column(
                   children: [
                     for (var i = 0; i < visiveis.length; i++) ...[
-                      if (i > 0) Divider(height: 1, color: Colors.grey.shade100),
+                      if (i > 0) Divider(height: 1, color: context.isDarkMode ? context.appBorderSubtle : Colors.grey.shade100),
                       _LogLinha(log: visiveis[i].data()),
                     ],
                   ],
@@ -359,7 +360,7 @@ class _LogsBodyState extends State<_LogsBody> {
               Center(
                 child: Text(
                   'Fim dos logs deste período.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 12, color: AdminUi.apoioOf(context)),
                 ),
               ),
           ],
@@ -438,7 +439,7 @@ class _LogLinha extends StatelessWidget {
                     if (modulo.isNotEmpty) AdminSelo(modulo, cor: cor),
                     Text(
                       (log['adminEmail'] ?? '—').toString(),
-                      style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                      style: TextStyle(color: AdminUi.apoioOf(context), fontSize: 12),
                     ),
                   ],
                 ),
@@ -447,7 +448,7 @@ class _LogLinha extends StatelessWidget {
                   Text(
                     detalhes,
                     style: TextStyle(
-                      color: Colors.grey.shade700,
+                      color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                       fontSize: 12,
                       height: 1.3,
                     ),

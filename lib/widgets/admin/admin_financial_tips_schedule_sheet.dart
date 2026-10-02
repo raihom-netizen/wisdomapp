@@ -5,8 +5,10 @@ import 'package:flutter/services.dart';
 
 import '../../services/financial_tips_home_sync_service.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_context.dart';
 import '../../utils/admin_financial_tip_utils.dart';
 import '../../utils/insights_engine.dart';
+import 'admin_ui_kit.dart';
 
 /// Nomes curtos dos dias (DateTime.weekday: 1=seg … 7=dom).
 const List<({int weekday, String short, String label})> kFinancialTipWeekdays = [
@@ -162,9 +164,9 @@ class _AdminFinancialTipsScheduleSheetState
       expand: false,
       builder: (context, scrollController) {
         return Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFFF4F7FB),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+          decoration: BoxDecoration(
+            color: context.isDarkMode ? context.appScaffold : const Color(0xFFF4F7FB),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
           ),
           child: Column(
             children: [
@@ -220,14 +222,14 @@ class _AdminFinancialTipsScheduleSheetState
                     const SizedBox(height: 6),
                     Text(
                       'Arraste para definir a sequência. Cada dia civil avança para a próxima dica.',
-                      style: TextStyle(color: Colors.grey.shade700, fontSize: 13, height: 1.35),
+                      style: TextStyle(color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700, fontSize: 13, height: 1.35),
                     ),
                     const SizedBox(height: 10),
                     if (_rotationIds.isEmpty)
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Colors.orange.shade50,
+                          color: context.isDarkMode ? context.appAccentSurface(Colors.orange) : Colors.orange.shade50,
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(color: Colors.orange.shade200),
                         ),
@@ -257,13 +259,13 @@ class _AdminFinancialTipsScheduleSheetState
                               : id;
                           return Material(
                             key: ValueKey('rot-$id'),
-                            color: Colors.white,
+                            color: AdminUi.cardOf(context),
                             borderRadius: BorderRadius.circular(14),
                             child: Container(
                               margin: const EdgeInsets.only(bottom: 8),
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(14),
-                                border: Border.all(color: Colors.grey.shade200),
+                                border: Border.all(color: AdminUi.bordaOf(context)),
                               ),
                               child: ListTile(
                                 leading: ReorderableDragStartListener(
@@ -334,7 +336,7 @@ class _AdminFinancialTipsScheduleSheetState
                     Text(
                       'Opcional: escolha qual dica aparece em cada dia. '
                       'Se não marcar, usa a rotação automática.',
-                      style: TextStyle(color: Colors.grey.shade700, fontSize: 13, height: 1.35),
+                      style: TextStyle(color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700, fontSize: 13, height: 1.35),
                     ),
                     const SizedBox(height: 12),
                     ...kFinancialTipWeekdays.map((day) {
@@ -343,7 +345,7 @@ class _AdminFinancialTipsScheduleSheetState
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 10),
                         child: Material(
-                          color: Colors.white,
+                          color: AdminUi.cardOf(context),
                           borderRadius: BorderRadius.circular(16),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(16),
@@ -354,7 +356,7 @@ class _AdminFinancialTipsScheduleSheetState
                                 border: Border.all(
                                   color: hasFix
                                       ? AppColors.primary.withValues(alpha: 0.45)
-                                      : Colors.grey.shade200,
+                                      : AdminUi.bordaOf(context),
                                   width: hasFix ? 2 : 1,
                                 ),
                               ),
@@ -404,7 +406,7 @@ class _AdminFinancialTipsScheduleSheetState
                                               fontSize: 12,
                                               color: hasFix
                                                   ? AppColors.primary
-                                                  : Colors.grey.shade600,
+                                                  : AdminUi.apoioOf(context),
                                               fontWeight: FontWeight.w600,
                                             ),
                                           ),
@@ -470,7 +472,7 @@ class _InfoBanner extends StatelessWidget {
               children: [
                 Text(title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
                 const SizedBox(height: 4),
-                Text(body, style: TextStyle(color: Colors.grey.shade800, height: 1.4, fontSize: 13)),
+                Text(body, style: TextStyle(color: context.isDarkMode ? context.appTextPrimary : Colors.grey.shade800, height: 1.4, fontSize: 13)),
               ],
             ),
           ),
@@ -498,7 +500,7 @@ class _TipPickerList extends StatelessWidget {
       constraints: BoxConstraints(maxHeight: maxH),
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AdminUi.cardOf(context),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Column(

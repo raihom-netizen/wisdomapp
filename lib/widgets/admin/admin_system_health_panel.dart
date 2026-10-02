@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../constants/app_version.dart';
+import '../../theme/theme_context.dart';
+import 'admin_ui_kit.dart';
 
 /// Painel de saúde do sistema no Resumo admin.
 class AdminSystemHealthPanel extends StatelessWidget {
@@ -68,9 +70,9 @@ class AdminSystemHealthPanel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AdminUi.cardOf(context),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: AdminUi.bordaOf(context)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
@@ -105,7 +107,7 @@ class AdminSystemHealthPanel extends StatelessWidget {
                       color: row.ok ? Colors.green.shade700 : Colors.orange.shade800,
                     ),
                     const SizedBox(width: 8),
-                    Icon(row.icon, size: 18, color: Colors.grey.shade600),
+                    Icon(row.icon, size: 18, color: AdminUi.apoioOf(context)),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Column(
@@ -116,7 +118,7 @@ class AdminSystemHealthPanel extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
-                              color: Colors.grey.shade700,
+                              color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
                             ),
                           ),
                           Text(

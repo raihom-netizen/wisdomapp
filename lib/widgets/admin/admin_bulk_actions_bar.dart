@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
+import 'admin_ui_kit.dart';
 
 
 
@@ -60,7 +61,7 @@ class AdminBulkActionsBar extends StatelessWidget {
 
       borderRadius: BorderRadius.circular(16),
 
-      color: Colors.white,
+      color: AdminUi.cardOf(context),
 
       child: Padding(
 

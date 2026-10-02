@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../services/pro_open_finance_config_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 
 /// Admin: teto global de conexões + listagem de add-ons (Mercado Pago) por utilizador.
 class AdminOpenFinanceExtrasTab extends StatefulWidget {
@@ -181,7 +182,7 @@ class _AdminOpenFinanceExtrasTabState extends State<AdminOpenFinanceExtrasTab> {
               'Registos de conexão extra (pagas)',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
+                    color: context.appTextPrimary,
                   ),
             ),
           ),

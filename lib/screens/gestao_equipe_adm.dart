@@ -8,6 +8,7 @@ import '../constants/team_role_config.dart';
 import '../services/admin_permissions_service.dart';
 import '../services/logs_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/admin_load_guard.dart';
 import '../widgets/admin/admin_page_shell.dart';
 import '../widgets/admin/admin_ui_kit.dart';
@@ -543,7 +544,7 @@ class _GestaoEquipeAdmState extends State<GestaoEquipeAdm> {
             const SizedBox(height: 10),
             Text(
               'Só o super admin adiciona, edita ou remove membros.',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              style: TextStyle(fontSize: 12, color: AdminUi.apoioOf(context)),
             ),
           ],
           const SizedBox(height: 12),
@@ -588,14 +589,14 @@ class _GestaoEquipeAdmState extends State<GestaoEquipeAdm> {
   Widget _listaMembros(List<_Membro> lista) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AdminUi.cardOf(context),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: AdminUi.bordaOf(context)),
       ),
       child: Column(
         children: [
           for (var i = 0; i < lista.length; i++) ...[
-            if (i > 0) Divider(height: 1, color: Colors.grey.shade100),
+            if (i > 0) Divider(height: 1, color: context.isDarkMode ? context.appBorderSubtle : Colors.grey.shade100),
             _linhaMembro(lista[i]),
           ],
         ],
@@ -624,7 +625,7 @@ class _GestaoEquipeAdmState extends State<GestaoEquipeAdm> {
             m.email,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+            style: TextStyle(fontSize: 12, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700),
           ),
           if (!largo) ...[
             const SizedBox(height: 4),
@@ -636,7 +637,7 @@ class _GestaoEquipeAdmState extends State<GestaoEquipeAdm> {
                     cor: c, icone: TeamRoleConfig.icon(m.role)),
                 if (ult != null)
                   Text('Último acesso ${df.format(ult)}',
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                      style: TextStyle(fontSize: 11, color: AdminUi.apoioOf(context))),
               ],
             ),
           ],
@@ -702,14 +703,14 @@ class _GestaoEquipeAdmState extends State<GestaoEquipeAdm> {
                     ult == null
                         ? 'Sem registro de acesso'
                         : '${df.format(ult)}${m.plataforma.isEmpty ? '' : ' · ${m.plataforma}'}',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                    style: TextStyle(fontSize: 12, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700),
                   ),
                 ),
                 Expanded(
                   flex: 2,
                   child: Text(
                     m.criadoEm == null ? '' : 'Desde ${DateFormat('MM/yyyy').format(m.criadoEm!)}',
-                    style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600),
+                    style: TextStyle(fontSize: 11.5, color: AdminUi.apoioOf(context)),
                   ),
                 ),
               ],
@@ -744,7 +745,7 @@ class _MatrizPermissoes extends StatelessWidget {
             margin: const EdgeInsets.only(bottom: 8),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AdminUi.cardOf(context),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: TeamRoleConfig.color(papel).withValues(alpha: 0.25)),
             ),
@@ -762,7 +763,7 @@ class _MatrizPermissoes extends StatelessWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(resumo,
-                          style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700)),
+                          style: TextStyle(fontSize: 11.5, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700)),
                     ),
                   ],
                 ),

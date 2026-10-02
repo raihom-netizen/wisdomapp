@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../widgets/fast_text_field.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../widgets/module_header_premium.dart';
 import '../widgets/admin/admin_page_shell.dart';
 
@@ -281,19 +282,19 @@ class _AdminPluggyTabState extends State<AdminPluggyTab> {
               const SizedBox(height: 12),
               Text(
                 _lastTestMessage!,
-                style: TextStyle(fontSize: 13, color: Colors.grey.shade800, height: 1.35),
+                style: TextStyle(fontSize: 13, color: context.isDarkMode ? context.appTextPrimary : Colors.grey.shade800, height: 1.35),
               ),
             ],
             const SizedBox(height: 20),
             Text(
               'Sincronização agendada: Cloud Function `pluggyScheduledItemsSync` (12:00 e 23:00 America/Sao_Paulo) '
               'chama PATCH /items. Para desligar: `scheduledItemSyncEnabled: false` no mesmo documento.',
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade700, height: 1.35),
+              style: TextStyle(fontSize: 11, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700, height: 1.35),
             ),
             const SizedBox(height: 8),
             Text(
               'Documento: app_config/pluggy — leitura restrita a administradores.',
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+              style: TextStyle(fontSize: 11, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600),
             ),
           ],
         );

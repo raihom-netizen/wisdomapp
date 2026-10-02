@@ -2,6 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../theme/theme_context.dart';
+import 'admin_ui_kit.dart';
+
 /// Compara dois utilizadores lado a lado.
 Future<void> showAdminUserCompareSheet(
   BuildContext context, {
@@ -60,7 +63,7 @@ class _CompareBody extends StatelessWidget {
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
+                    color: context.isDarkMode ? context.appBorderSubtle : Colors.grey.shade300,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -71,14 +74,14 @@ class _CompareBody extends StatelessWidget {
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 16),
-              _row('Nome', _v(a, 'name'), _v(b, 'name')),
-              _row('E-mail', _v(a, 'email'), _v(b, 'email')),
-              _row('Plano', _plan(a), _plan(b)),
-              _row('Vencimento', _exp(a), _exp(b)),
-              _row('Convênio', _v(a, 'partnershipId'), _v(b, 'partnershipId')),
-              _row('App', _v(a, 'app'), _v(b, 'app')),
-              _row('Status', _v(a, 'status'), _v(b, 'status')),
-              _row('UID', uidA, uidB),
+              _row(context, 'Nome', _v(a, 'name'), _v(b, 'name')),
+              _row(context, 'E-mail', _v(a, 'email'), _v(b, 'email')),
+              _row(context, 'Plano', _plan(a), _plan(b)),
+              _row(context, 'Vencimento', _exp(a), _exp(b)),
+              _row(context, 'Convênio', _v(a, 'partnershipId'), _v(b, 'partnershipId')),
+              _row(context, 'App', _v(a, 'app'), _v(b, 'app')),
+              _row(context, 'Status', _v(a, 'status'), _v(b, 'status')),
+              _row(context, 'UID', uidA, uidB),
             ],
           );
         },
@@ -108,7 +111,7 @@ class _CompareBody extends StatelessWidget {
     return '—';
   }
 
-  Widget _row(String label, String left, String right) {
+  Widget _row(BuildContext context, String label, String left, String right) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Column(
@@ -118,14 +121,14 @@ class _CompareBody extends StatelessWidget {
               style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
-                  color: Colors.grey.shade700)),
+                  color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700)),
           const SizedBox(height: 6),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: _cell(left)),
+              Expanded(child: _cell(context, left)),
               const SizedBox(width: 8),
-              Expanded(child: _cell(right)),
+              Expanded(child: _cell(context, right)),
             ],
           ),
         ],
@@ -133,13 +136,13 @@ class _CompareBody extends StatelessWidget {
     );
   }
 
-  Widget _cell(String text) {
+  Widget _cell(BuildContext context, String text) {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
+        color: context.isDarkMode ? context.appSurfaceHigh : Colors.grey.shade50,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: AdminUi.bordaOf(context)),
       ),
       child: Text(text, style: const TextStyle(fontSize: 13)),
     );

@@ -12,7 +12,9 @@ import '../services/billing_service.dart';
 import '../services/logs_service.dart';
 import '../services/mp_checkout_pricing_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/debounced_text_controller.dart';
+import '../widgets/admin/admin_ui_kit.dart';
 import '../widgets/brl_amount_text_field.dart';
 
 /// Parâmetros de custo estimado (editáveis no próprio painel → `app_config/premium_pro_monitor`).
@@ -423,7 +425,7 @@ class _AdminPremiumProMonitorTabState extends State<AdminPremiumProMonitorTab> {
                                     FocusManager.instance.primaryFocus?.unfocus(),
                                 decoration: InputDecoration(
                                   filled: true,
-                                  fillColor: Colors.white,
+                                  fillColor: AdminUi.cardOf(context),
                                   prefixIcon: const Icon(Icons.search_rounded),
                                   hintText: 'Buscar por nome, e-mail ou UID',
                                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
@@ -438,7 +440,7 @@ class _AdminPremiumProMonitorTabState extends State<AdminPremiumProMonitorTab> {
                                   child: Text(
                                     q.isEmpty ? 'Nenhum utilizador com plano legado encontrado.' : 'Nenhum resultado para a busca.',
                                     textAlign: TextAlign.center,
-                                    style: TextStyle(color: Colors.blueGrey.shade600),
+                                    style: TextStyle(color: context.isDarkMode ? context.appTextSecondary : Colors.blueGrey.shade600),
                                   ),
                                 ),
                             ],
@@ -597,7 +599,7 @@ class _AdminPremiumProMonitorTabState extends State<AdminPremiumProMonitorTab> {
             const SizedBox(height: 4),
             Text(
               'Valores são estimativas para acompanhar margem. Ajuste conforme sua fatura Pluggy, uso Firestore e taxa real Mercado Pago.',
-              style: TextStyle(fontSize: 12, color: Colors.blueGrey.shade600, height: 1.35),
+              style: TextStyle(fontSize: 12, color: context.isDarkMode ? context.appTextSecondary : Colors.blueGrey.shade600, height: 1.35),
             ),
             const SizedBox(height: 12),
             Row(
@@ -695,7 +697,7 @@ class _AdminPremiumProMonitorTabState extends State<AdminPremiumProMonitorTab> {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: BorderSide(color: Colors.blueGrey.shade100)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: BorderSide(color: context.isDarkMode ? AdminUi.bordaOf(context) : Colors.blueGrey.shade100)),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -714,8 +716,8 @@ class _AdminPremiumProMonitorTabState extends State<AdminPremiumProMonitorTab> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(name, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-                      Text(email, style: TextStyle(fontSize: 12, color: Colors.blueGrey.shade600)),
-                      Text('UID: $uid', style: TextStyle(fontSize: 10, color: Colors.blueGrey.shade400)),
+                      Text(email, style: TextStyle(fontSize: 12, color: context.isDarkMode ? context.appTextSecondary : Colors.blueGrey.shade600)),
+                      Text('UID: $uid', style: TextStyle(fontSize: 10, color: context.isDarkMode ? context.appTextMuted : Colors.blueGrey.shade400)),
                     ],
                   ),
                 ),
@@ -827,9 +829,9 @@ class _AdminPremiumProMonitorTabState extends State<AdminPremiumProMonitorTab> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: context.isDarkMode ? context.appChipIdleBg : const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blueGrey.shade100),
+        border: Border.all(color: context.isDarkMode ? AdminUi.bordaOf(context) : Colors.blueGrey.shade100),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -839,7 +841,7 @@ class _AdminPremiumProMonitorTabState extends State<AdminPremiumProMonitorTab> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: TextStyle(fontSize: 10, color: Colors.blueGrey.shade600, fontWeight: FontWeight.w600)),
+              Text(label, style: TextStyle(fontSize: 10, color: context.isDarkMode ? context.appTextSecondary : Colors.blueGrey.shade600, fontWeight: FontWeight.w600)),
               Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
             ],
           ),
@@ -905,8 +907,8 @@ class _AdminPremiumProMonitorTabState extends State<AdminPremiumProMonitorTab> {
               ),
               const SizedBox(height: 12),
               Text(name, style: const TextStyle(fontWeight: FontWeight.w800)),
-              Text(email, style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
-              SelectableText('UID: $uid', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+              Text(email, style: TextStyle(fontSize: 13, color: ctx.isDarkMode ? ctx.appTextSecondary : Colors.grey.shade700)),
+              SelectableText('UID: $uid', style: TextStyle(fontSize: 11, color: AdminUi.apoioOf(ctx))),
             ],
           ),
         ),

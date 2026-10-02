@@ -7,7 +7,9 @@ import '../../services/admin_partner_stats_service.dart';
 import '../../services/mp_checkout_pricing_service.dart';
 import '../../widgets/admin_menu_lateral.dart';
 import '../../widgets/skeleton_loader.dart';
+import '../../theme/theme_context.dart';
 import 'admin_alert_center.dart';
+import 'admin_ui_kit.dart';
 
 typedef AdminPartnerNavigate = void Function(AdminMenuItem item);
 typedef AdminPartnerAlertNavigate = void Function(String alertId);
@@ -81,7 +83,7 @@ class _AdminPartnerResumoTabState extends State<AdminPartnerResumoTab> {
           if (_lastUpdate != null)
             Text(
               'Atualizado às ${DateFormat('HH:mm').format(_lastUpdate!)}',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              style: TextStyle(fontSize: 12, color: AdminUi.apoioOf(context)),
             ),
           const SizedBox(height: 12),
           _buildPeriodFilter(),
@@ -241,7 +243,7 @@ class _AdminPartnerResumoTabState extends State<AdminPartnerResumoTab> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AdminUi.cardOf(context),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: Colors.orange.shade300),
       ),
@@ -272,7 +274,7 @@ class _AdminPartnerResumoTabState extends State<AdminPartnerResumoTab> {
             style: TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 13,
-                color: Colors.grey.shade700)),
+                color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700)),
         ..._periodOptions.map((d) {
           final selected = _periodDays == d;
           final label = d == 365 ? '12 meses' : '$d dias';
@@ -416,12 +418,12 @@ class _PartnerMetricCard extends StatelessWidget {
                     style: TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w900,
-                        color: Colors.grey.shade900)),
+                        color: context.isDarkMode ? context.appTextPrimary : Colors.grey.shade900)),
                 if (subValue != null) ...[
                   const SizedBox(height: 4),
                   Text(subValue!,
                       style: TextStyle(
-                          fontSize: 10, color: Colors.grey.shade600)),
+                          fontSize: 10, color: AdminUi.apoioOf(context))),
                 ],
                 const SizedBox(height: 6),
                 Row(
@@ -470,7 +472,7 @@ class _PartnerForecastPanel extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: AdminUi.cardOf(context),
             borderRadius: BorderRadius.circular(18),
             border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.25)),
             boxShadow: [
@@ -501,13 +503,14 @@ class _PartnerForecastPanel extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 '$totalPremiums premium(s) × ${fmt.format(monthly)} × ${partnerSharePercent.toStringAsFixed(0)}%',
-                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                style: TextStyle(fontSize: 11, color: AdminUi.apoioOf(context)),
               ),
               const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
                     child: _miniMetric(
+                      context,
                       'Previsto',
                       fmt.format(forecast),
                       Colors.blue.shade700,
@@ -516,6 +519,7 @@ class _PartnerForecastPanel extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: _miniMetric(
+                      context,
                       'Realizado',
                       fmt.format(partnerGrossRealized),
                       Colors.green.shade700,
@@ -524,6 +528,7 @@ class _PartnerForecastPanel extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: _miniMetric(
+                      context,
                       gap >= 0 ? 'A receber' : 'Acima',
                       fmt.format(gap.abs()),
                       gap >= 0 ? Colors.orange.shade800 : Colors.teal.shade700,
@@ -538,7 +543,7 @@ class _PartnerForecastPanel extends StatelessWidget {
     );
   }
 
-  Widget _miniMetric(String title, String value, Color color) {
+  Widget _miniMetric(BuildContext context, String title, String value, Color color) {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -550,7 +555,7 @@ class _PartnerForecastPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(title,
-              style: TextStyle(fontSize: 10, color: Colors.grey.shade700)),
+              style: TextStyle(fontSize: 10, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700)),
           Text(value,
               style: TextStyle(
                   fontSize: 13, fontWeight: FontWeight.w800, color: color)),
@@ -590,7 +595,7 @@ class _PartnerRevenueChart extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: AdminUi.cardOf(context),
             borderRadius: BorderRadius.circular(18),
             border: Border.all(color: color.withValues(alpha: 0.25)),
           ),
@@ -644,7 +649,7 @@ class _PartnerRevenueChart extends StatelessWidget {
                               child: Text(labels[i],
                                   style: TextStyle(
                                       fontSize: 9,
-                                      color: Colors.grey.shade600)),
+                                      color: AdminUi.apoioOf(context))),
                             );
                           },
                         ),
