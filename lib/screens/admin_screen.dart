@@ -2292,6 +2292,14 @@ class _AdminScreenState extends State<AdminScreen> {
                             ),
                           );
                         }
+                        if (snap.hasError && !snap.hasData) {
+                          // Antes sumia calado; agora avisa com «Tentar de novo».
+                          return AdminErroCard(
+                            erro: snap.error,
+                            titulo: 'Os indicadores de usuários não carregaram',
+                            onTentar: _reloadResumoStats,
+                          );
+                        }
                         if (!snap.hasData) return const SizedBox.shrink();
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 16),
