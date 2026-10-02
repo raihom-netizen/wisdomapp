@@ -41,6 +41,107 @@ service cloud.firestore {
     function isOwner(userId) {
       return request.auth.uid == userId;
     }
+
+    // ============================================================
+    // Compartilhamento de dados (sub-login) — igual ao Controle Total.
+    // O titular autoriza até 4 e-mails (users/{titular}.authorizedDelegateEmails)
+    // e cria um índice por e-mail em delegate_email_index/{email}. Quem entra
+    // com um desses e-mails (Google/Apple, e-mail verificado) lê e grava os
+    // dados do titular. Vale só enquanto o e-mail estiver NOS DOIS lugares:
+    // na lista do titular e no índice ativo apontando para ele.
+    // ============================================================
+    function authEmailKey() {
+      let e = request.auth.token.get('email', '');
+      return e is string ? e.lower() : '';
+    }
+
+    function authEmailVerified() {
+      return request.auth.token.get('email_verified', false) == true;
+    }
+
+    // E-mail está na lista do titular (campo novo ou o antigo de um e-mail só).
+    function principalListsEmail(data, e) {
+      return data.get('authorizedDelegateEmails', []).hasAny([e])
+        || data.get('authorizedDelegateEmail', '') == e;
+    }
+
+    function isDelegateFor(userId) {
+      let e = authEmailKey();
+      let idx = /databases/$(database)/documents/delegate_email_index/$(e);
+      let owner = /databases/$(database)/documents/users/$(userId);
+      return isSignedIn()
+        && e != ''
+        && authEmailVerified()
+        && request.auth.uid != userId
+        && exists(idx)
+        && get(idx).data.get('principalUid', '') == userId
+        && get(idx).data.get('active', false) == true
+        && exists(owner)
+        && principalListsEmail(get(owner).data, e);
+    }
+
+    function canAccessUserData(userId) {
+      return isOwner(userId) || isDelegateFor(userId);
+    }
+
+    // Lista de e-mails autorizados no perfil: no máximo 4.
+    function validDelegateList(data) {
+      return !('authorizedDelegateEmails' in data)
+        || (data.authorizedDelegateEmails is list
+            && data.authorizedDelegateEmails.size() <= 4);
+    }
+
+    function principalAfter() {
+      return getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    match /delegate_email_index/{emailKey} {
+      // `resource == null`: o titular consulta o índice ANTES de gravar para
+      // saber se o e-mail já é de outra conta; documento inexistente não
+      // revela nada.
+      allow read: if isSignedIn() && (
+        (authEmailKey() == emailKey && authEmailVerified())
+        || resource == null
+        || resource.data.get('principalUid', '') == request.auth.uid
+        || isAdmin()
+      );
+      // Titular cria/atualiza o índice de um e-mail que, NO MESMO LOTE, está
+      // na própria lista (getAfter) — assim a lista de 4 é o teto real. Não
+      // pode tomar o índice de outra conta nem autorizar o próprio e-mail.
+      allow create: if isSignedIn() && (
+        isAdmin()
+        || (
+          request.resource.data.get('principalUid', '') == request.auth.uid
+          && emailKey != authEmailKey()
+          && request.resource.data.get('active', false) == true
+          && principalListsEmail(principalAfter(), emailKey)
+          && validDelegateList(principalAfter())
+        )
+      );
+      allow update: if isSignedIn() && (
+        isAdmin()
+        || (
+          resource.data.get('principalUid', '') == request.auth.uid
+          && request.resource.data.get('principalUid', '') == request.auth.uid
+          && principalListsEmail(principalAfter(), emailKey)
+          && validDelegateList(principalAfter())
+        )
+        // O próprio convidado só marca que entrou (status «Ativo» no card do
+        // titular): delegateUid = ele mesmo, acceptedAt e lastSeenAt.
+        || (
+          authEmailKey() == emailKey
+          && authEmailVerified()
+          && resource.data.get('active', false) == true
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['delegateUid', 'acceptedAt', 'lastSeenAt'])
+          && request.resource.data.get('delegateUid', '') == request.auth.uid
+        )
+      );
+      allow delete: if isSignedIn() && (
+        resource.data.get('principalUid', '') == request.auth.uid || isAdmin()
+      );
+    }
+
     match /cpf_index/{cpf} {
       allow read: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
       allow create, update: if isSignedIn() && request.resource.data.uid == request.auth.uid;
@@ -121,26 +222,30 @@ service cloud.firestore {
       allow update: if isAdmin();
     }
     match /users/{userId} {
-      allow read: if isSignedIn() && (isOwner(userId) || isAdminPanelReader());
-      allow create: if isSignedIn() && isOwner(userId);
+      // Sub-login autorizado lê o perfil do titular (licença, plano, nome) para
+      // abrir o painel com os dados dele. Gravar o perfil continua só do dono.
+      allow read: if isSignedIn() && (canAccessUserData(userId) || isAdminPanelReader());
+      allow create: if isSignedIn() && isOwner(userId)
+        && validDelegateList(request.resource.data);
       allow update: if isAdmin()
         || (isOwner(userId)
             && request.resource.data.get('role', null) == resource.data.get('role', null)
             && request.resource.data.get('plan', null) == resource.data.get('plan', null)
             && request.resource.data.get('licenseExpiresAt', null) == resource.data.get('licenseExpiresAt', null)
-            && request.resource.data.get('planStatus', null) == resource.data.get('planStatus', null));
+            && request.resource.data.get('planStatus', null) == resource.data.get('planStatus', null)
+            && validDelegateList(request.resource.data));
       allow delete: if isAdmin();
     }
-    // Escalas e configurações (Horas extras, etc.): dono pode ler/escrever. Bloqueio de licença é no app.
+    // Escalas e configurações (Horas extras, etc.): dono ou e-mail autorizado. Bloqueio de licença é no app.
     match /users/{userId}/scales/{scaleId} {
-      allow read, write: if isSignedIn() && request.auth.uid == userId;
+      allow read, write: if isSignedIn() && canAccessUserData(userId);
     }
     match /users/{userId}/settings/{docId} {
-      allow read, write: if isSignedIn() && request.auth.uid == userId;
+      allow read, write: if isSignedIn() && canAccessUserData(userId);
     }
     // Add-on Open Finance: leitura de entitlements; escrita só Cloud Functions.
     match /users/{userId}/bank_connection_entitlements/{docId} {
-      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow read: if isSignedIn() && (canAccessUserData(userId) || isAdmin());
       allow create, update, delete: if false;
     }
     match /users/{userId}/entitlement_payments/{docId} {
@@ -152,6 +257,16 @@ service cloud.firestore {
     }
     match /users/{userId}/{allPaths=**} {
       allow read, write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+    }
+    // Sub-login (e-mail autorizado pelo titular): demais dados do titular —
+    // financeiro, agenda, objetivos, metas, tokens de push… `{sub}` exige ao
+    // menos uma subcoleção: o doc users/{titular} em si NÃO entra aqui (o
+    // sub-login não mexe em plano, licença nem na lista de autorizados), e
+    // as pastas só do servidor ficam de fora.
+    match /users/{userId}/{sub}/{rest=**} {
+      allow read, write: if isSignedIn()
+        && !(sub in ['private', 'entitlement_payments', 'bank_connection_entitlements'])
+        && isDelegateFor(userId);
     }
   }
 }

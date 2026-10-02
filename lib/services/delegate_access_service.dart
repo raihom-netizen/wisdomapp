@@ -330,10 +330,9 @@ class DelegateAccessService {
 
   /// Titular ativou compartilhamento (tem e-mail autorizado cadastrado).
   static bool principalHasSharingEnabled(Map<String, dynamic>? userData) {
-    final e =
-        (userData?['authorizedDelegateEmail'] as String?)?.trim().toLowerCase() ??
-            '';
-    return e.isNotEmpty;
+    // Vale qualquer um da lista: quem removeu o primeiro e manteve os outros
+    // continua compartilhando.
+    return authorizedEmailsFrom(userData).isNotEmpty;
   }
 
   /// Bloqueia painel antes do 1º vínculo? Não — sub-login fixo em cache + listener.
@@ -473,6 +472,7 @@ class DelegateAccessService {
       ensureDelegateIndexListener();
       unawaited(_loadPrincipalNameLazy(principalUid));
       unawaited(_syncDelegateSessionProfile(user.uid, principalUid));
+      unawaited(_markInviteAccepted(authEmail, user.uid));
     } catch (_) {
       if (await isDelegatePinned() && isActingAsDelegate) {
         ensureDelegateIndexListener();
@@ -499,6 +499,11 @@ class DelegateAccessService {
       _lastPinnedServerCheck = now;
       await resolveAfterLogin(blocking: false);
       ensureDelegateIndexListener();
+      final user = FirebaseAuth.instance.currentUser;
+      final email = user?.email?.trim().toLowerCase() ?? '';
+      if (user != null && email.isNotEmpty) {
+        unawaited(_markInviteAccepted(email, user.uid));
+      }
       return;
     }
     await resolveAfterLogin(blocking: blocking);
@@ -567,89 +572,344 @@ class DelegateAccessService {
     } catch (_) {}
   }
 
-  static Future<String?> saveAuthorizedEmail({
+  /// Sub-login: marca no índice que o convite foi aceito (e quando foi o
+  /// último acesso). É o que o titular vê como «Ativo» × «Convite pendente».
+  /// As regras só deixam o próprio e-mail gravar estes 3 campos.
+  static DateTime? _lastInviteMarkAt;
+
+  static Future<void> _markInviteAccepted(String authEmail, String uid) async {
+    final key = emailDocKey(authEmail);
+    if (key.isEmpty || uid.isEmpty) return;
+    final now = DateTime.now();
+    if (_lastInviteMarkAt != null &&
+        now.difference(_lastInviteMarkAt!) < const Duration(hours: 6)) {
+      return;
+    }
+    try {
+      final ref =
+          FirebaseFirestore.instance.collection('delegate_email_index').doc(key);
+      final snap = await ref.get();
+      final data = snap.data();
+      if (!snap.exists || data == null || data['active'] != true) return;
+      final principal = (data['principalUid'] as String?)?.trim() ?? '';
+      if (principal.isEmpty || principal == uid) return;
+      final patch = <String, dynamic>{
+        'delegateUid': uid,
+        'lastSeenAt': FieldValue.serverTimestamp(),
+      };
+      if (data['acceptedAt'] == null) {
+        patch['acceptedAt'] = FieldValue.serverTimestamp();
+      }
+      await ref.update(patch);
+      _lastInviteMarkAt = now;
+    } catch (_) {}
+  }
+
+  /// Quantas pessoas a licença pode autorizar ao mesmo tempo (igual ao
+  /// Controle Total). Cada uma entra com o próprio Google/Apple e continua sem
+  /// licença própria — o vínculo é com quem cadastrou.
+  static const int maxAuthorizedEmails = 4;
+
+  /// E-mails autorizados da licença, em ordem de cadastro.
+  ///
+  /// Lê o campo novo (`authorizedDelegateEmails`) e, quando ele ainda não
+  /// existe, o campo antigo de um e-mail só — nenhuma licença precisa ser
+  /// migrada para continuar funcionando.
+  static List<String> authorizedEmailsFrom(Map<String, dynamic>? userData) {
+    final lista = userData?['authorizedDelegateEmails'];
+    final out = <String>[];
+    if (lista is List) {
+      for (final e in lista) {
+        final k = emailDocKey(e.toString());
+        if (k.isNotEmpty && !out.contains(k)) out.add(k);
+      }
+    }
+    final antigo =
+        emailDocKey((userData?['authorizedDelegateEmail'] ?? '').toString());
+    if (antigo.isNotEmpty && !out.contains(antigo)) out.insert(0, antigo);
+    return out;
+  }
+
+  /// Lê os e-mails autorizados direto do Firestore.
+  static Future<List<String>> loadAuthorizedEmails(String principalUid) async {
+    final uid = principalUid.trim();
+    if (uid.isEmpty) return const [];
+    try {
+      final snap =
+          await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      return authorizedEmailsFrom(snap.data());
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Lista com a situação de cada pessoa (pendente / ativo / sem acesso).
+  static Future<List<DelegateInvite>> loadInvites(String principalUid) async {
+    final uid = principalUid.trim();
+    final emails = await loadAuthorizedEmails(uid);
+    if (emails.isEmpty) return const [];
+    final db = FirebaseFirestore.instance;
+    final out = await Future.wait(emails.map((email) async {
+      try {
+        final snap =
+            await db.collection('delegate_email_index').doc(email).get();
+        final d = snap.data();
+        if (!snap.exists ||
+            d == null ||
+            d['active'] != true ||
+            (d['principalUid'] ?? '').toString().trim() != uid) {
+          return DelegateInvite(
+              email: email, status: DelegateInviteStatus.semAcesso);
+        }
+        final aceito = d['acceptedAt'];
+        final visto = d['lastSeenAt'];
+        return DelegateInvite(
+          email: email,
+          status: aceito == null
+              ? DelegateInviteStatus.pendente
+              : DelegateInviteStatus.ativo,
+          acceptedAt: aceito is Timestamp ? aceito.toDate() : null,
+          lastSeenAt: visto is Timestamp ? visto.toDate() : null,
+        );
+      } catch (_) {
+        return DelegateInvite(
+            email: email, status: DelegateInviteStatus.semAcesso);
+      }
+    }));
+    return out;
+  }
+
+  /// Adiciona (ou troca) um e-mail autorizado na lista.
+  ///
+  /// `substituindo` é o e-mail que está sendo editado — ele sai da lista e do
+  /// índice no mesmo lote, para não sobrar acesso de quem foi trocado.
+  /// Passar o MESMO e-mail em `substituindo` e `newEmail` reativa o índice.
+  static Future<String?> saveAuthorizedEmailInList({
     required String principalUid,
     required String principalEmail,
     required String newEmail,
+    String substituindo = '',
   }) async {
+    final uid = principalUid.trim();
+    if (uid.isEmpty) return 'Sessão inválida. Saia e entre novamente no app.';
     final clean = emailDocKey(newEmail);
     if (!isValidEmail(clean)) return 'Informe um e-mail válido.';
     final own = emailDocKey(principalEmail);
     if (clean == own) {
       return 'O e-mail autorizado não pode ser o mesmo da licença principal.';
     }
+    final antigo = emailDocKey(substituindo);
 
-    final db = FirebaseFirestore.instance;
-    final indexRef = db.collection('delegate_email_index').doc(clean);
-    final existing = await indexRef.get();
-    if (existing.exists) {
-      final otherUid =
-          (existing.data()?['principalUid'] as String?)?.trim() ?? '';
-      if (otherUid.isNotEmpty && otherUid != principalUid) {
-        return 'Este e-mail já está autorizado em outra conta.';
+    try {
+      final db = FirebaseFirestore.instance;
+      final userRef = db.collection('users').doc(uid);
+      final userSnap = await userRef.get();
+      final atuais = authorizedEmailsFrom(userSnap.data());
+      if (atuais.contains(clean) && clean != antigo) {
+        return 'Esse e-mail já está autorizado nesta licença.';
       }
-    }
+      final restantes = atuais.where((e) => e != antigo && e != clean).toList();
+      if (restantes.length >= maxAuthorizedEmails) {
+        return 'Você já tem $maxAuthorizedEmails pessoas autorizadas. '
+            'Remova uma para adicionar outra.';
+      }
 
-    final userRef = db.collection('users').doc(principalUid);
-    final userSnap = await userRef.get();
-    final oldEmail =
-        emailDocKey((userSnap.data()?['authorizedDelegateEmail'] as String?) ?? '');
+      final indexRef = db.collection('delegate_email_index').doc(clean);
+      final existing = await indexRef.get();
+      if (existing.exists) {
+        final otherUid =
+            (existing.data()?['principalUid'] as String?)?.trim() ?? '';
+        if (otherUid.isNotEmpty && otherUid != uid) {
+          return 'Este e-mail já está autorizado em outra conta.';
+        }
+      }
 
-    final batch = db.batch();
-    batch.set(userRef, {
-      'authorizedDelegateEmail': clean,
-      'delegateSharingEnabled': true,
-      'authorizedDelegateUpdatedAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-    batch.set(indexRef, {
-      'principalUid': principalUid,
-      'principalEmail': own,
-      'active': true,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-    if (oldEmail.isNotEmpty && oldEmail != clean) {
-      batch.set(
-        db.collection('delegate_email_index').doc(oldEmail),
-        {
-          'active': false,
-          'revokedAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
-      );
-      batch.delete(db.collection('delegate_email_index').doc(oldEmail));
+      String? delegateUidAntigo;
+      if (antigo.isNotEmpty && antigo != clean) {
+        delegateUidAntigo = await _delegateUidOf(antigo);
+      }
+
+      final novos = [...restantes, clean];
+      final batch = db.batch();
+      batch.set(userRef, {
+        'authorizedDelegateEmails': novos,
+        // O campo antigo continua com o primeiro da lista: o painel admin, as
+        // functions e as versões antigas do app leem ele.
+        'authorizedDelegateEmail': novos.first,
+        'delegateSharingEnabled': true,
+        'authorizedDelegateUpdatedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      batch.set(indexRef, {
+        'principalUid': uid,
+        'principalEmail': own,
+        'active': true,
+        'invitedAt': existing.exists
+            ? (existing.data()?['invitedAt'] ?? FieldValue.serverTimestamp())
+            : FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      if (antigo.isNotEmpty && antigo != clean) {
+        // Só apagar: marcar `active: false` e apagar o mesmo documento no
+        // mesmo lote é escrita dupla no mesmo caminho e derrubava o lote
+        // inteiro (o e-mail NOVO ia junto).
+        batch.delete(db.collection('delegate_email_index').doc(antigo));
+      }
+      await batch.commit();
+      if (delegateUidAntigo != null) {
+        unawaited(_removeDelegatePushTokens(uid, delegateUidAntigo));
+      }
+      return null;
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        return 'Sem permissão para salvar agora. Saia e entre de novo no app; '
+            'se continuar, o e-mail pode já estar autorizado em outra conta.';
+      }
+      if (e.code == 'unavailable' || e.code == 'deadline-exceeded') {
+        return 'Sem conexão com o servidor. Tente de novo em instantes.';
+      }
+      return 'Não consegui salvar o e-mail autorizado (${e.code}). Tente de novo.';
+    } catch (_) {
+      return 'Não foi possível salvar o e-mail autorizado. Tente de novo.';
     }
-    await batch.commit();
-    return null;
   }
 
+  /// Tira UM e-mail da lista (e o acesso dele), mantendo os outros.
+  static Future<String?> removeAuthorizedEmailFromList({
+    required String principalUid,
+    required String email,
+  }) async {
+    final uid = principalUid.trim();
+    final alvo = emailDocKey(email);
+    if (uid.isEmpty || alvo.isEmpty) return 'Sessão inválida.';
+    try {
+      final db = FirebaseFirestore.instance;
+      final userRef = db.collection('users').doc(uid);
+      final userSnap = await userRef.get();
+      final restantes =
+          authorizedEmailsFrom(userSnap.data()).where((e) => e != alvo).toList();
+      final delegateUid = await _delegateUidOf(alvo);
+
+      final batch = db.batch();
+      batch.set(userRef, {
+        'authorizedDelegateEmails': restantes,
+        'authorizedDelegateEmail': restantes.isEmpty ? '' : restantes.first,
+        'delegateSharingEnabled': restantes.isNotEmpty,
+        'authorizedDelegateUpdatedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      batch.delete(db.collection('delegate_email_index').doc(alvo));
+      await batch.commit();
+      if (delegateUid != null) {
+        unawaited(_removeDelegatePushTokens(uid, delegateUid));
+      }
+      return null;
+    } on FirebaseException catch (e) {
+      return 'Não consegui remover agora (${e.code}). Tente de novo.';
+    } catch (_) {
+      return 'Não foi possível remover. Tente de novo.';
+    }
+  }
+
+  /// Painel admin: troca o primeiro e-mail (ou cadastra, se não houver).
+  static Future<String?> saveAuthorizedEmail({
+    required String principalUid,
+    required String principalEmail,
+    required String newEmail,
+  }) async {
+    final atuais = await loadAuthorizedEmails(principalUid);
+    return saveAuthorizedEmailInList(
+      principalUid: principalUid,
+      principalEmail: principalEmail,
+      newEmail: newEmail,
+      substituindo: atuais.isEmpty ? '' : atuais.first,
+    );
+  }
+
+  static Future<String?> _delegateUidOf(String email) async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('delegate_email_index')
+          .doc(emailDocKey(email))
+          .get();
+      final v = (snap.data()?['delegateUid'] ?? '').toString().trim();
+      return v.isEmpty ? null : v;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// O aparelho do sub-login grava o token de push na pasta do titular (é
+  /// onde ele trabalha). Ao tirar o acesso, o push do titular não pode
+  /// continuar chegando no celular de quem saiu.
+  static Future<void> _removeDelegatePushTokens(
+    String principalUid,
+    String delegateUid,
+  ) async {
+    if (principalUid == delegateUid) return;
+    final userRef =
+        FirebaseFirestore.instance.collection('users').doc(principalUid);
+    for (final sub in const ['fcmTokens', 'deviceTokens']) {
+      try {
+        final q = await userRef
+            .collection(sub)
+            .where('authUid', isEqualTo: delegateUid)
+            .limit(20)
+            .get();
+        for (final d in q.docs) {
+          await d.reference.delete();
+        }
+      } catch (_) {}
+    }
+  }
+
+  /// Tira TODOS os e-mails autorizados (painel admin «Remover»).
   static Future<void> removeAuthorizedEmail(String principalUid) async {
-    final db = FirebaseFirestore.instance;
-    final userRef = db.collection('users').doc(principalUid);
-    final userSnap = await userRef.get();
-    final oldEmail =
-        emailDocKey((userSnap.data()?['authorizedDelegateEmail'] as String?) ?? '');
-
-    final batch = db.batch();
-    batch.set(userRef, {
-      'authorizedDelegateEmail': FieldValue.delete(),
-      'delegateSharingEnabled': false,
-      'authorizedDelegateUpdatedAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-    if (oldEmail.isNotEmpty) {
-      batch.set(
-        db.collection('delegate_email_index').doc(oldEmail),
-        {
-          'active': false,
-          'revokedAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
-      );
-      batch.delete(db.collection('delegate_email_index').doc(oldEmail));
+    final emails = await loadAuthorizedEmails(principalUid);
+    if (emails.isEmpty) {
+      // Pode ter sobrado só o campo antigo vazio/inconsistente: limpa o perfil.
+      await FirebaseFirestore.instance.collection('users').doc(principalUid).set({
+        'authorizedDelegateEmails': <String>[],
+        'authorizedDelegateEmail': '',
+        'delegateSharingEnabled': false,
+        'authorizedDelegateUpdatedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      return;
     }
-    await batch.commit();
+    for (final e in emails) {
+      final erro = await removeAuthorizedEmailFromList(
+        principalUid: principalUid,
+        email: e,
+      );
+      if (erro != null) throw Exception(erro);
+    }
   }
+}
+
+/// Situação de uma pessoa autorizada, vista pelo titular.
+enum DelegateInviteStatus {
+  /// Autorizado, mas a pessoa ainda não entrou no app com esse e-mail.
+  pendente,
+
+  /// Já entrou com o e-mail autorizado e está usando os dados da licença.
+  ativo,
+
+  /// Está na lista do titular, mas o índice de acesso não existe (gravação
+  /// antiga que falhou pela metade). Reativar resolve.
+  semAcesso,
+}
+
+class DelegateInvite {
+  const DelegateInvite({
+    required this.email,
+    required this.status,
+    this.acceptedAt,
+    this.lastSeenAt,
+  });
+
+  final String email;
+  final DelegateInviteStatus status;
+  final DateTime? acceptedAt;
+  final DateTime? lastSeenAt;
 }

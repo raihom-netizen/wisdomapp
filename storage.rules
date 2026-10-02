@@ -90,7 +90,10 @@ service firebase.storage {
 
     function isPremiumPlan(plan) {
 
-      let p = plan.toString().toLowerCase();
+      // `toString()/toLowerCase()` não existem na linguagem de regras (o
+      // emulador acusa «Function not found») — a regra caía e o upload do
+      // comprovante era negado. `string()` + `lower()` são as nativas.
+      let p = string(plan).lower();
 
       return p == 'premium' || p == 'master' || p == 'basic'
 
@@ -106,7 +109,7 @@ service firebase.storage {
 
     function planIsActiveStatus(status) {
 
-      let s = status.toString().toLowerCase();
+      let s = string(status).lower();
 
       return s == '' || s == 'active' || s == 'ativo' || s == 'ativa'
 
@@ -155,6 +158,41 @@ service firebase.storage {
     }
 
 
+
+    // Compartilhamento de dados (sub-login): e-mail verificado e índice ativo
+    // apontando para o titular (o titular apaga o índice ao remover a pessoa).
+    // Sem isto o sub-login via o lançamento e tomava 403 ao abrir/anexar o
+    // comprovante.
+    function isDelegateFor(userId) {
+      let e = request.auth.token.get('email', '');
+      let key = e is string ? e.lower() : '';
+      let idx = /databases/(default)/documents/delegate_email_index/$(key);
+      return isSignedIn()
+        && key != ''
+        && request.auth.token.get('email_verified', false) == true
+        && request.auth.uid != userId
+        && firestore.exists(idx)
+        && firestore.get(idx).data.get('principalUid', '') == userId
+        && firestore.get(idx).data.get('active', false) == true;
+    }
+
+    // Licença do TITULAR (o sub-login não tem licença própria).
+    function ownerIsPremium(userId) {
+      let user = firestore.get(/databases/(default)/documents/users/$(userId)).data;
+      let plan = user.get('plan', user.get('licensePlan', 'free'));
+      let exp = user.get('licenseExpiresAt', null);
+      return isPremiumPlan(plan) && (exp == null || exp > request.time);
+    }
+
+    match /comprovantes/{userId}/{allPaths=**} {
+      allow read: if isDelegateFor(userId);
+      allow write: if isDelegateFor(userId) && underComprovanteLimit() && ownerIsPremium(userId);
+    }
+
+    match /users/{userId}/{allPaths=**} {
+      allow read: if isDelegateFor(userId);
+      allow write: if isDelegateFor(userId) && underComprovanteLimit() && ownerIsPremium(userId);
+    }
 
     // Comprovantes financeiros (receitas/despesas) — dono com licença ativa.
 

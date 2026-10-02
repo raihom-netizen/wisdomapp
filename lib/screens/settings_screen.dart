@@ -327,28 +327,98 @@ class _DelegateSharingCard extends StatefulWidget {
 }
 
 class _DelegateSharingCardState extends State<_DelegateSharingCard> {
-  String? _authorizedEmail;
+  /// Pessoas autorizadas (até [DelegateAccessService.maxAuthorizedEmails]),
+  /// com a situação de cada uma (convite pendente / ativo).
+  List<DelegateInvite> _invites = const [];
   bool _busy = false;
+  bool _carregou = false;
+
+  List<String> get _emails => _invites.map((e) => e.email).toList();
 
   @override
   void initState() {
     super.initState();
-    _authorizedEmail = widget.initialAuthorizedEmail?.trim().toLowerCase();
+    final inicial = widget.initialAuthorizedEmail?.trim().toLowerCase();
+    // O perfil traz só o primeiro e-mail: mostra ele na hora e busca a lista
+    // completa (com a situação de cada um) em seguida.
+    if (inicial != null && inicial.isNotEmpty) {
+      _invites = [
+        DelegateInvite(
+            email: inicial, status: DelegateInviteStatus.pendente),
+      ];
+    }
+    _recarregar();
   }
 
   @override
   void didUpdateWidget(covariant _DelegateSharingCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.initialAuthorizedEmail != widget.initialAuthorizedEmail) {
-      _authorizedEmail =
-          widget.initialAuthorizedEmail?.trim().toLowerCase();
+    if (oldWidget.initialAuthorizedEmail != widget.initialAuthorizedEmail ||
+        oldWidget.principalUid != widget.principalUid) {
+      _recarregar();
+    }
+  }
+
+  Future<void> _recarregar() async {
+    final lista = await DelegateAccessService.loadInvites(widget.principalUid);
+    if (!mounted) return;
+    setState(() {
+      _invites = lista;
+      _carregou = true;
+    });
+  }
+
+  void _snack(String msg, {bool erro = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: erro ? Colors.red.shade700 : null,
+      ),
+    );
+  }
+
+  /// Grava (adicionar, editar ou reativar). Nunca deixa o card preso no
+  /// «carregando»: antes uma exceção do Firestore escapava e o `_busy`
+  /// ficava ligado para sempre, sem mensagem nenhuma.
+  Future<void> _salvar(String email, {String substituindo = ''}) async {
+    setState(() => _busy = true);
+    String? saveErr;
+    try {
+      saveErr = await DelegateAccessService.saveAuthorizedEmailInList(
+        principalUid: widget.principalUid,
+        principalEmail: widget.principalEmail,
+        newEmail: email,
+        substituindo: substituindo,
+      );
+    } catch (e) {
+      saveErr = 'Não foi possível salvar: $e';
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+    if (saveErr == null) await _recarregar();
+    if (saveErr != null) {
+      _snack(saveErr, erro: true);
+    } else if (substituindo.isEmpty) {
+      _snack('Pessoa autorizada. Ela entra no app com Google ou Apple usando '
+          '$email e já vê os seus dados.');
+    } else if (substituindo == email.trim().toLowerCase()) {
+      _snack('Acesso reativado.');
+    } else {
+      _snack('E-mail atualizado.');
     }
   }
 
   Future<void> _openEmailDialog({String? initial}) async {
+    if (widget.principalUid.trim().isEmpty) {
+      _snack('Sessão ainda não confirmada. Aguarde um instante e tente de novo.',
+          erro: true);
+      return;
+    }
     final ctrl = TextEditingController(text: initial ?? '');
     final err = await showDialog<String?>(
       context: context,
+      useRootNavigator: true,
       builder: (ctx) {
         String? localErr;
         return StatefulBuilder(
@@ -401,36 +471,18 @@ class _DelegateSharingCardState extends State<_DelegateSharingCard> {
     );
     ctrl.dispose();
     if (err == null || !mounted) return;
-
-    setState(() => _busy = true);
-    final saveErr = await DelegateAccessService.saveAuthorizedEmail(
-      principalUid: widget.principalUid,
-      principalEmail: widget.principalEmail,
-      newEmail: err,
-    );
-    if (!mounted) return;
-    setState(() {
-      _busy = false;
-      if (saveErr == null) {
-        _authorizedEmail = err.trim().toLowerCase();
-      }
-    });
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(saveErr ?? 'E-mail autorizado salvo.'),
-        backgroundColor: saveErr != null ? Colors.red.shade700 : null,
-      ),
-    );
+    await _salvar(err, substituindo: initial ?? '');
   }
 
-  Future<void> _confirmRemove() async {
+  Future<void> _confirmRemove(String email) async {
     final ok = await showDialog<bool>(
       context: context,
+      useRootNavigator: true,
       builder: (ctx) => AlertDialog(
-        title: const Text('Remover e-mail autorizado?'),
+        title: const Text('Remover pessoa autorizada?'),
         content: Text(
-          '$_authorizedEmail deixará de acessar os dados desta licença.',
+          '$email deixará de acessar os dados desta licença na hora. '
+          'Se estiver com o app aberto, volta para a própria conta.',
         ),
         actions: [
           TextButton(
@@ -446,32 +498,150 @@ class _DelegateSharingCardState extends State<_DelegateSharingCard> {
     );
     if (ok != true || !mounted) return;
     setState(() => _busy = true);
+    String? erro;
     try {
-      await DelegateAccessService.removeAuthorizedEmail(widget.principalUid);
-      if (!mounted) return;
-      setState(() {
-        _authorizedEmail = null;
-        _busy = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('E-mail autorizado removido.')),
+      erro = await DelegateAccessService.removeAuthorizedEmailFromList(
+        principalUid: widget.principalUid,
+        email: email,
       );
     } catch (e) {
-      if (!mounted) return;
-      setState(() => _busy = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Não foi possível remover: $e'),
-          backgroundColor: Colors.red.shade700,
-        ),
-      );
+      erro = 'Não foi possível remover: $e';
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
+    if (erro == null) await _recarregar();
+    _snack(erro ?? 'Pessoa removida do compartilhamento.', erro: erro != null);
+  }
+
+  static String _dataCurta(DateTime d) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(d.day)}/${two(d.month)}/${d.year}';
+  }
+
+  Widget _statusChip(DelegateInvite inv) {
+    late final Color cor;
+    late final String texto;
+    late final IconData icone;
+    switch (inv.status) {
+      case DelegateInviteStatus.ativo:
+        cor = Colors.green.shade700;
+        texto = 'Ativo';
+        icone = Icons.check_circle_rounded;
+      case DelegateInviteStatus.pendente:
+        cor = Colors.orange.shade800;
+        texto = 'Convite pendente';
+        icone = Icons.schedule_rounded;
+      case DelegateInviteStatus.semAcesso:
+        cor = Colors.red.shade700;
+        texto = 'Sem acesso — reativar';
+        icone = Icons.error_outline_rounded;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: cor.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: cor.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icone, size: 13, color: cor),
+          const SizedBox(width: 4),
+          Text(
+            texto,
+            style: TextStyle(
+                fontSize: 11, fontWeight: FontWeight.w800, color: cor),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _linhaPessoa(DelegateInvite inv) {
+    final detalhe = switch (inv.status) {
+      DelegateInviteStatus.ativo => inv.lastSeenAt != null
+          ? 'Último acesso em ${_dataCurta(inv.lastSeenAt!)}'
+          : (inv.acceptedAt != null
+              ? 'Entrou em ${_dataCurta(inv.acceptedAt!)}'
+              : 'Já entrou com este e-mail'),
+      DelegateInviteStatus.pendente =>
+        'Aguardando entrar no app com Google ou Apple usando este e-mail',
+      DelegateInviteStatus.semAcesso =>
+        'O acesso não foi gravado por completo. Toque em reativar.',
+    };
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.person_outline_rounded,
+              color: AppColors.primary, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  inv.email,
+                  style: const TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w800),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                _statusChip(inv),
+                const SizedBox(height: 3),
+                Text(
+                  detalhe,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textMuted,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (inv.status == DelegateInviteStatus.semAcesso)
+            IconButton(
+              tooltip: 'Reativar acesso',
+              onPressed: _busy
+                  ? null
+                  : () => _salvar(inv.email, substituindo: inv.email),
+              icon: Icon(Icons.refresh_rounded,
+                  size: 20, color: Colors.red.shade700),
+            ),
+          IconButton(
+            tooltip: 'Editar e-mail',
+            onPressed:
+                _busy ? null : () => _openEmailDialog(initial: inv.email),
+            icon: Icon(Icons.edit_rounded, size: 20, color: AppColors.primary),
+          ),
+          IconButton(
+            tooltip: 'Remover',
+            onPressed: _busy ? null : () => _confirmRemove(inv.email),
+            icon: Icon(Icons.delete_outline_rounded,
+                size: 20, color: Colors.red.shade700),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasEmail =
-        _authorizedEmail != null && _authorizedEmail!.trim().isNotEmpty;
+    final hasEmail = _invites.isNotEmpty;
+    final max = DelegateAccessService.maxAuthorizedEmails;
+    final restam = max - _invites.length;
+    final ativos =
+        _invites.where((i) => i.status == DelegateInviteStatus.ativo).length;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 14),
@@ -500,6 +670,23 @@ class _DelegateSharingCardState extends State<_DelegateSharingCard> {
                     ),
                   ),
                 ),
+                // Contador: quantos dos quatro lugares estão em uso.
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '${_invites.length}/$max',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -518,9 +705,10 @@ class _DelegateSharingCardState extends State<_DelegateSharingCard> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'O e-mail autorizado terá permissão total: lançar, editar e '
-                      'excluir financeiro, agenda, cursos e documentos da licença principal. '
-                      'Não cria outro usuário no sistema — fica vinculado a quem cadastrou.',
+                      'Cada pessoa autorizada terá permissão total: ver, lançar, editar e '
+                      'excluir financeiro, agenda, objetivos e documentos da licença principal. '
+                      'Não cria outra licença — fica vinculada a quem cadastrou. '
+                      'Você pode autorizar até $max pessoas, cada uma pelo próprio e-mail.',
                       style: TextStyle(
                         fontSize: 11.5,
                         height: 1.35,
@@ -543,9 +731,13 @@ class _DelegateSharingCardState extends State<_DelegateSharingCard> {
                   border: Border.all(color: const Color(0xFFFFB74D)),
                 ),
                 child: Text(
-                  'Autonomia ativa: $_authorizedEmail pode alterar e remover '
-                  'lançamentos e compromissos como se fosse o titular. Você pode editar '
-                  'ou remover este e-mail aqui a qualquer momento.',
+                  _invites.length == 1
+                      ? 'Autonomia ativa: ${_emails.first} pode alterar e remover '
+                          'lançamentos e compromissos como se fosse o titular.'
+                      : 'Autonomia ativa para ${_invites.length} pessoas '
+                          '($ativos já ${ativos == 1 ? 'entrou' : 'entraram'}): todas '
+                          'podem alterar e remover lançamentos e compromissos como se '
+                          'fossem o titular.',
                   style: TextStyle(
                     fontSize: 11.5,
                     height: 1.35,
@@ -554,74 +746,28 @@ class _DelegateSharingCardState extends State<_DelegateSharingCard> {
                   ),
                 ),
               ),
-              Container(
+              for (final inv in _invites) _linhaPessoa(inv),
+              const SizedBox(height: 2),
+              SizedBox(
                 width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                      color: AppColors.primary.withValues(alpha: 0.2)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.mail_outline_rounded,
-                        color: AppColors.primary, size: 20),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'E-mail de compartilhamento',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textMuted,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          Text(
-                            _authorizedEmail!,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w800,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: _busy
-                        ? null
-                        : () => _openEmailDialog(initial: _authorizedEmail),
-                    icon: const Icon(Icons.edit_rounded, size: 18),
-                    label: const Text('Editar e-mail'),
+                child: OutlinedButton.icon(
+                  onPressed:
+                      (_busy || restam <= 0) ? null : () => _openEmailDialog(),
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: Text(restam > 0
+                      ? 'Adicionar outra pessoa ($restam restante${restam > 1 ? 's' : ''})'
+                      : 'Limite de $max pessoas atingido'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 46),
                   ),
-                  OutlinedButton.icon(
-                    onPressed: _busy ? null : _confirmRemove,
-                    icon: Icon(Icons.delete_outline_rounded,
-                        size: 18, color: Colors.red.shade700),
-                    label: Text('Remover',
-                        style: TextStyle(color: Colors.red.shade700)),
-                  ),
-                ],
+                ),
               ),
             ] else
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
-                  onPressed: _busy ? null : () => _openEmailDialog(),
+                  onPressed:
+                      (_busy || !_carregou) ? null : () => _openEmailDialog(),
                   icon: const Icon(Icons.add_rounded),
                   label: const Text('Adicionar e-mail'),
                   style: FilledButton.styleFrom(
