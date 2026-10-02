@@ -913,6 +913,13 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                   index: 7,
                   accent: const Color(0xFF06B6D4),
                 ),
+                // Configurações depois de Cursos (pedido do dono 02/10/2026).
+                quickButton(
+                  icon: Icons.settings_rounded,
+                  label: footerNarrow ? 'Ajustes' : 'Configurações',
+                  index: 9,
+                  accent: const Color(0xFFF59E0B),
+                ),
               ],
             ),
           ),
