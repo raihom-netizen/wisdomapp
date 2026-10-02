@@ -123,7 +123,7 @@ class _NotificationDespertadorScreenState
   Future<void> _carregar() async {
     try {
       final ref = NotificationSonecaService.docNotificacoes();
-      final snap = await ref?.get();
+      final snap = await ref?.get().timeout(const Duration(seconds: 12));
       _geral = snap?.data()?['sonecaAtiva'] == true;
       final mods = (snap?.data()?['sonecaModulos'] as Map?) ?? const {};
       for (final m in _kModulos) {

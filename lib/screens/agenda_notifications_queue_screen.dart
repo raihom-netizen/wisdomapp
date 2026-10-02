@@ -29,6 +29,18 @@ class _AgendaNotificationsQueueScreenState
         FirebaseAuth.instance.currentUser?.uid ?? '',
       );
 
+  /// Escuta guardada no State (antes era criada a cada build/setState).
+  Stream<List<AgendaAlertQueueItem>>? _queueStream;
+  String? _queueStreamUid;
+
+  Stream<List<AgendaAlertQueueItem>> _queueFor(String uid) {
+    if (_queueStream == null || _queueStreamUid != uid) {
+      _queueStreamUid = uid;
+      _queueStream = AgendaAlertsQueueService.watchQueue(uid);
+    }
+    return _queueStream!;
+  }
+
   Future<void> _syncNow() async {
     if (_uid.isEmpty || _syncing) return;
     setState(() => _syncing = true);
@@ -175,8 +187,39 @@ class _AgendaNotificationsQueueScreenState
           else
             Expanded(
               child: StreamBuilder<List<AgendaAlertQueueItem>>(
-                stream: AgendaAlertsQueueService.watchQueue(_uid),
+                stream: _queueFor(_uid),
                 builder: (context, snap) {
+                  if (snap.hasError && !snap.hasData) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.cloud_off_rounded,
+                                size: 40, color: context.appTextMuted),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Não foi possível carregar a fila de avisos. '
+                              'Verifique a conexão.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: context.appTextMuted,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            FilledButton.icon(
+                              onPressed: () =>
+                                  setState(() => _queueStream = null),
+                              icon: const Icon(Icons.refresh_rounded),
+                              label: const Text('Tentar de novo'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
                   if (snap.connectionState == ConnectionState.waiting &&
                       !snap.hasData) {
                     return const Center(

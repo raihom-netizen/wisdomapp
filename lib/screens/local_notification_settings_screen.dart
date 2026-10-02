@@ -113,7 +113,8 @@ class _LocalNotificationSettingsScreenState extends State<LocalNotificationSetti
             .doc(uid)
             .collection('settings')
             .doc('notifications')
-            .get(const GetOptions(source: Source.serverAndCache));
+            .get(const GetOptions(source: Source.serverAndCache))
+            .timeout(const Duration(seconds: 12));
         d = snap.data();
       } catch (_) {}
     }

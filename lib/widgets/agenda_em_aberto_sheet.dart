@@ -106,11 +106,21 @@ class _AgendaEmAbertoSheetBodyState extends State<_AgendaEmAbertoSheetBody> {
     );
   }
 
+  /// Escuta guardada no State por período: antes cada setState (ex.: marcar
+  /// um item) abria uma escuta nova e a lista voltava a girar.
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _remindersStreamCache;
+  String? _remindersStreamKey;
+
   Stream<QuerySnapshot<Map<String, dynamic>>> _remindersStream() {
     final queryStart =
         _periodValue.rangeStart.subtract(const Duration(days: 3));
     final queryEnd = _periodValue.rangeEnd.add(const Duration(days: 1));
-    return FirebaseFirestore.instance
+    final key = '${widget.userFsId}|${queryStart.toIso8601String()}|'
+        '${queryEnd.toIso8601String()}';
+    final cached = _remindersStreamCache;
+    if (cached != null && _remindersStreamKey == key) return cached;
+    _remindersStreamKey = key;
+    return _remindersStreamCache = FirebaseFirestore.instance
         .collection('users')
         .doc(widget.userFsId)
         .collection('reminders')

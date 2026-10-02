@@ -40,7 +40,23 @@ class _ScaleNotificationsConfigScreenState extends State<ScaleNotificationsConfi
   }
 
   Future<void> _load() async {
-    final snap = await widget._ref.get();
+    // Prazo + erro visível: antes uma falha de leitura deixava a tela
+    // girando para sempre.
+    final DocumentSnapshot<Map<String, dynamic>> snap;
+    try {
+      snap = await widget._ref.get().timeout(const Duration(seconds: 12));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Não foi possível carregar as configurações salvas. Verifique a conexão.'),
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
     if (snap.exists && snap.data() != null) {
       final d = snap.data()!;
       setState(() {

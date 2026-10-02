@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../utils/firestore_user_doc_id.dart';
 
 /// CRUD de ocorrências (produtividade). users/{uid}/ocorrencias.
@@ -191,13 +192,18 @@ class OcorrenciasService {
   /// e em `LocationsScreen` (plantões recorrentes).
   Stream<QuerySnapshot<Map<String, dynamic>>> watch(String uid) async* {
     final col = _col(uid);
-    try {
-      final cached = await col.get(const GetOptions(source: Source.cache));
-      if (cached.docs.isNotEmpty) {
-        yield cached;
+    // Web: não depende de cache em disco — vai direto à escuta.
+    if (!kIsWeb) {
+      try {
+        final cached = await col
+            .get(const GetOptions(source: Source.cache))
+            .timeout(const Duration(seconds: 4));
+        if (cached.docs.isNotEmpty) {
+          yield cached;
+        }
+      } catch (_) {
+        // sem cache local ainda — segue direto para o snapshots() abaixo
       }
-    } catch (_) {
-      // sem cache local ainda — segue direto para o snapshots() abaixo
     }
     // Evita falhas intermitentes do SDK Web com orderBy em cenários de
     // cache/index local. A ordenação final da grid é feita no cliente.

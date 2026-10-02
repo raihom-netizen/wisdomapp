@@ -72,6 +72,41 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
   /// Blindagem: usa UID efetivo (titular quando sub-login).
   String get _userDocId => firestoreUserDocIdStrictFromSession();
 
+  /// Escutas guardadas no State: criar `watch()` dentro do build abria uma
+  /// escuta nova a cada setState (lista girando / leituras repetidas).
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _listaStream;
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _resumoStream;
+  String? _streamsUid;
+  Future<int>? _pontuacaoFolgaFuture;
+  String? _pontuacaoFolgaUid;
+
+  void _syncStreamsUid(String id) {
+    if (_streamsUid == id) return;
+    _streamsUid = id;
+    _listaStream = null;
+    _resumoStream = null;
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> _listaStreamFor(String id) {
+    _syncStreamsUid(id);
+    return _listaStream ??= _ocorrenciasService.watch(id);
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> _resumoStreamFor(String id) {
+    _syncStreamsUid(id);
+    return _resumoStream ??= _ocorrenciasService.watch(id);
+  }
+
+  Future<int> _pontuacaoFolgaFor(String id) {
+    if (_pontuacaoFolgaFuture == null || _pontuacaoFolgaUid != id) {
+      _pontuacaoFolgaUid = id;
+      _pontuacaoFolgaFuture = ProdutividadeConfigService()
+          .getPontuacaoParaFolga(id)
+          .timeout(const Duration(seconds: 12));
+    }
+    return _pontuacaoFolgaFuture!;
+  }
+
   bool _topoExpandido = true;
   // Filtro padrão ao entrar: "Disponíveis para folga" (ocorrências em aberto).
   // O usuário troca o chip para ver as já tiradas; antes era 'Todas', mas
@@ -432,22 +467,19 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
   Future<void> _clearCacheAndRetry() async {
     try {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Limpando cache local…')),
+        const SnackBar(content: Text('Recarregando do servidor…')),
       );
-      // Web: sem terminate() — ele mata TODAS as escutas abertas do app
-      // (outros módulos ficavam girando para sempre). Lá não há cache em disco.
-      if (!kIsWeb) {
-        try {
-          await FirebaseFirestore.instance.terminate();
-        } catch (_) {}
-        try {
-          await FirebaseFirestore.instance.clearPersistence();
-        } catch (_) {}
-      }
+      // Sem terminate()/clearPersistence(): terminate mata TODAS as escutas
+      // abertas do app (outros módulos ficavam girando para sempre), em
+      // qualquer plataforma. Basta reabrir a escuta deste módulo.
       if (!mounted) return;
-      setState(() {}); // refaz o StreamBuilder com novo `watch`
+      setState(() {
+        _listaStream = null;
+        _resumoStream = null;
+        _pontuacaoFolgaFuture = null;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cache limpo. Tentando recarregar…')),
+        const SnackBar(content: Text('Recarregando as ocorrências…')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -978,7 +1010,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
                   else
                     StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                     key: ValueKey<String>('ocorrencias-$id'),
-                    stream: _ocorrenciasService.watch(id),
+                    stream: _listaStreamFor(id),
                     builder: (context, snap) {
                       if (snap.hasError) {
                         return Padding(
@@ -1670,7 +1702,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
     final (rangeStart, rangeEnd) = _rangeForResumoPeriodo();
     final periodLabel = _labelResumoPeriodo();
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: _ocorrenciasService.watch(id),
+      stream: _resumoStreamFor(id),
       builder: (context, snap) {
         int emAbertoQtde = 0;
         int emAbertoPontos = 0;
@@ -2164,7 +2196,7 @@ class _OcorrenciasScreenState extends State<OcorrenciasScreen> {
       totalPontos += (e['pontuacao'] is int) ? e['pontuacao'] as int : int.tryParse((e['pontuacao'] ?? '0').toString()) ?? 0;
     }
     return FutureBuilder<int>(
-      future: ProdutividadeConfigService().getPontuacaoParaFolga(_userDocId),
+      future: _pontuacaoFolgaFor(_userDocId),
       builder: (context, snap) {
         final pontuacaoParaFolga = snap.data ?? ProdutividadeConfigService.defaultPontuacaoParaFolga;
         final restantes = totalPontos - pontuacaoParaFolga;

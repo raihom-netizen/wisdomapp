@@ -189,6 +189,24 @@ Future<void> showProdutividadeEmAbertoSheet(
                 streamKey: ref.path,
                 create: () => ref.snapshots(),
                 builder: (context, snap) {
+                  if (snap.hasError && !snap.hasData) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          'Não foi possível carregar as ocorrências. '
+                          'Verifique a conexão e abra de novo.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: context.isDarkMode
+                                ? context.appTextSecondary
+                                : Colors.grey.shade800,
+                          ),
+                        ),
+                      ),
+                    );
+                  }
                   if (snap.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   }

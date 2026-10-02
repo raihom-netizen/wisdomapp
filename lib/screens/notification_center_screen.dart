@@ -317,7 +317,12 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
             NotificationCenterSnapshot.empty,
         builder: (context, snap) {
           final hasCached = (snap.data?.entries.isNotEmpty ?? false);
-          if (snap.connectionState == ConnectionState.waiting && !hasCached) {
+          // A escuta é compartilhada (broadcast): se já estava ativa e a
+          // central está vazia, não chega evento novo — o peek já vale como
+          // «carregado» (antes girava para sempre para quem não tinha avisos).
+          if (snap.connectionState == ConnectionState.waiting &&
+              !hasCached &&
+              NotificationCenterService.peek(_uid) == null) {
             return const Center(child: CircularProgressIndicator());
           }
           final allEntries = snap.data?.entries ?? const [];

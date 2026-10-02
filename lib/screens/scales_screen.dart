@@ -610,6 +610,18 @@ class _ScalesScreenState extends State<ScalesScreen> {
 
   String get _userDocId => firestoreUserDocIdForAppShell(widget.uid);
 
+  /// Escuta da config guardada no State (antes criada a cada build).
+  Stream<ControleTotalConfig>? _configStream;
+  String? _configStreamUid;
+
+  Stream<ControleTotalConfig> _configStreamFor(String uid) {
+    if (_configStream == null || _configStreamUid != uid) {
+      _configStreamUid = uid;
+      _configStream = ControleTotalConfigService().watchConfig(uid);
+    }
+    return _configStream!;
+  }
+
   CollectionReference<Map<String, dynamic>> get _scales =>
       _scalesRef.collection('users').doc(_userDocId).collection('scales');
 
@@ -1861,7 +1873,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
         DateTime(_focusedDay.year, _focusedDay.month + 1, 0, 23, 59, 59);
     final nomeMes = DateFormat('MMMM', 'pt_BR').format(monthStart);
     return StreamBuilder<ControleTotalConfig>(
-      stream: ControleTotalConfigService().watchConfig(_userDocId),
+      stream: _configStreamFor(_userDocId),
       builder: (context, configSnap) {
         final config = configSnap.data ?? const ControleTotalConfig();
         final tetoHoras = config.tetoHorasMensal > 0
@@ -3002,6 +3014,31 @@ class _ScalesScreenState extends State<ScalesScreen> {
 
   bool _isLastDayOfMonth(DateTime d) => ScaleRates.isLastDayOfMonth(d);
 
+  /// Memo do split por dia: o FutureBuilder chamava o cálculo (com leituras
+  /// das taxas) a cada rebuild da tela.
+  final Map<String, Future<({double ate2359, double de0007, bool temSplit})>>
+      _splitDiaMemo = {};
+
+  Future<({double ate2359, double de0007, bool temSplit})> _splitDiaFuture(
+      DateTime day, List<ScaleEntry> entries) {
+    final key = StringBuffer('${day.year}-${day.month}-${day.day}');
+    for (final e in entries) {
+      key.write('|${e.id}:${e.start}-${e.end}:${e.totalValue}');
+    }
+    final k = key.toString();
+    final hit = _splitDiaMemo[k];
+    if (hit != null) return hit;
+    if (_splitDiaMemo.length > 40) _splitDiaMemo.clear();
+    final f = _computeSplitDia(day, entries)
+        .timeout(const Duration(seconds: 15))
+        .catchError((Object _) {
+      _splitDiaMemo.remove(k);
+      return (ate2359: 0.0, de0007: 0.0, temSplit: false);
+    });
+    _splitDiaMemo[k] = f;
+    return f;
+  }
+
   Future<({double ate2359, double de0007, bool temSplit})> _computeSplitDia(
       DateTime day, List<ScaleEntry> entries) async {
     final dayEnd = DateTime(day.year, day.month, day.day, 23, 59, 59);
@@ -3046,7 +3083,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
         .toList();
     final totalDia = entries.fold<double>(0, (s, e) => s + (e.totalValue));
     return FutureBuilder<({double ate2359, double de0007, bool temSplit})>(
-      future: _computeSplitDia(day, entries),
+      future: _splitDiaFuture(day, entries),
       builder: (context, snap) {
         final split = snap.data;
         final temSplit = split?.temSplit ?? false;
@@ -6388,7 +6425,7 @@ class _ScalesScreenState extends State<ScalesScreen> {
                                         double de0007,
                                         bool temSplit
                                       })>(
-                                    future: _computeSplitDia(day, entries),
+                                    future: _splitDiaFuture(day, entries),
                                     builder: (context, snap) {
                                       final split = snap.data;
                                       final temSplit = split?.temSplit ?? false;

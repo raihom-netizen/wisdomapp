@@ -45,7 +45,22 @@ class _ScaleRatesEditScreenState extends State<ScaleRatesEditScreen> {
   }
 
   Future<void> _loadRates() async {
-    final rates = await ScaleRatesService().getRates(uid: widget.uid);
+    final ScaleRates rates;
+    try {
+      rates = await ScaleRatesService()
+          .getRates(uid: widget.uid)
+          .timeout(const Duration(seconds: 12));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Não foi possível carregar os valores salvos. Verifique a conexão antes de salvar.'),
+        ),
+      );
+      return;
+    }
     if (!mounted) return;
     for (int i = 0; i < 7; i++) {
       _diurnoControllers[i].text = CurrencyFormats.formatBRLInput(rates.valueDiurno[i]);

@@ -63,10 +63,15 @@ class _NotificationSoundSettingsScreenState
   }
 
   Future<void> _load() async {
-    for (final c in _kCategories) {
-      _state[c] = await _prefs.read(c);
+    try {
+      for (final c in _kCategories) {
+        _state[c] = await _prefs.read(c);
+      }
+    } catch (_) {
+      // preferências locais ilegíveis: segue com o padrão, sem travar a tela
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
-    if (mounted) setState(() => _loading = false);
   }
 
   Future<void> _previewVibrationPattern() async {

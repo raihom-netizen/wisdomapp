@@ -75,8 +75,12 @@ class _SharedWatch {
 
   /// Inbox local + último snapshot — pintura imediata offline.
   Future<void> _primeFromLocalCache() async {
-    _pushInbox = await NotificationCenterStore.instance.pushInboxEntries();
-    _dismissed = await NotificationCenterStore.instance.dismissedIds();
+    try {
+      _pushInbox = await NotificationCenterStore.instance.pushInboxEntries();
+      _dismissed = await NotificationCenterStore.instance.dismissedIds();
+    } catch (_) {
+      return;
+    }
     final peek = NotificationCenterService._compose(
       _agenda,
       _finance,
@@ -117,8 +121,14 @@ class _SharedWatch {
   }
 
   Future<void> _rebuild() async {
-    _dismissed = await NotificationCenterStore.instance.dismissedIds();
-    _pushInbox = await NotificationCenterStore.instance.pushInboxEntries();
+    // Falha no armazenamento local não pode impedir a emissão (a central
+    // ficava girando para sempre) — segue com o que já tem em memória.
+    try {
+      _dismissed = await NotificationCenterStore.instance.dismissedIds();
+    } catch (_) {}
+    try {
+      _pushInbox = await NotificationCenterStore.instance.pushInboxEntries();
+    } catch (_) {}
     if (_controller.isClosed) return;
     final snap = NotificationCenterService._compose(
       _agenda,

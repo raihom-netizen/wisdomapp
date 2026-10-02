@@ -55,7 +55,7 @@ class _LocationsScreenState extends State<LocationsScreen> {
     final u = fa.FirebaseAuth.instance.currentUser;
     if (u == null) return;
     try {
-      await u.getIdToken(true);
+      await u.getIdToken(true).timeout(const Duration(seconds: 8));
     } catch (_) {}
   }
 
@@ -156,17 +156,22 @@ class _LocationsScreenState extends State<LocationsScreen> {
     // **imediatamente** ao usuário (evita tela vazia/erro quando rede falha).
     // Mesmo que o cache retorne 0 docs, prosseguimos para o servidor —
     // não bloqueamos o build com tela de erro.
-    try {
-      final cached = await ref.get(const GetOptions(source: Source.cache));
-      if (!mounted || gen != _listenGen) return;
-      if (cached.docs.isNotEmpty) {
-        setState(() {
-          _loadError = null;
-          _setDocs(cached.docs);
-        });
+    // Web: sem cache em disco — vai direto ao servidor/escuta.
+    if (!kIsWeb) {
+      try {
+        final cached = await ref
+            .get(const GetOptions(source: Source.cache))
+            .timeout(const Duration(seconds: 4));
+        if (!mounted || gen != _listenGen) return;
+        if (cached.docs.isNotEmpty) {
+          setState(() {
+            _loadError = null;
+            _setDocs(cached.docs);
+          });
+        }
+      } catch (_) {
+        // Cache miss/erro — segue para o caminho de rede normal.
       }
-    } catch (_) {
-      // Cache miss/erro — segue para o caminho de rede normal.
     }
     if (!mounted || gen != _listenGen) return;
 
@@ -190,9 +195,12 @@ class _LocationsScreenState extends State<LocationsScreen> {
 
       for (final src in sources) {
         try {
-          final snap = src == null
-              ? await ref.get()
-              : await ref.get(GetOptions(source: src));
+          // Prazo por leitura: um get pendurado na rede deixava a tela
+          // girando para sempre (a escuta só era ligada depois).
+          final snap = await (src == null
+                  ? ref.get()
+                  : ref.get(GetOptions(source: src)))
+              .timeout(const Duration(seconds: 10));
           if (!mounted || gen != _listenGen) return;
           setState(() {
             _loadError = null;
@@ -218,7 +226,8 @@ class _LocationsScreenState extends State<LocationsScreen> {
     }
 
     if (!mounted || gen != _listenGen) return;
-    if (lastErr != null) {
+    // Se a escuta já entregou a lista, não troca a tela boa por erro.
+    if (lastErr != null && _docs == null) {
       setState(() => _loadError = lastErr);
     }
   }
@@ -265,12 +274,19 @@ class _LocationsScreenState extends State<LocationsScreen> {
     _authWaitTimer?.cancel();
     _authWaitTimer = null;
 
+    // Escuta ligada já (não espera a leitura avulsa terminar) + vigia:
+    // se em 25 s nada chegou, mostra erro com «Tentar novamente».
+    _attachSnapshots(ref, gen: gen);
+    _authWaitTimer = Timer(const Duration(seconds: 25), () {
+      if (!mounted || gen != _listenGen) return;
+      if (_docs != null || _loadError != null) return;
+      setState(() => _loadError = TimeoutException(
+          'Tempo esgotado ao carregar os plantões'));
+    });
     unawaited(() async {
       await _ensureFreshAuthToken();
       if (!mounted || gen != _listenGen) return;
       await _fetchOnce(gen: gen);
-      if (!mounted || gen != _listenGen) return;
-      _attachSnapshots(ref, gen: gen);
     }());
   }
 
@@ -310,22 +326,15 @@ class _LocationsScreenState extends State<LocationsScreen> {
   Future<void> _clearCacheAndRetry() async {
     setState(() => _loadError = null);
     _sub?.cancel();
-    // Web: sem terminate() — ele mata TODAS as escutas abertas do app
-    // (outros módulos ficavam girando para sempre). Lá não há cache em disco.
-    if (!kIsWeb) {
-      try {
-        await FirebaseFirestore.instance.terminate();
-      } catch (_) {}
-      try {
-        await FirebaseFirestore.instance.clearPersistence();
-      } catch (_) {}
-    }
+    // Sem terminate()/clearPersistence(): terminate mata TODAS as escutas
+    // abertas do app (outros módulos ficavam girando para sempre) em
+    // qualquer plataforma. Reabre só a escuta daqui, indo ao servidor.
     if (!mounted) return;
     _startListening();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Cache local limpo. Buscando do servidor…'),
+        content: Text('Buscando do servidor…'),
         duration: Duration(seconds: 2),
       ),
     );
@@ -423,7 +432,7 @@ class _LocationsScreenState extends State<LocationsScreen> {
                 OutlinedButton.icon(
                   onPressed: _clearCacheAndRetry,
                   icon: const Icon(Icons.cleaning_services_rounded),
-                  label: const Text('Limpar cache local e tentar novamente'),
+                  label: const Text('Recarregar do servidor'),
                 ),
               ],
             ),
