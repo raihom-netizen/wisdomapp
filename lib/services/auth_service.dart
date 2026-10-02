@@ -318,14 +318,17 @@ class AuthService {
         googleProvider.setCustomParameters({'prompt': 'select_account'});
       }
       try {
-        return await FirestoreWebGuard.runWebGoogleSignInFlow(() async {
-          final userCred = await _auth.signInWithPopup(googleProvider);
-          await FirestoreWebGuard.stabilizeAfterWebSignIn();
-          await FirestoreWebGuard.runWithWebRecovery(
-            () => _ensureUserProfile(userCred.user),
-          );
-          return userCred;
-        });
+        // 02/10/2026: sem `runWebGoogleSignInFlow` — ele desligava a rede do
+        // Firestore (disableNetwork) durante o popup e religava depois; perder
+        // e voltar a rede com escutas abertas é gatilho conhecido do assert
+        // ca9 do SDK JS. As escutas públicas da landing/divulgação já são
+        // pausadas pela própria tela antes do login, então não há corrida.
+        final userCred = await _auth.signInWithPopup(googleProvider);
+        await FirestoreWebGuard.stabilizeAfterWebSignIn();
+        await FirestoreWebGuard.runWithWebRecovery(
+          () => _ensureUserProfile(userCred.user),
+        );
+        return userCred;
       } catch (e) {
         if (e.toString().contains('popup_closed_by_user') ||
             e.toString().contains('cancelled-popup')) {
