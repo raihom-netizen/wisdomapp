@@ -32,7 +32,11 @@ String gerarPixCopiaECola({
   }
 
   final chaveLimpa = _normalizarChave(chave);
-  final desc = limpo(descricao, 40);
+  // Campo 26 tem no máximo 99 caracteres: 18 (GUI) + 4 + chave + 4 + descrição.
+  // Chave aleatória/e-mail longo + descrição grande passava de 99 e o banco
+  // recusava o código. A descrição é cortada para caber (ou some).
+  final maxDesc = 99 - 18 - 4 - chaveLimpa.length - 4;
+  final desc = maxDesc <= 0 ? '' : limpo(descricao, maxDesc < 40 ? maxDesc : 40).trim();
   final conta = campo('00', 'br.gov.bcb.pix') + campo('01', chaveLimpa) + (desc.isEmpty ? '' : campo('02', desc));
   final tx = RegExp(r'^[A-Za-z0-9]{1,25}$').hasMatch(txid) ? txid : '***';
   final semCrc = campo('00', '01') +
