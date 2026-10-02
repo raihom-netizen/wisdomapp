@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../core/wisdom_storage_upload.dart';
 import '../utils/course_media_url_resolver.dart';
@@ -35,8 +36,11 @@ class CourseUploadCancelledException implements Exception {
 
 /// Upload de video MP4/WebM para o modulo Cursos (admin).
 ///
-/// Usa [WisdomStorageUpload] com retry + URL timeout (padrao Controle Total).
-/// Com [CourseUploadCancelToken], envia direto (uma tentativa) para poder cancelar.
+/// No celular usa `putFile` (lê do disco em partes, retomável); na web,
+/// `putData`. Sem token: até 3 tentativas em erro de rede. Com
+/// [CourseUploadCancelToken], uma tentativa (cancelável). O link de download
+/// é buscado com novas tentativas e, se não vier, o envio FALHA com erro
+/// visível — nunca devolve URL vazia.
 class CourseVideoFileService {
   CourseVideoFileService._();
 
@@ -79,55 +83,84 @@ class CourseVideoFileService {
     }
   }
 
+  static SettableMetadata _metadata(String mime) => SettableMetadata(
+        contentType: mime,
+        cacheControl: 'public, max-age=31536000, immutable',
+      );
+
+  /// Envia com [startTask] (putFile no celular, putData na web/bytes).
+  ///
+  /// - Sem [cancelToken]: até 3 tentativas em erro de rede (backoff).
+  /// - Com [cancelToken]: uma tentativa, cancelável pelo admin.
+  /// Ao final SEMPRE devolve uma URL válida — nunca string vazia (ver
+  /// [_downloadUrlWithRetry]); a aula não pode ser gravada sem link.
   static Future<String> _put({
     required String path,
-    required Uint8List bytes,
+    required UploadTask Function(Reference ref, SettableMetadata md) startTask,
     required String mime,
     void Function(double progress)? onProgress,
     CourseUploadCancelToken? cancelToken,
   }) async {
-    if (cancelToken == null) {
-      return WisdomStorageUpload.putData(
-        storagePath: path,
-        bytes: bytes,
-        mimeType: mime,
-        onProgress: onProgress,
-      );
-    }
-    if (cancelToken.isCancelled) throw const CourseUploadCancelledException();
     final ref = FirebaseStorage.instance.ref(path);
-    final task = ref.putData(
-      bytes,
-      SettableMetadata(
-        contentType: mime,
-        cacheControl: 'public, max-age=31536000, immutable',
-      ),
-    );
-    cancelToken._attach(task);
-    try {
-      await task.snapshotEvents.fold<void>(null, (_, s) {
-        if (s.totalBytes > 0) onProgress?.call(s.bytesTransferred / s.totalBytes);
-      });
-    } catch (e) {
-      if (cancelToken.isCancelled ||
-          (e is FirebaseException && e.code == 'canceled')) {
+    final maxAttempts = cancelToken == null ? 3 : 1;
+    Object? lastError;
+    for (var attempt = 0; attempt < maxAttempts; attempt++) {
+      if (cancelToken?.isCancelled == true) {
         throw const CourseUploadCancelledException();
       }
-      rethrow;
+      if (attempt > 0) {
+        await Future<void>.delayed(Duration(seconds: 2 * attempt));
+      }
+      final task = startTask(ref, _metadata(mime));
+      cancelToken?._attach(task);
+      try {
+        await task.snapshotEvents.fold<void>(null, (_, s) {
+          if (s.totalBytes > 0) {
+            onProgress?.call(s.bytesTransferred / s.totalBytes);
+          }
+        });
+        lastError = null;
+        break;
+      } catch (e) {
+        if (cancelToken?.isCancelled == true ||
+            (e is FirebaseException && e.code == 'canceled')) {
+          throw const CourseUploadCancelledException();
+        }
+        lastError = e;
+        if (!WisdomStorageUpload.isRetryableError(e)) rethrow;
+      }
     }
-    if (cancelToken.isCancelled) {
+    if (lastError != null) throw lastError;
+    if (cancelToken?.isCancelled == true) {
       try {
         await ref.delete();
       } catch (_) {}
       throw const CourseUploadCancelledException();
     }
-    try {
-      return await ref
-          .getDownloadURL()
-          .timeout(const Duration(seconds: 5), onTimeout: () => '');
-    } catch (_) {
-      return '';
+    return _downloadUrlWithRetry(ref);
+  }
+
+  /// Link de download com novas tentativas (1 s, 2 s, 4 s, 8 s).
+  /// Falha com erro visível em vez de devolver '' (aula com URL vazia não toca).
+  static Future<String> _downloadUrlWithRetry(Reference ref) async {
+    Object? lastError;
+    for (var attempt = 0; attempt < 5; attempt++) {
+      if (attempt > 0) {
+        await Future<void>.delayed(Duration(seconds: 1 << (attempt - 1)));
+      }
+      try {
+        final url =
+            await ref.getDownloadURL().timeout(const Duration(seconds: 10));
+        if (url.trim().isNotEmpty) return url;
+      } catch (e) {
+        lastError = e;
+      }
     }
+    throw StateError(
+      'O vídeo foi enviado, mas não foi possível obter o link dele '
+      '(${ref.fullPath}). Verifique a conexão e tente salvar de novo.'
+      '${lastError == null ? '' : ' Detalhe: $lastError'}',
+    );
   }
 
   /// Upload via arquivo em disco (ideal para gravacao de camera e videos grandes).
@@ -150,9 +183,13 @@ class CourseVideoFileService {
     final ts = DateTime.now().millisecondsSinceEpoch;
     final path = 'wisdomapp/course_videos/$id/video_${index}_$ts.$ext';
 
+    // Celular: putFile lê do disco em partes (retomável, sem carregar até
+    // 250 MB na memória). Na web não existe File de disco → bytes.
+    final Uint8List? webBytes = kIsWeb ? await file.readAsBytes() : null;
     final url = await _put(
       path: path,
-      bytes: await file.readAsBytes(),
+      startTask: (ref, md) =>
+          webBytes != null ? ref.putData(webBytes, md) : ref.putFile(file, md),
       mime: mime,
       onProgress: onProgress,
       cancelToken: cancelToken,
@@ -184,7 +221,7 @@ class CourseVideoFileService {
 
     final url = await _put(
       path: path,
-      bytes: bytes,
+      startTask: (ref, md) => ref.putData(bytes, md),
       mime: mimeType,
       onProgress: onProgress,
       cancelToken: cancelToken,
