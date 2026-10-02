@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/theme_context.dart';
 import '../../utils/admin_load_guard.dart';
 
 /// Peças visuais comuns do Painel Admin (padrão Controle Total): cabeçalho com
@@ -17,6 +18,22 @@ class AdminUi {
   static const Color rosa = Color(0xFFDB2777);
   static const Color cinza = Color(0xFF64748B);
   static const Color tinta = Color(0xFF0F172A);
+
+  /// Tinta de título/valor que segue o tema (claro = [tinta]).
+  static Color tintaOf(BuildContext context) =>
+      context.isDarkMode ? context.appTextPrimary : tinta;
+
+  /// Fundo de card/campo do admin (claro = branco).
+  static Color cardOf(BuildContext context) =>
+      context.isDarkMode ? context.appSurface : Colors.white;
+
+  /// Borda fina (claro = grey.shade200).
+  static Color bordaOf(BuildContext context) =>
+      context.isDarkMode ? context.appChipIdleBorder : Colors.grey.shade200;
+
+  /// Texto de apoio (claro = grey.shade600).
+  static Color apoioOf(BuildContext context) =>
+      context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600;
 
   /// Colunas da grade de KPIs pela largura disponível.
   static int colunas(double largura, {int max = 4}) {
@@ -150,7 +167,7 @@ class AdminKpi extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: AdminUi.cardOf(context),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -197,7 +214,9 @@ class AdminKpi extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                         color: selecionado
                             ? Colors.white.withValues(alpha: 0.9)
-                            : Colors.grey.shade700,
+                            : (context.isDarkMode
+                                ? context.appTextSecondary
+                                : Colors.grey.shade700),
                       ),
                     ),
                     Text(
@@ -207,7 +226,9 @@ class AdminKpi extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 19,
                         fontWeight: FontWeight.w900,
-                        color: selecionado ? Colors.white : AdminUi.tinta,
+                        color: selecionado
+                            ? Colors.white
+                            : AdminUi.tintaOf(context),
                       ),
                     ),
                     if (sub != null && sub!.isNotEmpty)
@@ -219,7 +240,7 @@ class AdminKpi extends StatelessWidget {
                           fontSize: 10.5,
                           color: selecionado
                               ? Colors.white.withValues(alpha: 0.85)
-                              : Colors.grey.shade600,
+                              : AdminUi.apoioOf(context),
                         ),
                       ),
                   ],
@@ -290,10 +311,10 @@ class AdminSecao extends StatelessWidget {
             child: Text(
               titulo,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 15.5,
                 fontWeight: FontWeight.w800,
-                color: AdminUi.tinta,
+                color: AdminUi.tintaOf(context),
               ),
             ),
           ),
@@ -340,15 +361,15 @@ class AdminBusca extends StatelessWidget {
                 },
               ),
         filled: true,
-        fillColor: Colors.white,
+        fillColor: AdminUi.cardOf(context),
         contentPadding: const EdgeInsets.symmetric(vertical: 12),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: Colors.grey.shade200),
+          borderSide: BorderSide(color: AdminUi.bordaOf(context)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: Colors.grey.shade200),
+          borderSide: BorderSide(color: AdminUi.bordaOf(context)),
         ),
       ),
     );
@@ -377,7 +398,7 @@ class AdminCarregando extends StatelessWidget {
           Text(
             texto,
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 12.5),
+            style: TextStyle(color: AdminUi.apoioOf(context), fontSize: 12.5),
           ),
         ],
       ),
@@ -404,7 +425,7 @@ class AdminErroCard extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 12),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AdminUi.cardOf(context),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.red.shade200),
         boxShadow: [
@@ -429,7 +450,12 @@ class AdminErroCard extends StatelessWidget {
           SelectableText(
             AdminLoadGuard.mensagem(erro),
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12.5, color: Colors.grey.shade800, height: 1.35),
+            style: TextStyle(
+                fontSize: 12.5,
+                color: context.isDarkMode
+                    ? context.appTextSecondary
+                    : Colors.grey.shade800,
+                height: 1.35),
           ),
           const SizedBox(height: 14),
           FilledButton.icon(
@@ -462,9 +488,9 @@ class AdminVazio extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 8),
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AdminUi.cardOf(context),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: AdminUi.bordaOf(context)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -474,7 +500,7 @@ class AdminVazio extends StatelessWidget {
           Text(
             texto,
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+            style: TextStyle(color: AdminUi.apoioOf(context), fontSize: 13),
           ),
           if (acao != null) ...[const SizedBox(height: 12), acao!],
         ],
