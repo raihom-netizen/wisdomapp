@@ -8,6 +8,18 @@ function asJsDate(iso) {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+/** Ano/mês/dia em America/Sao_Paulo (Brasil sem horário de verão: UTC−3). */
+function brDateParts(date) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const get = (k) => parseInt(parts.find((x) => x.type === k)?.value || "0", 10);
+  return { y: get("year"), m: get("month"), d: get("day") };
+}
+
 function serializeTs(value) {
   if (!value || typeof value.toDate !== "function") return null;
   return value.toDate().toISOString();
@@ -48,8 +60,11 @@ exports.ctAgendaRemindersForRange = onCall(
     if (!from || !to) {
       throw new HttpsError("invalid-argument", "Período inválido.");
     }
-    const start = new Date(from.getFullYear(), from.getMonth(), from.getDate(), 0, 0, 0, 0);
-    const end = new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999);
+    // Dias civis em Brasília (servidor em UTC): 00:00–23:59:59 de São Paulo.
+    const f = brDateParts(from);
+    const t = brDateParts(to);
+    const start = new Date(Date.UTC(f.y, f.m - 1, f.d, 3, 0, 0, 0));
+    const end = new Date(Date.UTC(t.y, t.m - 1, t.d + 1, 2, 59, 59, 999));
     const snap = await admin
       .firestore()
       .collection("users")

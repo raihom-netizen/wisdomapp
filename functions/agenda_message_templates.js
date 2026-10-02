@@ -48,13 +48,41 @@ function greetUser(name) {
 
 
 
+/**
+
+ * Ano/mês/dia em America/Sao_Paulo. O servidor roda em UTC: com getDate()
+
+ * um evento das 21h–23h59 (Brasília) saía com a data do DIA SEGUINTE e
+
+ * «Hoje»/«Amanhã» errados.
+
+ */
+
+function brDateParts(date) {
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+
+    timeZone: "America/Sao_Paulo",
+
+    year: "numeric",
+
+    month: "2-digit",
+
+    day: "2-digit",
+
+  }).formatToParts(date);
+
+  const get = (t) => parseInt(parts.find((x) => x.type === t)?.value || "0", 10);
+
+  return { y: get("year"), m: get("month"), d: get("day") };
+
+}
+
 function formatDateBr(date) {
 
-  const dd = String(date.getDate()).padStart(2, "0");
+  const { y, m, d } = brDateParts(date);
 
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-
-  return `${dd}/${mm}/${date.getFullYear()}`;
+  return `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`;
 
 }
 
@@ -332,23 +360,23 @@ function eventDayContext(eventAt, now) {
 
   }
 
-  const sameDay =
+  // Dia civil em Brasília (servidor em UTC).
 
-    eventAt.getFullYear() === n.getFullYear() &&
+  const ev = brDateParts(eventAt);
 
-    eventAt.getMonth() === n.getMonth() &&
+  const hj = brDateParts(n);
 
-    eventAt.getDate() === n.getDate();
+  const sameDay = ev.y === hj.y && ev.m === hj.m && ev.d === hj.d;
 
-  const tomorrow = new Date(n.getFullYear(), n.getMonth(), n.getDate() + 1);
+  const amanha = new Date(Date.UTC(hj.y, hj.m - 1, hj.d + 1));
 
   const isTomorrow =
 
-    eventAt.getFullYear() === tomorrow.getFullYear() &&
+    ev.y === amanha.getUTCFullYear() &&
 
-    eventAt.getMonth() === tomorrow.getMonth() &&
+    ev.m === amanha.getUTCMonth() + 1 &&
 
-    eventAt.getDate() === tomorrow.getDate();
+    ev.d === amanha.getUTCDate();
 
   const dateStr = formatDateBr(eventAt);
 
