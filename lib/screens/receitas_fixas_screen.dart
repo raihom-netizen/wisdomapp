@@ -30,6 +30,7 @@ import '../widgets/fixas_totalizador_card.dart';
 import '../widgets/finance_calendar_color_picker.dart';
 import '../widgets/fixed_flow_finance_account_field.dart';
 import '../widgets/fixed_pending_prefs_sheet.dart';
+import '../utils/fixed_flow_schedule.dart';
 
 const EdgeInsets _kFixedFlowKeyboardScrollPad =
     EdgeInsets.fromLTRB(0, 0, 0, 260);
@@ -853,10 +854,14 @@ class _ReceitasFixasScreenState extends State<ReceitasFixasScreen> {
                               }
                               DateTime? effectiveEnd = endDate;
                               if (mode == FixedIncomeService.modeInstallments) {
-                                final meses =
-                                    totalParcelas - parcelaInicial + 1;
-                                effectiveEnd = DateTime(startDate.year,
-                                    startDate.month + meses - 1, startDate.day);
+                                // Último dia do mês final (início dia 29–31
+                                // não transborda para o mês seguinte).
+                                effectiveEnd =
+                                    FixedFlowSchedule.installmentsEndDate(
+                                  start: startDate,
+                                  totalParcelas: totalParcelas,
+                                  parcelaInicial: parcelaInicial,
+                                );
                               }
                               try {
                                 if (isEdit && id != null) {

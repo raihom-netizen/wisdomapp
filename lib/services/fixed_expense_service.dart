@@ -5,6 +5,7 @@ import '../utils/finance_line_opening.dart';
 import '../utils/finance_transaction_status_resolver.dart';
 import '../utils/finance_transactions_hub.dart';
 import '../utils/firestore_user_doc_id.dart';
+import '../utils/fixed_flow_schedule.dart';
 import 'finance_month_cache.dart';
 
 /// Despesas fixas: todo mês o sistema cria um lançamento automaticamente no período definido pelo usuário.
@@ -78,8 +79,12 @@ class FixedExpenseService {
           totalParcelas.clamp(1, AppBusinessRules.maxFixedFlowInstallments);
       final start = DateTime(startDate.year, startDate.month, startDate.day);
       final ini = (parcelaInicial ?? 1).clamp(1, effTotalParcelas);
-      final meses = effTotalParcelas - ini + 1;
-      end = DateTime(start.year, start.month + meses - 1, start.day);
+      // Último dia do mês final (31/01 + 2 parcelas = 28/02, não 03/03).
+      end = FixedFlowSchedule.installmentsEndDate(
+        start: start,
+        totalParcelas: effTotalParcelas,
+        parcelaInicial: ini,
+      );
     } else {
       effTotalParcelas = null;
       end = endDate ??
@@ -218,7 +223,13 @@ class FixedExpenseService {
         data['parceiroTipo'] = (parceiroTipo ?? '').trim();
       }
     }
+    final beforeSnap = await _fixedRef(uid).doc(id).get();
+    final before = beforeSnap.data() ?? const <String, dynamic>{};
     await _fixedRef(uid).doc(id).update(data);
+    // Meses PENDENTES já gerados acompanham a edição (valor, descrição,
+    // categoria, nº da parcela) e os que sobraram ao encurtar a data final /
+    // nº de parcelas são apagados. Pagos nunca são tocados.
+    await _syncPendingWithFixed(uid, id, before);
     if (parceiroId != null) {
       await _updatePendingParceiro(
         uid,
@@ -660,9 +671,9 @@ class FixedExpenseService {
         if (isByInstallments && totalParcelas != null) {
           final monthsFromStart =
               (month.year - start.year) * 12 + (month.month - start.month);
-          parcelIndex =
-              (parcelaInicial + monthsFromStart).clamp(1, totalParcelas);
-          if (parcelIndex > totalParcelas) {
+          // Sem clamp: mês fora das parcelas NÃO gera (antes repetia N/N).
+          parcelIndex = parcelaInicial + monthsFromStart;
+          if (parcelIndex < 1 || parcelIndex > totalParcelas) {
             month = DateTime(month.year, month.month + 1, 1);
             continue;
           }
@@ -684,6 +695,11 @@ class FixedExpenseService {
         const status = 'pending';
         const Timestamp? paidAt = null;
         toCreate.add({
+          '__id': FixedFlowSchedule.generatedTxId(
+            prefix: 'fx',
+            fixedId: feId,
+            month: month,
+          ),
           'type': 'expense',
           'amount': amount,
           'category': category,
@@ -716,19 +732,101 @@ class FixedExpenseService {
       }
     }
 
-    int created = 0;
     try {
-      for (var j = 0; j < toCreate.length; j += batchLimit) {
+      return await _createGeneratedMonths(uid, toCreate);
+    } catch (e) {
+      throw Exception('Erro ao gerar parcelas de despesas fixas: $e');
+    }
+  }
+
+  /// Grava os meses gerados com ID determinístico (`fx_{fixa}_{yyyyMM}`):
+  /// numa transação, só cria o documento que ainda NÃO existe — dois aparelhos
+  /// gerando juntos não duplicam o mês nem sobrescrevem um mês já pago.
+  /// Meses antigos com ID aleatório continuam valendo: já entraram em
+  /// `existingMonthKeys` pela consulta por `fixedExpenseId` e não chegam aqui.
+  /// Sem rede (transação indisponível) cai num lote comum com os mesmos IDs.
+  Future<int> _createGeneratedMonths(
+    String uid,
+    List<Map<String, dynamic>> toCreate,
+  ) async {
+    var created = 0;
+    const chunk = 200;
+    for (var j = 0; j < toCreate.length; j += chunk) {
+      final part = toCreate.skip(j).take(chunk).toList();
+      final refs = [
+        for (final d in part) _txRef(uid).doc(d['__id'] as String),
+      ];
+      final payloads = [
+        for (final d in part) Map<String, dynamic>.from(d)..remove('__id'),
+      ];
+      try {
+        final n = await _db.runTransaction<int>((t) async {
+          final snaps = <DocumentSnapshot<Map<String, dynamic>>>[];
+          for (final r in refs) {
+            snaps.add(await t.get(r));
+          }
+          var made = 0;
+          for (var k = 0; k < refs.length; k++) {
+            if (snaps[k].exists) continue;
+            t.set(refs[k], payloads[k]);
+            made++;
+          }
+          return made;
+        });
+        created += n;
+      } catch (_) {
         final batch = _db.batch();
-        for (final data in toCreate.skip(j).take(batchLimit)) {
-          batch.set(_txRef(uid).doc(), data);
-          created++;
+        for (var k = 0; k < refs.length; k++) {
+          batch.set(refs[k], payloads[k]);
+        }
+        await batch.commit();
+        created += refs.length;
+      }
+    }
+    return created;
+  }
+
+  /// Ver [FixedFlowSchedule.planPendingSync].
+  Future<void> _syncPendingWithFixed(
+    String uid,
+    String fixedId,
+    Map<String, dynamic> before,
+  ) async {
+    try {
+      final after = (await _fixedRef(uid).doc(fixedId).get()).data();
+      if (after == null) return;
+      final snap = await _txRef(uid)
+          .where('fixedExpenseId', isEqualTo: fixedId)
+          .where('status', isEqualTo: 'pending')
+          .get();
+      if (snap.docs.isEmpty) return;
+      final plan = FixedFlowSchedule.planPendingSync(
+        before: before,
+        after: after,
+        pending: [for (final d in snap.docs) (id: d.id, data: d.data())],
+        monthKeyField: 'fixedExpenseMonthKey',
+        modeInstallments: modeInstallments,
+      );
+      if (plan.isEmpty) return;
+      final ops = <void Function(WriteBatch)>[
+        for (final e in plan.updates.entries)
+          (b) => b.update(_txRef(uid).doc(e.key), {
+                ...e.value,
+                'updatedAt': FieldValue.serverTimestamp(),
+              }),
+        for (final id in plan.deletes) (b) => b.delete(_txRef(uid).doc(id)),
+      ];
+      for (var i = 0; i < ops.length; i += 450) {
+        final batch = _db.batch();
+        for (final op in ops.skip(i).take(450)) {
+          op(batch);
         }
         await batch.commit();
       }
-      return created;
-    } catch (e) {
-      throw Exception('Erro ao gerar parcelas de despesas fixas: $e');
+      FinanceMonthCache.clearUid(uid);
+      FinanceTransactionsHub.notifyMutated(uid: uid);
+    } catch (_) {
+      // A fixa já foi salva; os pendentes ficam como estavam (comportamento antigo).
     }
   }
 }
