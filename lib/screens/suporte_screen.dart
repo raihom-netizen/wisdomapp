@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../widgets/fast_text_field.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../services/user_feedback_service.dart';
 
 /// Página de Suporte — igual à página de sugestões: usuário envia mensagem, admin responde no painel.
@@ -104,14 +105,14 @@ class _SuporteScreenState extends State<SuporteScreen> {
           child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Central de Suporte',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: context.appTextPrimary),
             ),
             const SizedBox(height: 8),
             Text(
               'Envie sua dúvida ou problema. Atendemos pelo painel do app e você receberá a resposta aqui.',
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade700, height: 1.6),
+              style: TextStyle(fontSize: 14, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700, height: 1.6),
             ),
             const SizedBox(height: 28),
             if (isLoggedIn) ...[
@@ -164,7 +165,7 @@ class _SuporteScreenState extends State<SuporteScreen> {
                       const SizedBox(height: 8),
                       Text(
                         'Entre na sua conta para enviar sua mensagem de suporte. Você receberá a resposta no próprio app.',
-                        style: TextStyle(fontSize: 14, color: Colors.grey.shade700, height: 1.5),
+                        style: TextStyle(fontSize: 14, color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700, height: 1.5),
                       ),
                       const SizedBox(height: 20),
                       SizedBox(

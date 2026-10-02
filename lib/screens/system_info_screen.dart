@@ -4,6 +4,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../constants/app_verse.dart';
 import '../constants/app_brand.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../services/user_feedback_service.dart';
 
 /// Tela Informações do Sistema: resumo geral, créditos, sugestões/críticas.
@@ -115,7 +116,7 @@ class _SystemInfoScreenState extends State<SystemInfoScreen> {
                       '(compromissos e lembretes) e Cursos '
                       '(conteúdos e formação). Inclui backup local, '
                       'sincronização na nuvem e dicas financeiras com base na Bíblia.',
-                      style: TextStyle(fontSize: 14, height: 1.5, color: AppColors.textSecondary),
+                      style: TextStyle(fontSize: 14, height: 1.5, color: context.appTextSecondary),
                     ),
                   ],
                 ),
@@ -132,7 +133,7 @@ class _SystemInfoScreenState extends State<SystemInfoScreen> {
                   children: [
                     Text(
                       'Agradecemos por usar o WISDOMAPP App. Sua confiança nos motiva a melhorar sempre.',
-                      style: TextStyle(fontSize: 15, height: 1.5, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
+                      style: TextStyle(fontSize: 15, height: 1.5, color: context.appTextSecondary, fontWeight: FontWeight.w500),
                     ),
                   ],
                 ),
@@ -149,7 +150,7 @@ class _SystemInfoScreenState extends State<SystemInfoScreen> {
                   children: [
                     Text(
                       'Idealizado por',
-                      style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+                      style: TextStyle(fontSize: 13, color: context.appTextMuted),
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -163,7 +164,7 @@ class _SystemInfoScreenState extends State<SystemInfoScreen> {
                     const SizedBox(height: 18),
                     Text(
                       'Desenvolvido por',
-                      style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+                      style: TextStyle(fontSize: 13, color: context.appTextMuted),
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -210,7 +211,7 @@ class _SystemInfoScreenState extends State<SystemInfoScreen> {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.textSecondary,
+                      color: context.appTextSecondary,
                     ),
                   ),
                 ],
@@ -219,7 +220,7 @@ class _SystemInfoScreenState extends State<SystemInfoScreen> {
             const SizedBox(height: 10),
             Text(
               'Envie sua opinião. Leio todas as mensagens e respondo pelo app.',
-              style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+              style: TextStyle(fontSize: 13, color: context.appTextMuted),
             ),
             const SizedBox(height: 12),
             FastTextField(
@@ -253,7 +254,7 @@ class _SystemInfoScreenState extends State<SystemInfoScreen> {
               builder: (context, snap) => Text(
                 snap.hasData ? 'Versão ${snap.data!.version}+${snap.data!.buildNumber}' : '',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                style: TextStyle(fontSize: 12, color: context.appTextMuted),
               ),
             ),
             const SizedBox(height: 8),
@@ -263,7 +264,7 @@ class _SystemInfoScreenState extends State<SystemInfoScreen> {
               style: TextStyle(
                 fontSize: 10,
                 height: 1.3,
-                color: AppColors.textMuted.withValues(alpha: 0.7),
+                color: context.appTextMuted.withValues(alpha: 0.7),
                 fontStyle: FontStyle.italic,
               ),
             ),

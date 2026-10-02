@@ -32,6 +32,7 @@ import '../utils/firestore_user_doc_id.dart';
 import '../utils/shell_lazy_module_policy.dart';
 import '../pwa_install/install_card.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../services/push_notification_service.dart';
 import '../services/widget_data_service.dart';
 import '../models/user_profile.dart';
@@ -830,7 +831,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                               selected ? FontWeight.w900 : FontWeight.w800,
                           color: selected
                               ? accent
-                              : const Color(0xFF334155),
+                              : (context.isDarkMode
+                                  ? context.appTextSecondary
+                                  : const Color(0xFF334155)),
                         ),
                       ),
                     ],
@@ -861,12 +864,16 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
               vertical: isUltraNarrow ? 4 : 5,
             ),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: context.isDarkMode ? context.appSurface : Colors.white,
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
+              border: Border.all(
+                  color: context.isDarkMode
+                      ? context.appChipIdleBorder
+                      : const Color(0xFFE2E8F0)),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.08),
+                  color: Colors.black
+                      .withValues(alpha: context.isDarkMode ? 0.4 : 0.08),
                   blurRadius: 20,
                   offset: const Offset(0, -4),
                 ),
@@ -1473,7 +1480,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 15,
-                            color: Colors.grey.shade700,
+                            color: context.isDarkMode
+                                ? context.appTextSecondary
+                                : Colors.grey.shade700,
                           ),
                         ),
                         const SizedBox(height: 28),
@@ -2473,15 +2482,21 @@ class _PaymentSuccessBanner extends StatelessWidget {
                 children: [
                   Text(
                     'Licença $planLabel ativada com sucesso.',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w800,
-                      color: Colors.black87,
+                      color: context.isDarkMode
+                          ? context.appTextPrimary
+                          : Colors.black87,
                     ),
                   ),
                   Text(
                     'Vencimento da licença: $venc.',
-                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: context.isDarkMode
+                            ? context.appTextSecondary
+                            : Colors.black54),
                   ),
                 ],
               ),
@@ -2517,13 +2532,15 @@ class _GracePeriodBanner extends StatelessWidget {
               size: 22,
             ),
             const SizedBox(width: 10),
-            const Expanded(
+            Expanded(
               child: Text(
                 'Período de carência (3 dias). Renove agora para não perder o acesso ao sistema.',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: Colors.black87,
+                  color: context.isDarkMode
+                      ? context.appTextPrimary
+                      : Colors.black87,
                 ),
               ),
             ),
@@ -2573,10 +2590,12 @@ class _ReadOnlyBanner extends StatelessWidget {
                 isLicenseExpired
                     ? 'Licença vencida. Você pode visualizar, mas não lançar receitas, despesas, escalas, ocorrências nem emitir relatórios. Renove para continuar.'
                     : 'Modo somente visualização. Assine o plano Premium para lançar e emitir relatórios.',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: Colors.black87,
+                  color: context.isDarkMode
+                      ? context.appTextPrimary
+                      : Colors.black87,
                 ),
               ),
             ),
@@ -2688,7 +2707,9 @@ class _LicenseBannerState extends State<_LicenseBanner> {
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
-                        color: Colors.orange.shade900,
+                        color: context.isDarkMode
+                            ? Colors.orange.shade200
+                            : Colors.orange.shade900,
                       ),
                     ),
                   ),
@@ -2757,7 +2778,11 @@ class _LicenseBannerState extends State<_LicenseBanner> {
             Expanded(
               child: Text(
                 msg,
-                style: const TextStyle(fontSize: 12, color: Colors.black87),
+                style: TextStyle(
+                    fontSize: 12,
+                    color: context.isDarkMode
+                        ? context.appTextPrimary
+                        : Colors.black87),
               ),
             ),
             FilledButton(
@@ -2857,9 +2882,9 @@ class _ShellModuleBootPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ColoredBox(
-      color: _bg,
-      child: Center(
+    return ColoredBox(
+      color: context.isDarkMode ? context.appScaffold : _bg,
+      child: const Center(
         child: SizedBox(
           width: 32,
           height: 32,

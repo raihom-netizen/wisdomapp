@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 
 const String _kOnboardingTourDone = 'onboarding_tour_done';
 
@@ -112,10 +113,10 @@ class _OnboardingTourState extends State<OnboardingTour> {
                             const SizedBox(height: 20),
                             Text(
                               _steps[_step].$2,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 22,
                                 fontWeight: FontWeight.w800,
-                                color: AppColors.textPrimary,
+                                color: context.appTextPrimary,
                               ),
                               textAlign: TextAlign.center,
                             ),
@@ -124,7 +125,9 @@ class _OnboardingTourState extends State<OnboardingTour> {
                               _steps[_step].$3,
                               style: TextStyle(
                                 fontSize: 15,
-                                color: Colors.grey.shade700,
+                                color: context.isDarkMode
+                                    ? context.appTextSecondary
+                                    : Colors.grey.shade700,
                                 height: 1.4,
                               ),
                               textAlign: TextAlign.center,
@@ -139,7 +142,11 @@ class _OnboardingTourState extends State<OnboardingTour> {
                                   width: i == _step ? 24 : 8,
                                   height: 8,
                                   decoration: BoxDecoration(
-                                    color: i == _step ? AppColors.primary : Colors.grey.shade300,
+                                    color: i == _step
+                                        ? AppColors.primary
+                                        : (context.isDarkMode
+                                            ? context.appChipIdleBorder
+                                            : Colors.grey.shade300),
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                 ),

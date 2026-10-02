@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 
 /// Barra compacta: ← **Voltar** + **Fechar (X)** — previews e sheets modais.
 Widget previewSheetTopBar(BuildContext context) {
@@ -44,17 +45,19 @@ Widget previewSheetTopBar(BuildContext context) {
         ),
         const Spacer(),
         Material(
-          color: Colors.grey.shade100,
+          color: context.isDarkMode
+              ? context.appSurfaceHigh
+              : Colors.grey.shade100,
           shape: const CircleBorder(),
           child: InkWell(
             customBorder: const CircleBorder(),
             onTap: () => Navigator.of(context).pop(),
-            child: const Padding(
-              padding: EdgeInsets.all(8),
+            child: Padding(
+              padding: const EdgeInsets.all(8),
               child: Icon(
                 Icons.close_rounded,
                 size: 22,
-                color: Color(0xFF1A237E),
+                color: context.appDeepTitle,
                 semanticLabel: 'Fechar',
               ),
             ),
@@ -90,7 +93,8 @@ Widget sheetWideVoltarButton(
           minimumSize: const Size.fromHeight(52),
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
           foregroundColor: AppColors.primary,
-          backgroundColor: Colors.white,
+          backgroundColor:
+              context.isDarkMode ? context.appSurfaceHigh : Colors.white,
         ),
       ),
     ),

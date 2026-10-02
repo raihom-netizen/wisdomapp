@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../constants/premium_pro_limits.dart';
 import '../services/mp_checkout_pricing_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 
 /// Textos de posicionamento Premium PRO (Open Finance + automação).
 class PremiumProCopy {
@@ -33,13 +34,15 @@ class PremiumProDiferencialChips extends StatelessWidget {
       spacing: 8,
       runSpacing: 8,
       children: [
-        _chip(Icons.account_balance_rounded, PremiumProCopy.diferencialBancos),
-        _chip(Icons.credit_card_rounded, PremiumProCopy.diferencialMeios),
+        _chip(context, Icons.account_balance_rounded,
+            PremiumProCopy.diferencialBancos),
+        _chip(context, Icons.credit_card_rounded,
+            PremiumProCopy.diferencialMeios),
       ],
     );
   }
 
-  Widget _chip(IconData icon, String text) {
+  Widget _chip(BuildContext context, IconData icon, String text) {
     return Material(
       color: AppColors.primary.withValues(alpha: 0.08),
       borderRadius: BorderRadius.circular(12),
@@ -53,11 +56,11 @@ class PremiumProDiferencialChips extends StatelessWidget {
             Flexible(
               child: Text(
                 text,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                   height: 1.25,
-                  color: AppColors.textPrimary,
+                  color: context.appTextPrimary,
                 ),
               ),
             ),
@@ -87,7 +90,7 @@ class PremiumProDepoisChecklist extends StatelessWidget {
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w800,
-            color: AppColors.textMuted,
+            color: context.appTextMuted,
             letterSpacing: 0.3,
           ),
         ),
@@ -104,11 +107,11 @@ class PremiumProDepoisChecklist extends StatelessWidget {
                   Expanded(
                     child: Text(
                       t,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                         height: 1.35,
-                        color: AppColors.textPrimary,
+                        color: context.appTextPrimary,
                       ),
                     ),
                   ),
@@ -132,7 +135,10 @@ class PremiumProResumoVisaoCard extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.grey.shade200),
+        side: BorderSide(
+            color: context.isDarkMode
+                ? context.appChipIdleBorder
+                : Colors.grey.shade200),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -152,7 +158,7 @@ class PremiumProResumoVisaoCard extends StatelessWidget {
             const SizedBox(height: 10),
             Text(
               PremiumProCopy.resumoFluxo,
-              style: TextStyle(fontSize: 13, height: 1.45, color: AppColors.textSecondary),
+              style: TextStyle(fontSize: 13, height: 1.45, color: context.appTextSecondary),
             ),
             const SizedBox(height: 14),
             Text(
@@ -160,7 +166,7 @@ class PremiumProResumoVisaoCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
-                color: AppColors.textMuted,
+                color: context.appTextMuted,
               ),
             ),
             const SizedBox(height: 6),
@@ -170,7 +176,7 @@ class PremiumProResumoVisaoCard extends StatelessWidget {
                 fontSize: 13,
                 height: 1.5,
                 fontStyle: FontStyle.italic,
-                color: AppColors.textPrimary,
+                color: context.appTextPrimary,
               ),
             ),
           ],
@@ -201,7 +207,9 @@ class PremiumProMarketingHighlights extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
             side: BorderSide(color: AppColors.logoOrange.withValues(alpha: 0.45)),
           ),
-          color: const Color(0xFFFFF7ED),
+          color: context.isDarkMode
+              ? context.appAccentSurface(Colors.orange)
+              : const Color(0xFFFFF7ED),
           child: Padding(
             padding: pad,
             child: Column(
@@ -217,7 +225,9 @@ class PremiumProMarketingHighlights extends StatelessWidget {
                         style: TextStyle(
                           fontWeight: FontWeight.w900,
                           fontSize: compact ? 14 : 15,
-                          color: const Color(0xFF9A3412),
+                          color: context.isDarkMode
+                              ? Colors.orange.shade200
+                              : const Color(0xFF9A3412),
                         ),
                       ),
                     ),
@@ -251,13 +261,13 @@ class PremiumProMarketingHighlights extends StatelessWidget {
                   ),
                   Text(
                     '${p.premiumProAnnualLine} (${p.premiumProAnnualEquivPerMonthLine} em média) · referência: ${p.premiumProMonthlyLine}',
-                    style: TextStyle(fontSize: 11, color: AppColors.textMuted, height: 1.35),
+                    style: TextStyle(fontSize: 11, color: context.appTextMuted, height: 1.35),
                   ),
                 ] else ...[
                   const SizedBox(height: 8),
                   Text(
                     '${p.premiumProAnnualLine} ou ${p.premiumProMonthlyLine} — valores em tempo real no checkout.',
-                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.35),
+                    style: TextStyle(fontSize: 12, color: context.appTextSecondary, height: 1.35),
                   ),
                 ],
                 SizedBox(height: compact ? 10 : 12),
@@ -295,7 +305,7 @@ class _ProMarketingLine extends StatelessWidget {
               style: TextStyle(
                 fontSize: compact ? 11.5 : 12.5,
                 height: 1.4,
-                color: AppColors.textPrimary,
+                color: context.appTextPrimary,
                 fontWeight: FontWeight.w600,
               ),
             ),

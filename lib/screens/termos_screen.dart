@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../constants/app_brand.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 
 /// Termos de Uso do WISDOMAPP (Wisdom App).
 class TermosScreen extends StatelessWidget {
@@ -56,28 +57,34 @@ class TermosScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Termos de Uso',
                 style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary),
+                    color: context.appTextPrimary),
               ),
               const SizedBox(height: 8),
               Text(
                 '${AppBrand.name} — Última atualização: fevereiro de 2026',
-                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                style: TextStyle(
+                    fontSize: 13,
+                    color: context.isDarkMode
+                        ? context.appTextMuted
+                        : Colors.grey.shade600),
               ),
               const SizedBox(height: 24),
               Text(
                 'Leia atentamente estes Termos de Uso antes de utilizar o ${AppBrand.name}.',
                 style: TextStyle(
                     fontSize: 14,
-                    color: Colors.grey.shade700,
+                    color: context.isDarkMode
+                        ? context.appTextSecondary
+                        : Colors.grey.shade700,
                     height: 1.6),
               ),
               const SizedBox(height: 28),
-              ..._sectionsForApp().map((s) => _buildSection(s)),
+              ..._sectionsForApp().map((s) => _buildSection(context, s)),
             ],
           ),
         ),
@@ -85,7 +92,7 @@ class TermosScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSection(_Section s) {
+  Widget _buildSection(BuildContext context, _Section s) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 24),
       child: Column(
@@ -104,7 +111,9 @@ class TermosScreen extends StatelessWidget {
                 child: Text(p,
                     style: TextStyle(
                         fontSize: 14,
-                        color: Colors.grey.shade800,
+                        color: context.isDarkMode
+                            ? context.appTextSecondary
+                            : Colors.grey.shade800,
                         height: 1.6)),
               )),
         ],

@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/url_launcher_helper.dart';
 
 /// Diálogo central estilo “push” premium: cantos amplos, sombra, hierarquia clara.
@@ -33,6 +34,7 @@ Future<T?> showPremiumCenterMessageDialog<T>({
       final mq = MediaQuery.of(ctx);
       final maxW = mq.size.width.clamp(0.0, 420.0);
       final maxDialogH = (mq.size.height - mq.padding.vertical) * 0.88;
+      final dark = ctx.isDarkMode;
 
       void dismiss() {
         onLater?.call();
@@ -48,7 +50,7 @@ Future<T?> showPremiumCenterMessageDialog<T>({
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 20),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: dark ? ctx.appSurface : Colors.white,
                 borderRadius: BorderRadius.circular(28),
                 boxShadow: [
                   BoxShadow(
@@ -88,10 +90,15 @@ Future<T?> showPremiumCenterMessageDialog<T>({
                       padding: const EdgeInsets.fromLTRB(10, 10, 8, 0),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [
-                            const Color(0xFFEFF6FF),
-                            Colors.white,
-                          ],
+                          colors: dark
+                              ? [
+                                  AppColors.primary.withValues(alpha: 0.14),
+                                  ctx.appSurface,
+                                ]
+                              : [
+                                  const Color(0xFFEFF6FF),
+                                  Colors.white,
+                                ],
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                         ),
@@ -103,7 +110,7 @@ Future<T?> showPremiumCenterMessageDialog<T>({
                             width: 48,
                             height: 48,
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: dark ? ctx.appSurfaceHigh : Colors.white,
                               borderRadius: BorderRadius.circular(14),
                               boxShadow: [
                                 BoxShadow(
@@ -129,10 +136,12 @@ Future<T?> showPremiumCenterMessageDialog<T>({
                               children: [
                                 Text(
                                   title,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 17,
                                     fontWeight: FontWeight.w800,
-                                    color: Color(0xFF0F172A),
+                                    color: dark
+                                        ? ctx.appTextPrimary
+                                        : const Color(0xFF0F172A),
                                     height: 1.25,
                                     letterSpacing: 0.1,
                                   ),
@@ -144,7 +153,7 @@ Future<T?> showPremiumCenterMessageDialog<T>({
                                     style: TextStyle(
                                       fontSize: 12.5,
                                       fontWeight: FontWeight.w600,
-                                      color: AppColors.textMuted,
+                                      color: ctx.appTextMuted,
                                       height: 1.3,
                                     ),
                                   ),
@@ -190,7 +199,7 @@ Future<T?> showPremiumCenterMessageDialog<T>({
                                       baseStyle: TextStyle(
                                         fontSize: 14.5,
                                         height: 1.45,
-                                        color: AppColors.textSecondary,
+                                        color: ctx.appTextSecondary,
                                         fontWeight: FontWeight.w500,
                                       ),
                                       linkStyle: TextStyle(
@@ -208,7 +217,7 @@ Future<T?> showPremiumCenterMessageDialog<T>({
                                       style: TextStyle(
                                         fontSize: 12.5,
                                         fontStyle: FontStyle.italic,
-                                        color: AppColors.textMuted,
+                                        color: ctx.appTextMuted,
                                         height: 1.35,
                                       ),
                                     ),
@@ -243,7 +252,7 @@ Future<T?> showPremiumCenterMessageDialog<T>({
                               style: TextStyle(
                                 fontWeight: FontWeight.w700,
                                 fontSize: 15,
-                                color: AppColors.textMuted,
+                                color: ctx.appTextMuted,
                               ),
                             ),
                           ),

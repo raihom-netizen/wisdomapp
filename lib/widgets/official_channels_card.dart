@@ -5,6 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/url_launcher_helper.dart';
 
 /// Faixa premium de canais oficiais — YouTube, Instagram, WhatsApp.
@@ -53,6 +54,25 @@ class OfficialChannelsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!_hasAny) return const SizedBox.shrink();
+
+    // Modo escuro: usa o visual «sobre fundo escuro» (vidro translúcido),
+    // que já tem textos claros — o claro fica idêntico.
+    if (context.isDarkMode && !forDarkBackground) {
+      return OfficialChannelsCard(
+        title: title,
+        subtitle: subtitle,
+        youtubeUrl: youtubeUrl,
+        instagramUrl: instagramUrl,
+        whatsappUrl: whatsappUrl,
+        youtubeLabel: youtubeLabel,
+        instagramLabel: instagramLabel,
+        whatsappLabel: whatsappLabel,
+        compact: compact,
+        includeYoutubeInstagram: includeYoutubeInstagram,
+        includeInstagram: includeInstagram,
+        forDarkBackground: true,
+      );
+    }
 
     final pad = compact ? 12.0 : 18.0;
     final radius = compact ? 16.0 : 22.0;

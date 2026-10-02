@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/user_profile.dart';
 import '../services/user_display_name_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 
 /// Sheet moderno — editar nome/sobrenome exibidos no painel (emoji permitido).
 Future<bool?> showUserDisplayNameEditSheet(
@@ -111,7 +112,9 @@ class _UserDisplayNameEditSheetState extends State<_UserDisplayNameEditSheet> {
       padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + bottom),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: const Color(0xFFF8FAFC),
+          color: context.isDarkMode
+              ? context.appSurface
+              : const Color(0xFFF8FAFC),
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
@@ -135,17 +138,19 @@ class _UserDisplayNameEditSheetState extends State<_UserDisplayNameEditSheet> {
                     height: 4,
                     margin: const EdgeInsets.only(bottom: 14),
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade400,
+                      color: context.isDarkMode
+                          ? context.appChipIdleBorder
+                          : Colors.grey.shade400,
                       borderRadius: BorderRadius.circular(999),
                     ),
                   ),
                 ),
-                const Text(
+                Text(
                   'Como quer ser chamado?',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w900,
-                    color: AppColors.textPrimary,
+                    color: context.appTextPrimary,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -154,7 +159,7 @@ class _UserDisplayNameEditSheetState extends State<_UserDisplayNameEditSheet> {
                   style: TextStyle(
                     fontSize: 13,
                     height: 1.35,
-                    color: AppColors.textSecondary,
+                    color: context.appTextSecondary,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -293,14 +298,20 @@ class _UserDisplayNameEditSheetState extends State<_UserDisplayNameEditSheet> {
         hintText: hint,
         counterText: '',
         filled: true,
-        fillColor: Colors.white,
+        fillColor: context.isDarkMode ? context.appInputFill : Colors.white,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: Colors.grey.shade300),
+          borderSide: BorderSide(
+              color: context.isDarkMode
+                  ? context.appChipIdleBorder
+                  : Colors.grey.shade300),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: Colors.grey.shade300),
+          borderSide: BorderSide(
+              color: context.isDarkMode
+                  ? context.appChipIdleBorder
+                  : Colors.grey.shade300),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),

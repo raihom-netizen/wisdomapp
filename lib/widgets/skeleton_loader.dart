@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/theme_context.dart';
+
 /// Placeholder shimmer effect (grey boxes with animated gradient).
 /// Use where CircularProgressIndicator is shown for list loading.
 class SkeletonLoader extends StatefulWidget {
@@ -54,11 +56,17 @@ class _SkeletonLoaderState extends State<SkeletonLoader>
             gradient: LinearGradient(
               begin: Alignment(_animation.value - 1, 0),
               end: Alignment(_animation.value, 0),
-              colors: [
-                Colors.grey.shade300,
-                Colors.grey.shade100,
-                Colors.grey.shade300,
-              ],
+              colors: context.isDarkMode
+                  ? [
+                      context.appSurfaceHigh,
+                      context.appSurface,
+                      context.appSurfaceHigh,
+                    ]
+                  : [
+                      Colors.grey.shade300,
+                      Colors.grey.shade100,
+                      Colors.grey.shade300,
+                    ],
             ),
           ),
         );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import 'plan_change_contract_sheet.dart';
 
 /// Aviso antes do pagamento: responsabilidade do usuário + termo completo.
@@ -48,7 +49,9 @@ class PlanChangeAcknowledgmentCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: context.isDarkMode
+                        ? context.appSurfaceHigh
+                        : Colors.white,
                     borderRadius: BorderRadius.circular(14),
                     boxShadow: [
                       BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 8),
@@ -57,13 +60,15 @@ class PlanChangeAcknowledgmentCard extends StatelessWidget {
                   child: Icon(Icons.policy_rounded, color: AppColors.primary, size: 26),
                 ),
                 const SizedBox(width: 12),
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Antes de mudar de plano',
                     style: TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w900,
-                      color: Color(0xFF0F172A),
+                      color: context.isDarkMode
+                          ? context.appTextPrimary
+                          : const Color(0xFF0F172A),
                       height: 1.2,
                     ),
                   ),
@@ -77,7 +82,9 @@ class PlanChangeAcknowledgmentCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 13,
                 height: 1.45,
-                color: Colors.blueGrey.shade800,
+                color: context.isDarkMode
+                    ? context.appTextSecondary
+                    : Colors.blueGrey.shade800,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -95,7 +102,9 @@ class PlanChangeAcknowledgmentCard extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Material(
-              color: Colors.white.withValues(alpha: 0.75),
+              color: context.isDarkMode
+                  ? context.appSurfaceHigh.withValues(alpha: 0.75)
+                  : Colors.white.withValues(alpha: 0.75),
               borderRadius: BorderRadius.circular(14),
               child: CheckboxListTile(
                 value: accepted,

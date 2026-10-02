@@ -11,6 +11,7 @@ import '../services/relatorio_service.dart';
 import '../services/version_check_service.dart';
 import '../utils/pdf_financeiro_super_extrato.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import 'report_preview_screen.dart';
 import '../widgets/module_header_premium.dart';
 import '../utils/premium_upgrade.dart';
@@ -478,11 +479,11 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
           const SizedBox(height: 8),
           Card(
             child: ListTile(
-              leading: Icon(Icons.picture_as_pdf, color: profile.hasActiveLicense ? AppColors.deepBlueDark : Colors.grey),
+              leading: Icon(Icons.picture_as_pdf, color: profile.hasActiveLicense ? (context.isDarkMode ? context.appDeepTitle : AppColors.deepBlueDark) : Colors.grey),
               title: const Text('Relatório financeiro (PDF)', style: TextStyle(fontWeight: FontWeight.w700)),
               subtitle: const Text('Gere PDF do período para contador ou arquivo pessoal. Layout Clean Premium.'),
               trailing: IconButton(
-                icon: Icon(Icons.description, color: profile.hasActiveLicense ? AppColors.deepBlueDark : Colors.grey),
+                icon: Icon(Icons.description, color: profile.hasActiveLicense ? (context.isDarkMode ? context.appDeepTitle : AppColors.deepBlueDark) : Colors.grey),
                 onPressed: profile.hasActiveLicense
                     ? () => _gerarRelatorioPdf(context, uid)
                     : () => mostrarAvisoSeLicencaInativa(context, profile),

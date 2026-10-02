@@ -6,6 +6,7 @@ import '../constants/app_brand.dart';
 import '../constants/app_version.dart';
 import '../services/version_check_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/app_update_launcher.dart';
 
 /// Diálogo de nova versão (não bloqueante) — igual Controle Total.
@@ -45,8 +46,10 @@ class NewVersionDialog extends StatelessWidget {
       child: Container(
         constraints: const BoxConstraints(maxWidth: 440),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFFFFFFFF), Color(0xFFF0F7FF)],
+          gradient: LinearGradient(
+            colors: context.isDarkMode
+                ? [context.appSurface, context.appSurfaceHigh]
+                : const [Color(0xFFFFFFFF), Color(0xFFF0F7FF)],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -90,21 +93,21 @@ class NewVersionDialog extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 20),
-                const Text(
+                Text(
                   'Nova versão disponível',
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
+                    color: context.appTextPrimary,
                   ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
                 Text(
                   'A versão $version já está no ar com melhorias e correções para o ${AppBrand.displayName}.',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
-                    color: AppColors.textSecondary,
+                    color: context.appTextSecondary,
                     height: 1.4,
                   ),
                   textAlign: TextAlign.center,
@@ -148,7 +151,7 @@ class NewVersionDialog extends StatelessWidget {
                         : 'Toque em "Atualizar agora" para abrir a Play Store e baixar a nova versão.',
                     style: TextStyle(
                       fontSize: 13,
-                      color: AppColors.textSecondary.withValues(alpha: 0.9),
+                      color: context.appTextSecondary.withValues(alpha: 0.9),
                       height: 1.3,
                     ),
                     textAlign: TextAlign.center,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 
 /// Estado vazio amigável: ícone, mensagem e botão de ação opcional.
 /// Deixa os módulos mais atrativos quando não há dados.
@@ -21,7 +22,7 @@ class ModuleEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = iconColor ?? AppColors.textMuted;
+    final color = iconColor ?? context.appTextMuted;
 
     return Center(
       child: Padding(
@@ -43,7 +44,7 @@ class ModuleEmptyState extends StatelessWidget {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 16,
-                color: AppColors.textSecondary,
+                color: context.appTextSecondary,
                 fontWeight: FontWeight.w500,
               ),
             ),

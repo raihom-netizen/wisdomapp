@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../services/home_start_module_cache.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 
 /// Campo em `users/{uid}/settings/planning` — índice do módulo no [HomeShell].
 const String kHomeDefaultStartModuleField = 'defaultStartModuleIndex';
@@ -125,7 +126,7 @@ Future<void> showHomeStartModulePickerSheet(
               bottom: 8 + bottomInset + keyboard,
             ),
             child: Material(
-              color: AppColors.surface,
+              color: ctx.isDarkMode ? ctx.appSurface : AppColors.surface,
               elevation: 24,
               shadowColor: Colors.black.withValues(alpha: 0.2),
               borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -141,7 +142,9 @@ Future<void> showHomeStartModulePickerSheet(
                       width: 40,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade300,
+                        color: ctx.isDarkMode
+                            ? ctx.appChipIdleBorder
+                            : Colors.grey.shade300,
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -232,8 +235,12 @@ Future<void> showHomeStartModulePickerSheet(
                       child: FilledButton.icon(
                         style: FilledButton.styleFrom(
                           elevation: 0,
-                          backgroundColor: AppColors.surface,
-                          foregroundColor: AppColors.deepBlueDark,
+                          backgroundColor: ctx.isDarkMode
+                              ? ctx.appSurface
+                              : AppColors.surface,
+                          foregroundColor: ctx.isDarkMode
+                              ? ctx.appTextPrimary
+                              : AppColors.deepBlueDark,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
@@ -300,12 +307,13 @@ class _HomeStartModuleTile extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         color: selected
-            ? AppColors.primary.withValues(alpha: 0.06)
-            : const Color(0xFFF8FAFC),
+            ? AppColors.primary
+                .withValues(alpha: context.isDarkMode ? 0.18 : 0.06)
+            : context.appChipIdleBg,
         border: Border.all(
           color: selected
               ? AppColors.primary.withValues(alpha: 0.55)
-              : const Color(0xFFE2E8F0),
+              : context.appChipIdleBorder,
           width: selected ? 2 : 1,
         ),
         boxShadow: selected
@@ -357,9 +365,11 @@ class _HomeStartModuleTile extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w800,
-                          color: selected
-                              ? AppColors.deepBlueDark
-                              : AppColors.textPrimary,
+                          color: context.isDarkMode
+                              ? context.appTextPrimary
+                              : (selected
+                                  ? AppColors.deepBlueDark
+                                  : AppColors.textPrimary),
                           letterSpacing: 0.1,
                         ),
                       ),
@@ -369,7 +379,7 @@ class _HomeStartModuleTile extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
-                          color: AppColors.textMuted,
+                          color: context.appTextMuted,
                           height: 1.25,
                         ),
                         maxLines: 2,

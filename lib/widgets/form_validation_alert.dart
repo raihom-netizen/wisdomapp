@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/theme_context.dart';
+
 /// Campo obrigatório ausente em formulários do app.
 class FormMissingField {
   const FormMissingField({
@@ -108,7 +110,9 @@ Future<void> showFormMissingFieldsAlert(
                     style: TextStyle(
                       fontSize: 13.5,
                       fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade800,
+                      color: ctx.isDarkMode
+                          ? ctx.appTextSecondary
+                          : Colors.grey.shade800,
                       height: 1.35,
                     ),
                   ),
@@ -184,10 +188,12 @@ class _MissingFieldTile extends StatelessWidget {
               children: [
                 Text(
                   field.label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 14,
-                    color: Color(0xFF0F172A),
+                    color: context.isDarkMode
+                        ? context.appTextPrimary
+                        : const Color(0xFF0F172A),
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -196,7 +202,9 @@ class _MissingFieldTile extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade700,
+                    color: context.isDarkMode
+                        ? context.appTextSecondary
+                        : Colors.grey.shade700,
                     height: 1.3,
                   ),
                 ),

@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../utils/firestore_user_doc_id.dart';
 import '../constants/app_verse.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../services/user_backup_service.dart';
 import '../services/backup_save.dart';
 import 'system_info_screen.dart';
@@ -101,7 +102,7 @@ class _BiometricSwitchTileState extends State<_BiometricSwitchTile> {
           _enabled
               ? 'Ativado. Sessão mantida no aparelho; após ${AppBusinessRules.inactivityTimeoutMinutes} min em segundo plano, pede digital de novo.'
               : 'Desativado — abre direto com a sessão guardada (como Controle Total). Funciona offline.',
-          style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+          style: TextStyle(fontSize: 12, color: context.appTextMuted),
         ),
         value: _enabled,
         onChanged: _busy ? null : _onToggle,
@@ -171,7 +172,7 @@ class _PontuacaoParaFolgaCardState extends State<_PontuacaoParaFolgaCard> {
             Text(
               'Número de referência da sua unidade (ex.: 30). Ao atingir essa pontuação em aberto, você pode marcar sua folga.',
               style: TextStyle(
-                  fontSize: 12, color: AppColors.textMuted, height: 1.3),
+                  fontSize: 12, color: context.appTextMuted, height: 1.3),
             ),
             const SizedBox(height: 12),
             Row(
@@ -603,7 +604,7 @@ class _DelegateSharingCardState extends State<_DelegateSharingCard> {
                   detalhe,
                   style: TextStyle(
                     fontSize: 11,
-                    color: AppColors.textMuted,
+                    color: context.appTextMuted,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -667,7 +668,7 @@ class _DelegateSharingCardState extends State<_DelegateSharingCard> {
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary,
+                      color: context.appTextPrimary,
                     ),
                   ),
                 ),
@@ -694,9 +695,14 @@ class _DelegateSharingCardState extends State<_DelegateSharingCard> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.orange.shade50,
+                color: context.isDarkMode
+                    ? context.appAccentSurface(Colors.orange)
+                    : Colors.orange.shade50,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.orange.shade200),
+                border: Border.all(
+                    color: context.isDarkMode
+                        ? Colors.orange.withValues(alpha: 0.4)
+                        : Colors.orange.shade200),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -713,7 +719,9 @@ class _DelegateSharingCardState extends State<_DelegateSharingCard> {
                       style: TextStyle(
                         fontSize: 11.5,
                         height: 1.35,
-                        color: Colors.orange.shade900,
+                        color: context.isDarkMode
+                            ? Colors.orange.shade200
+                            : Colors.orange.shade900,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -727,7 +735,9 @@ class _DelegateSharingCardState extends State<_DelegateSharingCard> {
                 padding: const EdgeInsets.all(10),
                 margin: const EdgeInsets.only(bottom: 10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFFF3E0),
+                  color: context.isDarkMode
+                      ? context.appAccentSurface(Colors.orange)
+                      : const Color(0xFFFFF3E0),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: const Color(0xFFFFB74D)),
                 ),
@@ -743,7 +753,9 @@ class _DelegateSharingCardState extends State<_DelegateSharingCard> {
                     fontSize: 11.5,
                     height: 1.35,
                     fontWeight: FontWeight.w600,
-                    color: Colors.orange.shade900,
+                    color: context.isDarkMode
+                        ? Colors.orange.shade200
+                        : Colors.orange.shade900,
                   ),
                 ),
               ),
@@ -920,7 +932,7 @@ class SettingsScreen extends StatelessWidget {
                         'Backup, notificações e preferências.',
                         style: TextStyle(
                             fontSize: 13,
-                            color: AppColors.textPrimary,
+                            color: context.appTextPrimary,
                             fontWeight: FontWeight.w500,
                             height: 1.4),
                       ),
@@ -1046,7 +1058,7 @@ class SettingsScreen extends StatelessWidget {
                   _tile(
                     context,
                     icon: Icons.info_outline_rounded,
-                    iconColor: AppColors.textMuted,
+                    iconColor: context.appTextMuted,
                     title: 'Informações do Sistema',
                     subtitle:
                         'Resumo, créditos (Johnathan Tarley · Raihom Barbosa) e sugestões/críticas',
@@ -1071,7 +1083,7 @@ class SettingsScreen extends StatelessWidget {
                   'Versão ${AppVersion.current} · ${AppVersion.internalLabel}',
                   style: TextStyle(
                       fontSize: 13,
-                      color: AppColors.textMuted,
+                      color: context.appTextMuted,
                       fontWeight: FontWeight.w500),
                 ),
               ),
@@ -1088,7 +1100,9 @@ class SettingsScreen extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      color: Colors.blue.shade50,
+      color: context.isDarkMode
+          ? context.appAccentSurface(Colors.blue)
+          : Colors.blue.shade50,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -1097,7 +1111,10 @@ class SettingsScreen extends StatelessWidget {
             Row(
               children: [
                 Icon(Icons.cloud_upload_rounded,
-                    color: Colors.blue.shade700, size: 28),
+                    color: context.isDarkMode
+                        ? Colors.blue.shade300
+                        : Colors.blue.shade700,
+                    size: 28),
                 const SizedBox(width: 12),
                 const Text(
                   'Destino do backup',
@@ -1110,7 +1127,7 @@ class SettingsScreen extends StatelessWidget {
               'O backup é salvo no seu aparelho (pasta Downloads ou compartilhamento). '
               'Recomendamos enviar para Google Drive ou outra nuvem — é mais seguro e não ocupa espaço no celular.',
               style: TextStyle(
-                  fontSize: 13, height: 1.5, color: AppColors.textSecondary),
+                  fontSize: 13, height: 1.5, color: context.appTextSecondary),
             ),
           ],
         ),
@@ -1125,13 +1142,15 @@ class SettingsScreen extends StatelessWidget {
   Widget _sectionTitle(String label) {
     return Padding(
       padding: const EdgeInsets.only(left: 4, bottom: 8),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          color: AppColors.textMuted,
-          letterSpacing: 0.5,
+      child: Builder(
+        builder: (context) => Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: context.appTextMuted,
+            letterSpacing: 0.5,
+          ),
         ),
       ),
     );
@@ -1456,7 +1475,7 @@ class SettingsScreen extends StatelessWidget {
           subtitle: Text(
             'Permanece logada até «Entrar com outra conta». Com internet off, '
             'continua a usar dados guardados no aparelho.',
-            style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+            style: TextStyle(fontSize: 12, color: context.appTextMuted),
           ),
         ),
       );
@@ -1481,10 +1500,10 @@ class SettingsScreen extends StatelessWidget {
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: subtitle != null
             ? Text(subtitle,
-                style: TextStyle(fontSize: 12, color: AppColors.textMuted))
+                style: TextStyle(fontSize: 12, color: context.appTextMuted))
             : null,
         trailing:
-            const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+            Icon(Icons.chevron_right_rounded, color: context.appTextMuted),
         onTap: onTap,
       ),
     );
@@ -1618,17 +1637,17 @@ class SettingsScreen extends StatelessWidget {
                 style: TextStyle(fontWeight: FontWeight.w800)),
             const SizedBox(height: 8),
             Text('Versão ${info.version} (${info.buildNumber})',
-                style: TextStyle(fontSize: 14, color: AppColors.textMuted)),
+                style: TextStyle(fontSize: 14, color: ctx.appTextMuted)),
             const SizedBox(height: 16),
             Text(
                 'Sabedoria financeira com princípios bíblicos: Financeiro, Agenda e Cursos em um só app.',
-                style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                style: TextStyle(fontSize: 13, color: ctx.appTextSecondary)),
             const SizedBox(height: 16),
             Text(
               AppVerse.full,
               style: TextStyle(
                   fontSize: 10,
-                  color: AppColors.textMuted.withValues(alpha: 0.8),
+                  color: ctx.appTextMuted.withValues(alpha: 0.8),
                   fontStyle: FontStyle.italic),
             ),
           ],
@@ -1715,7 +1734,7 @@ class _WeeklySummarySettingsDialogState
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.isDarkMode ? context.appSurface : Colors.white,
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
@@ -1754,7 +1773,9 @@ class _WeeklySummarySettingsDialogState
                     width: 48,
                     height: 48,
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: context.isDarkMode
+                          ? context.appSurfaceHigh
+                          : Colors.white,
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
                           color: AppColors.primary.withValues(alpha: 0.14)),
@@ -1770,7 +1791,7 @@ class _WeeklySummarySettingsDialogState
                         color: AppColors.primary, size: 26),
                   ),
                   const SizedBox(width: 10),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -1779,17 +1800,19 @@ class _WeeklySummarySettingsDialogState
                           style: TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w800,
-                            color: Color(0xFF0F172A),
+                            color: context.isDarkMode
+                                ? context.appTextPrimary
+                                : const Color(0xFF0F172A),
                             height: 1.25,
                           ),
                         ),
-                        SizedBox(height: 4),
+                        const SizedBox(height: 4),
                         Text(
                           'Super premium · WISDOMAPP',
                           style: TextStyle(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w600,
-                            color: AppColors.textMuted,
+                            color: context.appTextMuted,
                           ),
                         ),
                       ],
@@ -1825,7 +1848,7 @@ class _WeeklySummarySettingsDialogState
                       style: TextStyle(
                         fontSize: 14,
                         height: 1.45,
-                        color: AppColors.textSecondary,
+                        color: context.appTextSecondary,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -1839,7 +1862,7 @@ class _WeeklySummarySettingsDialogState
                     else
                       Container(
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
+                          color: context.appChipIdleBg,
                           borderRadius: BorderRadius.circular(18),
                           border: Border.all(
                               color: AppColors.primary.withValues(alpha: 0.12)),
@@ -1854,10 +1877,10 @@ class _WeeklySummarySettingsDialogState
                             style: TextStyle(
                                 fontWeight: FontWeight.w800, fontSize: 15),
                           ),
-                          subtitle: const Text(
+                          subtitle: Text(
                             'Padrão do app: desligado. Ative só se quiser ver o cartão semanal.',
                             style: TextStyle(
-                                fontSize: 12.5, color: AppColors.textMuted),
+                                fontSize: 12.5, color: context.appTextMuted),
                           ),
                           activeThumbColor: Colors.white,
                           activeTrackColor: AppColors.primary,
@@ -1867,7 +1890,9 @@ class _WeeklySummarySettingsDialogState
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: context.isDarkMode
+                            ? context.appSurfaceHigh
+                            : Colors.white,
                         borderRadius: BorderRadius.circular(18),
                         border: Border.all(
                             color: AppColors.accent.withValues(alpha: 0.28)),
@@ -1888,13 +1913,15 @@ class _WeeklySummarySettingsDialogState
                               Icon(Icons.visibility_rounded,
                                   color: AppColors.deepBlue, size: 22),
                               const SizedBox(width: 10),
-                              const Expanded(
+                              Expanded(
                                 child: Text(
                                   'Pré-visualização (exemplo)',
                                   style: TextStyle(
                                     fontWeight: FontWeight.w900,
                                     fontSize: 15,
-                                    color: Color(0xFF0F172A),
+                                    color: context.isDarkMode
+                                        ? context.appTextPrimary
+                                        : const Color(0xFF0F172A),
                                   ),
                                 ),
                               ),
@@ -1906,7 +1933,7 @@ class _WeeklySummarySettingsDialogState
                             style: TextStyle(
                               fontSize: 12.5,
                               height: 1.4,
-                              color: AppColors.textMuted,
+                              color: context.appTextMuted,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -2032,9 +2059,9 @@ class _BackupAutoSheetState extends State<_BackupAutoSheet> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: context.isDarkMode ? context.appSurface : AppColors.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom),
       child: SingleChildScrollView(
@@ -2050,7 +2077,9 @@ class _BackupAutoSheetState extends State<_BackupAutoSheet> {
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
+                      color: context.isDarkMode
+                          ? context.appChipIdleBorder
+                          : Colors.grey.shade300,
                       borderRadius: BorderRadius.circular(2)),
                 ),
               ),
@@ -2060,7 +2089,7 @@ class _BackupAutoSheetState extends State<_BackupAutoSheet> {
               const SizedBox(height: 6),
               Text(
                 'O backup é salvo no seu aparelho. Envie o arquivo para o seu Google Drive ou outra nuvem para não ocupar espaço e ter cópia segura. Não usamos nosso banco para guardar seu backup.',
-                style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+                style: TextStyle(fontSize: 13, color: context.appTextMuted),
               ),
               const SizedBox(height: 20),
               SwitchListTile(
@@ -2085,7 +2114,7 @@ class _BackupAutoSheetState extends State<_BackupAutoSheet> {
                     children: [
                       Text('Horário:',
                           style: TextStyle(
-                              fontSize: 14, color: AppColors.textSecondary)),
+                              fontSize: 14, color: context.appTextSecondary)),
                       const SizedBox(width: 12),
                       DropdownButton<int>(
                         value: _dailyHour.clamp(0, 23),
@@ -2113,7 +2142,7 @@ class _BackupAutoSheetState extends State<_BackupAutoSheet> {
                   padding: const EdgeInsets.only(left: 16),
                   child: Text('Dias da semana',
                       style:
-                          TextStyle(fontSize: 13, color: AppColors.textMuted)),
+                          TextStyle(fontSize: 13, color: context.appTextMuted)),
                 ),
                 const SizedBox(height: 6),
                 Wrap(
@@ -2225,10 +2254,10 @@ class _PlanningSettingsSectionState extends State<_PlanningSettingsSection> {
             style: TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text(
           'Ao abrir o app: $label',
-          style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+          style: TextStyle(fontSize: 12, color: context.appTextMuted),
         ),
-        trailing: const Icon(Icons.chevron_right_rounded,
-            color: AppColors.textMuted),
+        trailing: Icon(Icons.chevron_right_rounded,
+            color: context.appTextMuted),
         onTap: () => showHomeStartModulePickerSheet(
           context,
           uid: widget.uid,
@@ -2281,9 +2310,9 @@ class _PlanningFinanceTipsTileState extends State<_PlanningFinanceTipsTile> {
             color: AppColors.amber, size: 26),
         title: const Text('Dicas financeiras diárias',
             style: TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: const Text(
+        subtitle: Text(
           'Dicas bíblicas sobre economia e planejamento no Início. Opcional.',
-          style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+          style: TextStyle(fontSize: 12, color: context.appTextMuted),
         ),
         value: _enabled,
         onChanged: widget.blocked
@@ -2379,12 +2408,12 @@ class _BackupAutoSettingsTileState extends State<_BackupAutoSettingsTile> {
         leading: Icon(Icons.backup_rounded, color: Colors.teal, size: 26),
         title: const Text('Backup automático',
             style: TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: const Text(
+        subtitle: Text(
           'Backup periódico no seu aparelho; salve no seu Google Drive ou nuvem.',
-          style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+          style: TextStyle(fontSize: 12, color: context.appTextMuted),
         ),
-        trailing: const Icon(Icons.chevron_right_rounded,
-            color: AppColors.textMuted),
+        trailing: Icon(Icons.chevron_right_rounded,
+            color: context.appTextMuted),
         onTap: widget.blocked
             ? null
             : () => widget.onOpenSheet(

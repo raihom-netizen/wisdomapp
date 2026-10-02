@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/user_profile.dart';
 import '../screens/escolha_plano_page.dart';
 import '../services/ios_payments_gate.dart';
+import '../theme/theme_context.dart';
 
 /// Exibe aviso de recurso Premium e oferece ir para a tela de planos.
 void mostrarAvisoUpgrade(BuildContext context) {
@@ -97,9 +98,13 @@ void mostrarAvisoLicencaVencida(BuildContext context) {
         child: const Icon(Icons.lock_clock_rounded,
             color: Colors.white, size: 32),
       ),
-      title: const Text('Licença vencida',
+      title: Text('Licença vencida',
           textAlign: TextAlign.center,
-          style: TextStyle(color: Color(0xFFD32F2F), fontWeight: FontWeight.w800)),
+          style: TextStyle(
+              color: ctx.isDarkMode
+                  ? const Color(0xFFEF5350)
+                  : const Color(0xFFD32F2F),
+              fontWeight: FontWeight.w800)),
       content: const Text(
         'Sua licença está vencida. Você pode visualizar os módulos, mas não pode lançar, editar ou remover dados em Financeiro, Agenda, Cursos, Relatórios e Configurações.\n\nRenove agora para voltar a usar o WISDOMAPP por completo.',
       ),

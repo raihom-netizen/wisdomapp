@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../theme/theme_context.dart';
 import '../widgets/shell_keyboard_bottom_pad.dart';
 
 export '../widgets/shell_keyboard_bottom_pad.dart' show AppKeyboardInsets, AppKeyboardScope;
@@ -111,7 +112,10 @@ class KeyboardAwareFormBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       elevation: elevation,
-      color: backgroundColor,
+      // Padrão branco vira a superfície do tema no escuro (claro inalterado).
+      color: context.isDarkMode && backgroundColor == Colors.white
+          ? context.appSurface
+          : backgroundColor,
       child: SafeArea(
         top: false,
         child: Padding(

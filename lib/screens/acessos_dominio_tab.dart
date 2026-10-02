@@ -3,6 +3,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../services/functions_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../widgets/module_header_premium.dart';
 import '../widgets/admin/admin_page_shell.dart';
 import '../utils/date_picker_a11y.dart';
@@ -43,6 +44,14 @@ class _AcessosDominioTabState extends State<AcessosDominioTab> {
       _statsFuture = _loadStats();
     });
   }
+
+  // Cores que acompanham o tema (claro idêntico ao original).
+  bool get _dark => context.isDarkMode;
+  Color get _borderC => _dark ? context.appChipIdleBorder : Colors.grey.shade200;
+  Color get _trackC => _dark ? context.appSurfaceHigh : Colors.grey.shade100;
+  Color get _mutedC => _dark ? context.appTextMuted : Colors.grey.shade600;
+  Color get _labelC => _dark ? context.appTextSecondary : Colors.grey.shade700;
+  Color get _titleC => _dark ? context.appTextPrimary : Colors.grey.shade800;
 
   @override
   Widget build(BuildContext context) {
@@ -100,13 +109,13 @@ class _AcessosDominioTabState extends State<AcessosDominioTab> {
   Widget _buildPeriodSelector() {
     return Card(
       elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: BorderSide(color: Colors.grey.shade200)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: BorderSide(color: _borderC)),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Período', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.grey.shade700)),
+            Text('Período', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _labelC)),
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,
@@ -123,7 +132,7 @@ class _AcessosDominioTabState extends State<AcessosDominioTab> {
                     });
                   },
                   selectedColor: AppColors.primary.withValues(alpha: 0.25),
-                  backgroundColor: Colors.grey.shade100,
+                  backgroundColor: _trackC,
                 );
               }).toList(),
             ),
@@ -146,10 +155,10 @@ class _AcessosDominioTabState extends State<AcessosDominioTab> {
         : DateFormat('dd/MM/yyyy', 'pt_BR').format(_referenceDate);
     return Card(
       elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: BorderSide(color: Colors.grey.shade200)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: BorderSide(color: _borderC)),
       child: ListTile(
         leading: Icon(Icons.calendar_month_rounded, color: AppColors.primary),
-        title: Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+        title: Text(label, style: TextStyle(fontSize: 12, color: _mutedC)),
         subtitle: Text(display, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
         trailing: IconButton(
           icon: const Icon(Icons.edit_calendar_rounded),
@@ -224,16 +233,16 @@ class _AcessosDominioTabState extends State<AcessosDominioTab> {
         const SizedBox(height: 20),
         Card(
           elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: Colors.grey.shade200)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: _borderC)),
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Acessos por hora (horário Brasília)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.grey.shade800)),
+                Text('Acessos por hora (horário Brasília)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: _titleC)),
                 const SizedBox(height: 16),
                 if (values.isEmpty || values.every((v) => v == 0))
-                  SizedBox(height: 180, child: Center(child: Text('Sem dados neste dia', style: TextStyle(color: Colors.grey.shade600))))
+                  SizedBox(height: 180, child: Center(child: Text('Sem dados neste dia', style: TextStyle(color: _mutedC))))
                 else
                   SizedBox(
                     height: 220,
@@ -255,7 +264,7 @@ class _AcessosDominioTabState extends State<AcessosDominioTab> {
                                 if (i >= 0 && i < 24) {
                                   return Padding(
                                     padding: const EdgeInsets.only(top: 8),
-                                    child: Text(labels[i], style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
+                                    child: Text(labels[i], style: TextStyle(fontSize: 10, color: _mutedC)),
                                   );
                                 }
                                 return const SizedBox.shrink();
@@ -268,7 +277,7 @@ class _AcessosDominioTabState extends State<AcessosDominioTab> {
                               reservedSize: 32,
                               getTitlesWidget: (v, meta) => Text(
                                 v.toInt().toString(),
-                                style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                                style: TextStyle(fontSize: 10, color: _mutedC),
                               ),
                             ),
                           ),
@@ -278,7 +287,7 @@ class _AcessosDominioTabState extends State<AcessosDominioTab> {
                         gridData: FlGridData(
                           show: true,
                           drawVerticalLine: false,
-                          getDrawingHorizontalLine: (v) => FlLine(color: Colors.grey.shade200, strokeWidth: 1),
+                          getDrawingHorizontalLine: (v) => FlLine(color: _borderC, strokeWidth: 1),
                         ),
                         borderData: FlBorderData(show: false),
                         barGroups: values.asMap().entries.map((e) {
@@ -290,7 +299,7 @@ class _AcessosDominioTabState extends State<AcessosDominioTab> {
                                 color: AppColors.primary,
                                 width: 12,
                                 borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                                backDrawRodData: BackgroundBarChartRodData(show: true, toY: maxVal, color: Colors.grey.shade100),
+                                backDrawRodData: BackgroundBarChartRodData(show: true, toY: maxVal, color: _trackC),
                               ),
                             ],
                           );
@@ -325,21 +334,21 @@ class _AcessosDominioTabState extends State<AcessosDominioTab> {
         if (startISO.isNotEmpty && endISO.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: Text('$startISO a $endISO', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+            child: Text('$startISO a $endISO', style: TextStyle(fontSize: 12, color: _mutedC)),
           ),
         const SizedBox(height: 20),
         Card(
           elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: Colors.grey.shade200)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: _borderC)),
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('$periodLabel — acessos por dia', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.grey.shade800)),
+                Text('$periodLabel — acessos por dia', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: _titleC)),
                 const SizedBox(height: 16),
                 if (days.isEmpty || counts.every((c) => c == 0))
-                  SizedBox(height: 200, child: Center(child: Text('Sem dados no período', style: TextStyle(color: Colors.grey.shade600))))
+                  SizedBox(height: 200, child: Center(child: Text('Sem dados no período', style: TextStyle(color: _mutedC))))
                 else
                   SizedBox(
                     height: 240,
@@ -363,7 +372,7 @@ class _AcessosDominioTabState extends State<AcessosDominioTab> {
                                   final dd = date.length >= 10 ? '${date.substring(8, 10)}/${date.substring(5, 7)}' : date;
                                   return Padding(
                                     padding: const EdgeInsets.only(top: 8),
-                                    child: Text(dd, style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
+                                    child: Text(dd, style: TextStyle(fontSize: 10, color: _mutedC)),
                                   );
                                 }
                                 return const SizedBox.shrink();
@@ -376,7 +385,7 @@ class _AcessosDominioTabState extends State<AcessosDominioTab> {
                               reservedSize: 36,
                               getTitlesWidget: (v, meta) => Text(
                                 v.toInt().toString(),
-                                style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                                style: TextStyle(fontSize: 10, color: _mutedC),
                               ),
                             ),
                           ),
@@ -386,7 +395,7 @@ class _AcessosDominioTabState extends State<AcessosDominioTab> {
                         gridData: FlGridData(
                           show: true,
                           drawVerticalLine: false,
-                          getDrawingHorizontalLine: (v) => FlLine(color: Colors.grey.shade200, strokeWidth: 1),
+                          getDrawingHorizontalLine: (v) => FlLine(color: _borderC, strokeWidth: 1),
                         ),
                         borderData: FlBorderData(show: false),
                         barGroups: counts.asMap().entries.map((e) {
@@ -401,7 +410,7 @@ class _AcessosDominioTabState extends State<AcessosDominioTab> {
                                 backDrawRodData: BackgroundBarChartRodData(
                                   show: true,
                                   toY: maxVal,
-                                  color: Colors.grey.shade100,
+                                  color: _trackC,
                                 ),
                               ),
                             ],
