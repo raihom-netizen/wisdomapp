@@ -727,7 +727,14 @@ class _Usuario360DetailState extends State<_Usuario360Detail> {
     }
   }
 
-  Future<_UsageBundle> _loadUsage(String uid) async {
+  /// Com prazo: sem resposta vira erro com «Tentar de novo» (não gira para sempre).
+  Future<_UsageBundle> _loadUsage(String uid) => AdminLoadGuard.comPrazo(
+        _loadUsageSemPrazo(uid),
+        prazo: AdminLoadGuard.longo,
+        oQue: 'o uso do usuário',
+      );
+
+  Future<_UsageBundle> _loadUsageSemPrazo(String uid) async {
     final db = FirebaseFirestore.instance;
     final uref = db.collection('users').doc(uid);
 
@@ -736,11 +743,19 @@ class _Usuario360DetailState extends State<_Usuario360Detail> {
       return c.count ?? 0;
     }
 
-    final lastTxSnap = await uref
-        .collection('transactions')
-        .orderBy('date', descending: true)
-        .limit(1)
-        .get();
+    // Último lançamento, contagens e pagamentos em paralelo (antes em fila).
+    final leituras = await Future.wait<Object>([
+      uref.collection('transactions').orderBy('date', descending: true).limit(1).get(),
+      db.collection('mp_payments').where('uid', isEqualTo: uid).get(),
+      Future.wait<int>([
+        count('transactions'),
+        count('finance_accounts'),
+        count('reminders'),
+        count('goals'),
+        count('bank_connections'),
+      ]),
+    ]);
+    final lastTxSnap = leituras[0] as QuerySnapshot<Map<String, dynamic>>;
 
     DateTime? lastTxDate;
     if (lastTxSnap.docs.isNotEmpty) {
@@ -748,20 +763,14 @@ class _Usuario360DetailState extends State<_Usuario360Detail> {
       if (t is Timestamp) lastTxDate = t.toDate();
     }
 
-    final counts = await Future.wait<int>([
-      count('transactions'),
-      count('finance_accounts'),
-      count('reminders'),
-      count('goals'),
-      count('bank_connections'),
-    ]);
+    final counts = leituras[2] as List<int>;
     final tx = counts[0];
     final financeAccounts = counts[1];
     final reminders = counts[2];
     final goals = counts[3];
     final bankConnections = counts[4];
 
-    final mpSnap = await db.collection('mp_payments').where('uid', isEqualTo: uid).get();
+    final mpSnap = leituras[1] as QuerySnapshot<Map<String, dynamic>>;
     double mpTotal = 0;
     int mpApproved = 0;
     for (final d in mpSnap.docs) {

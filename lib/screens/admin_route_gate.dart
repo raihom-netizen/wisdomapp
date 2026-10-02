@@ -9,6 +9,7 @@ import '../models/user_profile.dart';
 import '../services/app_session_cache.dart';
 import '../services/firestore_service.dart';
 import '../services/user_profile_startup_cache.dart';
+import '../utils/admin_load_guard.dart';
 import '../widgets/admin_guard.dart';
 import 'admin_screen.dart';
 import 'landing_screen.dart';
@@ -67,7 +68,7 @@ class _AdminScreenHostState extends State<_AdminScreenHost> {
   @override
   void initState() {
     super.initState();
-    _profileStream = FirestoreService().watchProfile(widget.uid);
+    _profileStream = _escutaPerfil();
     unawaited(UserProfileStartupCache.prefetch(widget.uid));
     unawaited(AppSessionCache.markShellReady(widget.uid));
   }
@@ -76,9 +77,16 @@ class _AdminScreenHostState extends State<_AdminScreenHost> {
   void didUpdateWidget(covariant _AdminScreenHost oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.uid != widget.uid) {
-      _profileStream = FirestoreService().watchProfile(widget.uid);
+      _profileStream = _escutaPerfil();
     }
   }
+
+  /// Com prazo para o 1º dado: sem resposta vira erro com «Tentar de novo»
+  /// (antes o painel ficava no spinner para sempre).
+  Stream<UserProfile> _escutaPerfil() => AdminLoadGuard.primeiroDadoComPrazo(
+        FirestoreService().watchProfile(widget.uid),
+        oQue: 'o perfil de administrador',
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -94,9 +102,22 @@ class _AdminScreenHostState extends State<_AdminScreenHost> {
               child: Center(
                 child: Padding(
                   padding: const EdgeInsets.all(24),
-                  child: Text(
-                    'Não foi possível carregar o perfil admin.\n${snap.error}',
-                    textAlign: TextAlign.center,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Não foi possível carregar o perfil admin.\n'
+                        '${AdminLoadGuard.mensagem(snap.error)}',
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 14),
+                      FilledButton.icon(
+                        onPressed: () =>
+                            setState(() => _profileStream = _escutaPerfil()),
+                        icon: const Icon(Icons.refresh_rounded, size: 18),
+                        label: const Text('Tentar de novo'),
+                      ),
+                    ],
                   ),
                 ),
               ),

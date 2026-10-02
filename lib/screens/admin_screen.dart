@@ -4401,7 +4401,7 @@ class _AdminScreenState extends State<AdminScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content: Text(
-                'Falha ao excluir total: ${e.toString().split('\n').first}'),
+                'Falha ao excluir total: ${AdminLoadGuard.mensagem(e)}'),
             backgroundColor: AppColors.error),
       );
     }
@@ -4530,7 +4530,7 @@ class _AdminScreenState extends State<AdminScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erro: ${e.toString().split('\n').first}'),
+            content: Text('Erro: ${AdminLoadGuard.mensagem(e)}'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -8991,7 +8991,7 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erro ao buscar: ${e.toString().split('\n').first}'),
+            content: Text('Erro ao buscar: ${AdminLoadGuard.mensagem(e)}'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -9036,7 +9036,7 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erro: ${e.toString().split('\n').first}'),
+            content: Text('Erro: ${AdminLoadGuard.mensagem(e)}'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -9309,7 +9309,7 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('E-mail: ${e.toString().split('\n').first}'),
+          content: Text('E-mail: ${AdminLoadGuard.mensagem(e)}'),
           backgroundColor: AppColors.error,
         ),
       );
@@ -11183,7 +11183,7 @@ class _DriveBackupTabContentState extends State<_DriveBackupTabContent> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content:
-                  Text('Erro ao obter link: ${e.toString().split('\n').first}'),
+                  Text('Erro ao obter link: ${AdminLoadGuard.mensagem(e)}'),
               backgroundColor: Colors.red),
         );
       }

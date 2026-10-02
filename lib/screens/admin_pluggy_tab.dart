@@ -108,7 +108,7 @@ class _AdminPluggyTabState extends State<AdminPluggyTab> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erro ao salvar: ${e.toString().split('\n').first}'),
+            content: Text('Erro ao salvar: ${AdminLoadGuard.mensagem(e)}'),
             backgroundColor: AppColors.error,
           ),
         );

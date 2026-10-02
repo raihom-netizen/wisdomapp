@@ -139,7 +139,8 @@ class _AdminGuardState extends State<AdminGuard> {
           final role = (userData?['role'] ?? '').toString();
           final email = user.email?.trim().toLowerCase();
 
-          if (role == 'admin' ||
+          if (AdminMasterConfig.currentUserIsMaster() ||
+              role == 'admin' ||
               role == 'master' ||
               role == 'gestor' ||
               role == 'partner' ||

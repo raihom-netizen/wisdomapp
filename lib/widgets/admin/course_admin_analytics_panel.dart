@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../services/course_analytics_service.dart';
 import '../../theme/theme_context.dart';
+import '../../utils/admin_load_guard.dart';
 
 /// Painel moderno de métricas — visualizações, curtidas e gráfico de engajamento.
 class CourseAdminAnalyticsPanel extends StatelessWidget {
@@ -645,12 +646,17 @@ class _CourseViewersListState extends State<_CourseViewersList> {
   @override
   void initState() {
     super.initState();
-    _stream = CourseAnalyticsService.instance.watchViewers(widget.courseId);
+    _stream = _escuta();
   }
+
+  Stream<List<CourseViewerRow>> _escuta() => AdminLoadGuard.primeiroDadoComPrazo(
+        CourseAnalyticsService.instance.watchViewers(widget.courseId),
+        oQue: 'quem assistiu',
+      );
 
   void _tentarDeNovo() {
     setState(() {
-      _stream = CourseAnalyticsService.instance.watchViewers(widget.courseId);
+      _stream = _escuta();
     });
   }
 
@@ -675,7 +681,7 @@ class _CourseViewersListState extends State<_CourseViewersList> {
                       color: Colors.orangeAccent, size: 36),
                   const SizedBox(height: 10),
                   Text(
-                    'Não deu para carregar quem assistiu.\n${snap.error}',
+                    'Não deu para carregar quem assistiu.\n${AdminLoadGuard.mensagem(snap.error)}',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: fgA(0.7),

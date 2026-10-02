@@ -130,6 +130,13 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
           if (d == null && _carregando)
             const AdminCarregando(texto: 'Lendo cadastros e pagamentos…'),
           if (d != null) ...[
+            if (AdminPainelGeralData.erroCustos != null)
+              _aviso(
+                'Os custos mensais não carregaram — o lucro abaixo está sem '
+                'eles. ${AdminLoadGuard.mensagem(AdminPainelGeralData.erroCustos)} '
+                'Puxe para atualizar.',
+                _ambar,
+              ),
             if (d.limiteAtingido)
               _aviso(
                 'Mostrando os primeiros ${AdminPainelGeralData.limiteUsuarios} '
@@ -904,6 +911,14 @@ class _AdminPainelGeralTabState extends State<AdminPainelGeralTab> {
   }
 
   Future<void> _editarCustos(List<AdminCusto> atuais) async {
+    if (AdminPainelGeralData.erroCustos != null) {
+      // Não abre o editor com a lista vazia: «Salvar» apagaria os custos reais.
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Os custos atuais não carregaram. Atualize o painel e '
+            'tente de novo antes de editar.'),
+      ));
+      return;
+    }
     final linhas = [
       for (final c in atuais)
         (

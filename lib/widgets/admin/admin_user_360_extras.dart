@@ -35,7 +35,10 @@ class _AdminUser360ExtrasPanelState extends State<AdminUser360ExtrasPanel> {
   late Stream<List<AdminAuditEntry>> _auditStream;
 
   void _bindStreams() {
-    _noteStream = AdminUserInternalNotesService().watchNote(widget.uid);
+    _noteStream = AdminLoadGuard.primeiroDadoComPrazo(
+      AdminUserInternalNotesService().watchNote(widget.uid),
+      oQue: 'a nota interna',
+    );
     _auditStream = AdminLoadGuard.primeiroDadoComPrazo(
       AdminAuditQueryService().watchForUser(widget.uid),
       oQue: 'o histórico',
@@ -170,12 +173,19 @@ class _AdminUser360ExtrasPanelState extends State<AdminUser360ExtrasPanel> {
                 snap.data!.isNotEmpty) {
               _notesCtrl.text = snap.data!;
             }
+            // Só edita depois de ler a nota atual — antes dava para digitar
+            // e «Guardar» por cima de uma nota que ainda não tinha chegado.
+            final pronta = snap.hasData;
             return TextField(
               controller: _notesCtrl,
-              readOnly: !widget.canEdit,
+              readOnly: !widget.canEdit || !pronta,
               maxLines: 3,
               decoration: InputDecoration(
-                hintText: 'Observações de suporte, acordos, etc.',
+                hintText: snap.hasError
+                    ? 'Nota não carregou: ${AdminLoadGuard.mensagem(snap.error)}'
+                    : (pronta
+                        ? 'Observações de suporte, acordos, etc.'
+                        : 'Carregando a nota…'),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),

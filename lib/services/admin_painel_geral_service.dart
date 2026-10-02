@@ -290,15 +290,22 @@ class AdminPainelGeralData {
         .doc('admin_costs');
   }
 
+  /// Erro da última leitura dos custos (null = leu certo). Antes a falha
+  /// virava «custo R$ 0» calado e «Editar custos» gravava a lista vazia por
+  /// cima dos custos reais.
+  static Object? erroCustos;
+
   static Future<List<AdminCusto>> carregarCustos() async {
     final ref = _custosRef();
     if (ref == null) return const [];
     try {
-      final snap = await ref.get();
+      final snap = await ref.get().timeout(const Duration(seconds: 20));
+      erroCustos = null;
       final raw = snap.data()?['itens'];
       if (raw is! List) return const [];
       return raw.map(AdminCusto.fromJson).whereType<AdminCusto>().toList();
-    } catch (_) {
+    } catch (e) {
+      erroCustos = e;
       return const [];
     }
   }

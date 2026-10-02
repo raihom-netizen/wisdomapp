@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/course_comments_service.dart';
 import '../../theme/theme_context.dart';
+import '../../utils/admin_load_guard.dart';
 import '../../utils/course_lessons.dart';
 import '../course_video/course_comments_section.dart' show courseCommentWhen;
 
@@ -42,7 +43,10 @@ class _CourseCommentsModeration extends StatefulWidget {
 
 class _CourseCommentsModerationState extends State<_CourseCommentsModeration> {
   late final Stream<List<CourseComment>> _stream =
-      CourseCommentsService.watchCourse(widget.courseId);
+      AdminLoadGuard.primeiroDadoComPrazo(
+    CourseCommentsService.watchCourse(widget.courseId),
+    oQue: 'os comentários',
+  );
   late final Map<String, String> _lessonTitles = {
     for (final l in CourseLessons.fromData(widget.data)) l.key: l.title,
   };

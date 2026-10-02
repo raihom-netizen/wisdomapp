@@ -390,7 +390,7 @@ class _PromoUserPickerDialogState extends State<_PromoUserPickerDialog> {
       if (_pageCursor != null) {
         qb = qb.startAfterDocument(_pageCursor!);
       }
-      final snap = await qb.get();
+      final snap = await AdminLoadGuard.comPrazo(qb.get());
       if (!mounted) return;
       if (snap.docs.isEmpty) {
         setState(() {
@@ -414,7 +414,7 @@ class _PromoUserPickerDialogState extends State<_PromoUserPickerDialog> {
       if (mounted) {
         setState(() {
           _loadingPage = false;
-          _hint = e.toString().split('\n').first;
+          _hint = AdminLoadGuard.mensagem(e);
         });
       }
     }
@@ -431,16 +431,16 @@ class _PromoUserPickerDialogState extends State<_PromoUserPickerDialog> {
 
     Future<void> addEqEmail(String emailTry) async {
       try {
-        final eq = await FirebaseFirestore.instance
+        final eq = await AdminLoadGuard.comPrazo(FirebaseFirestore.instance
             .collection('users')
             .where('email', isEqualTo: emailTry)
             .limit(8)
-            .get();
+            .get());
         for (final d in eq.docs) {
           out[d.id] = d;
         }
       } catch (e) {
-        errors.add(e.toString().split('\n').first);
+        errors.add(AdminLoadGuard.mensagem(e));
       }
     }
 
@@ -452,7 +452,7 @@ class _PromoUserPickerDialogState extends State<_PromoUserPickerDialog> {
         out[d.id] = d;
       }
     } catch (e) {
-      errors.add(e.toString().split('\n').first);
+      errors.add(AdminLoadGuard.mensagem(e));
     }
 
     if (out.isEmpty && errors.isNotEmpty) {
@@ -494,7 +494,7 @@ class _PromoUserPickerDialogState extends State<_PromoUserPickerDialog> {
       if (mounted) {
         setState(() {
           _searchingServer = false;
-          _hint = e.toString().split('\n').first;
+          _hint = AdminLoadGuard.mensagem(e);
         });
       }
     }
@@ -899,7 +899,7 @@ class _PromoEditorDialogState extends State<_PromoEditorDialog> {
     }
     try {
       final snap =
-          await FirebaseFirestore.instance.collection('promotions').doc(loadId).get();
+          await AdminLoadGuard.comPrazo(FirebaseFirestore.instance.collection('promotions').doc(loadId).get());
       final m = snap.data();
       if (m != null) {
         _titleCtrl.text = (m['title'] ?? '').toString();
@@ -1026,11 +1026,11 @@ class _PromoEditorDialogState extends State<_PromoEditorDialog> {
     }
     setState(() => _lookingUpPromoUser = true);
     try {
-      final q = await FirebaseFirestore.instance
+      final q = await AdminLoadGuard.comPrazo(FirebaseFirestore.instance
           .collection('users')
           .where('email', isEqualTo: email)
           .limit(5)
-          .get();
+          .get());
       if (!mounted) return;
       if (q.docs.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1047,7 +1047,7 @@ class _PromoEditorDialogState extends State<_PromoEditorDialog> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erro ao buscar: ${e.toString().split('\n').first}'),
+            content: Text('Erro ao buscar: ${AdminLoadGuard.mensagem(e)}'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -1072,7 +1072,7 @@ class _PromoEditorDialogState extends State<_PromoEditorDialog> {
     }
     setState(() => _lookingUpPromoUser = true);
     try {
-      final snap = await FirebaseFirestore.instance.doc('users/$uid').get();
+      final snap = await AdminLoadGuard.comPrazo(FirebaseFirestore.instance.doc('users/$uid').get());
       if (!mounted) return;
       if (!snap.exists) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1089,7 +1089,7 @@ class _PromoEditorDialogState extends State<_PromoEditorDialog> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erro: ${e.toString().split('\n').first}'),
+            content: Text('Erro: ${AdminLoadGuard.mensagem(e)}'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -1191,7 +1191,7 @@ class _PromoEditorDialogState extends State<_PromoEditorDialog> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Teste não enviado: ${e.toString().split('\n').first}'),
+          content: Text('Teste não enviado: ${AdminLoadGuard.mensagem(e)}'),
           backgroundColor: AppColors.error,
         ),
       );
@@ -1272,11 +1272,11 @@ class _PromoEditorDialogState extends State<_PromoEditorDialog> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString().split('\n').first;
+        _error = AdminLoadGuard.mensagem(e);
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('E-mail não enviado: ${e.toString().split('\n').first}'),
+          content: Text('E-mail não enviado: ${AdminLoadGuard.mensagem(e)}'),
           backgroundColor: AppColors.error,
         ),
       );
@@ -1929,10 +1929,10 @@ class _PromoListBroadcastDialogState extends State<_PromoListBroadcastDialog> {
 
   Future<void> _load() async {
     try {
-      final snap = await FirebaseFirestore.instance
+      final snap = await AdminLoadGuard.comPrazo(FirebaseFirestore.instance
           .collection('promotions')
           .doc(widget.promoId)
-          .get();
+          .get());
       final m = snap.data();
       _titleLine = (m?['title'] ?? widget.promoId).toString();
       _subjectCtrl.text = _defaultSubject();
@@ -2000,7 +2000,7 @@ class _PromoListBroadcastDialogState extends State<_PromoListBroadcastDialog> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString().split('\n').first;
+        _error = AdminLoadGuard.mensagem(e);
       });
     } finally {
       if (mounted) setState(() => _sending = false);

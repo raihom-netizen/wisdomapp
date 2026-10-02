@@ -21,6 +21,7 @@ import '../utils/admin_responsive.dart';
 import 'keyed_stream_builder.dart';
 import '../services/functions_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/debounced_text_controller.dart';
 import '../utils/keyboard_form_scaffold.dart';
 import '../utils/url_launcher_helper.dart' as url_helper;
@@ -28,6 +29,7 @@ import 'admin_delegate_email_section.dart';
 import 'brl_amount_text_field.dart';
 import 'app_bar_chart.dart';
 import 'admin/admin_page_shell.dart';
+import 'admin/admin_ui_kit.dart';
 import 'module_header_premium.dart';
 
 String _formatPartnershipVigenciaSubtitle(Map<String, dynamic> m) {
@@ -591,7 +593,7 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
   }) {
     return RepaintBoundary(
       child: Material(
-        color: Colors.white,
+        color: AdminUi.cardOf(context),
         borderRadius: BorderRadius.circular(20),
         clipBehavior: Clip.antiAlias,
         child: Ink(
@@ -633,11 +635,11 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
                         children: [
                           Text(
                             title,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w900,
                               letterSpacing: -0.3,
-                              color: Color(0xFF0F172A),
+                              color: AdminUi.tintaOf(context),
                             ),
                           ),
                           if (subtitle != null && subtitle.trim().isNotEmpty) ...[
@@ -646,7 +648,7 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
                               subtitle,
                               style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.grey.shade700,
+                                color: AdminUi.apoioOf(context),
                                 height: 1.4,
                               ),
                             ),
@@ -679,7 +681,7 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
         const SizedBox(height: 6),
         Text(
           'Ao salvar, o perfil do convênio fica pronto no Firestore e o link público já pode ser divulgado.',
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+          style: TextStyle(fontSize: 12, color: AdminUi.apoioOf(context)),
         ),
         const SizedBox(height: 10),
         ],
@@ -1414,7 +1416,7 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
           return 'Falha ao sincronizar CSV (código: ${e.code}).';
       }
     }
-    return e.toString().split('\n').first.trim();
+    return AdminLoadGuard.mensagem(e).trim();
   }
 
   /// Fluxo controlado: URL gravada no Firestore + import no servidor + flag para você conferir.
@@ -1670,7 +1672,7 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
                                 child: Text(
                                   'Nenhum convênio encontrado para "$q".',
                                   textAlign: TextAlign.center,
-                                  style: TextStyle(color: Colors.grey.shade700),
+                                  style: TextStyle(color: AdminUi.apoioOf(context)),
                                 ),
                               )
                             : ListView.builder(
@@ -2093,25 +2095,25 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
                             'Uso no banco (Firestore): contagens neste convênio — '
                             'membros ativos, usuários do app (partnershipId ou plano igual ao do convênio, ex.: premium_assego, se alterado manualmente no painel) e submissões pelo link. '
                             'Não inclui escalas/transações dos usuários.',
-                            style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                            style: TextStyle(fontSize: 11, color: AdminUi.apoioOf(context)),
                           ),
                           const SizedBox(height: 10),
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFF8FAFC),
+                              color: context.isDarkMode ? context.appMutedSurface : const Color(0xFFF8FAFC),
                               borderRadius: BorderRadius.circular(10),
                               border: Border.all(color: const Color(0xFFD9E2EC)),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text(
+                                Text(
                                   'Link público do convênio',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w700,
-                                    color: Color(0xFF334155),
+                                    color: AdminUi.apoioOf(context),
                                   ),
                                 ),
                                 const SizedBox(height: 4),
@@ -2227,17 +2229,17 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
                             width: double.infinity,
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFF1F5F9),
+                              color: context.isDarkMode ? context.appMutedSurface : const Color(0xFFF1F5F9),
                               borderRadius: BorderRadius.circular(10),
                               border:
                                   Border.all(color: const Color(0xFFCBD5E1)),
                             ),
-                            child: const Text(
+                            child: Text(
                               'Fluxo recomendado: URL CSV pública (parceiro mantém o link). Alternativa: upload manual do arquivo .csv aqui no painel — mesma conferência e status no convênio. Usuários em plano de convênio (premium_*) têm o mesmo pacote de acesso premium na web/app conforme licença ativa.',
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
-                                color: Color(0xFF334155),
+                                color: AdminUi.apoioOf(context),
                               ),
                             ),
                           ),
@@ -2542,7 +2544,7 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: Material(
-                      color: Colors.white,
+                      color: AdminUi.cardOf(context),
                       borderRadius: BorderRadius.circular(20),
                       clipBehavior: Clip.antiAlias,
                       child: Ink(
@@ -2605,12 +2607,12 @@ class _PartnershipsAdminModuleState extends State<PartnershipsAdminModule> {
                                             children: [
                                               Text(
                                                 name,
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   fontSize: 17,
                                                   fontWeight: FontWeight.w900,
                                                   letterSpacing: -0.3,
                                                   height: 1.15,
-                                                  color: Color(0xFF0F172A),
+                                                  color: AdminUi.tintaOf(context),
                                                 ),
                                                 maxLines: 2,
                                                 overflow: TextOverflow.ellipsis,
@@ -3025,9 +3027,13 @@ class _PartnershipVigenciaEditorState extends State<_PartnershipVigenciaEditor> 
         gradient: LinearGradient(
           colors: [
             widget.partnershipData['active'] != false
-                ? const Color(0xFFEEF2FF)
-                : const Color(0xFFF1F5F9),
-            Colors.white,
+                ? (context.isDarkMode
+                    ? const Color(0xFF6366F1).withValues(alpha: 0.14)
+                    : const Color(0xFFEEF2FF))
+                : (context.isDarkMode
+                    ? context.appMutedSurface
+                    : const Color(0xFFF1F5F9)),
+            AdminUi.cardOf(context),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -3063,13 +3069,13 @@ class _PartnershipVigenciaEditorState extends State<_PartnershipVigenciaEditor> 
                 child: const Icon(Icons.edit_calendar_rounded, color: Colors.white, size: 22),
               ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Dados do convênio',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w900,
-                    color: Color(0xFF0F172A),
+                    color: AdminUi.tintaOf(context),
                     letterSpacing: -0.3,
                   ),
                 ),
@@ -3079,7 +3085,7 @@ class _PartnershipVigenciaEditorState extends State<_PartnershipVigenciaEditor> 
           const SizedBox(height: 8),
           Text(
             'Nome, plano, vigência do contrato e prorrogação. Depois de alterar, use «Aplicar licença aos usuários».',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade700, height: 1.4),
+            style: TextStyle(fontSize: 12, color: AdminUi.apoioOf(context), height: 1.4),
           ),
           const SizedBox(height: 14),
           FastTextField(
@@ -3089,7 +3095,7 @@ class _PartnershipVigenciaEditorState extends State<_PartnershipVigenciaEditor> 
               labelText: 'Nome do convênio',
               hintText: 'Ex.: Assego App',
               filled: true,
-              fillColor: Colors.white,
+              fillColor: AdminUi.cardOf(context),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
@@ -3570,7 +3576,7 @@ class _PartnershipQuotaBillingPanelState extends State<_PartnershipQuotaBillingP
                             size: 18,
                             color: excess > 0
                                 ? Colors.orange.shade900
-                                : Colors.grey.shade700),
+                                : AdminUi.apoioOf(context)),
                         label: Text('Excedentes: $excess'),
                       ),
                       Chip(
@@ -3817,7 +3823,7 @@ class _PartnershipManualEmailCardState extends State<_PartnershipManualEmailCard
             const SizedBox(height: 4),
             Text(
               'Digite o e-mail e use Incluir ou Remover. Combine com CSV, URL/sync automático e com a migração em massa na lista abaixo.',
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+              style: TextStyle(fontSize: 11, color: AdminUi.apoioOf(context)),
             ),
             const SizedBox(height: 10),
             LayoutBuilder(
@@ -4477,7 +4483,9 @@ class _PartnershipUsersPanelState extends State<PartnershipUsersPanel> {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isRemoved ? Colors.grey.shade50 : Colors.white,
+        color: isRemoved
+            ? (context.isDarkMode ? context.appMutedSurface : Colors.grey.shade50)
+            : AdminUi.cardOf(context),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isRemoved ? Colors.grey.shade300 : Colors.grey.shade200,
@@ -4527,7 +4535,7 @@ class _PartnershipUsersPanelState extends State<PartnershipUsersPanel> {
                     const SizedBox(height: 4),
                     Text(
                       '$planLabel • $validadeStr',
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                      style: TextStyle(fontSize: 11, color: AdminUi.apoioOf(context)),
                     ),
                     if (partnershipId.isNotEmpty)
                       Padding(
@@ -4751,7 +4759,7 @@ class _PartnershipUsersPanelState extends State<PartnershipUsersPanel> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Falha ao excluir: ${e.toString().split('\n').first}'),
+          content: Text('Falha ao excluir: ${AdminLoadGuard.mensagem(e)}'),
           backgroundColor: AppColors.error,
         ),
       );
@@ -4787,7 +4795,7 @@ class _PartnershipUsersPanelState extends State<PartnershipUsersPanel> {
         query.isEmpty
             ? 'Nenhum usuário encontrado para este convênio.'
             : 'Nenhum usuário encontrado para a busca informada.',
-        style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+        style: TextStyle(fontSize: 12, color: AdminUi.apoioOf(context)),
       );
     }
 
@@ -5052,7 +5060,7 @@ class _PartnershipUsersPanelState extends State<PartnershipUsersPanel> {
               padding: const EdgeInsets.only(top: 8),
               child: Text(
                 'Há mais de 400 usuários: refine a busca para listar todos em lotes.',
-                style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                style: TextStyle(fontSize: 11, color: AdminUi.apoioOf(context)),
               ),
             ),
         ],
@@ -5164,7 +5172,7 @@ class _PartnershipUsersPanelState extends State<PartnershipUsersPanel> {
             margin: const EdgeInsets.only(bottom: 8),
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
+              color: context.isDarkMode ? context.appMutedSurface : const Color(0xFFF8FAFC),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: const Color(0xFFCBD5E1)),
             ),
@@ -5204,7 +5212,7 @@ class _PartnershipUsersPanelState extends State<PartnershipUsersPanel> {
                         'Plano: ${plan.isEmpty ? '—' : plan} • Convênio: ${pId.isEmpty ? '—' : pId} • Licença: $exp',
                         style: TextStyle(
                           fontSize: 11,
-                          color: Colors.grey.shade700,
+                          color: AdminUi.apoioOf(context),
                         ),
                       ),
                       if (delegateEmail.isNotEmpty)
@@ -5303,7 +5311,7 @@ class _PartnershipUsersPanelState extends State<PartnershipUsersPanel> {
             widget.useRichUserCards
                 ? 'Mostrando até 120 usuários. Refine a busca.'
                 : 'Mostrando 80 usuários. Refine a busca para reduzir a base.',
-            style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+            style: TextStyle(fontSize: 11, color: AdminUi.apoioOf(context)),
           ),
       ],
     );
@@ -5323,7 +5331,7 @@ class _PartnershipUsersPanelState extends State<PartnershipUsersPanel> {
         width: double.infinity,
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: const Color(0xFFF8FAFC),
+          color: context.isDarkMode ? context.appMutedSurface : const Color(0xFFF8FAFC),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: const Color(0xFFCBD5E1)),
         ),
@@ -5334,10 +5342,10 @@ class _PartnershipUsersPanelState extends State<PartnershipUsersPanel> {
               widget.useRichUserCards
                   ? 'Utilizadores com convênio — edição como na tela Usuários'
                   : 'Utilizadores com partnershipId preenchido',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w800,
-                color: Color(0xFF334155),
+                color: AdminUi.apoioOf(context),
               ),
             ),
             const SizedBox(height: 8),
@@ -5377,7 +5385,7 @@ class _PartnershipUsersPanelState extends State<PartnershipUsersPanel> {
       width: double.infinity,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: context.isDarkMode ? context.appMutedSurface : const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0xFFCBD5E1)),
       ),
@@ -5388,10 +5396,10 @@ class _PartnershipUsersPanelState extends State<PartnershipUsersPanel> {
             widget.layout == PartnershipUsersPanelLayout.dataTable
                 ? 'Grade de usuários — edição, licença e exclusão'
                 : 'Usuários do convênio (seleção / migração / edição / licença / exclusão)',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w800,
-              color: Color(0xFF334155),
+              color: AdminUi.apoioOf(context),
             ),
           ),
           const SizedBox(height: 8),
@@ -5549,7 +5557,7 @@ class _ConsolidadoConveniosCardState extends State<_ConsolidadoConveniosCard> {
     final periodDays = widget.periodDays;
     return RepaintBoundary(
       child: Material(
-      color: Colors.white,
+      color: AdminUi.cardOf(context),
       borderRadius: BorderRadius.circular(20),
       clipBehavior: Clip.antiAlias,
       child: Ink(
@@ -5622,14 +5630,14 @@ class _ConsolidadoConveniosCardState extends State<_ConsolidadoConveniosCard> {
                       child: const Icon(Icons.insights_rounded, color: Colors.white, size: 22),
                     ),
                     const SizedBox(width: 12),
-                    const Expanded(
+                    Expanded(
                       child: Text(
                         'Consolidado geral dos associados',
                         style: TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.w900,
                           letterSpacing: -0.3,
-                          color: Color(0xFF0F172A),
+                          color: AdminUi.tintaOf(context),
                         ),
                       ),
                     ),
@@ -5644,7 +5652,7 @@ class _ConsolidadoConveniosCardState extends State<_ConsolidadoConveniosCard> {
                       : (periodDays <= 0
                           ? 'Soma de ${docs.length} associações — partnershipId ou plano do convênio (fallback: membros ativos), sem filtro de data.'
                           : 'Soma de ${docs.length} associações — quantidade no período: últimos $periodDays dias (createdAt).'),
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                  style: TextStyle(fontSize: 12, color: AdminUi.apoioOf(context)),
                 ),
                 const SizedBox(height: 10),
                 Wrap(
@@ -5910,9 +5918,9 @@ class _PartnershipFinancialPanelState extends State<_PartnershipFinancialPanel> 
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AdminUi.cardOf(context),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: AdminUi.bordaOf(context)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.06),
@@ -6129,7 +6137,7 @@ class _PartnershipFinancialPanelState extends State<_PartnershipFinancialPanel> 
                               : 'Cadastros no período (partnershipId ou plan do convênio + createdAt).',
                           style: TextStyle(
                             fontSize: 11,
-                            color: Colors.grey.shade700,
+                            color: AdminUi.apoioOf(context),
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -6193,7 +6201,7 @@ class _PartnershipFinancialPanelState extends State<_PartnershipFinancialPanel> 
                           'Resultado = receita do contrato no período + (receita/usuário × Q) − (custo/usuário × Q). Unidades ~MB são estimativa.',
                           style: TextStyle(
                             fontSize: 11,
-                            color: Colors.grey.shade700,
+                            color: AdminUi.apoioOf(context),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -6375,7 +6383,7 @@ class _CsvSourceBlockState extends State<_CsvSourceBlock> {
         const SizedBox(height: 4),
         Text(
           'Por URL: integração/API — o parceiro mantém um CSV público em https; o sistema baixa e importa em cada sync. Por arquivo: upload manual. Mesmo fluxo de conferência.',
-          style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+          style: TextStyle(fontSize: 11, color: AdminUi.apoioOf(context)),
         ),
         const SizedBox(height: 8),
         SwitchListTile(
@@ -6383,7 +6391,7 @@ class _CsvSourceBlockState extends State<_CsvSourceBlock> {
           title: const Text('Remover quem não está mais no CSV'),
           subtitle: Text(
             'Ao sincronizar, retira do convênio os e-mails que saíram da lista (automático).',
-            style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+            style: TextStyle(fontSize: 11, color: AdminUi.apoioOf(context)),
           ),
           value: _removeMissingNotInCsv,
           onChanged: (v) => setState(() => _removeMissingNotInCsv = v),

@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../theme/theme_context.dart';
+import '../utils/admin_load_guard.dart';
+import '../widgets/admin/admin_ui_kit.dart';
 import '../widgets/fast_text_field.dart';
 
 /// Painel Admin: templates globais de push/e-mail (`app_config/notification_templates`).
@@ -37,6 +39,7 @@ class _AdminNotificationTemplatesSectionState
   int _digestHour = 20;
   bool _loading = true;
   bool _saving = false;
+  Object? _loadError;
 
   @override
   void initState() {
@@ -56,8 +59,17 @@ class _AdminNotificationTemplatesSectionState
   }
 
   Future<void> _load() async {
+    if (mounted && !_loading) {
+      setState(() {
+        _loading = true;
+        _loadError = null;
+      });
+    }
     try {
-      final snap = await _doc.get();
+      final snap = await AdminLoadGuard.comPrazo(
+        _doc.get(),
+        oQue: 'os templates de notificação',
+      );
       final d = snap.data();
       if (d != null && mounted) {
         _brandCtrl.text = (d['brandName'] ?? 'WISDOMAPP').toString();
@@ -73,14 +85,18 @@ class _AdminNotificationTemplatesSectionState
             ? (d['digestHourBrasilia'] as num).toInt()
             : 20;
       }
-    } catch (_) {}
+    } catch (e) {
+      // Antes: erro calado e os campos abriam com o padrão — «Salvar»
+      // gravava o padrão por cima do que estava configurado.
+      _loadError = e;
+    }
     if (mounted) setState(() => _loading = false);
   }
 
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      await _doc.set({
+      await AdminLoadGuard.comPrazo(_doc.set({
         'brandName': _brandCtrl.text.trim(),
         'emailFooter': _footerCtrl.text.trim(),
         'emailIntro': _introCtrl.text.trim(),
@@ -92,7 +108,7 @@ class _AdminNotificationTemplatesSectionState
         'digestPushEnabled': _digestPush,
         'digestHourBrasilia': _digestHour.clamp(0, 23),
         'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      }, SetOptions(merge: true)), oQue: 'a gravação dos templates');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Templates de notificação salvos.')),
@@ -102,7 +118,7 @@ class _AdminNotificationTemplatesSectionState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erro ao salvar: $e'),
+            content: Text('Erro ao salvar: ${AdminLoadGuard.mensagem(e)}'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -118,6 +134,13 @@ class _AdminNotificationTemplatesSectionState
       return const Padding(
         padding: EdgeInsets.all(24),
         child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_loadError != null) {
+      return AdminErroCard(
+        erro: _loadError,
+        titulo: 'Não foi possível carregar os templates de notificação',
+        onTentar: _load,
       );
     }
     return Card(

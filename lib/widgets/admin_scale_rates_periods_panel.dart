@@ -7,6 +7,7 @@ import '../models/scale_rates_period.dart';
 import '../services/scale_rates_period_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/theme_context.dart';
+import '../utils/admin_load_guard.dart';
 import 'admin_scale_rates_period_editor_page.dart';
 import 'keyed_stream_builder.dart';
 
@@ -30,6 +31,8 @@ class _AdminScaleRatesPeriodsPanelState
     extends State<AdminScaleRatesPeriodsPanel> {
   bool _syncing = false;
   bool _recalculating = false;
+  /// Muda a cada «Tentar de novo» (recria a escuta dos períodos).
+  int _tentativa = 0;
 
   Future<void> _recalcAllUsers({bool force = true, bool silent = false}) async {
     setState(() => _recalculating = true);
@@ -257,9 +260,35 @@ class _AdminScaleRatesPeriodsPanelState
   @override
   Widget build(BuildContext context) {
     return KeyedStreamBuilder<List<ScaleRatesPeriod>>(
-      streamKey: 'scale-rates-periods',
-      create: () => ScaleRatesPeriodService().watchPeriods(),
+      streamKey: 'scale-rates-periods-$_tentativa',
+      create: () => AdminLoadGuard.primeiroDadoComPrazo(
+        ScaleRatesPeriodService().watchPeriods(),
+        oQue: 'os períodos de valores',
+      ),
       builder: (context, snap) {
+        // Erro ao ler: avisa em vez de mostrar só os padrões do app calado.
+        final avisoErro = snap.hasError && !snap.hasData
+            ? Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Material(
+                  color: context.isDarkMode
+                      ? Colors.orange.withValues(alpha: 0.16)
+                      : Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  child: ListTile(
+                    leading: Icon(Icons.cloud_off_rounded,
+                        color: Colors.orange.shade700),
+                    title: const Text(
+                        'Mostrando os períodos padrão do app — o Firestore não respondeu'),
+                    subtitle: Text(AdminLoadGuard.mensagem(snap.error)),
+                    trailing: TextButton(
+                      onPressed: () => setState(() => _tentativa++),
+                      child: const Text('Tentar de novo'),
+                    ),
+                  ),
+                ),
+              )
+            : null;
         final periods = snap.data ?? ScaleRatesPeriodRegistry.bootstrapPeriods();
         final sorted = ScaleRatesPeriod.sortAsc(periods);
         final active = ScaleRatesPeriod.resolveAt(DateTime.now(), sorted);
@@ -273,6 +302,7 @@ class _AdminScaleRatesPeriodsPanelState
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (avisoErro != null) avisoErro,
             Container(
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(

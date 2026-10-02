@@ -2121,7 +2121,7 @@ class _AdminCursosTabState extends State<AdminCursosTab> {
       final m = (e.message ?? '').trim();
       if (m.isNotEmpty) return '${e.code}: $m';
     }
-    final msg = e.toString().split('\n').first.trim();
+    final msg = AdminLoadGuard.mensagem(e).trim();
     return msg.length > 180 ? '${msg.substring(0, 180)}…' : msg;
   }
 
