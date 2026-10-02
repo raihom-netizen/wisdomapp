@@ -24,7 +24,10 @@ import '../widgets/wisdomapp_hero_brand.dart';
 
 /// Página de divulgação (rota `/divulgacao`) — visual alinhado à landing super premium.
 class TelaDivulgacaoPage extends StatefulWidget {
-  const TelaDivulgacaoPage({super.key});
+  const TelaDivulgacaoPage({super.key, this.preview = false});
+
+  /// Prévia aberta pelo Admin: não redireciona quem já está logado.
+  final bool preview;
 
   @override
   State<TelaDivulgacaoPage> createState() => _TelaDivulgacaoPageState();
@@ -39,7 +42,7 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _mpCheckoutSub;
   Map<String, dynamic>? _landingMainData;
   Map<String, dynamic>? _mpCheckoutData;
-  LandingPublicContent _landing = LandingPublicContent.fromMap(null);
+  LandingPublicContent _landing = LandingPublicContent.initial();
 
   late final AnimationController _intro;
   late final Animation<double> _fade;
@@ -90,7 +93,7 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
     _fade = CurvedAnimation(parent: _intro, curve: Curves.easeOutCubic);
     _intro.forward();
     _bindPublicFirestoreListeners();
-    if (!kIsWeb) {
+    if (!kIsWeb && !widget.preview) {
       WidgetsBinding.instance
           .addPostFrameCallback((_) => _redirectIfSessionPersisted());
     }
@@ -113,8 +116,9 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
       if (!mounted) return;
       final base = LandingPublicContent.fromMap(_landingMainData);
       final snap = MpCheckoutPricingSnapshot.fromFirestore(_mpCheckoutData);
-      setState(
-          () => _landing = base.applyPremiumTextsFromCheckoutPricing(snap));
+      final merged = base.applyPremiumTextsFromCheckoutPricing(snap);
+      landingContentLive.value = merged;
+      setState(() => _landing = merged);
     }
 
     _landingSub?.cancel();
@@ -340,23 +344,23 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
                           color: Colors.white),
                     ),
                     const SizedBox(width: 10),
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            'Login expresso',
-                            style: TextStyle(
+                            _landing.t('siteExpressTitle'),
+                            style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w800,
                               fontSize: 14,
                             ),
                           ),
-                          SizedBox(height: 2),
+                          const SizedBox(height: 2),
                           Text(
-                            'Clique aqui para entrar com Google ou Apple',
-                            style: TextStyle(
+                            _landing.t('siteExpressSubtitle'),
+                            style: const TextStyle(
                               color: Color(0xFFD1FAE5),
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
@@ -369,9 +373,9 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
                     FilledButton.tonalIcon(
                       onPressed: _openExpressLogin,
                       icon: const Icon(Icons.login_rounded, size: 18),
-                      label: const Text(
-                        'Entrar',
-                        style: TextStyle(fontWeight: FontWeight.w800),
+                      label: Text(
+                        _landing.t('siteExpressBtn'),
+                        style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
                       style: FilledButton.styleFrom(
                         minimumSize: const Size(48, 40),
@@ -754,7 +758,7 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
           ),
           const SizedBox(height: 8),
           Text(
-            'Autor: $author',
+            _landing.t('divBookAuthorLine').replaceAll('{autor}', author),
             style: GoogleFonts.inter(
               color: _divThemeAccent,
               fontWeight: FontWeight.w800,
@@ -928,7 +932,14 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
               const SizedBox(height: 12),
               OfficialSocialTopButtons.fromLanding(c),
               const SizedBox(height: 20),
-              const WisdomappHeroBrand(showMicroTagline: true, showIdealizer: true, compact: true),
+              WisdomappHeroBrand(
+                showMicroTagline: true,
+                showIdealizer: true,
+                compact: true,
+                title: c.divHeroTitle,
+                idealizer: c.t('homeHeroIdealizer'),
+                microTagline: c.t('homeHeroMicroTagline'),
+              ),
               const SizedBox(height: 12),
               Text(
                 c.divHeroTagline,

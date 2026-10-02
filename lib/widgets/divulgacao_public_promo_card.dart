@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../constants/promo_site_urls.dart';
+import '../models/landing_public_content.dart';
 import '../screens/payment_status_screen.dart';
 import '../theme/theme_context.dart';
 import '../utils/pwa_install_helper.dart';
@@ -178,6 +179,14 @@ class DivulgacaoPublicPromoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Textos editáveis no Admin (Landing / Divulgação) — mesma fonte da página.
+    return ValueListenableBuilder<LandingPublicContent>(
+      valueListenable: landingContentLive,
+      builder: (context, lc, _) => _buildPromo(context, lc),
+    );
+  }
+
+  Widget _buildPromo(BuildContext context, LandingPublicContent lc) {
     return StreamBuilder<PublicDivulgacaoPromo?>(
       stream: PublicDivulgacaoPromo.watchFeatured(),
       builder: (context, snap) {
@@ -211,7 +220,7 @@ class DivulgacaoPublicPromoCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Promoção limitada',
+                          lc.t('promoIosTitle'),
                           style: GoogleFonts.inter(
                             fontSize: 16,
                             fontWeight: FontWeight.w800,
@@ -220,7 +229,7 @@ class DivulgacaoPublicPromoCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Toque para abrir o site oficial e ver os detalhes desta campanha.',
+                          lc.t('promoIosBody'),
                           style: GoogleFonts.inter(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
@@ -230,7 +239,7 @@ class DivulgacaoPublicPromoCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          'wisdomapp-b9e98.web.app',
+                          lc.t('promoIosLink'),
                           style: GoogleFonts.inter(
                             fontSize: 14,
                             fontWeight: FontWeight.w800,
@@ -280,7 +289,7 @@ class DivulgacaoPublicPromoCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
-                          'PROMO ATIVA',
+                          lc.t('promoBadge'),
                           style: GoogleFonts.inter(
                             fontSize: 10,
                             fontWeight: FontWeight.w900,
@@ -306,7 +315,10 @@ class DivulgacaoPublicPromoCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '${promo.priceLabel} · +${promo.durationDays} dias de licença após pagamento aprovado',
+                    lc
+                        .t('promoDurationLine')
+                        .replaceAll('{preco}', promo.priceLabel)
+                        .replaceAll('{dias_licenca}', '${promo.durationDays}'),
                     style: GoogleFonts.inter(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -337,15 +349,15 @@ class DivulgacaoPublicPromoCard extends StatelessWidget {
                       ),
                       child: Text(
                         FirebaseAuth.instance.currentUser != null
-                            ? 'Pagar com esta promoção'
-                            : 'Entrar e aproveitar — PIX ou cartão',
+                            ? lc.t('promoCtaLogged')
+                            : lc.t('promoCtaGuest'),
                         style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w800),
                       ),
                     ),
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    'Novos e clientes: mesma conta. PIX ou cartão com Mercado Pago no app ou na web — a licença fica na sua conta.',
+                    lc.t('promoFootnote'),
                     textAlign: TextAlign.center,
                     style: GoogleFonts.inter(
                         fontSize: 11,

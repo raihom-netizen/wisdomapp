@@ -13,7 +13,15 @@ class WisdomappHeroBrand extends StatelessWidget {
     this.showMicroTagline = true,
     this.showIdealizer = false,
     this.compact = false,
+    this.title,
+    this.idealizer,
+    this.microTagline,
   });
+
+  /// Textos editáveis no Admin (landing); null/vazio = padrão da marca.
+  final String? title;
+  final String? idealizer;
+  final String? microTagline;
 
   final double? emblemSize;
   final bool showMicroTagline;
@@ -49,12 +57,15 @@ class WisdomappHeroBrand extends StatelessWidget {
         if (showIdealizer) ...[
           SizedBox(height: compact ? 10 : 14),
           WisdomappHeroTitle(
-            text: AppBrand.name,
+            text: (title ?? '').trim().isNotEmpty ? title!.trim() : AppBrand.name,
             fontSize: compact ? 28 : null,
           ),
           const SizedBox(height: 6),
           Text(
-            AppBrand.idealizerName.toUpperCase(),
+            ((idealizer ?? '').trim().isNotEmpty
+                    ? idealizer!.trim()
+                    : AppBrand.idealizerName)
+                .toUpperCase(),
             textAlign: TextAlign.center,
             style: GoogleFonts.inter(
               fontSize: compact ? 10 : 11.5,
@@ -74,7 +85,9 @@ class WisdomappHeroBrand extends StatelessWidget {
               colors: [_goldLight, _gold, _goldDeep],
             ).createShader(bounds),
             child: Text(
-              'SABEDORIA FINANCEIRA',
+              (microTagline ?? '').trim().isNotEmpty
+                  ? microTagline!.trim()
+                  : 'SABEDORIA FINANCEIRA',
               textAlign: TextAlign.center,
               style: GoogleFonts.inter(
                 fontSize: compact ? 10 : 11,

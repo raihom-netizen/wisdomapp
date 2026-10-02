@@ -1,400 +1,42 @@
+import 'package:flutter/foundation.dart' show ValueNotifier;
+
+import '../constants/landing_defaults.dart';
 import '../services/mp_checkout_pricing_service.dart';
+import 'user_profile.dart';
+
+export '../constants/landing_defaults.dart';
 
 // Conteúdo editável da landing (`/`) e da página pública `/divulgacao`, lido de
-// `landing_content/main`. Valores em branco no Firestore usam os defaults abaixo
-// (texto atual do site) para o painel já abrir preenchido.
+// `landing_content/main`. Valores em branco no Firestore usam os padrões de
+// `lib/constants/landing_defaults.dart` (texto atual do site) — a mesma fonte
+// que o editor do Admin usa, então página e editor nunca divergem.
 //
-// Os textos de preço Premium exibidos no site são alinhados a
-// `app_config/mp_checkout_prices` via [applyPremiumTextsFromCheckoutPricing]
-// para não ficarem presos a texto antigo gravado só em `landing_content/main`.
+// Preços: as linhas de valor (mensal/anual) vêm sempre de
+// `app_config/mp_checkout_prices` via [applyPremiumTextsFromCheckoutPricing], e
+// os marcadores {premium_mensal}, {premium_anual}, {premium_anual_mes},
+// {extra_mensal}, {extra_anual} e {dias} são trocados pelos valores atuais.
 
-/// URL padrão da Google Play (pacote Android oficial).
-const String kDefaultPlayStoreUrl =
-    'https://play.google.com/store/apps/details?id=com.wisdomapp.app';
+/// Último conteúdo público carregado pela landing / divulgação (com preços).
+/// Widgets avulsos (ex.: cartão de promoção) leem daqui sem abrir outra escuta.
+final ValueNotifier<LandingPublicContent> landingContentLive =
+    ValueNotifier<LandingPublicContent>(LandingPublicContent.initial());
 
-/// Instagram oficial WISDOMAPP (@wisdomappgo).
-const String kDefaultWisdomAppInstagramUrl =
-    'https://www.instagram.com/wisdomappgo/';
-
-/// Definição de campo para o editor Admin (página /divulgacao).
-class LandingFieldDef {
-  const LandingFieldDef(this.key, this.label, this.defaultValue);
-
-  final String key;
-  final String label;
-  final String defaultValue;
+/// Troca os marcadores de preço/dias pelo valor atual.
+String landingFillPlaceholders(String text, MpCheckoutPricingSnapshot? p) {
+  if (!text.contains('{')) return text;
+  final snap = p ?? MpCheckoutPricingSnapshot.defaults();
+  final f = MpCheckoutPricingSnapshot.formatBrl;
+  return text
+      .replaceAll('{premium_mensal}', f(snap.premiumMonthly))
+      .replaceAll('{premium_anual_mes}',
+          f(MpCheckoutPricingSnapshot.premiumAnnualEquivalentMonthlyFloor(
+              snap.premiumAnnual)))
+      .replaceAll('{premium_anual}', f(snap.premiumAnnual))
+      .replaceAll('{extra_mensal}', f(snap.extraBankConnectionMonthly))
+      .replaceAll('{extra_anual}', f(snap.extraBankConnectionAnnual))
+      .replaceAll('{dias}', '${UserProfile.newUserTrialDays}');
 }
 
-/// Campos da rota `/divulgacao` (ordem do formulário).
-const List<LandingFieldDef> kDivulgacaoLandingFields = [
-  LandingFieldDef('divHeroTitle', 'Hero — título principal', 'WISDOMAPP'),
-  LandingFieldDef(
-      'divHeroTagline',
-      'Hero — linha dourada (ex.: Sabedoria financeira)',
-      'Sabedoria financeira'),
-  LandingFieldDef(
-      'divHeroBadge', 'Hero — faixa (badge)', 'PRINCÍPIOS BÍBLICOS · GESTÃO INTELIGENTE'),
-  LandingFieldDef(
-    'divHeroHeadline',
-    'Hero — parágrafo (branco)',
-    'Finanças, objetivos financeiros, agenda e cursos em um só lugar — com sabedoria financeira baseada nos princípios bíblicos.',
-  ),
-  LandingFieldDef('divHeroBtnEntrar', 'Hero — botão Entrar', 'Entrar'),
-  LandingFieldDef('divHeroBtnPlanos', 'Hero — botão Ver planos', 'Ver planos'),
-  LandingFieldDef('divHeroChip1', 'Hero — chip 1', 'Seguro'),
-  LandingFieldDef('divHeroChip2', 'Hero — chip 2', 'Sincronizado'),
-  LandingFieldDef('divHeroChip3', 'Hero — chip 3', 'PIX e cartão no site'),
-  LandingFieldDef('divNavInicio', 'Topo web — botão Início', 'Início'),
-  LandingFieldDef(
-      'divChannelsTitle', 'Canais oficiais — título', 'Canais oficiais'),
-  LandingFieldDef(
-      'divChannelsSubtitle', 'Canais oficiais — subtítulo', 'Raihom Barbosa'),
-  LandingFieldDef(
-    'divYoutubeUrl',
-    'Canais oficiais — URL YouTube',
-    'https://youtube.com/',
-  ),
-  LandingFieldDef(
-    'divInstagramUrl',
-    'Canais oficiais — URL Instagram',
-    kDefaultWisdomAppInstagramUrl,
-  ),
-  LandingFieldDef(
-    'divWhatsappUrl',
-    'Canais oficiais — URL WhatsApp',
-    'https://wa.me/5562996713032',
-  ),
-  LandingFieldDef('divYoutubeLabel', 'Canais — rótulo YouTube', 'YouTube'),
-  LandingFieldDef('divInstagramLabel', 'Canais — rótulo Instagram', 'Instagram'),
-  LandingFieldDef('divWhatsappLabel', 'Canais — rótulo WhatsApp', 'WhatsApp'),
-  LandingFieldDef(
-    'divPlayStoreUrl',
-    'Baixar app — URL Google Play',
-    kDefaultPlayStoreUrl,
-  ),
-  LandingFieldDef(
-    'divPlayStoreLabel',
-    'Baixar app — rótulo botão Google Play',
-    'Google Play',
-  ),
-  LandingFieldDef(
-    'divBookBadge',
-    'Livro (lançamento) — faixa',
-    'LANÇAMENTO DO LIVRO',
-  ),
-  LandingFieldDef(
-    'divBookTitle',
-    'Livro (lançamento) — título',
-    'Um Degrau Abaixo',
-  ),
-  LandingFieldDef(
-    'divBookAuthor',
-    'Livro (lançamento) — autor',
-    'Johnathan Tarley',
-  ),
-  LandingFieldDef(
-    'divBookSubtitle',
-    'Livro (lançamento) — subtítulo',
-    'Método Wisdom de organização financeira.',
-  ),
-  LandingFieldDef(
-    'divBookLaunchText',
-    'Livro (lançamento) — texto da chamada',
-    'Em breve: reserva e novidades no Instagram, WhatsApp e YouTube oficial do mentor.',
-  ),
-  LandingFieldDef(
-    'divBookImageUrl',
-    'Livro (lançamento) — URL da capa (opcional)',
-    '',
-  ),
-  LandingFieldDef(
-    'divMentorName',
-    'Mentor — nome',
-    'Johnathan Tarley',
-  ),
-  LandingFieldDef(
-    'divMentorRole',
-    'Mentor — cargo/chamada',
-    'Mentor do curso e autor do método Wisdom.',
-  ),
-  LandingFieldDef(
-    'divMentorInstagramUrl',
-    'Mentor (Tarley) — URL Instagram',
-    kDefaultWisdomAppInstagramUrl,
-  ),
-  LandingFieldDef(
-    'divMentorWhatsappUrl',
-    'Mentor — URL WhatsApp',
-    'https://wa.me/5562996713032',
-  ),
-  LandingFieldDef(
-    'divMentorYoutubeUrl',
-    'Mentor — URL YouTube',
-    '',
-  ),
-  LandingFieldDef(
-    'divMentorInstagramLabel',
-    'Mentor — rótulo botão Instagram',
-    'Instagram do Mentor',
-  ),
-  LandingFieldDef(
-    'divMentorWhatsappLabel',
-    'Mentor — rótulo botão WhatsApp',
-    'WhatsApp do Mentor',
-  ),
-  LandingFieldDef(
-    'divMentorYoutubeLabel',
-    'Mentor — rótulo botão YouTube',
-    'YouTube do Mentor',
-  ),
-  LandingFieldDef('divLabelComoFunciona', 'Seção — rótulo “Como funciona”',
-      'Como funciona'),
-  LandingFieldDef('divStep1Title', 'Passo 1 — título', 'Crie sua conta'),
-  LandingFieldDef(
-    'divStep1Body',
-    'Passo 1 — texto',
-    'Entre com Google ou e-mail. Os dados ficam na sua conta segura.',
-  ),
-  LandingFieldDef(
-      'divStep2Title', 'Passo 2 — título', 'Escolha o plano no site'),
-  LandingFieldDef(
-    'divStep2Body',
-    'Passo 2 — texto',
-    'Promoções ativas mostram preço e duração da licença. Pagamento com Mercado Pago (PIX ou cartão) no site oficial.',
-  ),
-  LandingFieldDef('divStep3Title', 'Passo 3 — título', 'Use no app ou na web'),
-  LandingFieldDef(
-    'divStep3Body',
-    'Passo 3 — texto',
-    'A mesma conta no celular e no computador — finanças, objetivos, agenda e metas sincronizadas.',
-  ),
-  LandingFieldDef(
-      'divLabelComece', 'Seção — rótulo “Comece aqui”', 'Comece aqui'),
-  LandingFieldDef(
-    'divComeceParagraph',
-    'Comece aqui — parágrafo',
-    'Gestão financeira, Objetivos Financeiros (Projeto 52 semanas), agenda e cursos num só lugar — padrão super premium no site.',
-  ),
-  LandingFieldDef('divLabelPlanos', 'Seção — rótulo “Planos”', 'Planos'),
-  LandingFieldDef(
-    'divPlanosSubtitle',
-    'Planos — subtítulo',
-    r'Plano Premium: finanças, objetivos financeiros, agenda e cursos num só lugar. Pague mensal ou anual — no anual, melhor custo-benefício; recomendamos o anual. No cartão, o plano anual pode ser parcelado em até 6 vezes quando o Mercado Pago permitir.',
-  ),
-  LandingFieldDef(
-      'divBasicoTitulo', 'Bloco secundário — título (opcional)', 'Destaque'),
-  LandingFieldDef(
-      'divBasicoMensal', 'Bloco secundário — linha mensal', r'R$ 49,90/mês'),
-  LandingFieldDef(
-      'divBasicoAnual', 'Bloco secundário — linha anual', r'R$ 478,80/ano'),
-  LandingFieldDef(
-    'divBasicoBeneficios',
-    'Bloco secundário — benefícios (vírgula)',
-    'Controle financeiro, Objetivos Financeiros (52 semanas), Agenda e lembretes, Cursos financeiros bíblicos, Relatórios',
-  ),
-  LandingFieldDef('divPremiumTitulo', 'Plano Premium — nome', 'Premium'),
-  LandingFieldDef(
-      'divPremiumMensal', 'Plano Premium — linha mensal', r'R$ 49,90/mês'),
-  LandingFieldDef(
-      'divPremiumAnual', 'Plano Premium — linha anual', r'R$ 478,80/ano'),
-  LandingFieldDef(
-    'divPremiumBeneficios',
-    'Plano Premium — benefícios (vírgula)',
-    'Módulo financeiro completo, Objetivos Financeiros (52 semanas), Agenda e lembretes, Cursos bíblicos, Comprovantes e backup, Relatórios',
-  ),
-  LandingFieldDef(
-    'divPremiumCardSubtitle',
-    'Cartão Premium — subtítulo (cinza)',
-    'Finanças, objetivos financeiros, agenda e cursos com controlo total à mão',
-  ),
-  LandingFieldDef(
-      'divPremiumRibbon', 'Cartão Premium — faixa superior', 'SUPER PREMIUM'),
-  LandingFieldDef(
-    'divPremiumProTitulo',
-    'Plano Premium PRO — nome',
-    'Premium PRO — o teu dinheiro entra sozinho no app.',
-  ),
-  LandingFieldDef('divPremiumProMensal', 'Plano Premium PRO — linha mensal',
-      r'R$ 25,90/mês'),
-  LandingFieldDef('divPremiumProAnual', 'Plano Premium PRO — linha anual',
-      r'R$ 299,90/ano'),
-  LandingFieldDef(
-    'divPremiumProBeneficios',
-    'Plano Premium PRO — benefícios (vírgula)',
-    'Diferença do Premium: conexão Open Finance com bancos e cartões, Extrato e movimentos a entrar no app, Categorias certas nos lançamentos, Tudo o mais igual ao Premium (metas, escalas, comprovantes, app e web, lançar à mão quando quiseres)',
-  ),
-  LandingFieldDef(
-    'divPremiumProCardSubtitle',
-    'Cartão PRO — subtítulo (cinza)',
-    'Conecta bancos (Open Finance), extrato e movimentos nas categorias certas. O resto do Premium continua: lançar à mão, metas, escalas, app e web. A diferença é a integração automática com bancos e cartões',
-  ),
-  LandingFieldDef(
-    'divPremiumProExtrasLine',
-    "Plano PRO — conexão extra (preços = checkout MP; Sincronizar no Admin preenche)",
-    r'Conexão bancária extra a partir de R$ 5,90/mês ou R$ 59,90/ano (checkout) — vinculada ao teto de ligações do app.',
-  ),
-  LandingFieldDef('divPremiumProRibbon', 'Cartão PRO — faixa superior', 'PRO'),
-  LandingFieldDef(
-      'divIncluiLabel', 'Planos — rótulo da lista “Inclui”', 'Inclui'),
-  LandingFieldDef('divGerencieTopBadge', 'Cartão licença — faixa superior',
-      'SUPER PREMIUM · LICENÇA'),
-  LandingFieldDef(
-      'divGerencieTitle', 'Cartão licença — título', 'Gerencie sua licença'),
-  LandingFieldDef(
-    'divGerencieSubtitle',
-    'Cartão licença — subtítulo',
-    'Login no site · renovação premium com PIX ou cartão',
-  ),
-  LandingFieldDef(
-    'divGerencieTapLine',
-    'Cartão licença — linha clicável (PIX/cartão)',
-    'Clique aqui para renovar sua licença com PIX ou cartão.',
-  ),
-  LandingFieldDef(
-    'divGerencieParagraph',
-    'Cartão licença — parágrafo',
-    'Entre com Google (Android e web) ou com Google/Apple no iPhone. Depois do login você usa o sistema normalmente e compra ou renova pelo próprio site — PIX ou cartão.',
-  ),
-  LandingFieldDef('divGerencieLoginBtn', 'Cartão licença — botão login',
-      'Continuar com Google'),
-  LandingFieldDef('divGerencieGoogleBtn', 'Cartão licença — botão Google',
-      'Continuar com Google'),
-  LandingFieldDef(
-    'divTrialTitle',
-    'Trial — título (use {days} para os dias grátis)',
-    '{days} dias grátis — tudo liberado',
-  ),
-  LandingFieldDef(
-    'divTrialBody',
-    'Trial — texto',
-    'E-mail ou Google. Período completo em modo premium; depois escolha o plano no painel.',
-  ),
-  LandingFieldDef(
-      'divFooterDomain', 'Rodapé web — domínio', 'wisdomapp-b9e98.web.app'),
-  LandingFieldDef(
-      'divFooterHome', 'Rodapé web — link inicial', 'Página inicial'),
-  LandingFieldDef('divFooterTerms', 'Rodapé web — Termos', 'Termos'),
-  LandingFieldDef(
-      'divFooterPrivacy', 'Rodapé web — Privacidade', 'Privacidade'),
-  LandingFieldDef('divBtnEntrarPrincipal', 'Botão final — Entrar',
-      'Entrar — WISDOMAPP'),
-  LandingFieldDef('divBtnAreaAdmin', 'Botão final — Área administrativa',
-      'Área administrativa'),
-];
-
-/// Chaves de [kDivulgacaoLandingFields] só de planos (nome, mensal, anual, benefícios).
-const Set<String> kDivulgacaoPlanPricingKeys = {
-  'divBasicoTitulo',
-  'divBasicoMensal',
-  'divBasicoAnual',
-  'divBasicoBeneficios',
-  'divPremiumTitulo',
-  'divPremiumMensal',
-  'divPremiumAnual',
-  'divPremiumBeneficios',
-  'divPremiumProTitulo',
-  'divPremiumProMensal',
-  'divPremiumProAnual',
-  'divPremiumProBeneficios',
-  'divPremiumProExtrasLine',
-};
-
-/// Botão «Baixar o app» na landing (Google Play).
-const Set<String> kLandingAppDownloadFieldKeys = {
-  'divPlayStoreUrl',
-  'divPlayStoreLabel',
-};
-
-List<LandingFieldDef> get kLandingAppDownloadFields =>
-    kDivulgacaoLandingFields
-        .where((f) => kLandingAppDownloadFieldKeys.contains(f.key))
-        .toList();
-
-/// Livro + mentor Johnathan Tarley (`/divulgacao` e módulo Tarley).
-const Set<String> kLandingMentorTarleyFieldKeys = {
-  'divBookBadge',
-  'divBookTitle',
-  'divBookAuthor',
-  'divBookSubtitle',
-  'divBookLaunchText',
-  'divBookImageUrl',
-  'divMentorName',
-  'divMentorRole',
-  'divMentorInstagramUrl',
-  'divMentorWhatsappUrl',
-  'divMentorYoutubeUrl',
-  'divMentorInstagramLabel',
-  'divMentorWhatsappLabel',
-  'divMentorYoutubeLabel',
-};
-
-List<LandingFieldDef> get kLandingMentorTarleyFields =>
-    kDivulgacaoLandingFields
-        .where((f) => kLandingMentorTarleyFieldKeys.contains(f.key))
-        .toList();
-
-/// Campos da faixa «Canais oficiais» (site / landing).
-const Set<String> kLandingOfficialChannelsFieldKeys = {
-  'divChannelsTitle',
-  'divChannelsSubtitle',
-  'divYoutubeUrl',
-  'divInstagramUrl',
-  'divWhatsappUrl',
-  'divYoutubeLabel',
-  'divInstagramLabel',
-  'divWhatsappLabel',
-};
-
-List<LandingFieldDef> get kLandingOfficialChannelsFields =>
-    kDivulgacaoLandingFields
-        .where((f) => kLandingOfficialChannelsFieldKeys.contains(f.key))
-        .toList();
-
-/// Campos /divulgacao exceto planos (evita duplicar no formulário).
-List<LandingFieldDef> get kDivulgacaoLandingFieldsSemPlanos =>
-    kDivulgacaoLandingFields
-        .where((f) =>
-            !kDivulgacaoPlanPricingKeys.contains(f.key) &&
-            !kLandingOfficialChannelsFieldKeys.contains(f.key) &&
-            !kLandingAppDownloadFieldKeys.contains(f.key) &&
-            !kLandingMentorTarleyFieldKeys.contains(f.key))
-        .toList();
-
-/// Ordem fixa dos campos de plano para o bloco “Preços” no Admin.
-List<LandingFieldDef> get kDivulgacaoPlanPricingFields =>
-    kDivulgacaoLandingFields
-        .where((f) => kDivulgacaoPlanPricingKeys.contains(f.key))
-        .toList();
-
-/// Defaults da seção “Página inicial /” e textos legados já usados no Admin.
-const Map<String, String> kLegacyLandingDefaults = {
-  'heroTitle': 'WISDOMAPP',
-  'heroSubtitle': 'Sabedoria financeira baseada nos princípios bíblicos.',
-  'heroTealLine': 'Módulo Financeiro · Objetivos Financeiros · Agenda · Cursos',
-  'heroSlateLine': 'Organize finanças, metas, compromissos e aprendizado em um só app.',
-  'heroBadges':
-      'Receitas e despesas, Objetivos Financeiros 52 semanas, Orçamentos, Compromissos, Cursos bíblicos, Dicas do dia',
-  'heroNote': '',
-  'plansTitle': 'Plano Premium',
-  'premiumPrice': r'R$ 49,90/mês • R$ 478,80/ano',
-  'masterPrice': r'R$ 49,90/mês • R$ 478,80/ano',
-  'premiumPerks':
-      'Módulo financeiro completo, Objetivos Financeiros (52 semanas), Agenda e lembretes, Cursos com princípios bíblicos, Anexar comprovantes, Relatórios e dicas bíblicas',
-  'masterPerks':
-      'Módulo financeiro completo, Objetivos Financeiros (52 semanas), Agenda e lembretes, Cursos com princípios bíblicos, Anexar comprovantes, Relatórios e dicas bíblicas',
-  'planCtaText': 'Assinar agora',
-  'landingPremiumDetail':
-      r'Plano mensal: R$ 49,90 por mês. Plano anual: R$ 478,80/ano — equivalente a R$ 39,90/mês; recomendamos o anual para máxima economia.',
-  'landingPremiumCardPeriod':
-      r'Mensal ou anual — no anual: R$ 39,90/mês; recomendamos comprar anual',
-  'landingPremiumFeatures':
-      'Financeiro e relatórios, Objetivos Financeiros (52 semanas), Agenda e lembretes, Cursos financeiros bíblicos, Anexar comprovantes, Acesso web e celular, Downloads e suporte',
-  'footerText':
-      'WISDOMAPP — sabedoria financeira com princípios bíblicos. Acesso pelo celular, computador ou notebook.',
-  'supportTitle': 'Downloads e suporte',
-  'supportSubtitle':
-      'Financeiro, Objetivos Financeiros, agenda, cursos e relatórios; anexar comprovantes; acesso total.',
-};
 
 Map<String, String>? _divDefaultsCache;
 
@@ -534,7 +176,27 @@ class LandingPublicContent {
     required this.divFooterPrivacy,
     required this.divBtnEntrarPrincipal,
     required this.divBtnAreaAdmin,
+    this.raw,
+    this.pricing,
   });
+
+  /// Documento `landing_content/main` como veio do Firestore (para [t]).
+  final Map<String, dynamic>? raw;
+
+  /// Preços do checkout já aplicados (null = ainda não carregou → padrão).
+  final MpCheckoutPricingSnapshot? pricing;
+
+  /// Texto de qualquer chave (Firestore ou padrão do código), com marcadores
+  /// de preço/dias já trocados. Use para os textos que não têm campo próprio.
+  String t(String key) =>
+      landingFillPlaceholders(_pickStr(raw, key, landingDefaultFor(key)), pricing);
+
+  /// Como [t], mas devolve vazio se o admin apagou o texto (campos opcionais).
+  String tOptional(String key) {
+    final v = raw?[key];
+    if (v is String && v.trim().isEmpty && raw!.containsKey(key)) return '';
+    return t(key);
+  }
 
   final String heroTitle;
   final String heroSubtitle;
@@ -614,6 +276,10 @@ class LandingPublicContent {
   final String divFooterPrivacy;
   final String divBtnEntrarPrincipal;
   final String divBtnAreaAdmin;
+
+  /// Conteúdo padrão já com os preços padrão aplicados (antes do Firestore chegar).
+  factory LandingPublicContent.initial() => LandingPublicContent.fromMap(null)
+      .applyPremiumTextsFromCheckoutPricing(MpCheckoutPricingSnapshot.defaults());
 
   factory LandingPublicContent.fromMap(Map<String, dynamic>? raw) {
     return LandingPublicContent(
@@ -741,6 +407,7 @@ class LandingPublicContent {
           raw, 'divBtnEntrarPrincipal', _divDef('divBtnEntrarPrincipal')),
       divBtnAreaAdmin:
           _pickStr(raw, 'divBtnAreaAdmin', _divDef('divBtnAreaAdmin')),
+      raw: raw,
     );
   }
 
@@ -775,83 +442,95 @@ class LandingPublicContent {
       MpCheckoutPricingSnapshot snap) {
     final g = snap.generatedPremiumLandingFields();
     final gp = snap.generatedPremiumProLandingFields();
+    String p(String s) => landingFillPlaceholders(s, snap);
+    // Parágrafo com marcadores → usa o texto do admin com o preço atual.
+    // Texto antigo com «R$» fixo → usa o gerado (preço nunca fica velho).
+    // Sem preço → texto do admin como está.
+    String para(String stored, String? generated) {
+      if (stored.contains('{')) return p(stored);
+      if (generated != null && stored.contains(r'R$')) return generated;
+      return stored;
+    }
+
     return LandingPublicContent(
-      heroTitle: heroTitle,
-      heroSubtitle: heroSubtitle,
-      heroTealLine: heroTealLine,
-      heroSlateLine: heroSlateLine,
-      plansTitle: plansTitle,
-      planCtaText: planCtaText,
-      landingPremiumDetail: g['landingPremiumDetail'] ?? landingPremiumDetail,
+      heroTitle: p(heroTitle),
+      heroSubtitle: p(heroSubtitle),
+      heroTealLine: p(heroTealLine),
+      heroSlateLine: p(heroSlateLine),
+      plansTitle: p(plansTitle),
+      planCtaText: p(planCtaText),
+      landingPremiumDetail:
+          para(landingPremiumDetail, g['landingPremiumDetail']),
       landingPremiumCardPeriod:
-          g['landingPremiumCardPeriod'] ?? landingPremiumCardPeriod,
-      landingPremiumFeaturesCsv: landingPremiumFeaturesCsv,
-      divHeroTitle: divHeroTitle,
-      divHeroTagline: divHeroTagline,
-      divHeroBadge: divHeroBadge,
-      divHeroHeadline: divHeroHeadline,
-      divHeroBtnEntrar: divHeroBtnEntrar,
-      divHeroBtnPlanos: divHeroBtnPlanos,
-      divHeroChip1: divHeroChip1,
-      divHeroChip2: divHeroChip2,
-      divHeroChip3: divHeroChip3,
-      divNavInicio: divNavInicio,
-      divChannelsTitle: divChannelsTitle,
-      divChannelsSubtitle: divChannelsSubtitle,
-      divYoutubeUrl: divYoutubeUrl,
-      divInstagramUrl: divInstagramUrl,
-      divWhatsappUrl: divWhatsappUrl,
-      divYoutubeLabel: divYoutubeLabel,
-      divInstagramLabel: divInstagramLabel,
-      divWhatsappLabel: divWhatsappLabel,
-      divPlayStoreUrl: divPlayStoreUrl,
-      divPlayStoreLabel: divPlayStoreLabel,
-      divLabelComoFunciona: divLabelComoFunciona,
-      divStep1Title: divStep1Title,
-      divStep1Body: divStep1Body,
-      divStep2Title: divStep2Title,
-      divStep2Body: divStep2Body,
-      divStep3Title: divStep3Title,
-      divStep3Body: divStep3Body,
-      divLabelComece: divLabelComece,
-      divComeceParagraph: divComeceParagraph,
-      divLabelPlanos: divLabelPlanos,
-      divPlanosSubtitle: g['divPlanosSubtitle'] ?? divPlanosSubtitle,
-      divBasicoTitulo: divBasicoTitulo,
+          para(landingPremiumCardPeriod, g['landingPremiumCardPeriod']),
+      landingPremiumFeaturesCsv: p(landingPremiumFeaturesCsv),
+      divHeroTitle: p(divHeroTitle),
+      divHeroTagline: p(divHeroTagline),
+      divHeroBadge: p(divHeroBadge),
+      divHeroHeadline: p(divHeroHeadline),
+      divHeroBtnEntrar: p(divHeroBtnEntrar),
+      divHeroBtnPlanos: p(divHeroBtnPlanos),
+      divHeroChip1: p(divHeroChip1),
+      divHeroChip2: p(divHeroChip2),
+      divHeroChip3: p(divHeroChip3),
+      divNavInicio: p(divNavInicio),
+      divChannelsTitle: p(divChannelsTitle),
+      divChannelsSubtitle: p(divChannelsSubtitle),
+      divYoutubeUrl: p(divYoutubeUrl),
+      divInstagramUrl: p(divInstagramUrl),
+      divWhatsappUrl: p(divWhatsappUrl),
+      divYoutubeLabel: p(divYoutubeLabel),
+      divInstagramLabel: p(divInstagramLabel),
+      divWhatsappLabel: p(divWhatsappLabel),
+      divPlayStoreUrl: p(divPlayStoreUrl),
+      divPlayStoreLabel: p(divPlayStoreLabel),
+      divLabelComoFunciona: p(divLabelComoFunciona),
+      divStep1Title: p(divStep1Title),
+      divStep1Body: p(divStep1Body),
+      divStep2Title: p(divStep2Title),
+      divStep2Body: p(divStep2Body),
+      divStep3Title: p(divStep3Title),
+      divStep3Body: p(divStep3Body),
+      divLabelComece: p(divLabelComece),
+      divComeceParagraph: p(divComeceParagraph),
+      divLabelPlanos: p(divLabelPlanos),
+      divPlanosSubtitle: para(divPlanosSubtitle, g['divPlanosSubtitle']),
+      divBasicoTitulo: p(divBasicoTitulo),
       divBasicoMensal: g['divBasicoMensal'] ?? divBasicoMensal,
       divBasicoAnual: g['divBasicoAnual'] ?? divBasicoAnual,
-      divBasicoBeneficiosCsv: divBasicoBeneficiosCsv,
-      divPremiumTitulo: divPremiumTitulo,
+      divBasicoBeneficiosCsv: p(divBasicoBeneficiosCsv),
+      divPremiumTitulo: p(divPremiumTitulo),
       divPremiumMensal: g['divPremiumMensal'] ?? divPremiumMensal,
       divPremiumAnual: g['divPremiumAnual'] ?? divPremiumAnual,
-      divPremiumBeneficiosCsv:
-          g['divPremiumBeneficios'] ?? divPremiumBeneficiosCsv,
-      divPremiumCardSubtitle: divPremiumCardSubtitle,
-      divPremiumRibbon: divPremiumRibbon,
-      divPremiumProTitulo: divPremiumProTitulo,
+      divPremiumBeneficiosCsv: p(divPremiumBeneficiosCsv),
+      divPremiumCardSubtitle: p(divPremiumCardSubtitle),
+      divPremiumRibbon: p(divPremiumRibbon),
+      divPremiumProTitulo: p(divPremiumProTitulo),
       divPremiumProMensal: gp['divPremiumProMensal'] ?? divPremiumProMensal,
       divPremiumProAnual: gp['divPremiumProAnual'] ?? divPremiumProAnual,
-      divPremiumProBeneficiosCsv: divPremiumProBeneficiosCsv,
-      divPremiumProCardSubtitle: divPremiumProCardSubtitle,
+      divPremiumProBeneficiosCsv: p(divPremiumProBeneficiosCsv),
+      divPremiumProCardSubtitle: p(divPremiumProCardSubtitle),
       divPremiumProExtrasLine:
           gp['divPremiumProExtrasLine'] ?? divPremiumProExtrasLine,
-      divPremiumProRibbon: divPremiumProRibbon,
-      divIncluiLabel: divIncluiLabel,
-      divGerencieTopBadge: divGerencieTopBadge,
-      divGerencieTitle: divGerencieTitle,
-      divGerencieSubtitle: divGerencieSubtitle,
-      divGerencieTapLine: divGerencieTapLine,
-      divGerencieParagraph: divGerencieParagraph,
-      divGerencieLoginBtn: divGerencieLoginBtn,
-      divGerencieGoogleBtn: divGerencieGoogleBtn,
-      divTrialTitle: divTrialTitle,
-      divTrialBody: divTrialBody,
-      divFooterDomain: divFooterDomain,
-      divFooterHome: divFooterHome,
-      divFooterTerms: divFooterTerms,
-      divFooterPrivacy: divFooterPrivacy,
-      divBtnEntrarPrincipal: divBtnEntrarPrincipal,
-      divBtnAreaAdmin: divBtnAreaAdmin,
+      divPremiumProRibbon: p(divPremiumProRibbon),
+      divIncluiLabel: p(divIncluiLabel),
+      divGerencieTopBadge: p(divGerencieTopBadge),
+      divGerencieTitle: p(divGerencieTitle),
+      divGerencieSubtitle: p(divGerencieSubtitle),
+      divGerencieTapLine: p(divGerencieTapLine),
+      divGerencieParagraph: p(divGerencieParagraph),
+      divGerencieLoginBtn: p(divGerencieLoginBtn),
+      divGerencieGoogleBtn: p(divGerencieGoogleBtn),
+      divTrialTitle: p(divTrialTitle),
+      divTrialBody: p(divTrialBody),
+      divFooterDomain: p(divFooterDomain),
+      divFooterHome: p(divFooterHome),
+      divFooterTerms: p(divFooterTerms),
+      divFooterPrivacy: p(divFooterPrivacy),
+      divBtnEntrarPrincipal: p(divBtnEntrarPrincipal),
+      divBtnAreaAdmin: p(divBtnAreaAdmin),
+      raw: raw,
+      pricing: snap,
     );
   }
 

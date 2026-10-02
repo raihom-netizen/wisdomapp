@@ -8,7 +8,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show TextInput;
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
-import '../constants/app_verse.dart';
 import '../utils/url_launcher_helper.dart';
 import '../utils/pwa_install_helper.dart';
 import '../services/app_session_cache.dart';
@@ -18,7 +17,6 @@ import 'package:flutter/foundation.dart'
 import '../services/offline_credentials_store.dart';
 import '../services/version_check_service.dart';
 import '../models/landing_public_content.dart';
-import '../models/user_profile.dart';
 import '../services/mp_checkout_pricing_service.dart';
 import '../services/ios_payments_gate.dart';
 import '../services/login_preferences.dart';
@@ -33,7 +31,11 @@ import '../theme/theme_context.dart';
 
 /// Página de divulgação do WISDOMAPP (hero, módulos, planos e rodapé).
 class LandingScreen extends StatefulWidget {
-  const LandingScreen({super.key});
+  const LandingScreen({super.key, this.preview = false});
+
+  /// Prévia aberta pelo Admin (Landing / Divulgação): não redireciona quem já
+  /// está logado e escuta os textos/preços salvos em tempo real.
+  final bool preview;
 
   @override
   State<LandingScreen> createState() => _LandingScreenState();
@@ -53,7 +55,7 @@ class _LandingScreenState extends State<LandingScreen>
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _mpCheckoutSub;
   Map<String, dynamic>? _landingMainData;
   Map<String, dynamic>? _mpCheckoutData;
-  LandingPublicContent _landing = LandingPublicContent.fromMap(null);
+  LandingPublicContent _landing = LandingPublicContent.initial();
 
   /// Site aberto pelo app iOS (Gerenciamento de licença) ou PWA Safari — query [from_app]=1 & [source].
   bool _webFromIosAppLicense = false;
@@ -76,16 +78,18 @@ class _LandingScreenState extends State<LandingScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Future<void>.delayed(const Duration(milliseconds: 300), () {
         if (!mounted) return;
-        if (FirebaseAuth.instance.currentUser != null) return;
+        if (!widget.preview && FirebaseAuth.instance.currentUser != null) {
+          return;
+        }
         _bindPublicFirestoreListeners();
       });
     });
-    if (!kIsWeb) {
+    if (!kIsWeb && !widget.preview) {
       _tryInstantSessionRedirect();
       WidgetsBinding.instance
           .addPostFrameCallback((_) => _autoRestoreSessionOnLanding());
     }
-    _prefillSavedEmailLogin();
+    if (!widget.preview) _prefillSavedEmailLogin();
   }
 
   /// Pré-preenche o e-mail salvo e abre o formulário quando o usuário prefere
@@ -284,23 +288,23 @@ class _LandingScreenState extends State<LandingScreen>
                           color: Colors.white),
                     ),
                     const SizedBox(width: 10),
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            'Login expresso',
-                            style: TextStyle(
+                            _landing.t('siteExpressTitle'),
+                            style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w800,
                               fontSize: 14,
                             ),
                           ),
-                          SizedBox(height: 2),
+                          const SizedBox(height: 2),
                           Text(
-                            'Clique aqui para entrar com Google ou Apple',
-                            style: TextStyle(
+                            _landing.t('siteExpressSubtitle'),
+                            style: const TextStyle(
                               color: _lpGoldLight,
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
@@ -313,7 +317,7 @@ class _LandingScreenState extends State<LandingScreen>
                     FilledButton.tonalIcon(
                       onPressed: _openExpressLoginFromFaixa,
                       icon: const Icon(Icons.login_rounded, size: 18),
-                      label: const Text('Entrar'),
+                      label: Text(_landing.t('siteExpressBtn')),
                       style: FilledButton.styleFrom(
                         minimumSize: const Size(48, 40),
                         tapTargetSize: MaterialTapTargetSize.padded,
@@ -339,8 +343,9 @@ class _LandingScreenState extends State<LandingScreen>
       if (!mounted) return;
       final base = LandingPublicContent.fromMap(_landingMainData);
       final snap = MpCheckoutPricingSnapshot.fromFirestore(_mpCheckoutData);
-      setState(
-          () => _landing = base.applyPremiumTextsFromCheckoutPricing(snap));
+      final merged = base.applyPremiumTextsFromCheckoutPricing(snap);
+      landingContentLive.value = merged;
+      setState(() => _landing = merged);
     }
 
     _landingSub?.cancel();
@@ -791,7 +796,7 @@ class _LandingScreenState extends State<LandingScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Melhor no iPhone: abra no Safari e toque em Compartilhar → "Adicionar à Tela de Início".',
+                  _landing.t('homeIosSafariHint'),
                   style: TextStyle(
                       fontSize: 13,
                       color: context.isDarkMode
@@ -846,7 +851,7 @@ class _LandingScreenState extends State<LandingScreen>
           child: Column(
             children: [
               Text(
-                'BAIXE O APP',
+                _landing.t('homeDownloadTitle'),
                 style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w800,
@@ -858,7 +863,9 @@ class _LandingScreenState extends State<LandingScreen>
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(
-                    'Versão $version',
+                    _landing
+                        .t('homeDownloadVersion')
+                        .replaceAll('{version}', version),
                     style: TextStyle(
                         fontSize: 11,
                         color: Colors.white.withValues(alpha: 0.5)),
@@ -923,8 +930,8 @@ class _LandingScreenState extends State<LandingScreen>
                           ),
                           label: Text(
                             _showApkDownloadOnLanding
-                                ? 'iPhone (TestFlight)'
-                                : 'Baixar',
+                                ? _landing.t('homeIosTestFlightBtn')
+                                : _landing.t('homeIosBaixarBtn'),
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
                               fontSize: 13,
@@ -949,7 +956,7 @@ class _LandingScreenState extends State<LandingScreen>
                           Padding(
                             padding: const EdgeInsets.only(top: 4),
                             child: Text(
-                              'TestFlight na App Store, depois abra este link.',
+                              _landing.t('homeIosTestFlightHintWeb'),
                               style: TextStyle(
                                   fontSize: 10,
                                   color: Colors.white.withValues(alpha: 0.55)),
@@ -960,7 +967,7 @@ class _LandingScreenState extends State<LandingScreen>
                           Padding(
                             padding: const EdgeInsets.only(top: 4),
                             child: Text(
-                              'Instale o TestFlight e abra o link da beta.',
+                              _landing.t('homeIosTestFlightHintIos'),
                               style: TextStyle(
                                   fontSize: 10,
                                   color: Colors.white.withValues(alpha: 0.55)),
@@ -1072,6 +1079,9 @@ class _LandingScreenState extends State<LandingScreen>
                 showMicroTagline: true,
                 showIdealizer: true,
                 compact: h < 760,
+                title: _landing.heroTitle,
+                idealizer: _landing.t('homeHeroIdealizer'),
+                microTagline: _landing.t('homeHeroMicroTagline'),
               );
             },
           ),
@@ -1110,7 +1120,7 @@ class _LandingScreenState extends State<LandingScreen>
             icon: Icon(Icons.rocket_launch_rounded,
                 color: _lpGoldLight.withValues(alpha: 0.95), size: 18),
             label: Text(
-              'Começar ${UserProfile.newUserTrialDays} dias grátis',
+              _landing.t('homeHeroCtaTrial'),
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.94),
                 fontSize: 14,
@@ -1127,6 +1137,17 @@ class _LandingScreenState extends State<LandingScreen>
                   borderRadius: BorderRadius.circular(14)),
             ),
           ),
+          if (_landing.tOptional('heroNote').isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              _landing.tOptional('heroNote'),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  fontSize: 13,
+                  height: 1.35,
+                  color: Colors.white.withValues(alpha: 0.8)),
+            ),
+          ],
           const SizedBox(height: 28),
           Container(
             padding: const EdgeInsets.all(2),
@@ -1172,7 +1193,7 @@ class _LandingScreenState extends State<LandingScreen>
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'App instalado: seu login será mantido ao fechar e abrir.',
+                              _landing.t('homePwaInstalledNote'),
                               style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
@@ -1196,8 +1217,8 @@ class _LandingScreenState extends State<LandingScreen>
                       Expanded(
                         child: Text(
                           _webFromIosAppLicense
-                              ? 'Renove ou adquira sua licença'
-                              : 'Gerencie sua Licença',
+                              ? _landing.t('homeLicenseTitleIos')
+                              : _landing.t('homeLicenseTitle'),
                           style: TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w800,
@@ -1212,8 +1233,8 @@ class _LandingScreenState extends State<LandingScreen>
                   const SizedBox(height: 8),
                   Text(
                     _webFromIosAppLicense
-                        ? 'Você abriu o site pelo app iPhone/iPad. Entre com Google ou Apple. Depois escolha mensal ou anual — PIX ou cartão.'
-                        : 'Entre com Google (Android e web) ou com Google/Apple no iPhone. Depois do login você compra ou renova a licença — PIX ou cartão.',
+                        ? _landing.t('homeLicenseBodyIos')
+                        : _landing.t('homeLicenseBody'),
                     textAlign: TextAlign.center,
                     style: TextStyle(
                         fontSize: 13,
@@ -1247,8 +1268,8 @@ class _LandingScreenState extends State<LandingScreen>
                       ),
                       label: Text(
                         _showEmailLogin
-                            ? 'Fechar'
-                            : 'Entrar com e-mail e senha',
+                            ? _landing.t('homeEmailToggleClose')
+                            : _landing.t('homeEmailToggle'),
                         style: const TextStyle(
                           color: _lpGold,
                           fontWeight: FontWeight.w700,
@@ -1272,7 +1293,7 @@ class _LandingScreenState extends State<LandingScreen>
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Text(
-                            'Equipe Wisdom APP',
+                            _landing.t('homeEmailTeamTitle'),
                             style: TextStyle(
                               color: _lpGoldLight,
                               fontWeight: FontWeight.w800,
@@ -1282,7 +1303,7 @@ class _LandingScreenState extends State<LandingScreen>
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Acesse com seu e-mail e senha cadastrados.',
+                            _landing.t('homeEmailTeamSubtitle'),
                             style: TextStyle(
                               color: Colors.white.withValues(alpha: 0.6),
                               fontSize: 12,
@@ -1385,8 +1406,8 @@ class _LandingScreenState extends State<LandingScreen>
                                   foregroundColor: _lpGoldLight,
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 4, vertical: 2)),
-                              child: const Text('Esqueceu a senha?',
-                                  style: TextStyle(
+                              child: Text(_landing.t('homeForgotPassword'),
+                                  style: const TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600)),
                             ),
@@ -1422,8 +1443,8 @@ class _LandingScreenState extends State<LandingScreen>
                                       height: 22,
                                       child: CircularProgressIndicator(
                                           strokeWidth: 2, color: _lpNavyDark))
-                                  : const Text('ENTRAR',
-                                      style: TextStyle(
+                                  : Text(_landing.t('homeEmailEnterBtn'),
+                                      style: const TextStyle(
                                           fontWeight: FontWeight.w900,
                                           letterSpacing: 0.8,
                                           fontSize: 15)),
@@ -1435,7 +1456,7 @@ class _LandingScreenState extends State<LandingScreen>
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(
-                                'Não tem conta?',
+                                _landing.t('homeNoAccount'),
                                 style: TextStyle(
                                   color: Colors.white.withValues(alpha: 0.6),
                                   fontSize: 13,
@@ -1451,9 +1472,9 @@ class _LandingScreenState extends State<LandingScreen>
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 6, vertical: 2),
                                 ),
-                                child: const Text(
-                                  'Cadastrar',
-                                  style: TextStyle(
+                                child: Text(
+                                  _landing.t('homeSignupBtn'),
+                                  style: const TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w800,
                                     decoration: TextDecoration.underline,
@@ -1485,11 +1506,10 @@ class _LandingScreenState extends State<LandingScreen>
                     height: 1.4),
                 children: [
                   TextSpan(
-                    text:
-                        'Teste grátis por ${UserProfile.newUserTrialDays} dias – acesso livre total pelo celular, computador ou notebook. Use no app ou no navegador em ',
+                    text: _landing.t('homeTrialLine'),
                   ),
                   TextSpan(
-                    text: 'wisdomapp-b9e98.web.app',
+                    text: _landing.t('homeTrialLinkText'),
                     style: TextStyle(
                       color: _lpGold,
                       fontWeight: FontWeight.w700,
@@ -1499,7 +1519,7 @@ class _LandingScreenState extends State<LandingScreen>
                       ..onTap = () async {
                         try {
                           await openUrlPreferChrome(
-                              'https://wisdomapp-b9e98.web.app/');
+                              _landing.t('homeTrialLinkUrl'));
                         } catch (_) {}
                       },
                   ),
@@ -1532,7 +1552,7 @@ class _LandingScreenState extends State<LandingScreen>
         child: Column(
           children: [
             Text(
-              '"O homem que consegue organizar sua vida financeira, conseguirá organizar todas as áreas da sua vida."',
+              _landing.t('homeQuoteText'),
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 15,
@@ -1546,7 +1566,7 @@ class _LandingScreenState extends State<LandingScreen>
             ),
             const SizedBox(height: 8),
             Text(
-              '— Billy Graham',
+              _landing.t('homeQuoteAuthor'),
               style: TextStyle(
                   fontSize: 13, fontWeight: FontWeight.w800, color: _lpGold),
             ),
@@ -1558,26 +1578,26 @@ class _LandingScreenState extends State<LandingScreen>
 
   // --- Módulos / Features (todas as funções do app) ---
   Widget _buildFeaturesSection() {
-    const features = [
+    final features = [
       (
         Icons.account_balance_wallet_rounded,
-        'Módulo Financeiro',
-        'Receitas, despesas, orçamentos e relatórios.'
+        _landing.t('homeModule1Title'),
+        _landing.t('homeModule1Desc'),
       ),
       (
         Icons.flag_rounded,
-        'Módulo Objetivos Financeiros',
-        'Metas com Projeto 52 semanas — viagem, carro, casa, reserva…'
+        _landing.t('homeModule2Title'),
+        _landing.t('homeModule2Desc'),
       ),
       (
         Icons.event_note_rounded,
-        'Módulo Agenda',
-        'Compromissos, lembretes e planejamento no dia a dia.'
+        _landing.t('homeModule3Title'),
+        _landing.t('homeModule3Desc'),
       ),
       (
         Icons.menu_book_rounded,
-        'Módulo Cursos Financeiros',
-        'Educação financeira com princípios bíblicos.'
+        _landing.t('homeModule4Title'),
+        _landing.t('homeModule4Desc'),
       ),
     ];
     return Padding(
@@ -1585,7 +1605,7 @@ class _LandingScreenState extends State<LandingScreen>
       child: Column(
         children: [
           Text(
-            'Módulos do WISDOMAPP',
+            _landing.t('homeModulesTitle'),
             textAlign: TextAlign.center,
             style: TextStyle(
                 fontSize: 26,
@@ -1604,7 +1624,7 @@ class _LandingScreenState extends State<LandingScreen>
           ),
           const SizedBox(height: 14),
           Text(
-            'Financeiro, objetivos financeiros, agenda e cursos com princípios bíblicos — tudo integrado.',
+            _landing.t('homeModulesSubtitle'),
             textAlign: TextAlign.center,
             style: TextStyle(
                 fontSize: 15,
@@ -1776,7 +1796,7 @@ class _LandingScreenState extends State<LandingScreen>
                     features: _landing.landingPremiumFeaturesList,
                     isPremium: true,
                     ctaLabel: _webFromIosAppLicense
-                        ? 'Renove ou adquira — ver planos'
+                        ? _landing.t('homePlanCtaIos')
                         : _landing.planCtaText,
                   ),
                 ),
@@ -1792,7 +1812,7 @@ class _LandingScreenState extends State<LandingScreen>
                 features: _landing.landingPremiumFeaturesList,
                 isPremium: true,
                 ctaLabel: _webFromIosAppLicense
-                    ? 'Renove ou adquira — ver planos'
+                    ? _landing.t('homePlanCtaIos')
                     : _landing.planCtaText,
               ),
             ),
@@ -1980,7 +2000,7 @@ class _LandingScreenState extends State<LandingScreen>
   }
 
   Widget _buildFooter(BuildContext context) {
-    const email = 'raihom@gmail.com';
+    final email = _landing.t('homeFooterEmail');
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
@@ -1997,14 +2017,15 @@ class _LandingScreenState extends State<LandingScreen>
       ),
       child: Column(
         children: [
-          Text("Sistema sem propagandas indesejáveis, limpo e seguro.",
+          Text(_landing.t('homeFooterLine1'),
+              textAlign: TextAlign.center,
               style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                   color: context.appDeepTitle)),
           const SizedBox(height: 4),
-          Text(
-              "Acesso pelo celular, computador ou notebook. Acesso livre total.",
+          Text(_landing.t('homeFooterLine2'),
+              textAlign: TextAlign.center,
               style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -2014,8 +2035,8 @@ class _LandingScreenState extends State<LandingScreen>
             builder: (context) {
               final pwaIos = kIsWeb && isPwaIos;
               final String paymentFooter = pwaIos
-                  ? "No Safari no iPhone/iPad, contrate o plano pelo app instalado (TestFlight) ou pelo site no computador."
-                  : "Pagamento seguro via Mercado Pago (PIX ou Cartão)";
+                  ? _landing.t('homeFooterPaymentIos')
+                  : _landing.t('homeFooterPayment');
               return Text(
                 paymentFooter,
                 textAlign: TextAlign.center,
@@ -2034,7 +2055,7 @@ class _LandingScreenState extends State<LandingScreen>
             runSpacing: 8,
             children: [
               _FooterLink(
-                  label: 'Política de Privacidade',
+                  label: _landing.t('homeFooterPrivacy'),
                   onTap: () => Navigator.of(context).pushNamed('/privacidade')),
               Text('•',
                   style: TextStyle(
@@ -2043,7 +2064,7 @@ class _LandingScreenState extends State<LandingScreen>
                           : Colors.grey.shade600,
                       fontSize: 12)),
               _FooterLink(
-                  label: 'Termos de Uso',
+                  label: _landing.t('homeFooterTerms'),
                   onTap: () => Navigator.of(context).pushNamed('/termos')),
               Text('•',
                   style: TextStyle(
@@ -2052,7 +2073,7 @@ class _LandingScreenState extends State<LandingScreen>
                           : Colors.grey.shade600,
                       fontSize: 12)),
               _FooterLink(
-                  label: 'Suporte',
+                  label: _landing.t('homeFooterSupport'),
                   onTap: () => Navigator.of(context).pushNamed('/suporte')),
             ],
           ),
@@ -2068,7 +2089,7 @@ class _LandingScreenState extends State<LandingScreen>
             ],
           ),
           const SizedBox(height: 20),
-          Text(AppVerse.full,
+          Text(_landing.t('homeFooterVerse'),
               textAlign: TextAlign.center,
               style: TextStyle(
                   fontSize: 12,
@@ -2077,14 +2098,14 @@ class _LandingScreenState extends State<LandingScreen>
                       ? context.appTextSecondary
                       : Colors.grey.shade700)),
           const SizedBox(height: 16),
-          Text('Desenvolvido por Raihom Barbosa',
+          Text(_landing.t('homeFooterDevBy'),
               style: TextStyle(
                   fontSize: 13,
                   color: context.isDarkMode
                       ? context.appTextSecondary
                       : Colors.grey.shade600)),
           const SizedBox(height: 4),
-          Text('© 2026 WISDOMAPP',
+          Text(_landing.t('homeFooterCopyright'),
               style: TextStyle(
                   fontSize: 12,
                   color: context.isDarkMode
