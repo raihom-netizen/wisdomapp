@@ -556,7 +556,7 @@
       if (isIOS || inApp) return;
       if ("serviceWorker" in navigator && "PushManager" in window) {
         // Marcador de versao (scripts/sync_app_version.ps1): muda a cada release e atualiza o SW/PWA instalado.
-        var swVersion = "v=29";
+        var swVersion = "v=30";
         navigator.serviceWorker.register("/firebase-messaging-sw.js?" + swVersion)
           .then(function (swReg) { console.log("FCM Service Worker registrado.", swReg.scope); })
           .catch(function (err) { console.warn("Registro FCM Service Worker falhou:", err); });
@@ -676,6 +676,6 @@
   <!-- Boot único: web/flutter_bootstrap.js customizado já chama _flutter.loader.load
        (canvaskit full local). Load duplicado aqui causava 2ª execução do main() e
        FirebaseError failed-precondition: initializeFirestore() com opções diferentes. -->
-  <script src="flutter_bootstrap.js?v=29" async></script>
+  <script src="flutter_bootstrap.js?v=30" async></script>
 </body>
 </html>
