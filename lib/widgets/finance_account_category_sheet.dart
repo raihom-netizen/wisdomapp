@@ -55,6 +55,12 @@ class FinanceAccountCategorySheet extends StatefulWidget {
   final Set<String> optimisticPaidIds;
   final double sheetInitialChildSize;
   final double sheetMaxChildSize;
+  /// `true` = página em tela cheia (Scaffold + AppBar com «Voltar»), aberta
+  /// com [Navigator.push] em vez de bottom sheet.
+  final bool fullScreenPage;
+  /// Lançamentos do período que a tela de origem já tem em memória: a página
+  /// pinta com eles na hora e confirma no servidor em segundo plano.
+  final List<QueryDocumentSnapshot<Map<String, dynamic>>>? initialDocs;
 
   const FinanceAccountCategorySheet({
     super.key,
@@ -76,6 +82,8 @@ class FinanceAccountCategorySheet extends StatefulWidget {
     this.optimisticPaidIds = const {},
     this.sheetInitialChildSize = 0.78,
     this.sheetMaxChildSize = 0.96,
+    this.fullScreenPage = false,
+    this.initialDocs,
   });
 
   @override
@@ -101,8 +109,23 @@ class _FinanceAccountCategorySheetState extends State<FinanceAccountCategoryShee
     _authUidSub = fa.FirebaseAuth.instance.authStateChanges().listen((_) {
       if (mounted) setState(() {});
     });
+    // Pinta na hora com o que a tela de origem já tem (mesmo filtro que a
+    // leitura do servidor aplica: status + data efetiva no período).
+    final seed = widget.initialDocs;
+    if (seed != null) {
+      _periodDocs = seed.where((doc) {
+        final d = doc.data();
+        return _passStatus(d) && _passEffectiveDateInPeriod(d);
+      }).toList();
+    }
     unawaited(_reloadPeriodDocs());
   }
+
+  /// Leitura do servidor: 3 consultas paginadas com novas tentativas e sem
+  /// prazo — na Web (long-polling, sem cache em disco) podia ficar minutos
+  /// pendurada e o sheet mostrava só o spinner. Agora tem teto.
+  static const Duration _kServerLoadTimeout = Duration(seconds: 25);
+  int _loadGen = 0;
 
   @override
   void didUpdateWidget(covariant FinanceAccountCategorySheet oldWidget) {
@@ -124,24 +147,44 @@ class _FinanceAccountCategorySheetState extends State<FinanceAccountCategoryShee
 
   Future<void> _reloadPeriodDocs() async {
     if (!mounted) return;
+    final gen = ++_loadGen;
     setState(() {
       _periodLoading = true;
       _periodLoadError = null;
     });
+    final uid = firestoreUserDocIdForAppShell(widget.uid);
+    // 1) Cache local (Android/iOS em disco; Web em memória): pintura imediata
+    //    quando ainda não há nada na tela.
+    if (_periodDocs == null) {
+      try {
+        final cached = await financePeriodMergedDocumentsCollect(
+          uid: uid,
+          from: widget.from,
+          to: widget.to,
+          statusFilter: widget.statusFilter,
+          cacheOnly: true,
+        ).timeout(const Duration(seconds: 3));
+        if (mounted && gen == _loadGen && _periodDocs == null && cached.isNotEmpty) {
+          setState(() => _periodDocs = cached);
+        }
+      } catch (_) {}
+    }
+    // 2) Servidor, com prazo.
     try {
       final docs = await financePeriodMergedDocumentsCollect(
-        uid: firestoreUserDocIdForAppShell(widget.uid),
+        uid: uid,
         from: widget.from,
         to: widget.to,
         statusFilter: widget.statusFilter,
-      );
-      if (!mounted) return;
+      ).timeout(_kServerLoadTimeout);
+      if (!mounted || gen != _loadGen) return;
       setState(() {
         _periodDocs = docs;
         _periodLoading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      debugPrint('FinanceAccountCategorySheet load: $e');
+      if (!mounted || gen != _loadGen) return;
       setState(() {
         _periodLoadError = e;
         _periodLoading = false;
@@ -178,7 +221,40 @@ class _FinanceAccountCategorySheetState extends State<FinanceAccountCategoryShee
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    if (widget.fullScreenPage) {
+      final bg = context.isDarkMode ? context.appScaffold : const Color(0xFFF8FAFC);
+      return Scaffold(
+        backgroundColor: bg,
+        appBar: AppBar(
+          backgroundColor: bg,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded),
+            tooltip: 'Voltar',
+            onPressed: () => Navigator.of(context).maybePop(),
+          ),
+          titleSpacing: 0,
+          title: Text(
+            widget.account?.displayName ?? 'Todas as contas',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh_rounded),
+              tooltip: 'Atualizar',
+              onPressed: _periodLoading ? null : () => unawaited(_reloadPeriodDocs()),
+            ),
+          ],
+        ),
+        body: SafeArea(
+          top: false,
+          child: _buildContent(context, null),
+        ),
+      );
+    }
     return DraggableScrollableSheet(
       expand: widget.sheetInitialChildSize >= 0.92,
       initialChildSize: widget.sheetInitialChildSize,
@@ -203,21 +279,78 @@ class _FinanceAccountCategorySheetState extends State<FinanceAccountCategoryShee
                   ),
                 ),
               ),
+              Expanded(child: _buildContent(context, scrollController)),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Faixa de erro com «Tentar de novo» (lista vazia ou atualização que falhou).
+  Widget _loadErrorBox(BuildContext context, {required bool compact}) {
+    final msg = _periodLoadError is TimeoutException
+        ? 'O servidor demorou para responder.'
+        : 'Não foi possível carregar os lançamentos.';
+    return Container(
+      padding: EdgeInsets.all(compact ? 12 : 18),
+      margin: EdgeInsets.only(bottom: compact ? 12 : 0),
+      decoration: BoxDecoration(
+        color: context.isDarkMode ? context.appSurface : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.orange.shade300),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.error_outline_rounded, size: compact ? 22 : 30, color: Colors.orange.shade700),
+              const SizedBox(width: 10),
               Expanded(
-                child: Builder(
+                child: Text(
+                  compact ? '$msg Mostrando os dados já carregados.' : msg,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                    color: context.isDarkMode ? context.appTextPrimary : Colors.grey.shade800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (!compact && _periodLoadError is! TimeoutException) ...[
+            const SizedBox(height: 8),
+            Text(
+              _periodLoadError.toString().split('\n').first,
+              style: TextStyle(fontSize: 11.5, color: context.appTextMuted),
+            ),
+          ],
+          const SizedBox(height: 10),
+          FilledButton.icon(
+            onPressed: _periodLoading ? null : () => unawaited(_reloadPeriodDocs()),
+            icon: const Icon(Icons.refresh_rounded, size: 20),
+            label: const Text('Tentar de novo'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContent(BuildContext context, ScrollController? scrollController) {
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    return Builder(
                   builder: (context) {
-                    if (_periodLoadError != null) {
+                    if (_periodLoadError != null && _periodDocs == null) {
                       return ListView(
                         controller: scrollController,
                         padding: const EdgeInsets.all(24),
                         children: [
-                          Icon(Icons.error_outline_rounded, size: 40, color: Colors.orange.shade700),
-                          const SizedBox(height: 12),
-                          Text('Erro ao carregar: $_periodLoadError', style: const TextStyle(fontSize: 14)),
+                          _loadErrorBox(context, compact: false),
                         ],
                       );
                     }
-                    if (_periodLoading && (_periodDocs == null || _periodDocs!.isEmpty)) {
+                    if (_periodDocs == null) {
                       return const Center(child: CircularProgressIndicator());
                     }
                     final raw = (_periodDocs ?? []).where((doc) {
@@ -303,7 +436,16 @@ class _FinanceAccountCategorySheetState extends State<FinanceAccountCategoryShee
                           controller: scrollController,
                           padding: EdgeInsets.fromLTRB(16, 4, 16, 16 + bottomInset),
                           children: [
-                            _sheetWideVoltar(context, footer: false),
+                            // Tela cheia: a seta da AppBar já é o «Voltar» do topo.
+                            if (!widget.fullScreenPage)
+                              _sheetWideVoltar(context, footer: false),
+                            if (_periodLoadError != null)
+                              _loadErrorBox(context, compact: true)
+                            else if (_periodLoading)
+                              const Padding(
+                                padding: EdgeInsets.only(bottom: 10),
+                                child: LinearProgressIndicator(minHeight: 3),
+                              ),
                             _header(
                               net,
                               inc,
@@ -451,12 +593,6 @@ class _FinanceAccountCategorySheetState extends State<FinanceAccountCategoryShee
                       },
                     );
                   },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 

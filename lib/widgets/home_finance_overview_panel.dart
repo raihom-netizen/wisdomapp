@@ -328,6 +328,9 @@ class _HomeFinanceOverviewPanelState extends State<HomeFinanceOverviewPanel> {
       financeAccounts: accounts,
       onOpenFinanceModule: widget.onOpenFinanceiro,
       nearlyFullScreen: true,
+      // Lançamentos do período que o painel já tem: a tela abre pintada, sem
+      // spinner, e confirma no servidor em segundo plano.
+      initialDocs: _ultimosDocs[_chaveDocs(start, end)],
     );
   }
 

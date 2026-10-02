@@ -49,15 +49,15 @@ abstract final class FinanceAccountCategorySheetLauncher {
     VoidCallback? onOpenFinanceModule,
     String statusFilter = 'paid',
     bool nearlyFullScreen = false,
+    List<QueryDocumentSnapshot<Map<String, dynamic>>>? initialDocs,
   }) {
     final sheetInitial = nearlyFullScreen ? 0.96 : 0.78;
     final sheetMax = nearlyFullScreen ? 0.98 : 0.96;
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
+    // Abre em TELA CHEIA (página com AppBar e «Voltar»), não mais em sheet.
+    Navigator.of(context).push<void>(MaterialPageRoute<void>(
       builder: (ctx) => FinanceAccountCategorySheet(
+        fullScreenPage: true,
+        initialDocs: initialDocs,
         sheetInitialChildSize: sheetInitial,
         sheetMaxChildSize: sheetMax,
         uid: _fsUid(uid),
@@ -85,12 +85,11 @@ abstract final class FinanceAccountCategorySheetLauncher {
           financeAccounts: financeAccounts,
           openingBalanceHint: openingBalanceHint,
         ),
-        onApplyAccountFilter: (_) {
-          Navigator.of(ctx).pop();
-          onOpenFinanceModule?.call();
-        },
+        // A própria tela já se fecha antes de chamar isto (o pop daqui tirava
+        // também a tela de baixo).
+        onApplyAccountFilter: (_) => onOpenFinanceModule?.call(),
       ),
-    );
+    ));
   }
 
   /// Grid moderna com gráficos, filtros e edição de lançamentos (Receitas / Despesas / Saldo).

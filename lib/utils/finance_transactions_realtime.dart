@@ -166,6 +166,9 @@ Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> financePeriodMergedDoc
   String? financeAccountId,
   int pageSize = 400,
   int maxDocuments = 8000,
+  /// `true`: só o cache local (sem rede, sem novas tentativas) — para pintar
+  /// na hora antes da leitura do servidor. Erro/sem cache = lista vazia.
+  bool cacheOnly = false,
 }) async {
   final id = firestoreUserDocIdForAppShell(uid);
   final f = DateTime(from.year, from.month, from.day);
@@ -198,6 +201,14 @@ Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> financePeriodMergedDoc
     Query<Map<String, dynamic>> q, {
     required String field,
   }) async {
+    if (cacheOnly) {
+      try {
+        final snap = await q.limit(maxDocuments).get(const GetOptions(source: Source.cache));
+        return snap.docs;
+      } catch (_) {
+        return [];
+      }
+    }
     try {
       return await firestoreQueryCollectDocumentsBatched(
         q,
@@ -224,9 +235,15 @@ Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> financePeriodMergedDoc
     }
   }
 
-  final byDate = await safeCollect(base('date'), field: 'date');
-  final byEff = await safeCollect(base('effectiveDate'), field: 'effectiveDate');
-  final byPaidAt = await safeCollect(base('paidAt'), field: 'paidAt');
+  // As 3 leituras em paralelo (antes uma esperava a outra: 3× o tempo de rede).
+  final parts = await Future.wait([
+    safeCollect(base('date'), field: 'date'),
+    safeCollect(base('effectiveDate'), field: 'effectiveDate'),
+    safeCollect(base('paidAt'), field: 'paidAt'),
+  ]);
+  final byDate = parts[0];
+  final byEff = parts[1];
+  final byPaidAt = parts[2];
 
   final merged = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
   for (final d in [...byDate, ...byEff, ...byPaidAt]) {
