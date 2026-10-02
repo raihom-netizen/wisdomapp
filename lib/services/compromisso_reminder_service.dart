@@ -490,6 +490,9 @@ class CompromissoReminderService {
               userDocId: userDocId,
               reminderDocId: doc.id,
               googleEventId: gId,
+              // Limpeza por período: só esta ocorrência no Google — nunca
+              // a série recorrente inteira.
+              tryDeleteEntireSeries: false,
             ),
           );
         }
