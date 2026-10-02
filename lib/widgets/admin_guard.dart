@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../constants/admin_content_editor_config.dart';
 import '../constants/admin_partner_config.dart';
 import '../models/user_profile.dart';
+import '../theme/theme_context.dart';
 
 /// Protege rotas admin. Com [trustedProfile] (sessão já carregada no app),
 /// abre o painel na hora — sem tela branca aguardando Firestore.
@@ -31,8 +32,8 @@ class AdminGuard extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.login_rounded,
-                      size: 56, color: Color(0xFF1A237E)),
+                  Icon(Icons.login_rounded,
+                      size: 56, color: context.appDeepTitle),
                   const SizedBox(height: 16),
                   const Text(
                     'Faça login para acessar o painel admin.',

@@ -21,6 +21,7 @@ import '../constants/premium_pro_limits.dart';
 import '../constants/currency_formats.dart';
 import '../constants/app_strings.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../widgets/module_header_premium.dart';
 import '../widgets/partnerships_admin_module.dart';
 import '../widgets/admin_menu_lateral.dart';
@@ -82,6 +83,27 @@ import '../widgets/admin/admin_page_shell.dart';
 import '../utils/firestore_reliable_read.dart';
 import '../utils/firestore_retry.dart';
 import '../utils/firestore_web_guard.dart';
+
+// Modo escuro do admin: no claro devolvem exatamente a cor original.
+/// Texto principal (claro = [light]).
+Color _dkText(BuildContext c, Color light) =>
+    c.isDarkMode ? c.appTextPrimary : light;
+
+/// Texto de apoio (claro = [light]).
+Color _dkSub(BuildContext c, Color light) =>
+    c.isDarkMode ? c.appTextSecondary : light;
+
+/// Texto/ícone apagado (claro = [light]).
+Color _dkMuted(BuildContext c, Color light) =>
+    c.isDarkMode ? c.appTextMuted : light;
+
+/// Fundo suave de área/campo (claro = [light]).
+Color _dkFill(BuildContext c, Color light) =>
+    c.isDarkMode ? c.appSurfaceHigh : light;
+
+/// Borda fina (claro = [light]).
+Color _dkBorder(BuildContext c, Color light) =>
+    c.isDarkMode ? c.appChipIdleBorder : light;
 
 /// Quando [useUnifiedPanel] é true, exibe seletor Gestão Yahweh | CASER | Gestão Frotas e filtra usuários por [app].
 class AdminScreen extends StatefulWidget {
@@ -1863,7 +1885,9 @@ class _AdminScreenState extends State<AdminScreen> {
       child: Scaffold(
         key: _scaffoldKey,
         resizeToAvoidBottomInset: scaffoldKeyboardResizeToAvoidBottomInset(),
-        backgroundColor: AdminPageShell.background,
+        backgroundColor: context.isDarkMode
+            ? context.appScaffold
+            : AdminPageShell.background,
         appBar: AppBar(
           title: Text(
             _selectedItem == _adminHomeMenuItem && _isFullAdmin
@@ -2211,9 +2235,9 @@ class _AdminScreenState extends State<AdminScreen> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AdminUi.cardOf(context),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade200),
+              border: Border.all(color: AdminUi.bordaOf(context)),
               boxShadow: [
                 BoxShadow(
                     color: Colors.black.withValues(alpha: 0.04),
@@ -2232,14 +2256,14 @@ class _AdminScreenState extends State<AdminScreen> {
                         fontWeight: FontWeight.w700,
                         color: AppColors.primary)),
                 Icon(Icons.chevron_right_rounded,
-                    size: 18, color: Colors.grey.shade500),
+                    size: 18, color: _dkMuted(context, Colors.grey.shade500)),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(label,
                       style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade800)),
+                          color: _dkText(context, Colors.grey.shade800))),
                 ),
               ],
             ),
@@ -2584,7 +2608,7 @@ class _AdminScreenState extends State<AdminScreen> {
                       final narrowFilters = constraints.maxWidth < 400;
                       return Container(
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: AdminUi.cardOf(context),
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
                               color: AppColors.primary.withValues(alpha: 0.18)),
@@ -2610,7 +2634,8 @@ class _AdminScreenState extends State<AdminScreen> {
                                       style: TextStyle(
                                           fontSize: 14,
                                           fontWeight: FontWeight.w800,
-                                          color: Colors.grey.shade800)),
+                                          color: _dkText(
+                                              context, Colors.grey.shade800))),
                                   const Spacer(),
                                   TextButton.icon(
                                     icon: const Icon(Icons.clear_all_rounded,
@@ -2775,7 +2800,8 @@ class _AdminScreenState extends State<AdminScreen> {
                                         Text('Data de cadastro',
                                             style: TextStyle(
                                                 fontSize: 11,
-                                                color: Colors.grey.shade600)),
+                                                color: AdminUi.apoioOf(
+                                                    context))),
                                         const SizedBox(height: 4),
                                         Row(
                                           children: [
@@ -2897,7 +2923,8 @@ class _AdminScreenState extends State<AdminScreen> {
                                           style: TextStyle(
                                             fontSize: 12,
                                             fontWeight: FontWeight.w600,
-                                            color: Colors.grey.shade800,
+                                            color: _dkText(
+                                                context, Colors.grey.shade800),
                                             height: 1.35,
                                           ),
                                         ),
@@ -2932,7 +2959,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: AdminUi.cardOf(context),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: Colors.red.shade200),
                     ),
@@ -2946,7 +2973,8 @@ class _AdminScreenState extends State<AdminScreen> {
                           'Erro ao carregar usuários: ${AdminLoadGuard.mensagem(snap.error)}',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                              fontSize: 13, color: Colors.grey.shade800),
+                              fontSize: 13,
+                              color: _dkText(context, Colors.grey.shade800)),
                         ),
                         const SizedBox(height: 12),
                         FilledButton.icon(
@@ -2990,9 +3018,9 @@ class _AdminScreenState extends State<AdminScreen> {
                     child: Container(
                       padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: AdminUi.cardOf(context),
                         borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: Colors.grey.shade200),
+                        border: Border.all(color: AdminUi.bordaOf(context)),
                         boxShadow: [
                           BoxShadow(
                               color: Colors.black.withValues(alpha: 0.04),
@@ -3005,7 +3033,8 @@ class _AdminScreenState extends State<AdminScreen> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(Icons.people_outline_rounded,
-                                size: 48, color: Colors.grey.shade400),
+                                size: 48,
+                                color: _dkMuted(context, Colors.grey.shade400)),
                             const SizedBox(height: 12),
                             Text(
                               docs.isEmpty
@@ -3013,7 +3042,8 @@ class _AdminScreenState extends State<AdminScreen> {
                                   : 'Nenhum usuário corresponde aos filtros.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                  fontSize: 14, color: Colors.grey.shade600),
+                                  fontSize: 14,
+                                  color: AdminUi.apoioOf(context)),
                             ),
                             if (!docs.isEmpty) ...[
                               const SizedBox(height: 16),
@@ -3046,7 +3076,7 @@ class _AdminScreenState extends State<AdminScreen> {
                               style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
-                                  color: Colors.grey.shade700),
+                                  color: _dkSub(context, Colors.grey.shade700)),
                             ),
                             if (atLimit)
                               Padding(
@@ -3055,7 +3085,7 @@ class _AdminScreenState extends State<AdminScreen> {
                                   'Mostrando até $_usersListLimit usuários. Use os filtros ou Exportar CSV para ver todos.',
                                   style: TextStyle(
                                       fontSize: 12,
-                                      color: Colors.grey.shade600),
+                                      color: AdminUi.apoioOf(context)),
                                 ),
                               ),
                           ],
@@ -3574,7 +3604,9 @@ class _AdminScreenState extends State<AdminScreen> {
           Icons.android_rounded, Colors.green.shade600, 'Android'));
     } else if (p.contains('ios') || p.contains('iphone')) {
       icons.add(_statusIconChip(
-          Icons.phone_iphone_rounded, Colors.grey.shade800, 'iOS'));
+          Icons.phone_iphone_rounded,
+          _dkText(context, Colors.grey.shade800),
+          'iOS'));
     } else if (p.contains('web')) {
       icons.add(
           _statusIconChip(Icons.language_rounded, AppColors.primary, 'Web'));
@@ -3849,18 +3881,23 @@ class _AdminScreenState extends State<AdminScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: isRemoved ? Colors.grey.shade50 : Colors.white,
+        color: isRemoved
+            ? _dkFill(context, Colors.grey.shade50)
+            : AdminUi.cardOf(context),
         borderRadius: BorderRadius.circular(18),
         // Faixa de status à esquerda + borda sutil = visual mais moderno e legível.
         border: Border(
           left:
               BorderSide(color: statusColor.withValues(alpha: 0.85), width: 5),
           top: BorderSide(
-              color: isRemoved ? Colors.grey.shade300 : Colors.grey.shade200),
+              color: _dkBorder(context,
+                  isRemoved ? Colors.grey.shade300 : Colors.grey.shade200)),
           right: BorderSide(
-              color: isRemoved ? Colors.grey.shade300 : Colors.grey.shade200),
+              color: _dkBorder(context,
+                  isRemoved ? Colors.grey.shade300 : Colors.grey.shade200)),
           bottom: BorderSide(
-              color: isRemoved ? Colors.grey.shade300 : Colors.grey.shade200),
+              color: _dkBorder(context,
+                  isRemoved ? Colors.grey.shade300 : Colors.grey.shade200)),
         ),
         boxShadow: [
           BoxShadow(
@@ -3925,7 +3962,8 @@ class _AdminScreenState extends State<AdminScreen> {
                             ),
                             Text(email,
                                 style: TextStyle(
-                                    fontSize: 12, color: Colors.grey.shade600),
+                                    fontSize: 12,
+                                    color: AdminUi.apoioOf(context)),
                                 overflow: TextOverflow.ellipsis),
                             AdminDelegateEmailSection(
                               principalUid: uid,
@@ -3946,7 +3984,11 @@ class _AdminScreenState extends State<AdminScreen> {
                                       partnershipName.isNotEmpty
                                           ? 'Convênio: $partnershipName ($partnershipId)'
                                           : 'Convênio: $partnershipId',
-                                      style: const TextStyle(fontSize: 11),
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: context.isDarkMode
+                                              ? Colors.indigo.shade900
+                                              : null),
                                     ),
                                     backgroundColor: Colors.indigo.shade50,
                                     visualDensity: VisualDensity.compact,
@@ -4201,7 +4243,8 @@ class _AdminScreenState extends State<AdminScreen> {
                         ),
                         Text(email,
                             style: TextStyle(
-                                fontSize: 12, color: Colors.grey.shade600)),
+                                fontSize: 12,
+                                color: AdminUi.apoioOf(context))),
                         AdminDelegateEmailSection(
                           principalUid: uid,
                           principalEmail: email,
@@ -4220,7 +4263,11 @@ class _AdminScreenState extends State<AdminScreen> {
                                   partnershipName.isNotEmpty
                                       ? 'Convênio: $partnershipName ($partnershipId)'
                                       : 'Convênio: $partnershipId',
-                                  style: const TextStyle(fontSize: 11),
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: context.isDarkMode
+                                          ? Colors.indigo.shade900
+                                          : null),
                                 ),
                                 backgroundColor: Colors.indigo.shade50,
                                 visualDensity: VisualDensity.compact,
@@ -4456,13 +4503,15 @@ class _AdminScreenState extends State<AdminScreen> {
       children: [
         Text(intro,
             style: TextStyle(
-                fontSize: 14, color: Colors.grey.shade800, height: 1.35)),
+                fontSize: 14,
+                color: _dkText(context, Colors.grey.shade800),
+                height: 1.35)),
         const SizedBox(height: 16),
         Text('Usuário',
             style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
-                color: Colors.grey.shade700)),
+                color: _dkSub(context, Colors.grey.shade700))),
         const SizedBox(height: 8),
         if (n.isNotEmpty)
           Text('Nome: $n',
@@ -4473,21 +4522,23 @@ class _AdminScreenState extends State<AdminScreen> {
               style: TextStyle(
                   fontSize: 14,
                   fontStyle: FontStyle.italic,
-                  color: Colors.grey.shade600)),
+                  color: AdminUi.apoioOf(context))),
         const SizedBox(height: 6),
         if (e.isNotEmpty)
           SelectableText('E-mail: $e',
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade800)),
+              style: TextStyle(
+                  fontSize: 14,
+                  color: _dkText(context, Colors.grey.shade800))),
         if (e.isEmpty)
           Text('E-mail: (não informado)',
               style: TextStyle(
                   fontSize: 14,
                   fontStyle: FontStyle.italic,
-                  color: Colors.grey.shade600)),
+                  color: AdminUi.apoioOf(context))),
         const SizedBox(height: 8),
         SelectableText(
           'ID: $uid',
-          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          style: TextStyle(fontSize: 11, color: AdminUi.apoioOf(context)),
         ),
       ],
     );
@@ -4769,7 +4820,7 @@ class _AdminScreenState extends State<AdminScreen> {
   Widget _buildForceUpdateCard() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AdminUi.cardOf(context),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.primary.withValues(alpha: 0.35)),
         boxShadow: [
@@ -4809,7 +4860,8 @@ class _AdminScreenState extends State<AdminScreen> {
                             'O deploy publica o site mas não dispara aviso — só este botão. '
                             'Usuários já na versão atual não veem nada. Para cancelar avisos, use "Desativar aviso".',
                             style: TextStyle(
-                                fontSize: 13, color: Colors.grey.shade700),
+                                fontSize: 13,
+                                color: _dkSub(context, Colors.grey.shade700)),
                           ),
                         ],
                       ),
@@ -4836,7 +4888,8 @@ class _AdminScreenState extends State<AdminScreen> {
                 const SizedBox(height: 8),
                 Text(
                   'Android abre a Play Store ao atualizar. Não use link direto de APK.',
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  style: TextStyle(
+                      fontSize: 11, color: AdminUi.apoioOf(context)),
                 ),
                 if (narrow) const SizedBox(height: 12),
                 SizedBox(
@@ -4916,9 +4969,9 @@ class _AdminScreenState extends State<AdminScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AdminUi.cardOf(context),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: AdminUi.bordaOf(context)),
         boxShadow: [
           BoxShadow(
               color: Colors.black.withValues(alpha: 0.04),
@@ -4934,7 +4987,7 @@ class _AdminScreenState extends State<AdminScreen> {
               style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: Colors.grey.shade800)),
+                  color: _dkText(context, Colors.grey.shade800))),
           const SizedBox(width: 10),
           if (isNarrow)
             Expanded(
@@ -5027,15 +5080,16 @@ class _AdminScreenState extends State<AdminScreen> {
               Expanded(
                 child: Text(
                   'Versão: v${AppVersion.current} · ${AppVersion.internalLabel}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  style: TextStyle(
+                      fontSize: 12, color: AdminUi.apoioOf(context)),
                 ),
               ),
               if (_lastResumoUpdate != null) ...[
                 const SizedBox(width: 16),
                 Text(
                     'Atualizado às ${DateFormat('HH:mm').format(_lastResumoUpdate!)}',
-                    style:
-                        TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                    style: TextStyle(
+                        fontSize: 12, color: AdminUi.apoioOf(context))),
               ],
             ],
           ),
@@ -5092,7 +5146,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   return Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: AdminUi.cardOf(context),
                       borderRadius: BorderRadius.circular(18),
                       border: Border.all(color: Colors.orange.shade300),
                       boxShadow: [
@@ -5112,7 +5166,8 @@ class _AdminScreenState extends State<AdminScreen> {
                             'Erro ao carregar: ${_formatAdminResumoError(snap.error!)}',
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                                color: Colors.grey.shade700, fontSize: 13)),
+                                color: _dkSub(context, Colors.grey.shade700),
+                                fontSize: 13)),
                         const SizedBox(height: 16),
                         FilledButton.icon(
                           onPressed: _reloadResumoStats,
@@ -5375,7 +5430,7 @@ class _AdminScreenState extends State<AdminScreen> {
                         stats.txResumoAviso!,
                         style: TextStyle(
                           fontSize: 11,
-                          color: Colors.grey.shade700,
+                          color: _dkSub(context, Colors.grey.shade700),
                           height: 1.3,
                           fontStyle: FontStyle.italic,
                         ),
@@ -5449,8 +5504,8 @@ class _AdminScreenState extends State<AdminScreen> {
                     const SizedBox(height: 16),
                     Text(
                       'O período personalizado abaixo abre nos últimos $_resumoPeriodDays dias (mesmo filtro do resumo).',
-                      style:
-                          TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      style: TextStyle(
+                          fontSize: 12, color: AdminUi.apoioOf(context)),
                     ),
                     const SizedBox(height: 16),
                     RepaintBoundary(
@@ -5466,8 +5521,8 @@ class _AdminScreenState extends State<AdminScreen> {
                     const SizedBox(height: 16),
                     Text(
                       'Horizonte de vencimento: contagem atual por faixa (próximos 90 dias; não é série histórica).',
-                      style:
-                          TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      style: TextStyle(
+                          fontSize: 12, color: AdminUi.apoioOf(context)),
                     ),
                     const SizedBox(height: 8),
                     AppBarChart(
@@ -5498,9 +5553,9 @@ class _AdminScreenState extends State<AdminScreen> {
                     const SizedBox(height: 12),
                     Container(
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: AdminUi.cardOf(context),
                         borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: Colors.grey.shade200),
+                        border: Border.all(color: AdminUi.bordaOf(context)),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.04),
@@ -5522,7 +5577,7 @@ class _AdminScreenState extends State<AdminScreen> {
                                   style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
-                                      color: Colors.grey.shade600),
+                                      color: AdminUi.apoioOf(context)),
                                 ),
                                 TextButton.icon(
                                   onPressed: () => setState(() =>
@@ -5546,9 +5601,10 @@ class _AdminScreenState extends State<AdminScreen> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 12, vertical: 10),
                               decoration: BoxDecoration(
-                                color: Colors.grey.shade50,
+                                color: _dkFill(context, Colors.grey.shade50),
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.grey.shade200),
+                                border: Border.all(
+                                    color: AdminUi.bordaOf(context)),
                               ),
                               child: Row(
                                 children: [
@@ -5580,7 +5636,8 @@ class _AdminScreenState extends State<AdminScreen> {
                                           Text(email,
                                               style: TextStyle(
                                                   fontSize: 12,
-                                                  color: Colors.grey.shade600)),
+                                                  color: AdminUi.apoioOf(
+                                                      context))),
                                       ],
                                     ),
                                   ),
@@ -5894,9 +5951,9 @@ class _AdminScreenState extends State<AdminScreen> {
               return Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: AdminUi.cardOf(context),
                   borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: Colors.grey.shade200),
+                  border: Border.all(color: AdminUi.bordaOf(context)),
                   boxShadow: [
                     BoxShadow(
                         color: Colors.black.withValues(alpha: 0.04),
@@ -5925,9 +5982,9 @@ class _AdminScreenState extends State<AdminScreen> {
                 return Container(
                   margin: const EdgeInsets.only(bottom: 10),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: AdminUi.cardOf(context),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.grey.shade200),
+                    border: Border.all(color: AdminUi.bordaOf(context)),
                     boxShadow: [
                       BoxShadow(
                           color: Colors.black.withValues(alpha: 0.04),
@@ -6002,9 +6059,9 @@ class _AdminScreenState extends State<AdminScreen> {
 
             return Container(
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AdminUi.cardOf(context),
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: Colors.grey.shade200),
+                border: Border.all(color: AdminUi.bordaOf(context)),
                 boxShadow: [
                   BoxShadow(
                       color: Colors.black.withValues(alpha: 0.04),
@@ -6027,7 +6084,7 @@ class _AdminScreenState extends State<AdminScreen> {
                       'Documento app_config/mp_checkout_prices — usado nas Cloud Functions (valor cobrado) e nas telas do app que mostram preço. Leitura pública. Assinaturas nativas da App Store (se houver) continuam no App Store Connect.',
                       style: TextStyle(
                           fontSize: 12,
-                          color: Colors.grey.shade700,
+                          color: _dkSub(context, Colors.grey.shade700),
                           height: 1.35),
                     ),
                     const SizedBox(height: 12),
@@ -6067,7 +6124,7 @@ class _AdminScreenState extends State<AdminScreen> {
                     Text(
                       '“Sincronizar preços nos textos” atualiza linhas de valor Premium em landing/divulgação (e parágrafos da home) a partir dos valores acima e grava landing_content/main. Valores legados no Firestore são alinhados ao Premium ao salvar.',
                       style:
-                          TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                          TextStyle(fontSize: 11, color: AdminUi.apoioOf(context)),
                     ),
                     const SizedBox(height: 28),
                     Text('Página inicial (/)',
@@ -6079,7 +6136,7 @@ class _AdminScreenState extends State<AdminScreen> {
                     Text(
                       'Hero principal. Campos vazios no servidor usam o texto padrão do site.',
                       style:
-                          TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                          TextStyle(fontSize: 13, color: _dkSub(context, Colors.grey.shade700)),
                     ),
                     const SizedBox(height: 16),
                     _LandingField(
@@ -6112,7 +6169,7 @@ class _AdminScreenState extends State<AdminScreen> {
                     Text(
                       'Nome, benefícios e faixas dos planos; valores mensais/anuais são alinhados ao checkout pelos botões acima ou por “Sincronizar”. premiumPrice/masterPrice espelham o Premium ao salvar.',
                       style:
-                          TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                          TextStyle(fontSize: 12, color: _dkSub(context, Colors.grey.shade700)),
                     ),
                     const SizedBox(height: 12),
                     ...kDivulgacaoPlanPricingFields.map(
@@ -6168,7 +6225,7 @@ class _AdminScreenState extends State<AdminScreen> {
                     Text(
                       'Configura o botão de integração no módulo Agenda e as cores-base da divulgação (padrão azul/dourado).',
                       style:
-                          TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                          TextStyle(fontSize: 12, color: _dkSub(context, Colors.grey.shade700)),
                     ),
                     const SizedBox(height: 8),
                     SwitchListTile.adaptive(
@@ -6237,7 +6294,7 @@ class _AdminScreenState extends State<AdminScreen> {
                             'YouTube, Instagram e WhatsApp na barra superior do site e apps (landing). Salve com o botão abaixo.',
                             style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.grey.shade700,
+                                color: _dkSub(context, Colors.grey.shade700),
                                 height: 1.35),
                           ),
                           const SizedBox(height: 14),
@@ -6288,7 +6345,7 @@ class _AdminScreenState extends State<AdminScreen> {
                             'Também sincroniza com app_config/version (avisos de atualização).',
                             style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.grey.shade700,
+                                color: _dkSub(context, Colors.grey.shade700),
                                 height: 1.35),
                           ),
                           const SizedBox(height: 14),
@@ -6339,7 +6396,7 @@ class _AdminScreenState extends State<AdminScreen> {
                             'Instagram padrão: @wisdomappgo.',
                             style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.grey.shade700,
+                                color: _dkSub(context, Colors.grey.shade700),
                                 height: 1.35),
                           ),
                           const SizedBox(height: 14),
@@ -6362,7 +6419,7 @@ class _AdminScreenState extends State<AdminScreen> {
                     Text(
                       'Demais textos da rota /divulgacao (planos já estão na seção acima).',
                       style:
-                          TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                          TextStyle(fontSize: 13, color: _dkSub(context, Colors.grey.shade700)),
                     ),
                     const SizedBox(height: 16),
                     ...kDivulgacaoLandingFieldsSemPlanos.map(
@@ -6655,9 +6712,9 @@ class _AdminScaleRatesEditorState extends State<_AdminScaleRatesEditor> {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AdminUi.cardOf(context),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: AdminUi.bordaOf(context)),
         boxShadow: [
           BoxShadow(
               color: Colors.black.withValues(alpha: 0.04),
@@ -7030,10 +7087,10 @@ class _AdminSectionTitle extends StatelessWidget {
         const SizedBox(width: 12),
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w800,
-              color: Color(0xFF1A237E)),
+              color: context.appDeepTitle),
         ),
       ],
     );
@@ -7101,7 +7158,9 @@ class _MetricCard extends StatelessWidget {
             style: TextStyle(
               fontSize: highlight ? 22 : 19,
               fontWeight: FontWeight.w800,
-              color: highlight ? color : Colors.grey.shade800,
+              color: highlight
+                  ? color
+                  : _dkText(context, Colors.grey.shade800),
               letterSpacing: -0.5,
             ),
           ),
@@ -7109,7 +7168,7 @@ class _MetricCard extends StatelessWidget {
             const SizedBox(height: 6),
             Text(subValue!,
                 style: TextStyle(
-                    fontSize: 11, color: Colors.grey.shade600, height: 1.2)),
+                    fontSize: 11, color: AdminUi.apoioOf(context), height: 1.2)),
           ],
           if (onTap != null) ...[
             const SizedBox(height: 8),
@@ -7375,7 +7434,7 @@ class _MercadoPagoTabContentState extends State<_MercadoPagoTabContent> {
             elevation: 0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
-              side: BorderSide(color: Colors.grey.shade200),
+              side: BorderSide(color: AdminUi.bordaOf(context)),
             ),
             child: Padding(
               padding: const EdgeInsets.all(20),
@@ -7675,12 +7734,13 @@ class _ZonaEmergenciaMpCardState extends State<_ZonaEmergenciaMpCard> {
                     hintText: 'ID do Pagamento (Ex: 123456789)',
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.grey.shade400),
+                      borderSide: BorderSide(
+                          color: _dkBorder(context, Colors.grey.shade400)),
                     ),
                     contentPadding: const EdgeInsets.symmetric(
                         horizontal: 14, vertical: 14),
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: AdminUi.cardOf(context),
                   ),
                   keyboardType: TextInputType.number,
                   enabled: !_syncing,
@@ -7893,9 +7953,9 @@ class _RecebimentosResumoWidgetState extends State<_RecebimentosResumoWidget> {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AdminUi.cardOf(context),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: AdminUi.bordaOf(context)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
@@ -7928,7 +7988,7 @@ class _RecebimentosResumoWidgetState extends State<_RecebimentosResumoWidget> {
             Row(
               children: [
                 Icon(Icons.date_range_rounded,
-                    size: 18, color: Colors.grey.shade700),
+                    size: 18, color: _dkSub(context, Colors.grey.shade700)),
                 const SizedBox(width: 8),
                 const Text('Período personalizado',
                     style:
@@ -8310,7 +8370,7 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
     }
   }
 
-  static Widget _buildApprovedDate(dynamic approved) {
+  static Widget _buildApprovedDate(BuildContext context, dynamic approved) {
     DateTime dt;
     if (approved is Timestamp) {
       dt = approved.toDate();
@@ -8320,10 +8380,11 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
       dt = DateTime.tryParse(approved.toString()) ?? DateTime.now();
     }
     return Text('Aprovado: ${DateFormat('dd/MM/yyyy HH:mm').format(dt)}',
-        style: TextStyle(fontSize: 11, color: Colors.grey.shade600));
+        style: TextStyle(fontSize: 11, color: AdminUi.apoioOf(context)));
   }
 
-  static Widget _buildDateAndTime(Map<String, dynamic> data) {
+  static Widget _buildDateAndTime(
+      BuildContext context, Map<String, dynamic> data) {
     final raw = data['raw'];
     if (raw is! Map) return const SizedBox.shrink();
     final v =
@@ -8338,7 +8399,7 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
       dt = DateTime.tryParse(v.toString()) ?? DateTime.now();
     return Text(
         '${DateFormat('dd/MM/yyyy').format(dt)} às ${DateFormat('HH:mm').format(dt)}',
-        style: TextStyle(fontSize: 12, color: Colors.grey.shade700));
+        style: TextStyle(fontSize: 12, color: _dkSub(context, Colors.grey.shade700)));
   }
 
   @override
@@ -8346,9 +8407,9 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AdminUi.cardOf(context),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: AdminUi.bordaOf(context)),
         boxShadow: [
           BoxShadow(
               color: Colors.black.withValues(alpha: 0.04),
@@ -8382,7 +8443,7 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
             'Se não ativar, use «Sync pagamentos (24h)» acima ou sincronize pelo ID/e-mail abaixo. '
             'Webhook: ${MpAdminConfigService.defaultWebhookUrl}',
             style: TextStyle(
-                fontSize: 12, color: Colors.grey.shade700, height: 1.4),
+                fontSize: 12, color: _dkSub(context, Colors.grey.shade700), height: 1.4),
           ),
           const SizedBox(height: 16),
           Container(
@@ -8409,7 +8470,7 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
                 const SizedBox(height: 6),
                 Text(
                   'Se um pagamento chegou no Mercado Pago mas não apareceu aqui, informe o ID numérico do pagamento (encontre no app MP ou painel do vendedor).',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                  style: TextStyle(fontSize: 12, color: _dkSub(context, Colors.grey.shade700)),
                 ),
                 const SizedBox(height: 12),
                 LayoutBuilder(
@@ -8502,7 +8563,7 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
                 const SizedBox(height: 6),
                 Text(
                   'Quando o usuário pagou via PIX mas a licença não ativou: informe o e-mail (ex.: caseanapolisgo@gmail.com) para buscar e processar o PIX pendente dele.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                  style: TextStyle(fontSize: 12, color: _dkSub(context, Colors.grey.shade700)),
                 ),
                 const SizedBox(height: 12),
                 LayoutBuilder(
@@ -8569,7 +8630,7 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
                   style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade700)),
+                      color: _dkSub(context, Colors.grey.shade700))),
               OutlinedButton(
                 style: OutlinedButton.styleFrom(minimumSize: const Size(0, 36)),
                 onPressed: () async {
@@ -8583,7 +8644,7 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
                 child: Text(DateFormat('dd/MM/yyyy').format(_filterStart)),
               ),
               Text('até',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                  style: TextStyle(fontSize: 12, color: AdminUi.apoioOf(context))),
               OutlinedButton(
                 style: OutlinedButton.styleFrom(minimumSize: const Size(0, 36)),
                 onPressed: () async {
@@ -8655,7 +8716,7 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
                   style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade700)),
+                      color: _dkSub(context, Colors.grey.shade700))),
               ChoiceChip(
                 label: const Text('Todos'),
                 selected: _recipientFilter == 'all',
@@ -8680,7 +8741,7 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
                   style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade700)),
+                      color: _dkSub(context, Colors.grey.shade700))),
               const SizedBox(width: 8),
               ChoiceChip(
                 label: const Text('Mais recente'),
@@ -8763,20 +8824,21 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
       return Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: Colors.grey.shade50,
+          color: _dkFill(context, Colors.grey.shade50),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade200),
+          border: Border.all(color: AdminUi.bordaOf(context)),
         ),
         child: Row(
           children: [
-            Icon(Icons.inbox_rounded, size: 40, color: Colors.grey.shade400),
+            Icon(Icons.inbox_rounded,
+                size: 40, color: _dkMuted(context, Colors.grey.shade400)),
             const SizedBox(width: 16),
             Expanded(
               child: Text(
                 'Nenhum pagamento registrado ainda. Quando houver vendas via '
                 'Mercado Pago, elas aparecerão aqui.',
                 style: TextStyle(
-                    color: Colors.grey.shade600, fontSize: 14, height: 1.35),
+                    color: AdminUi.apoioOf(context), fontSize: 14, height: 1.35),
               ),
             ),
           ],
@@ -8868,20 +8930,20 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
           return Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.grey.shade50,
+              color: _dkFill(context, Colors.grey.shade50),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
               children: [
                 Icon(Icons.inbox_rounded,
-                    size: 40, color: Colors.grey.shade400),
+                    size: 40, color: _dkMuted(context, Colors.grey.shade400)),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Text(
                     _searchQuery.isNotEmpty || _filterStatus != 'all'
                         ? 'Nenhum pagamento com os filtros aplicados.'
                         : 'Nenhum pagamento no período. Ajuste o filtro ou aguarde novos pagamentos.',
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                    style: TextStyle(color: AdminUi.apoioOf(context), fontSize: 14),
                   ),
                 ),
               ],
@@ -8951,12 +9013,12 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
                 decoration: BoxDecoration(
                   color: isApproved
                       ? AppColors.success.withValues(alpha: 0.08)
-                      : Colors.grey.shade50,
+                      : _dkFill(context, Colors.grey.shade50),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: isApproved
                         ? AppColors.success.withValues(alpha: 0.3)
-                        : Colors.grey.shade200,
+                        : AdminUi.bordaOf(context),
                   ),
                 ),
                 child: Row(
@@ -8987,14 +9049,14 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
                               'UID: ${uid.substring(0, uid.length.clamp(0, 14))}${uid.length > 14 ? '…' : ''}',
                               style: TextStyle(
                                 fontSize: 11,
-                                color: Colors.grey.shade600,
+                                color: AdminUi.apoioOf(context),
                               ),
                             ),
                           Text(
                             'Plano: $plan • ${planCode.isNotEmpty ? planCode : ''}',
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.grey.shade700,
+                              color: _dkSub(context, Colors.grey.shade700),
                             ),
                           ),
                           if (data['splitEnabled'] == true ||
@@ -9012,7 +9074,7 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
                               ),
                             ),
                           ],
-                          _buildDateAndTime(data),
+                          _buildDateAndTime(context, data),
                         ],
                       ),
                     ),
@@ -9028,7 +9090,7 @@ class _RecebimentosPixSectionState extends State<_RecebimentosPixSection> {
                             fontSize: 16,
                             color: isApproved
                                 ? AppColors.success
-                                : Colors.grey.shade700,
+                                : _dkSub(context, Colors.grey.shade700),
                           ),
                         ),
                         Container(
@@ -9286,7 +9348,7 @@ class _MaintenanceRegistryPickerDialogState
                   const Spacer(),
                   Text(
                     '${_rows.length} carregado(s) · $_selectedCount selecionado(s)',
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                    style: TextStyle(fontSize: 11, color: _dkSub(context, Colors.grey.shade700)),
                   ),
                 ],
               ),
@@ -9308,7 +9370,7 @@ class _MaintenanceRegistryPickerDialogState
                             _loadError != null
                                 ? 'Não foi possível carregar.'
                                 : 'Nenhum usuário encontrado.',
-                            style: TextStyle(color: Colors.grey.shade600),
+                            style: TextStyle(color: AdminUi.apoioOf(context)),
                           ),
                         )
                       : ListView.builder(
@@ -9346,7 +9408,7 @@ class _MaintenanceRegistryPickerDialogState
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                    fontSize: 11, color: Colors.grey.shade600),
+                                    fontSize: 11, color: AdminUi.apoioOf(context)),
                               ),
                               controlAffinity: ListTileControlAffinity.leading,
                               dense: true,
@@ -9747,7 +9809,9 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
                 child: Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
+                    color: context.isDarkMode
+                        ? context.appAccentSurface(Colors.orange)
+                        : Colors.orange.shade50,
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
                         color: Colors.orange.shade200.withValues(alpha: 0.85)),
@@ -9760,11 +9824,11 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
                       const SizedBox(height: 8),
                       Text('Data: $dateStr às $timeStr',
                           style: TextStyle(
-                              fontSize: 13, color: Colors.grey.shade700)),
+                              fontSize: 13, color: _dkSub(context, Colors.grey.shade700))),
                       const SizedBox(height: 8),
                       Text(destinatarios,
                           style: TextStyle(
-                              fontSize: 13, color: Colors.grey.shade800)),
+                              fontSize: 13, color: _dkText(context, Colors.grey.shade800))),
                       if (showPromo) ...[
                         const SizedBox(height: 12),
                         Text(
@@ -9772,14 +9836,14 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
                           style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
-                              color: Colors.grey.shade800),
+                              color: _dkText(context, Colors.grey.shade800)),
                         ),
                         if (showPromoAndroid) ...[
                           const SizedBox(height: 4),
                           Text('Android:',
                               style: TextStyle(
                                   fontSize: 11,
-                                  color: Colors.grey.shade700,
+                                  color: _dkSub(context, Colors.grey.shade700),
                                   fontWeight: FontWeight.w700)),
                           SelectableText(
                             resolvedUrlAndroid,
@@ -9792,7 +9856,7 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
                           Text('iPhone:',
                               style: TextStyle(
                                   fontSize: 11,
-                                  color: Colors.grey.shade700,
+                                  color: _dkSub(context, Colors.grey.shade700),
                                   fontWeight: FontWeight.w700)),
                           SelectableText(
                             resolvedUrlIos,
@@ -9805,13 +9869,13 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
                             'Promoção Firestore: ${_selectedPromoId!.trim()} (checkout com preço promocional)',
                             style: TextStyle(
                                 fontSize: 11,
-                                color: Colors.grey.shade700,
+                                color: _dkSub(context, Colors.grey.shade700),
                                 fontWeight: FontWeight.w600),
                           ),
                         if (pLbl.isNotEmpty)
                           Text('Botão: $pLbl',
                               style: TextStyle(
-                                  fontSize: 12, color: Colors.grey.shade700)),
+                                  fontSize: 12, color: _dkSub(context, Colors.grey.shade700))),
                         if (showPromo)
                           Text(
                             'E-mail: não sai ao salvar. Use «Enviar e-mails (link do site)» depois de gravar o aviso.',
@@ -10079,7 +10143,9 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
     final horizontalPad = isNarrow ? 12.0 : 16.0;
     if (!_loaded) {
       return ColoredBox(
-        color: const Color(0xFFF0F4F9),
+        color: context.isDarkMode
+            ? context.appScaffold
+            : const Color(0xFFF0F4F9),
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: EdgeInsets.fromLTRB(
@@ -10098,7 +10164,9 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
       );
     }
     return ColoredBox(
-      color: const Color(0xFFF0F4F9),
+      color: context.isDarkMode
+          ? context.appScaffold
+          : const Color(0xFFF0F4F9),
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: EdgeInsets.fromLTRB(
@@ -10132,7 +10200,7 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
             ),
             padding: const EdgeInsets.all(2),
             child: Material(
-              color: Colors.white,
+              color: AdminUi.cardOf(context),
               borderRadius: BorderRadius.circular(20),
               clipBehavior: Clip.antiAlias,
               child: Padding(
@@ -10144,7 +10212,7 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
                         style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
-                            color: Colors.grey.shade800)),
+                            color: _dkText(context, Colors.grey.shade800))),
                     const SizedBox(height: 8),
                     FastTextField(
                       controller: _messageCtrl,
@@ -10205,7 +10273,7 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
                       subtitle: Text(
                         'Android: Google Play · iPhone: TestFlight. Cada usuário vê só o botão da sua plataforma.',
                         style: TextStyle(
-                            fontSize: 11, color: Colors.grey.shade700),
+                            fontSize: 11, color: _dkSub(context, Colors.grey.shade700)),
                       ),
                       contentPadding: EdgeInsets.zero,
                     ),
@@ -10214,12 +10282,12 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
                         style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
-                            color: Colors.grey.shade800)),
+                            color: _dkText(context, Colors.grey.shade800))),
                     const SizedBox(height: 6),
                     Text(
                       'Opcional. Você pode enviar dois links na mesma mensagem: um para Android e outro para iPhone. Ou marque “site oficial” para usar wisdomapp-b9e98.web.app em ambos.',
                       style:
-                          TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                          TextStyle(fontSize: 12, color: AdminUi.apoioOf(context)),
                     ),
                     const SizedBox(height: 8),
                     SwitchListTile(
@@ -10232,7 +10300,7 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
                       subtitle: Text(
                         'Abre $kOfficialPromoLandingUrl — a oferta e o checkout ficam no site (login Google, cadastro, PIX/cartão).',
                         style: TextStyle(
-                            fontSize: 11, color: Colors.grey.shade700),
+                            fontSize: 11, color: _dkSub(context, Colors.grey.shade700)),
                       ),
                       contentPadding: EdgeInsets.zero,
                     ),
@@ -10260,7 +10328,7 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
                             _useOfficialPromoSite || _includeAppUpdateButtons,
                         fillColor:
                             (_useOfficialPromoSite || _includeAppUpdateButtons)
-                                ? Colors.grey.shade100
+                                ? _dkFill(context, Colors.grey.shade100)
                                 : null,
                       ),
                     ),
@@ -10288,7 +10356,7 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
                             _useOfficialPromoSite || _includeAppUpdateButtons,
                         fillColor:
                             (_useOfficialPromoSite || _includeAppUpdateButtons)
-                                ? Colors.grey.shade100
+                                ? _dkFill(context, Colors.grey.shade100)
                                 : null,
                       ),
                     ),
@@ -10310,13 +10378,13 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
                       style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: Colors.grey.shade800),
+                          color: _dkText(context, Colors.grey.shade800)),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       'Selecione uma promoção para o link incluir ?promo=ID em wisdomapp-b9e98.web.app — o checkout usa o preço e a duração da promoção (PIX/cartão no site).',
                       style:
-                          TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                          TextStyle(fontSize: 12, color: AdminUi.apoioOf(context)),
                     ),
                     const SizedBox(height: 8),
                     StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
@@ -10362,7 +10430,9 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
                     Container(
                       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
                       decoration: BoxDecoration(
-                        color: Colors.teal.shade50,
+                        color: context.isDarkMode
+                            ? context.appAccentSurface(Colors.teal)
+                            : Colors.teal.shade50,
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(color: Colors.teal.shade100),
                       ),
@@ -10378,7 +10448,7 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
                               style: TextStyle(
                                 fontSize: 12,
                                 height: 1.4,
-                                color: Colors.grey.shade800,
+                                color: _dkText(context, Colors.grey.shade800),
                               ),
                             ),
                           ),
@@ -10390,7 +10460,7 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
                         style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
-                            color: Colors.grey.shade800)),
+                            color: _dkText(context, Colors.grey.shade800))),
                     const SizedBox(height: 8),
                     RadioListTile<bool>(
                       value: false,
@@ -10425,7 +10495,7 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
                       Text(
                         'Carrega usuários do Firestore em lotes; marque um ou vários. Combine com e-mail/UID abaixo, se precisar.',
                         style: TextStyle(
-                            fontSize: 11, color: Colors.grey.shade600),
+                            fontSize: 11, color: AdminUi.apoioOf(context)),
                       ),
                       const SizedBox(height: 12),
                       Row(
@@ -10499,7 +10569,7 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
                             style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.grey.shade700),
+                                color: _dkSub(context, Colors.grey.shade700)),
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -10656,7 +10726,8 @@ class _ManutencaoTabContentState extends State<_ManutencaoTabContent> {
                             : 'Enviar e-mails (link do site)'),
                         style: FilledButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 14),
-                          foregroundColor: AppColors.deepBlueDark,
+                          foregroundColor:
+                              _dkText(context, AppColors.deepBlueDark),
                         ),
                       ),
                     ),
@@ -11038,7 +11109,7 @@ class _EmailConfigTabContentState extends State<_EmailConfigTabContent> {
           elevation: 0,
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(14),
-              side: BorderSide(color: Colors.grey.shade200)),
+              side: BorderSide(color: AdminUi.bordaOf(context))),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -11048,7 +11119,7 @@ class _EmailConfigTabContentState extends State<_EmailConfigTabContent> {
                     style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
-                        color: Colors.grey.shade800)),
+                        color: _dkText(context, Colors.grey.shade800))),
                 const SizedBox(height: 6),
                 FastTextField(
                   controller: _userCtrl,
@@ -11067,7 +11138,7 @@ class _EmailConfigTabContentState extends State<_EmailConfigTabContent> {
                     style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
-                        color: Colors.grey.shade800)),
+                        color: _dkText(context, Colors.grey.shade800))),
                 const SizedBox(height: 6),
                 FastTextField(
                   controller: _appPasswordCtrl,
@@ -11084,7 +11155,7 @@ class _EmailConfigTabContentState extends State<_EmailConfigTabContent> {
                 const SizedBox(height: 12),
                 Text(
                   'Gmail → Conta Google → Segurança → Verificação em 2 etapas (ative) → Senhas de app → Gerar nova. Cole a senha de 16 caracteres; espaços são removidos ao salvar.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 12, color: AdminUi.apoioOf(context)),
                 ),
                 const SizedBox(height: 20),
                 SizedBox(
@@ -11120,7 +11191,7 @@ class _EmailConfigTabContentState extends State<_EmailConfigTabContent> {
                 const SizedBox(height: 6),
                 Text(
                   'Apenas teste de entrega: o e-mail chega como "redefinição de senha" de propósito. Os clientes recebem lembretes financeiros, de agenda e avisos de licença (enviados pelo Gmail acima).',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 12, color: AdminUi.apoioOf(context)),
                 ),
                 const SizedBox(height: 10),
                 OutlinedButton.icon(
@@ -11143,7 +11214,7 @@ class _EmailConfigTabContentState extends State<_EmailConfigTabContent> {
                 const SizedBox(height: 4),
                 Text(
                   'Usa o mesmo envio dos lembretes automáticos. Preencha Gmail + senha de app e salve antes.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 12, color: AdminUi.apoioOf(context)),
                 ),
                 const SizedBox(height: 20),
                 OutlinedButton.icon(
@@ -11163,7 +11234,7 @@ class _EmailConfigTabContentState extends State<_EmailConfigTabContent> {
                 const SizedBox(height: 6),
                 Text(
                   'Envia e-mail e push de lembretes financeiros e de agenda a partir de hoje para usuários que ainda não foram notificados.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 12, color: AdminUi.apoioOf(context)),
                 ),
               ],
             ),
@@ -11405,7 +11476,7 @@ class _LojasTabContentState extends State<_LojasTabContent> {
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: Colors.grey.shade200),
+            side: BorderSide(color: AdminUi.bordaOf(context)),
           ),
           child: Padding(
             padding: const EdgeInsets.all(20),
@@ -11427,7 +11498,7 @@ class _LojasTabContentState extends State<_LojasTabContent> {
                   '2. Envie o arquivo abaixo\n'
                   '3. Clique em "Enviar para Play Store"',
                   style: TextStyle(
-                      fontSize: 13, color: Colors.grey.shade700, height: 1.5),
+                      fontSize: 13, color: _dkSub(context, Colors.grey.shade700), height: 1.5),
                 ),
                 const SizedBox(height: 16),
                 if (_aabStoragePath != null)
@@ -11485,20 +11556,21 @@ class _LojasTabContentState extends State<_LojasTabContent> {
                 ),
                 const SizedBox(height: 20),
                 // Testar no celular antes de publicar (só admin)
-                Divider(height: 1, color: Colors.grey.shade300),
+                Divider(
+                    height: 1, color: _dkBorder(context, Colors.grey.shade300)),
                 const SizedBox(height: 12),
                 Text(
                   'Testar no celular antes de publicar',
                   style: TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 14,
-                      color: Colors.grey.shade800),
+                      color: _dkText(context, Colors.grey.shade800)),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   'Envie um APK (flutter build apk) e baixe aqui para instalar no celular como na Play Store.',
                   style: TextStyle(
-                      fontSize: 12, color: Colors.grey.shade600, height: 1.4),
+                      fontSize: 12, color: AdminUi.apoioOf(context), height: 1.4),
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -11539,25 +11611,26 @@ class _LojasTabContentState extends State<_LojasTabContent> {
                         const SizedBox(width: 6),
                         Text('APK disponível para download.',
                             style: TextStyle(
-                                fontSize: 12, color: Colors.grey.shade700)),
+                                fontSize: 12, color: _dkSub(context, Colors.grey.shade700))),
                       ],
                     ),
                   ),
                 const SizedBox(height: 14),
-                Divider(height: 1, color: Colors.grey.shade300),
+                Divider(
+                    height: 1, color: _dkBorder(context, Colors.grey.shade300)),
                 const SizedBox(height: 10),
                 Text(
                   'Ou baixe o APK na pasta do Google Drive',
                   style: TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 13,
-                      color: Colors.grey.shade800),
+                      color: _dkText(context, Colors.grey.shade800)),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   'O arquivo pode ser enviado para a pasta APK_ANDROID no Drive e baixado por este link.',
                   style: TextStyle(
-                      fontSize: 12, color: Colors.grey.shade600, height: 1.3),
+                      fontSize: 12, color: AdminUi.apoioOf(context), height: 1.3),
                 ),
                 const SizedBox(height: 10),
                 FilledButton.icon(
@@ -11611,7 +11684,7 @@ class _LojasTabContentState extends State<_LojasTabContent> {
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: Colors.grey.shade200),
+            side: BorderSide(color: AdminUi.bordaOf(context)),
           ),
           child: Padding(
             padding: const EdgeInsets.all(20),
@@ -11620,7 +11693,7 @@ class _LojasTabContentState extends State<_LojasTabContent> {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.apple, color: Colors.grey.shade800, size: 28),
+                    Icon(Icons.apple, color: _dkText(context, Colors.grey.shade800), size: 28),
                     const SizedBox(width: 10),
                     const Text('Apple App Store',
                         style: TextStyle(
@@ -11632,7 +11705,7 @@ class _LojasTabContentState extends State<_LojasTabContent> {
                   'O build iOS requer Mac com Xcode. Use Codemagic, GitHub Actions (macOS) ou Xcode local.\n'
                   'Após gerar o IPA, envie pelo Transporter ou App Store Connect.',
                   style: TextStyle(
-                      fontSize: 13, color: Colors.grey.shade700, height: 1.5),
+                      fontSize: 13, color: _dkSub(context, Colors.grey.shade700), height: 1.5),
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
@@ -11838,7 +11911,7 @@ class _DriveBackupTabContentState extends State<_DriveBackupTabContent> {
           elevation: 0,
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
-              side: BorderSide(color: Colors.grey.shade200)),
+              side: BorderSide(color: AdminUi.bordaOf(context))),
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
@@ -11880,7 +11953,7 @@ class _DriveBackupTabContentState extends State<_DriveBackupTabContent> {
             elevation: 0,
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
-                side: BorderSide(color: Colors.grey.shade200)),
+                side: BorderSide(color: AdminUi.bordaOf(context))),
             child: Padding(
               padding: const EdgeInsets.all(24),
               child: Center(
@@ -11888,15 +11961,17 @@ class _DriveBackupTabContentState extends State<_DriveBackupTabContent> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(Icons.folder_off_rounded,
-                        size: 48, color: Colors.grey.shade400),
+                        size: 48,
+                        color: _dkMuted(context, Colors.grey.shade400)),
                     const SizedBox(height: 12),
                     Text('Nenhum backup encontrado.',
-                        style: TextStyle(color: Colors.grey.shade600)),
+                        style: TextStyle(color: AdminUi.apoioOf(context))),
                     const SizedBox(height: 8),
                     Text(
                         'Clique em "Criar backup agora" para gerar o primeiro.',
                         style: TextStyle(
-                            fontSize: 12, color: Colors.grey.shade500)),
+                            fontSize: 12,
+                            color: _dkMuted(context, Colors.grey.shade500))),
                   ],
                 ),
               ),
@@ -11920,9 +11995,9 @@ class _DriveBackupTabContentState extends State<_DriveBackupTabContent> {
                 margin: const EdgeInsets.only(bottom: 10),
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: AdminUi.cardOf(context),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade200),
+                  border: Border.all(color: AdminUi.bordaOf(context)),
                   boxShadow: [
                     BoxShadow(
                         color: Colors.black.withValues(alpha: 0.04),
@@ -11951,7 +12026,7 @@ class _DriveBackupTabContentState extends State<_DriveBackupTabContent> {
                                   const TextStyle(fontWeight: FontWeight.w700)),
                           Text(sizeStr,
                               style: TextStyle(
-                                  fontSize: 12, color: Colors.grey.shade600)),
+                                  fontSize: 12, color: AdminUi.apoioOf(context))),
                         ],
                       ),
                     ),
@@ -12370,9 +12445,9 @@ class _AdminInactiveUsersPanelState extends State<_AdminInactiveUsersPanel> {
         return Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: AdminUi.cardOf(context),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Colors.grey.shade200),
+            border: Border.all(color: AdminUi.bordaOf(context)),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.04),
@@ -12391,7 +12466,7 @@ class _AdminInactiveUsersPanelState extends State<_AdminInactiveUsersPanel> {
               const SizedBox(height: 4),
               Text(
                 'Base com até 5.000 usuários e movimentações de transações dos últimos 90 dias.',
-                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                style: TextStyle(fontSize: 11, color: AdminUi.apoioOf(context)),
               ),
               const SizedBox(height: 12),
               Row(
@@ -12409,9 +12484,11 @@ class _AdminInactiveUsersPanelState extends State<_AdminInactiveUsersPanel> {
                         child: Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF8FAFC),
+                            color: context.appChipIdleBg,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFFCBD5E1)),
+                            border: Border.all(
+                                color: _dkBorder(
+                                    context, const Color(0xFFCBD5E1))),
                           ),
                           child: Column(
                             children: [
@@ -12701,9 +12778,9 @@ class _UltimasTransacoesTable extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AdminUi.cardOf(context),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: AdminUi.bordaOf(context)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
@@ -12723,7 +12800,7 @@ class _UltimasTransacoesTable extends StatelessWidget {
                 Row(
                   children: [
                     Icon(Icons.receipt_long_rounded,
-                        size: 20, color: Colors.grey.shade700),
+                        size: 20, color: _dkSub(context, Colors.grey.shade700)),
                     const SizedBox(width: 8),
                     const Text('Últimas Transações',
                         style: TextStyle(
@@ -12743,11 +12820,12 @@ class _UltimasTransacoesTable extends StatelessWidget {
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: DataTable(
-              headingRowColor: WidgetStatePropertyAll(Colors.grey.shade100),
+              headingRowColor: WidgetStatePropertyAll(
+                  _dkFill(context, Colors.grey.shade100)),
               headingTextStyle: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: Colors.grey.shade700,
+                color: _dkSub(context, Colors.grey.shade700),
                 letterSpacing: 0.5,
               ),
               columns: const [
@@ -12764,7 +12842,7 @@ class _UltimasTransacoesTable extends StatelessWidget {
                       DataRow(cells: [
                         DataCell(Text('Nenhuma transação recente',
                             style: TextStyle(
-                                fontSize: 13, color: Colors.grey.shade600))),
+                                fontSize: 13, color: AdminUi.apoioOf(context)))),
                         const DataCell(SizedBox.shrink()),
                         const DataCell(SizedBox.shrink()),
                         const DataCell(SizedBox.shrink()),
@@ -12853,12 +12931,12 @@ class _UltimasTransacoesTable extends StatelessWidget {
                                         ? Icons.account_balance_wallet_rounded
                                         : Icons.credit_card_rounded,
                                     size: 16,
-                                    color: Colors.grey.shade600),
+                                    color: AdminUi.apoioOf(context)),
                                 const SizedBox(width: 6),
                                 Text(method.toUpperCase(),
                                     style: TextStyle(
                                         fontSize: 12,
-                                        color: Colors.grey.shade700)),
+                                        color: _dkSub(context, Colors.grey.shade700))),
                               ],
                             ),
                           ),
@@ -12871,7 +12949,7 @@ class _UltimasTransacoesTable extends StatelessWidget {
                                   color: AppColors.success))),
                           DataCell(Text(dtStr,
                               style: TextStyle(
-                                  fontSize: 11, color: Colors.grey.shade600))),
+                                  fontSize: 11, color: AdminUi.apoioOf(context)))),
                           DataCell(
                             semDados && paymentId.isNotEmpty
                                 ? TextButton.icon(
