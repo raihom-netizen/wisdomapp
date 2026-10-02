@@ -128,7 +128,9 @@ class _PluggyConnectWebViewScreenState extends State<PluggyConnectWebViewScreen>
           if (_error != null)
             MaterialBanner(
               content: Text(_error!),
-              backgroundColor: Colors.red.shade50,
+              backgroundColor: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.red.withValues(alpha: 0.18)
+                  : Colors.red.shade50,
               actions: [
                 TextButton(onPressed: () => setState(() => _error = null), child: const Text('OK')),
               ],

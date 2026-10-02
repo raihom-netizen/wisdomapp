@@ -37,10 +37,10 @@ Future<bool> showConfirmDeleteFinanceAccountDialog(
       title: Text(
         'Excluir «$name»?',
         textAlign: TextAlign.center,
-        style: const TextStyle(
+        style: TextStyle(
           fontWeight: FontWeight.w900,
           fontSize: 18,
-          color: Color(0xFF991B1B),
+          color: ctx.isDarkMode ? const Color(0xFFFCA5A5) : const Color(0xFF991B1B),
         ),
       ),
       content: Column(
@@ -72,8 +72,9 @@ Future<bool> showConfirmDeleteFinanceAccountDialog(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.sync_disabled_rounded,
-                      size: 20, color: Color(0xFFB45309)),
+                  Icon(Icons.sync_disabled_rounded,
+                      size: 20,
+                      color: ctx.isDarkMode ? const Color(0xFFFBBF24) : const Color(0xFFB45309)),
                   SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -82,11 +83,11 @@ Future<bool> showConfirmDeleteFinanceAccountDialog(
                       'contas desse banco que você manteve continuam. Se não sobrar '
                       'nenhuma conta dele, a integração com o banco é cancelada '
                       'automaticamente.',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         height: 1.35,
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFFB45309),
+                        color: ctx.isDarkMode ? const Color(0xFFFBBF24) : const Color(0xFFB45309),
                       ),
                     ),
                   ),

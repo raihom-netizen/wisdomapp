@@ -14,6 +14,7 @@ import '../services/finance_transfer_service.dart';
 import '../services/functions_service.dart';
 import '../services/logs_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../screens/anexo_viewer_screen.dart';
 import '../utils/firestore_user_doc_id.dart';
 import '../utils/receipt_attachment_utils.dart';
@@ -178,9 +179,9 @@ class _FinanceTransferPageState extends State<_FinanceTransferPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
+        Text(
           'Comprovante (JPEG, PNG ou PDF)',
-          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: Color(0xFF1A237E)),
+          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: context.appDeepTitle),
         ),
         const SizedBox(height: 8),
         Material(
@@ -191,10 +192,10 @@ class _FinanceTransferPageState extends State<_FinanceTransferPage> {
             child: Ink(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: context.isDarkMode ? context.appSurface : Colors.white,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: _hasReceipt ? AppColors.primary.withValues(alpha: 0.45) : const Color(0xFFE2E8F0),
+                  color: _hasReceipt ? AppColors.primary.withValues(alpha: 0.45) : context.appChipIdleBorder,
                   width: 1.5,
                 ),
               ),
@@ -212,7 +213,7 @@ class _FinanceTransferPageState extends State<_FinanceTransferPage> {
                       style: TextStyle(
                         fontWeight: _hasReceipt ? FontWeight.w700 : FontWeight.w600,
                         fontSize: 13.5,
-                        color: _hasReceipt ? AppColors.textPrimary : AppColors.textSecondary,
+                        color: _hasReceipt ? context.appTextPrimary : context.appTextSecondary,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -227,7 +228,8 @@ class _FinanceTransferPageState extends State<_FinanceTransferPage> {
                         _receiptName = '';
                         _receiptMime = null;
                       }),
-                      icon: Icon(Icons.close_rounded, color: Colors.grey.shade600),
+                      icon: Icon(Icons.close_rounded,
+                          color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600),
                     ),
                 ],
               ),
@@ -256,7 +258,7 @@ class _FinanceTransferPageState extends State<_FinanceTransferPage> {
           margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
           padding: EdgeInsets.only(bottom: bottom),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: ctx.isDarkMode ? ctx.appSurface : Colors.white,
             borderRadius: BorderRadius.circular(22),
             boxShadow: [
               BoxShadow(
@@ -285,7 +287,7 @@ class _FinanceTransferPageState extends State<_FinanceTransferPage> {
                     return ListTile(
                       leading: _TransferAccountThumb(account: a),
                       title: Text(a.displayName, style: const TextStyle(fontWeight: FontWeight.w800)),
-                      subtitle: Text(vis.badgeLabel, style: TextStyle(fontSize: 12, color: vis.isCreditCardStyle ? const Color(0xFF4F46E5) : AppColors.textMuted)),
+                      subtitle: Text(vis.badgeLabel, style: TextStyle(fontSize: 12, color: vis.isCreditCardStyle ? const Color(0xFF4F46E5) : ctx.appTextMuted)),
                       trailing: sel ? Icon(Icons.check_circle_rounded, color: AppColors.primary) : null,
                       onTap: () => Navigator.pop(ctx, a.id),
                     );
@@ -333,7 +335,7 @@ class _FinanceTransferPageState extends State<_FinanceTransferPage> {
 
     return Scaffold(
       resizeToAvoidBottomInset: scaffoldKeyboardResizeToAvoidBottomInset(standaloneFullPageForm: true),
-      backgroundColor: const Color(0xFFF1F5F9),
+      backgroundColor: context.isDarkMode ? context.appScaffold : const Color(0xFFF1F5F9),
       appBar: financePremiumGradientAppBar(
         title: 'Transferência',
         onBack: () => Navigator.pop(context),
@@ -351,7 +353,7 @@ class _FinanceTransferPageState extends State<_FinanceTransferPage> {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: Text(
               'Saída na origem e entrada no destino — histórico em ambas as contas.',
-              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.textMuted.withValues(alpha: 0.95), height: 1.35),
+              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: context.appTextMuted.withValues(alpha: 0.95), height: 1.35),
             ),
           ),
           // Valor fixo no topo — não some com o teclado.
@@ -366,7 +368,7 @@ class _FinanceTransferPageState extends State<_FinanceTransferPage> {
                     colors: [
                       AppColors.primary.withValues(alpha: 0.14),
                       AppColors.accent.withValues(alpha: 0.1),
-                      Colors.white,
+                      context.isDarkMode ? context.appSurface : Colors.white,
                     ],
                   ),
                   border: Border.all(color: AppColors.primary.withValues(alpha: 0.28), width: 1.4),
@@ -388,12 +390,12 @@ class _FinanceTransferPageState extends State<_FinanceTransferPage> {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        const Text(
+                        Text(
                           'R\$',
                           style: TextStyle(
                             fontSize: 28,
                             fontWeight: FontWeight.w800,
-                            color: AppColors.textSecondary,
+                            color: context.appTextSecondary,
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -406,14 +408,14 @@ class _FinanceTransferPageState extends State<_FinanceTransferPage> {
                               footerEstimate: 120,
                               standaloneFullPageForm: true,
                             ),
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 32,
                               fontWeight: FontWeight.w900,
-                              color: AppColors.textPrimary,
+                              color: context.appTextPrimary,
                             ),
                             decoration: InputDecoration(
                               filled: true,
-                              fillColor: Colors.white,
+                              fillColor: context.isDarkMode ? context.appInputFill : Colors.white,
                               hintText: '0,00',
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(16),
@@ -504,7 +506,7 @@ class _FinanceTransferPageState extends State<_FinanceTransferPage> {
                     labelText: 'Observação (opcional)',
                     hintText: 'Ex.: resgate, pagamento de cartão',
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: context.isDarkMode ? context.appInputFill : Colors.white,
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
                   ),
                 ),
@@ -596,7 +598,7 @@ class _TransferAccountPickerTile extends StatelessWidget {
         child: Ink(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
-            color: Colors.white,
+            color: context.isDarkMode ? context.appSurface : Colors.white,
             border: Border.all(color: accent.withValues(alpha: 0.28)),
             boxShadow: [BoxShadow(color: accent.withValues(alpha: 0.08), blurRadius: 12, offset: const Offset(0, 4))],
           ),
@@ -619,7 +621,7 @@ class _TransferAccountPickerTile extends StatelessWidget {
                       Text(label, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: accent)),
                       const SizedBox(height: 2),
                       Text(account.displayName, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
-                      Text(vis.badgeLabel, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: vis.isCreditCardStyle ? const Color(0xFF4F46E5) : AppColors.textMuted)),
+                      Text(vis.badgeLabel, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: vis.isCreditCardStyle ? const Color(0xFF4F46E5) : context.appTextMuted)),
                     ],
                   ),
                 ),
@@ -732,7 +734,10 @@ class _FinanceTransferEdit {
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(24),
-                  gradient: const LinearGradient(colors: [Color(0xFFF8FAFC), Colors.white]),
+                  gradient: LinearGradient(
+                      colors: context.isDarkMode
+                          ? [context.appChipIdleBg, context.appSurface]
+                          : const [Color(0xFFF8FAFC), Colors.white]),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -771,9 +776,9 @@ class _FinanceTransferEdit {
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                                const Text(
+                                Text(
                                   'R\$',
-                                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.textSecondary),
+                                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: context.appTextSecondary),
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
@@ -783,7 +788,7 @@ class _FinanceTransferEdit {
                                     decoration: InputDecoration(
                                       labelText: 'Valor',
                                       filled: true,
-                                      fillColor: Colors.white,
+                                      fillColor: context.isDarkMode ? context.appInputFill : Colors.white,
                                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
                                     ),
                                   ),

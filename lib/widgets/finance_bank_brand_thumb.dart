@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../constants/finance_bank_brand_hosts.dart';
 
 import '../constants/finance_bank_presets.dart';
+import '../theme/theme_context.dart';
 
 
 
@@ -52,7 +53,9 @@ class FinanceBankBrandThumb extends StatelessWidget {
 
         size: size * 0.82,
 
-        color: onBrandGradient ? Colors.white : const Color(0xFF475569),
+        color: onBrandGradient
+            ? Colors.white
+            : (context.isDarkMode ? context.appTextSecondary : const Color(0xFF475569)),
 
       );
 

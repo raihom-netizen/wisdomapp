@@ -42,7 +42,7 @@ InputDecoration _fixedFlowPremiumInputDeco(
   Widget? prefixIcon,
 }) {
   const radius = BorderRadius.all(Radius.circular(14));
-  const side = BorderSide(color: Color(0xFFE2E8F0));
+  final side = BorderSide(color: context.appChipIdleBorder);
   return InputDecoration(
     labelText: labelText,
     hintText: hintText,
@@ -50,9 +50,9 @@ InputDecoration _fixedFlowPremiumInputDeco(
     filled: true,
     fillColor: context.appInputFill,
     isDense: true,
-    border: const OutlineInputBorder(borderRadius: radius, borderSide: side),
+    border: OutlineInputBorder(borderRadius: radius, borderSide: side),
     enabledBorder:
-        const OutlineInputBorder(borderRadius: radius, borderSide: side),
+        OutlineInputBorder(borderRadius: radius, borderSide: side),
     focusedBorder: OutlineInputBorder(
         borderRadius: radius,
         borderSide: BorderSide(color: AppColors.primary, width: 2)),
@@ -63,15 +63,15 @@ InputDecoration _fixedFlowPremiumInputDeco(
 InputDecoration _fixedFlowPremiumDropdownDeco(BuildContext context,
     {required Widget prefixIcon}) {
   const radius = BorderRadius.all(Radius.circular(14));
-  const side = BorderSide(color: Color(0xFFE2E8F0));
+  final side = BorderSide(color: context.appChipIdleBorder);
   return InputDecoration(
     filled: true,
     fillColor: context.appInputFill,
     isDense: true,
     floatingLabelBehavior: FloatingLabelBehavior.never,
-    border: const OutlineInputBorder(borderRadius: radius, borderSide: side),
+    border: OutlineInputBorder(borderRadius: radius, borderSide: side),
     enabledBorder:
-        const OutlineInputBorder(borderRadius: radius, borderSide: side),
+        OutlineInputBorder(borderRadius: radius, borderSide: side),
     focusedBorder: OutlineInputBorder(
         borderRadius: radius,
         borderSide: BorderSide(color: AppColors.primary, width: 2)),

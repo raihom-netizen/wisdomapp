@@ -10,6 +10,7 @@ import '../constants/open_finance_br_institutions.dart';
 import '../services/bank_connection_manager.dart';
 import '../services/pluggy_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../widgets/open_finance_entitlement_guard.dart';
 import '../widgets/premium_pro_value_copy.dart';
 import '../utils/debounced_text_controller.dart';
@@ -211,7 +212,7 @@ class _BankConnectionScreenState extends State<BankConnectionScreen> {
                               style: TextStyle(
                                 fontWeight: FontWeight.w800,
                                 fontSize: 15,
-                                color: AppColors.textPrimary,
+                                color: context.appTextPrimary,
                               ),
                             ),
                           ),
@@ -224,21 +225,25 @@ class _BankConnectionScreenState extends State<BankConnectionScreen> {
                         style: TextStyle(
                           fontSize: 13,
                           height: 1.45,
-                          color: AppColors.textSecondary,
+                          color: context.appTextSecondary,
                         ),
                       ),
                       const SizedBox(height: 14),
                       const PremiumProDiferencialChips(),
                       const SizedBox(height: 12),
                       Material(
-                        color: Colors.amber.shade50,
+                        color: context.isDarkMode
+                            ? Colors.amber.withValues(alpha: 0.16)
+                            : Colors.amber.shade50,
                         borderRadius: BorderRadius.circular(12),
                         child: Padding(
                           padding: const EdgeInsets.all(12),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Icon(Icons.info_outline_rounded, color: Colors.amber.shade900, size: 22),
+                              Icon(Icons.info_outline_rounded,
+                                  color: context.isDarkMode ? Colors.amber.shade200 : Colors.amber.shade900,
+                                  size: 22),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
@@ -246,7 +251,7 @@ class _BankConnectionScreenState extends State<BankConnectionScreen> {
                                   style: TextStyle(
                                     fontSize: 12.5,
                                     height: 1.4,
-                                    color: Colors.brown.shade900,
+                                    color: context.isDarkMode ? Colors.amber.shade100 : Colors.brown.shade900,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
@@ -277,7 +282,7 @@ class _BankConnectionScreenState extends State<BankConnectionScreen> {
                   hintText: 'Ex.: Nubank, Itaú, Caixa…',
                   prefixIcon: const Icon(Icons.search_rounded),
                   filled: true,
-                  fillColor: Colors.white,
+                  fillColor: context.isDarkMode ? context.appInputFill : Colors.white,
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
                 ),
               ),
@@ -285,7 +290,7 @@ class _BankConnectionScreenState extends State<BankConnectionScreen> {
               Text(
                 'A cobertura real depende do agregador (Pluggy, Belvo, etc.): na prática a maioria dos bancos '
                 'usados no Brasil fica disponível. Com a busca vazia, os mais populares aparecem primeiro.',
-                style: TextStyle(fontSize: 11, color: AppColors.textMuted, height: 1.35),
+                style: TextStyle(fontSize: 11, color: context.appTextMuted, height: 1.35),
               ),
               const SizedBox(height: 12),
               Text(
@@ -293,7 +298,7 @@ class _BankConnectionScreenState extends State<BankConnectionScreen> {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.textMuted,
+                  color: context.appTextMuted,
                   letterSpacing: 0.4,
                 ),
               ),
@@ -304,7 +309,7 @@ class _BankConnectionScreenState extends State<BankConnectionScreen> {
                   child: Text(
                     'Nenhum banco encontrado. Tente outro nome.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: AppColors.textSecondary),
+                    style: TextStyle(color: context.appTextSecondary),
                   ),
                 )
               else
@@ -314,7 +319,8 @@ class _BankConnectionScreenState extends State<BankConnectionScreen> {
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(color: Colors.grey.shade200),
+                      side: BorderSide(
+                          color: context.isDarkMode ? context.appChipIdleBorder : Colors.grey.shade200),
                     ),
                     child: ListTile(
                       leading: CircleAvatar(
@@ -338,7 +344,7 @@ class _BankConnectionScreenState extends State<BankConnectionScreen> {
           Positioned.fill(
             child: AbsorbPointer(
               child: ColoredBox(
-                color: Colors.white.withValues(alpha: 0.6),
+                color: (context.isDarkMode ? context.appScaffold : Colors.white).withValues(alpha: 0.6),
                 child: const Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -384,7 +390,7 @@ class _PluggyConsentSheet extends StatelessWidget {
                   height: 4,
                   margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
+                    color: context.isDarkMode ? context.appChipIdleBorder : Colors.grey.shade300,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -397,7 +403,7 @@ class _PluggyConsentSheet extends StatelessWidget {
               Text(
                 'Próximo passo: abrir o fluxo oficial Pluggy Connect (Open Finance) numa janela segura. '
                 'Faça login e autorize o compartilhamento diretamente no ambiente do banco.',
-                style: TextStyle(fontSize: 14, height: 1.45, color: AppColors.textSecondary),
+                style: TextStyle(fontSize: 14, height: 1.45, color: context.appTextSecondary),
               ),
               const SizedBox(height: 16),
               const Text('Dados que você pode autorizar:', style: TextStyle(fontWeight: FontWeight.w700)),

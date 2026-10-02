@@ -7,6 +7,7 @@ import '../constants/spotlight_banks.dart';
 import '../models/user_profile.dart';
 import '../services/mp_checkout_pricing_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../utils/debounced_text_controller.dart';
 import 'escolha_plano_page.dart';
 
@@ -78,7 +79,7 @@ class _SupportedBanksPageState extends State<SupportedBanksPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F4FA),
+      backgroundColor: context.isDarkMode ? context.appScaffold : const Color(0xFFF0F4FA),
       appBar: AppBar(
         title: const Text('Bancos suportados'),
         backgroundColor: const Color(0xFF0F172A),
@@ -97,7 +98,7 @@ class _SupportedBanksPageState extends State<SupportedBanksPage> {
                 child: Material(
                   elevation: 0,
                   borderRadius: BorderRadius.circular(16),
-                  color: Colors.white,
+                  color: context.isDarkMode ? context.appSurface : Colors.white,
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -108,7 +109,9 @@ class _SupportedBanksPageState extends State<SupportedBanksPage> {
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w800,
-                            color: Colors.blueGrey.shade800,
+                            color: context.isDarkMode
+                                ? context.appTextSecondary
+                                : Colors.blueGrey.shade800,
                             letterSpacing: 0.3,
                           ),
                         ),
@@ -123,7 +126,7 @@ class _SupportedBanksPageState extends State<SupportedBanksPage> {
                           'Ou ${p.premiumAnnualLine} (${p.premiumAnnualEquivPerMonthLine} em média)',
                           style: TextStyle(
                               fontSize: 12.5,
-                              color: AppColors.textSecondary,
+                              color: context.appTextSecondary,
                               height: 1.35),
                         ),
                         const SizedBox(height: 8),
@@ -131,7 +134,7 @@ class _SupportedBanksPageState extends State<SupportedBanksPage> {
                           'A lista abaixo é só de referência. O app não abre novas ligações automáticas a bancos; use lançamentos manuais no Premium.',
                           style: TextStyle(
                               fontSize: 12,
-                              color: AppColors.textSecondary,
+                              color: context.appTextSecondary,
                               height: 1.35),
                         ),
                       ],
@@ -144,7 +147,7 @@ class _SupportedBanksPageState extends State<SupportedBanksPage> {
                 child: Material(
                   elevation: 0,
                   borderRadius: BorderRadius.circular(16),
-                  color: Colors.white,
+                  color: context.isDarkMode ? context.appSurface : Colors.white,
                   child: Padding(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -191,7 +194,7 @@ class _SupportedBanksPageState extends State<SupportedBanksPage> {
                             'Nenhum banco encontrado para "${_searchCtrl.text}".',
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                                color: AppColors.textSecondary, height: 1.4),
+                                color: context.appTextSecondary, height: 1.4),
                           ),
                         ),
                       )
@@ -215,7 +218,7 @@ class _SupportedBanksPageState extends State<SupportedBanksPage> {
         },
       ),
       bottomNavigationBar: Material(
-        color: Colors.white,
+        color: context.isDarkMode ? context.appSurface : Colors.white,
         elevation: 8,
         child: SafeArea(
           child: Padding(
@@ -247,7 +250,7 @@ class _BankBrandTile extends StatelessWidget {
     return Material(
       elevation: 0,
       borderRadius: BorderRadius.circular(16),
-      color: Colors.white,
+      color: context.isDarkMode ? context.appSurface : Colors.white,
       shadowColor: Colors.black12,
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -287,7 +290,7 @@ class _BankBrandTile extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w800,
-                      color: AppColors.textMuted,
+                      color: context.appTextMuted,
                     ),
                   ),
                 ],
@@ -305,7 +308,7 @@ class _BankBrandTile extends StatelessWidget {
                 'Logo offline · sem rede',
                 style: TextStyle(
                     fontSize: 10,
-                    color: AppColors.textMuted,
+                    color: context.appTextMuted,
                     fontWeight: FontWeight.w600),
               ),
             ],

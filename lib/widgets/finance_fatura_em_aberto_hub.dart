@@ -146,7 +146,7 @@ class _FinanceFaturaCardPickerSheet extends StatelessWidget {
       expand: false,
       builder: (context, scrollController) {
         return Container(
-          decoration: financePremiumSheetDecoration(surfaceTint: purple),
+          decoration: financePremiumSheetDecoration(surfaceTint: purple, context: context),
           child: Column(
             children: [
               FinancePremiumSheetHeader(

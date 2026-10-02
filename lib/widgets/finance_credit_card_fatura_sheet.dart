@@ -12,6 +12,7 @@ import '../constants/finance_category_visuals.dart';
 import '../models/finance_account.dart';
 import '../models/user_profile.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import 'finance_transaction_sort_bar.dart';
 import '../utils/finance_account_balance_utils.dart';
 import '../utils/finance_fatura_transaction_sort.dart';
@@ -459,9 +460,9 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
           child: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: context.isDarkMode ? context.appSurface : Colors.white,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
+              border: Border.all(color: context.appChipIdleBorder),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -549,7 +550,9 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
                   selectedColor: accent.withValues(alpha: 0.18),
                   labelStyle: TextStyle(
                     fontWeight: FontWeight.w800,
-                    color: _periodMode == label ? accent : AppColors.textSecondary,
+                    color: _periodMode == label
+                        ? (context.isDarkMode ? const Color(0xFFA5B4FC) : accent)
+                        : context.appTextSecondary,
                   ),
                   side: BorderSide(
                     color: accent.withValues(alpha: _periodMode == label ? 0.85 : 0.28),
@@ -628,7 +631,7 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
         Container(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.isDarkMode ? context.appSurface : Colors.white,
             borderRadius: BorderRadius.circular(18),
             border: Border.all(color: AppColors.primary.withValues(alpha: 0.1)),
             boxShadow: [
@@ -656,11 +659,17 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: Color(0xFF0F172A)),
+                      style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 15,
+                          color: context.isDarkMode ? context.appTextPrimary : const Color(0xFF0F172A)),
                     ),
                     Text(
                       '${entries.length} categoria(s) · ${CurrencyFormats.formatBRL(totalFatura)} no total',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600,
+                          fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
@@ -690,9 +699,9 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.isDarkMode ? context.appSurface : Colors.white,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
+            border: Border.all(color: context.appChipIdleBorder),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.03),
@@ -706,7 +715,10 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
             children: [
               Text(
                 'Detalhe por categoria',
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: Colors.grey.shade800),
+                style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14,
+                    color: context.isDarkMode ? context.appTextPrimary : Colors.grey.shade800),
               ),
               const SizedBox(height: 10),
               ...entries.map((e) {
@@ -736,7 +748,7 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
                               child: LinearProgressIndicator(
                                 value: ratio,
                                 minHeight: 6,
-                                backgroundColor: const Color(0xFFF1F5F9),
+                                backgroundColor: context.appInputFill,
                                 color: vis.color,
                               ),
                             ),
@@ -756,7 +768,7 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
                                   CurrencyFormats.formatPercentBr(share),
                                   style: TextStyle(
                                     fontSize: 11,
-                                    color: Colors.grey.shade600,
+                                    color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
@@ -828,8 +840,10 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
         style: ButtonStyle(
           visualDensity: VisualDensity.compact,
           foregroundColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.selected)) return accent;
-            return AppColors.textSecondary;
+            if (states.contains(WidgetState.selected)) {
+              return context.isDarkMode ? const Color(0xFFA5B4FC) : accent;
+            }
+            return context.appTextSecondary;
           }),
         ),
       ),
@@ -841,9 +855,9 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.isDarkMode ? context.appSurface : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: context.appChipIdleBorder),
       ),
       child: Row(
         children: [
@@ -894,7 +908,7 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
               style: TextStyle(
                 fontWeight: FontWeight.w900,
                 fontSize: 15,
-                color: Colors.grey.shade900,
+                color: context.isDarkMode ? context.appTextPrimary : Colors.grey.shade900,
               ),
             ),
           ),
@@ -951,10 +965,10 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
                 Flexible(
                   child: Text(
                     label,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary,
+                      color: context.appTextPrimary,
                       letterSpacing: 0.2,
                     ),
                   ),
@@ -1167,7 +1181,7 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.isDarkMode ? context.appSurface : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.primary.withValues(alpha: 0.12)),
         boxShadow: [
@@ -1191,7 +1205,7 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
-                    color: Colors.grey.shade800,
+                    color: context.isDarkMode ? context.appTextPrimary : Colors.grey.shade800,
                   ),
                 ),
               ),
@@ -1269,7 +1283,10 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
           ] else ...[
             Text(
               'Toque para editar · confirme pagamento no item · use Selecionar para pagar ou excluir em lote.',
-              style: TextStyle(fontSize: 11.5, height: 1.35, color: Colors.grey.shade600),
+              style: TextStyle(
+                  fontSize: 11.5,
+                  height: 1.35,
+                  color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600),
             ),
           ],
         ],
@@ -1288,7 +1305,7 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: Colors.grey.shade700,
+            color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
           ),
         ),
       ),
@@ -1354,15 +1371,15 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.isDarkMode ? context.appSurface : Colors.white,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
+            border: Border.all(color: context.appChipIdleBorder),
           ),
           child: Text(
             'Nenhum lançamento nesta aba para os filtros atuais.',
             style: TextStyle(
               fontSize: 13,
-              color: Colors.grey.shade600,
+              color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -1384,7 +1401,7 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
     return Container(
       padding: EdgeInsets.fromLTRB(20, 12, 20, footerPad),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.isDarkMode ? context.appSurface : Colors.white,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.08),
@@ -1407,7 +1424,7 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade600,
+                        color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600,
                       ),
                     ),
                     Text(
@@ -1420,7 +1437,9 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
                     ),
                     Text(
                       '$selectedCount lançamento(s)',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600),
                     ),
                   ],
                 ),
@@ -1465,7 +1484,10 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
           Text(
             'Filtros só neste preview — ao voltar, a lista principal não muda.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 11, height: 1.3, color: Colors.grey.shade600),
+            style: TextStyle(
+                fontSize: 11,
+                height: 1.3,
+                color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600),
           ),
         ],
       ),
@@ -1645,7 +1667,7 @@ class _FinanceCreditCardFaturaSheetState extends State<FinanceCreditCardFaturaSh
         : null;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: context.isDarkMode ? context.appScaffold : Colors.white,
       body: SafeArea(
         child: _buildBody(vis: vis, nextClose: nextClose),
       ),
@@ -1851,7 +1873,7 @@ class _StatusKpiCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.isDarkMode ? context.appSurface : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: color.withValues(alpha: 0.22)),
         boxShadow: [
@@ -1880,7 +1902,10 @@ class _StatusKpiCard extends StatelessWidget {
           ),
           Text(
             '$count lançamento(s)',
-            style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontWeight: FontWeight.w600),
+            style: TextStyle(
+                fontSize: 11,
+                color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600,
+                fontWeight: FontWeight.w600),
           ),
         ],
       ),

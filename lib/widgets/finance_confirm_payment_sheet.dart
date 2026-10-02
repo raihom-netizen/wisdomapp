@@ -852,10 +852,12 @@ Future<FinanceConfirmPaymentSheetResult?> showFinanceConfirmPaymentBatchSheet({
                                 children: [
                                   Text(
                                     'Pagamento em ${DateFormat('dd/MM/yyyy').format(payDay)}',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontWeight: FontWeight.w900,
                                       fontSize: 13,
-                                      color: Color(0xFF312E81),
+                                      color: context.isDarkMode
+                                          ? const Color(0xFFA5B4FC)
+                                          : const Color(0xFF312E81),
                                     ),
                                   ),
                                   SizedBox(height: 8),

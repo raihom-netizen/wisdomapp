@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 
 /// Grupo informativo (Open Finance / agregadores — cobertura típica no Brasil).
 class OpenFinanceCoverageGroup {
@@ -94,7 +95,7 @@ class OpenFinanceCoverageScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
+      backgroundColor: context.isDarkMode ? context.appScaffold : const Color(0xFFF1F5F9),
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
@@ -196,7 +197,7 @@ class _PopularStrip extends StatelessWidget {
             const SizedBox(height: 10),
             Text(
               'Aparecem primeiro também na busca de conexão do app.',
-              style: TextStyle(fontSize: 12, color: AppColors.textMuted, height: 1.3),
+              style: TextStyle(fontSize: 12, color: context.appTextMuted, height: 1.3),
             ),
             const SizedBox(height: 12),
             Wrap(
@@ -226,7 +227,9 @@ class _InfoProCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       elevation: 0,
-      color: const Color(0xFFECFDF5),
+      color: context.isDarkMode
+          ? context.appAccentSurface(AppColors.success)
+          : const Color(0xFFECFDF5),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
         side: BorderSide(color: AppColors.success.withValues(alpha: 0.35)),
@@ -240,10 +243,13 @@ class _InfoProCard extends StatelessWidget {
               children: [
                 Icon(Icons.verified_outlined, color: AppColors.success, size: 24),
                 const SizedBox(width: 10),
-                const Expanded(
+                Expanded(
                   child: Text(
                     'O que o app pode mostrar (referência)',
-                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: Color(0xFF065F46)),
+                    style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 15,
+                        color: context.isDarkMode ? Colors.green.shade200 : const Color(0xFF065F46)),
                   ),
                 ),
               ],
@@ -255,7 +261,10 @@ class _InfoProCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               'Você autoriza só o necessário no ambiente seguro do banco; o app não armazena senha de acesso.',
-              style: TextStyle(fontSize: 12, color: Colors.green.shade900, height: 1.4),
+              style: TextStyle(
+                  fontSize: 12,
+                  color: context.isDarkMode ? Colors.green.shade200 : Colors.green.shade900,
+                  height: 1.4),
             ),
           ],
         ),
@@ -279,7 +288,11 @@ class _InfoProCardBullet extends StatelessWidget {
           Icon(Icons.check_circle_rounded, size: 18, color: Colors.green.shade700),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(text, style: TextStyle(fontSize: 13, height: 1.35, color: Colors.green.shade900)),
+            child: Text(text,
+                style: TextStyle(
+                    fontSize: 13,
+                    height: 1.35,
+                    color: context.isDarkMode ? Colors.green.shade200 : Colors.green.shade900)),
           ),
         ],
       ),
@@ -298,7 +311,7 @@ class _GroupCard extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: Colors.grey.shade200),
+        side: BorderSide(color: context.isDarkMode ? context.appChipIdleBorder : Colors.grey.shade200),
       ),
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -312,7 +325,7 @@ class _GroupCard extends StatelessWidget {
           title: Text(group.title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
           subtitle: Padding(
             padding: const EdgeInsets.only(top: 4),
-            child: Text(group.hint, style: TextStyle(fontSize: 12, color: AppColors.textMuted, height: 1.35)),
+            child: Text(group.hint, style: TextStyle(fontSize: 12, color: context.appTextMuted, height: 1.35)),
           ),
           children: [
             ...group.institutions.map(

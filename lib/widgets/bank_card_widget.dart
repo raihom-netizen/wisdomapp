@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 
 /// Cartão de conta conectada (Open Finance): nome, status, saldo (quando a API existir) e última sync.
 class BankCardWidget extends StatelessWidget {
@@ -28,9 +29,10 @@ class BankCardWidget extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.isDarkMode ? context.appSurface : Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(
+            color: context.isDarkMode ? context.appChipIdleBorder : Colors.grey.shade200),
       ),
       child: Row(
         children: [
@@ -49,7 +51,7 @@ class BankCardWidget extends StatelessWidget {
                   statusLabel,
                   style: TextStyle(
                     fontSize: 12,
-                    color: connected ? AppColors.success : AppColors.textMuted,
+                    color: connected ? AppColors.success : context.appTextMuted,
                   ),
                 ),
                 Text(
@@ -57,7 +59,7 @@ class BankCardWidget extends StatelessWidget {
                     if (bal.isNotEmpty) bal,
                     'Última sincronização: $lastSyncLabel',
                   ].join(' · '),
-                  style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                  style: TextStyle(fontSize: 11, color: context.appTextMuted),
                 ),
               ],
             ),

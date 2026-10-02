@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import '../constants/premium_pro_limits.dart';
 import '../services/biometric_auth_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import '../widgets/bank_card_widget.dart';
 import '../widgets/open_finance_entitlement_guard.dart';
 import '../widgets/pluggy_sync_schedule_banner.dart';
@@ -195,7 +196,7 @@ class _OpenFinanceConnectionsScreenState extends State<OpenFinanceConnectionsScr
                               style: TextStyle(
                                 fontWeight: FontWeight.w800,
                                 fontSize: 16,
-                                color: AppColors.textPrimary,
+                                color: context.appTextPrimary,
                               ),
                             ),
                           ),
@@ -203,7 +204,7 @@ class _OpenFinanceConnectionsScreenState extends State<OpenFinanceConnectionsScr
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: context.isDarkMode ? context.appSurfaceHigh : Colors.white,
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
                               ),
@@ -222,25 +223,31 @@ class _OpenFinanceConnectionsScreenState extends State<OpenFinanceConnectionsScr
                         style: TextStyle(
                           fontSize: 13,
                           height: 1.45,
-                          color: AppColors.textSecondary,
+                          color: context.appTextSecondary,
                         ),
                       ),
                       if (atLimit) ...[
                         const SizedBox(height: 12),
                         Material(
-                          color: Colors.amber.shade50,
+                          color: context.isDarkMode
+                              ? Colors.amber.withValues(alpha: 0.16)
+                              : Colors.amber.shade50,
                           borderRadius: BorderRadius.circular(12),
                           child: Padding(
                             padding: const EdgeInsets.all(12),
                             child: Row(
                               children: [
-                                Icon(Icons.info_outline_rounded, color: Colors.amber.shade900),
+                                Icon(Icons.info_outline_rounded,
+                                    color: context.isDarkMode ? Colors.amber.shade200 : Colors.amber.shade900),
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
                                     'Limite de $included bancos inclusos atingido. Não é possível contratar vagas extra. '
                                     'Remova uma conexão antiga ou use lançamentos manuais no plano Premium. Em dúvida, contacte o suporte.',
-                                    style: TextStyle(fontSize: 12.5, height: 1.35, color: Colors.amber.shade900),
+                                    style: TextStyle(
+                                        fontSize: 12.5,
+                                        height: 1.35,
+                                        color: context.isDarkMode ? Colors.amber.shade200 : Colors.amber.shade900),
                                   ),
                                 ),
                               ],
@@ -297,7 +304,7 @@ class _OpenFinanceConnectionsScreenState extends State<OpenFinanceConnectionsScr
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.textMuted,
+                  color: context.appTextMuted,
                   letterSpacing: 0.5,
                 ),
               ),
@@ -310,7 +317,7 @@ class _OpenFinanceConnectionsScreenState extends State<OpenFinanceConnectionsScr
                     padding: const EdgeInsets.all(20),
                     child: Text(
                       'Nenhuma instituição ainda. Use o botão acima para buscar seu banco e autorizar o acesso.',
-                      style: TextStyle(fontSize: 14, color: AppColors.textSecondary, height: 1.4),
+                      style: TextStyle(fontSize: 14, color: context.appTextSecondary, height: 1.4),
                     ),
                   ),
                 )

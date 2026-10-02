@@ -1470,7 +1470,9 @@ class _AccountEditorSheetState extends State<_AccountEditorSheet> {
                 : null,
             color: hasSelection ? null : context.appChipIdleBg,
             border: Border.all(
-              color: hasSelection ? Colors.transparent : Colors.grey.shade300,
+              color: hasSelection
+                  ? Colors.transparent
+                  : (context.isDarkMode ? context.appChipIdleBorder : Colors.grey.shade300),
               width: hasSelection ? 0 : 1,
             ),
             boxShadow: hasSelection
@@ -1491,7 +1493,7 @@ class _AccountEditorSheetState extends State<_AccountEditorSheet> {
                       )
                     : Container(
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade200,
+                          color: context.isDarkMode ? context.appSurfaceHigh : Colors.grey.shade200,
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(Icons.account_balance_rounded, color: context.appTextSecondary),
@@ -1508,7 +1510,9 @@ class _AccountEditorSheetState extends State<_AccountEditorSheet> {
                       style: TextStyle(
                         fontWeight: FontWeight.w900,
                         fontSize: 16,
-                        color: hasSelection ? Colors.white : const Color(0xFF1E293B),
+                        color: hasSelection
+                            ? Colors.white
+                            : (context.isDarkMode ? context.appTextPrimary : const Color(0xFF1E293B)),
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -1521,7 +1525,7 @@ class _AccountEditorSheetState extends State<_AccountEditorSheet> {
                         fontWeight: FontWeight.w600,
                         color: hasSelection
                             ? Colors.white.withValues(alpha: 0.9)
-                            : AppColors.textMuted,
+                            : context.appTextMuted,
                       ),
                     ),
                   ],
@@ -1529,7 +1533,9 @@ class _AccountEditorSheetState extends State<_AccountEditorSheet> {
               ),
               Icon(
                 Icons.chevron_right_rounded,
-                color: hasSelection ? Colors.white : Colors.grey.shade500,
+                color: hasSelection
+                    ? Colors.white
+                    : (context.isDarkMode ? context.appTextMuted : Colors.grey.shade500),
                 size: 28,
               ),
             ],
@@ -2370,11 +2376,13 @@ class _BankPickerScreenState extends State<_BankPickerScreen> {
                   contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
+                    borderSide: BorderSide(
+                        color: context.isDarkMode ? context.appChipIdleBorder : Colors.grey.shade300),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
+                    borderSide: BorderSide(
+                        color: context.isDarkMode ? context.appChipIdleBorder : Colors.grey.shade300),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
@@ -2457,7 +2465,9 @@ class _BankPickerScreenState extends State<_BankPickerScreen> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.search_off_rounded, size: 56, color: Colors.grey.shade400),
+                            Icon(Icons.search_off_rounded,
+                                size: 56,
+                                color: context.isDarkMode ? context.appTextMuted : Colors.grey.shade400),
                             SizedBox(height: 12),
                             Text(
                               'Não encontramos esse banco.\nToque em «Cadastrar outro banco ou cartão» acima.',
@@ -2477,7 +2487,7 @@ class _BankPickerScreenState extends State<_BankPickerScreen> {
                         final p = filtered[i];
                         final sel = widget.initialSelected?.id == p.id;
                         return Material(
-                          color: Colors.white,
+                          color: context.isDarkMode ? context.appSurface : Colors.white,
                           borderRadius: BorderRadius.circular(14),
                           elevation: 0,
                           child: InkWell(
@@ -2488,7 +2498,9 @@ class _BankPickerScreenState extends State<_BankPickerScreen> {
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
-                                  color: sel ? AppColors.primary : Colors.grey.shade200,
+                                  color: sel
+                                      ? AppColors.primary
+                                      : (context.isDarkMode ? context.appChipIdleBorder : Colors.grey.shade200),
                                   width: sel ? 2 : 1,
                                 ),
                               ),
@@ -2512,10 +2524,12 @@ class _BankPickerScreenState extends State<_BankPickerScreen> {
                                       children: [
                                         Text(
                                           p.name,
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontWeight: FontWeight.w800,
                                             fontSize: 16,
-                                            color: Color(0xFF1E293B),
+                                            color: context.isDarkMode
+                                                ? context.appTextPrimary
+                                                : const Color(0xFF1E293B),
                                           ),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
@@ -2536,7 +2550,9 @@ class _BankPickerScreenState extends State<_BankPickerScreen> {
                                   if (sel)
                                     Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 26)
                                   else
-                                    Icon(Icons.chevron_right_rounded, color: Colors.grey.shade400, size: 24),
+                                    Icon(Icons.chevron_right_rounded,
+                                        color: context.isDarkMode ? context.appTextMuted : Colors.grey.shade400,
+                                        size: 24),
                                 ],
                               ),
                             ),

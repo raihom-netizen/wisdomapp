@@ -12,6 +12,7 @@ import '../constants/date_time_formats.dart';
 import '../models/finance_account.dart';
 import '../models/user_profile.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_context.dart';
 import 'finance_bank_brand_thumb.dart';
 import '../utils/finance_line_opening.dart';
 import '../services/finance_opening_balance_service.dart';
@@ -184,9 +185,9 @@ class _FinanceAccountCategorySheetState extends State<FinanceAccountCategoryShee
       maxChildSize: widget.sheetMaxChildSize,
       builder: (context, scrollController) {
         return DecoratedBox(
-          decoration: const BoxDecoration(
-            color: Color(0xFFF8FAFC),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+          decoration: BoxDecoration(
+            color: context.isDarkMode ? context.appScaffold : const Color(0xFFF8FAFC),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
           ),
           child: Column(
             children: [
@@ -196,7 +197,7 @@ class _FinanceAccountCategorySheetState extends State<FinanceAccountCategoryShee
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
+                    color: context.isDarkMode ? context.appChipIdleBorder : Colors.grey.shade300,
                     borderRadius: BorderRadius.circular(99),
                   ),
                 ),
@@ -295,9 +296,9 @@ class _FinanceAccountCategorySheetState extends State<FinanceAccountCategoryShee
                             width: double.infinity,
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: context.isDarkMode ? context.appSurface : Colors.white,
                               borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                              border: Border.all(color: context.appChipIdleBorder),
                             ),
                             child: Row(
                               children: [
@@ -306,7 +307,11 @@ class _FinanceAccountCategorySheetState extends State<FinanceAccountCategoryShee
                                 Expanded(
                                   child: Text(
                                     'Visão consolidada: todas as contas e lançamentos sem vínculo. Toque num banco no carrossel para abrir só aquela conta.',
-                                    style: TextStyle(fontSize: 12.5, height: 1.35, color: Colors.grey.shade800, fontWeight: FontWeight.w600),
+                                    style: TextStyle(
+                                        fontSize: 12.5,
+                                        height: 1.35,
+                                        color: context.isDarkMode ? context.appTextPrimary : Colors.grey.shade800,
+                                        fontWeight: FontWeight.w600),
                                   ),
                                 ),
                               ],
@@ -451,7 +456,10 @@ class _FinanceAccountCategorySheetState extends State<FinanceAccountCategoryShee
       children: [
         Text(
           'Prévia dos lançamentos',
-          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: Colors.grey.shade800),
+          style: TextStyle(
+              fontWeight: FontWeight.w900,
+              fontSize: 14,
+              color: context.isDarkMode ? context.appTextPrimary : Colors.grey.shade800),
         ),
         const SizedBox(height: 8),
         SizedBox(
@@ -475,7 +483,7 @@ class _FinanceAccountCategorySheetState extends State<FinanceAccountCategoryShee
                 width: 168,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: context.isDarkMode ? context.appSurface : Colors.white,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: accent.withValues(alpha: 0.25)),
                   boxShadow: [
@@ -492,7 +500,10 @@ class _FinanceAccountCategorySheetState extends State<FinanceAccountCategoryShee
                       style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5),
                     ),
                     const Spacer(),
-                    Text(dateStr, style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                    Text(dateStr,
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600)),
                     Text(
                       CurrencyFormats.formatBRL(amt),
                       style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: accent),
@@ -515,7 +526,10 @@ class _FinanceAccountCategorySheetState extends State<FinanceAccountCategoryShee
         Expanded(
           child: Text(
             'Lançamentos',
-            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: Colors.grey.shade900),
+            style: TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 15,
+                color: context.isDarkMode ? context.appTextPrimary : Colors.grey.shade900),
           ),
         ),
         Container(
@@ -595,20 +609,23 @@ class _FinanceAccountCategorySheetState extends State<FinanceAccountCategoryShee
       return Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: context.isDarkMode ? context.appSurface : Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
+          border: Border.all(color: context.appChipIdleBorder),
         ),
         child: Text(
           'Nenhum lançamento nesta aba para o período e filtros atuais.',
-          style: TextStyle(fontSize: 13, color: Colors.grey.shade600, fontWeight: FontWeight.w600),
+          style: TextStyle(
+              fontSize: 13,
+              color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600,
+              fontWeight: FontWeight.w600),
         ),
       );
     }
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.isDarkMode ? context.appSurface : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.primary.withValues(alpha: 0.12)),
       ),
@@ -620,7 +637,10 @@ class _FinanceAccountCategorySheetState extends State<FinanceAccountCategoryShee
               Expanded(
                 child: Text(
                   'Toque para editar · use Selecionar para excluir em lote',
-                  style: TextStyle(fontSize: 11.5, height: 1.35, color: Colors.grey.shade600),
+                  style: TextStyle(
+                      fontSize: 11.5,
+                      height: 1.35,
+                      color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600),
                 ),
               ),
               TextButton.icon(
@@ -722,8 +742,8 @@ class _FinanceAccountCategorySheetState extends State<FinanceAccountCategoryShee
           style: FilledButton.styleFrom(
             minimumSize: const Size.fromHeight(52),
             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-            foregroundColor: AppColors.primary,
-            backgroundColor: Colors.white,
+            foregroundColor: context.isDarkMode ? context.appTextPrimary : AppColors.primary,
+            backgroundColor: context.isDarkMode ? context.appSurfaceHigh : Colors.white,
           ),
         ),
       ),
@@ -1136,20 +1156,24 @@ class _CategoryPanel extends StatelessWidget {
       return Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: context.isDarkMode ? context.appSurface : Colors.white,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
+          border: Border.all(color: context.appChipIdleBorder),
         ),
         child: Column(
           children: [
-            Icon(Icons.pie_chart_outline_rounded, size: 44, color: Colors.grey.shade400),
+            Icon(Icons.pie_chart_outline_rounded,
+                size: 44, color: context.isDarkMode ? context.appTextMuted : Colors.grey.shade400),
             const SizedBox(height: 12),
             Text(
               consolidated
                   ? (type == 'expense' ? 'Nenhuma despesa no período consolidado.' : 'Nenhuma receita no período consolidado.')
                   : (type == 'expense' ? 'Nenhuma despesa nesta conta no período.' : 'Nenhuma receita nesta conta no período.'),
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade600, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                  fontSize: 14,
+                  color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600,
+                  fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -1181,9 +1205,9 @@ class _CategoryPanel extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.isDarkMode ? context.appSurface : Colors.white,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
+            border: Border.all(color: context.appChipIdleBorder),
             boxShadow: [
               BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 14, offset: const Offset(0, 6)),
             ],
@@ -1205,7 +1229,10 @@ class _CategoryPanel extends StatelessWidget {
                   Expanded(
                     child: Text(
                       type == 'expense' ? 'Despesas por categoria' : 'Receitas por categoria',
-                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Color(0xFF0F172A)),
+                      style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
+                          color: context.isDarkMode ? context.appTextPrimary : const Color(0xFF0F172A)),
                     ),
                   ),
                 ],
@@ -1213,7 +1240,10 @@ class _CategoryPanel extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 'Gráfico por categoria — role para ver e editar os lançamentos abaixo.',
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600, height: 1.35),
+                style: TextStyle(
+                    fontSize: 12,
+                    color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade600,
+                    height: 1.35),
               ),
               const SizedBox(height: 10),
               Container(
@@ -1304,7 +1334,12 @@ class _CategoryPanel extends StatelessWidget {
                                             CurrencyFormats.formatPercentBr(
                                               pieTotal > 0 ? 100 * pieRows[i].total / pieTotal : 0,
                                             ),
-                                            style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: Colors.grey.shade600),
+                                            style: TextStyle(
+                                                fontSize: 9.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: context.isDarkMode
+                                                    ? context.appTextSecondary
+                                                    : Colors.grey.shade600),
                                           ),
                                         ],
                                       ),

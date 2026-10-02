@@ -658,24 +658,35 @@ class _AvisoSemChave extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF7ED),
+        color: context.isDarkMode
+            ? context.appAccentSurface(const Color(0xFFEA580C))
+            : const Color(0xFFFFF7ED),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFFDBA74)),
+        border: Border.all(
+            color: context.isDarkMode
+                ? const Color(0xFFEA580C).withValues(alpha: 0.5)
+                : const Color(0xFFFDBA74)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        const Row(children: [
-          Icon(Icons.key_off_rounded, color: Color(0xFFC2410C)),
-          SizedBox(width: 8),
+        Row(children: [
+          Icon(Icons.key_off_rounded,
+              color: context.isDarkMode ? const Color(0xFFFDBA74) : const Color(0xFFC2410C)),
+          const SizedBox(width: 8),
           Expanded(
             child: Text('Nenhuma chave Pix cadastrada',
-                style: TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF9A3412))),
+                style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    color: context.isDarkMode ? const Color(0xFFFDBA74) : const Color(0xFF9A3412))),
           ),
         ]),
         const SizedBox(height: 6),
-        const Text(
+        Text(
           'A chave fica no cadastro do banco (Bancos e cartões). Cadastre uma — CPF, CNPJ, celular, '
           'e-mail ou aleatória — e o Pix sai com ela.',
-          style: TextStyle(fontSize: 12.5, color: Color(0xFF7C2D12), height: 1.35),
+          style: TextStyle(
+              fontSize: 12.5,
+              color: context.isDarkMode ? const Color(0xFFFED7AA) : const Color(0xFF7C2D12),
+              height: 1.35),
         ),
         const SizedBox(height: 10),
         FilledButton.icon(
