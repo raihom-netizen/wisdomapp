@@ -3335,7 +3335,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
           : r.hadChanges
               ? 'Calendário sincronizado: '
                   '${r.totalPulled} importados'
-                  '${r.totalPushed > 0 ? ', ${r.totalPushed} enviados' : ''}.'
+                  '${r.totalPushed > 0 ? ', ${r.totalPushed} enviados' : ''}'
+                  '${r.totalRemoved > 0 ? ', ${r.totalRemoved} removidos (apagados no Google/Apple)' : ''}.'
               : 'Calendário já está atualizado '
                   '(só compromissos deste mês em diante).';
       ScaffoldMessenger.of(context).showSnackBar(

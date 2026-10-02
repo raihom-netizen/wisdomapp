@@ -9,18 +9,26 @@ class ExternalCalendarSyncResult {
     this.googlePushed = 0,
     this.googlePulled = 0,
     this.applePulled = 0,
+    this.googleRemoved = 0,
+    this.appleRemoved = 0,
     this.skipped = false,
   });
 
   final int googlePushed;
   final int googlePulled;
   final int applePulled;
+
+  /// Compromissos do app removidos porque o evento foi apagado no Google/Apple.
+  final int googleRemoved;
+  final int appleRemoved;
   final bool skipped;
+
+  int get totalRemoved => googleRemoved + appleRemoved;
 
   int get totalPulled => googlePulled + applePulled;
   int get totalPushed => googlePushed;
 
-  bool get hadChanges => totalPulled > 0 || totalPushed > 0;
+  bool get hadChanges => totalPulled > 0 || totalPushed > 0 || totalRemoved > 0;
 }
 
 /// Orquestra sync WisdomApp ↔ Google / Apple Calendar.
@@ -77,7 +85,11 @@ class ExternalCalendarBidirectionalSync {
   }
 
   static Future<ExternalCalendarSyncResult> _execute(String userDocId) async {
-    var gPush = 0, gPull = 0, aPull = 0;
+    var gPush = 0, gPull = 0, aPull = 0, gRem = 0, aRem = 0;
+    final hoje = DateTime.now();
+    final janelaIni = DateTime(hoje.year, hoje.month - monthsBack, 1);
+    final janelaFim =
+        DateTime(hoje.year, hoje.month + monthsForward + 1, 0, 23, 59, 59);
 
     try {
       if (await GoogleCalendarSyncService.isEnabled(userDocId)) {
@@ -88,6 +100,12 @@ class ExternalCalendarBidirectionalSync {
         );
         gPush = g.pushed;
         gPull = g.pulled;
+        // Integração total: apagou no Google → sai do app.
+        gRem = await GoogleCalendarSyncService.removeLocalForDeletedGoogleEvents(
+          userDocId: userDocId,
+          from: janelaIni,
+          to: janelaFim,
+        );
       }
     } catch (e, st) {
       debugPrint('ExternalCalendarBidirectionalSync Google: $e\n$st');
@@ -108,6 +126,12 @@ class ExternalCalendarBidirectionalSync {
           count += events.length;
         }
         aPull = count;
+        // Integração total: apagou no iPhone → sai do app.
+        aRem = await AppleCalendarSyncService.removeLocalForDeletedAppleEvents(
+          userDocId: userDocId,
+          from: janelaIni,
+          to: janelaFim,
+        );
       }
     } catch (e, st) {
       debugPrint('ExternalCalendarBidirectionalSync Apple: $e\n$st');
@@ -117,6 +141,8 @@ class ExternalCalendarBidirectionalSync {
       googlePushed: gPush,
       googlePulled: gPull,
       applePulled: aPull,
+      googleRemoved: gRem,
+      appleRemoved: aRem,
     );
   }
 }

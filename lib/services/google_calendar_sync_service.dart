@@ -15,6 +15,8 @@ import 'google_calendar_auth_helper.dart';
 import 'google_calendar_oauth_bridge.dart';
 import 'google_calendar_token_store.dart';
 import 'google_calendar_oauth_return.dart';
+import 'agenda_scale_mirror_service.dart';
+import 'yearly_commitment_repeat_service.dart';
 
 /// Evento do Google Calendar exibido na Agenda (editável quando integração ativa).
 class GoogleCalendarEventItem {
@@ -910,6 +912,90 @@ class GoogleCalendarSyncService {
     final m = int.tryParse(parts.length > 1 ? parts[1] : '0') ?? 0;
     final end = DateTime(2000, 1, 1, h, m).add(const Duration(hours: 1));
     return '${end.hour.toString().padLeft(2, '0')}:${end.minute.toString().padLeft(2, '0')}';
+  }
+
+  /// Integração total (Google → app): compromisso do app VINCULADO a um
+  /// evento do Google (googleEventId) cujo evento foi excluído/cancelado no
+  /// Google sai do app (compromisso + espelho; os avisos o servidor cancela).
+  /// Só remove com prova do Google (HTTP 404/410 ou status «cancelled»);
+  /// erro de rede/permissão nunca apaga. Compromisso só do app (sem
+  /// googleEventId) nunca é tocado. Série anual: sai só a ocorrência.
+  static Future<int> removeLocalForDeletedGoogleEvents({
+    required String userDocId,
+    required DateTime from,
+    required DateTime to,
+    int maxChecks = 150,
+  }) async {
+    if (userDocId.isEmpty || !await isEnabled(userDocId)) return 0;
+    final remCol = FirebaseFirestore.instance
+        .collection('users')
+        .doc(userDocId)
+        .collection('reminders');
+    QuerySnapshot<Map<String, dynamic>> snap;
+    try {
+      snap = await remCol
+          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(from))
+          .where('date', isLessThanOrEqualTo: Timestamp.fromDate(to))
+          .get()
+          .timeout(const Duration(seconds: 30));
+    } catch (e) {
+      debugPrint('removeLocalForDeletedGoogleEvents leitura: $e');
+      return 0;
+    }
+    var checks = 0;
+    var removed = 0;
+    for (final doc in snap.docs) {
+      final data = doc.data();
+      final eventId = (data['googleEventId'] ?? '').toString().trim();
+      if (eventId.isEmpty) continue;
+      if (data['isYearlyRepeatTemplate'] == true) continue;
+      if (checks++ >= maxChecks) break;
+      bool apagadoNoGoogle;
+      try {
+        final uri = Uri.parse(
+          'https://www.googleapis.com/calendar/v3/calendars/primary/events/${Uri.encodeComponent(eventId)}',
+        );
+        final res = await _authorizedGet(uri, userDocId: userDocId)
+            .timeout(const Duration(seconds: 12));
+        if (res.statusCode == 404 || res.statusCode == 410) {
+          apagadoNoGoogle = true;
+        } else if (res.statusCode >= 200 && res.statusCode < 300) {
+          final body = jsonDecode(res.body);
+          apagadoNoGoogle =
+              body is Map && (body['status'] ?? '').toString() == 'cancelled';
+        } else {
+          apagadoNoGoogle = false; // 401/403/5xx: sem prova — não apaga
+        }
+      } catch (_) {
+        apagadoNoGoogle = false;
+      }
+      if (!apagadoNoGoogle) continue;
+      try {
+        final yearlyTemplateId =
+            (data['yearlyRepeatTemplateId'] ?? '').toString().trim();
+        if (yearlyTemplateId.isNotEmpty) {
+          await YearlyCommitmentRepeatService.deleteYearlyInstanceOnly(
+            userDocId: userDocId,
+            instanceReminderDocId: doc.id,
+            instanceData: data,
+          );
+        } else {
+          await doc.reference.delete().timeout(const Duration(seconds: 15));
+          await AgendaScaleMirrorService.delete(
+            userDocId: userDocId,
+            agendaId: doc.id,
+          );
+        }
+        removed++;
+      } catch (e) {
+        debugPrint('removeLocalForDeletedGoogleEvents ${doc.id}: $e');
+      }
+    }
+    if (removed > 0) {
+      debugPrint('Google → app: $removed compromisso(s) excluído(s) no Google '
+          'removido(s) do app.');
+    }
+    return removed;
   }
 
   /// Sincronização bidirecional: envia locais pendentes + importa novos do Google.

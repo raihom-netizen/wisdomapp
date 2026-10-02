@@ -9,6 +9,8 @@ import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../utils/firestore_web_guard.dart';
+import 'agenda_scale_mirror_service.dart';
+import 'yearly_commitment_repeat_service.dart';
 
 /// Evento do Calendário nativo (EventKit — iPhone / iPad).
 class AppleCalendarEventItem {
@@ -305,6 +307,81 @@ class AppleCalendarSyncService {
       debugPrint('AppleCalendar syncReminder: $e\n$st');
       return false;
     }
+  }
+
+  /// Integração total (iPhone → app): compromisso do app vinculado a um
+  /// evento do Calendário Apple (appleEventId) que foi apagado no iPhone sai
+  /// do app na próxima sincronização. Só apaga com a leitura bem-sucedida e
+  /// o evento ausente; sem permissão/erro nunca apaga. Compromisso só do app
+  /// (sem appleEventId) nunca é tocado. Série anual: sai só a ocorrência.
+  static Future<int> removeLocalForDeletedAppleEvents({
+    required String userDocId,
+    required DateTime from,
+    required DateTime to,
+    int maxChecks = 150,
+  }) async {
+    if (!isPlatformSupported || userDocId.isEmpty) return 0;
+    if (!await isEnabled(userDocId)) return 0;
+    if (!await _requestPermission()) return 0;
+    final calId = await _calendarIdForUser(userDocId);
+    if (calId == null) return 0;
+    QuerySnapshot<Map<String, dynamic>> snap;
+    try {
+      snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userDocId)
+          .collection('reminders')
+          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(from))
+          .where('date', isLessThanOrEqualTo: Timestamp.fromDate(to))
+          .get()
+          .timeout(const Duration(seconds: 30));
+    } catch (_) {
+      return 0;
+    }
+    var checks = 0;
+    var removed = 0;
+    for (final doc in snap.docs) {
+      final data = doc.data();
+      final appleId = (data['appleEventId'] ?? '').toString().trim();
+      if (appleId.isEmpty || data['isYearlyRepeatTemplate'] == true) continue;
+      if (checks++ >= maxChecks) break;
+      bool apagado;
+      try {
+        final res = await _plugin.retrieveEvents(
+          calId,
+          RetrieveEventsParams(eventIds: [appleId]),
+        );
+        apagado = res.isSuccess &&
+            res.data != null &&
+            !res.data!.any((e) => e.eventId == appleId);
+      } catch (_) {
+        apagado = false;
+      }
+      if (!apagado) continue;
+      try {
+        if ((data['yearlyRepeatTemplateId'] ?? '').toString().trim().isNotEmpty) {
+          await YearlyCommitmentRepeatService.deleteYearlyInstanceOnly(
+            userDocId: userDocId,
+            instanceReminderDocId: doc.id,
+            instanceData: data,
+          );
+        } else {
+          await doc.reference.delete().timeout(const Duration(seconds: 15));
+          await AgendaScaleMirrorService.delete(
+            userDocId: userDocId,
+            agendaId: doc.id,
+          );
+        }
+        removed++;
+      } catch (e) {
+        debugPrint('removeLocalForDeletedAppleEvents ${doc.id}: $e');
+      }
+    }
+    if (removed > 0) {
+      debugPrint('Apple → app: $removed compromisso(s) apagado(s) no iPhone '
+          'removido(s) do app.');
+    }
+    return removed;
   }
 
   static DateTime _combineDateTime(DateTime date, String hhmm) {
