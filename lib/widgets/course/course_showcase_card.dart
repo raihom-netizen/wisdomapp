@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 import '../../services/course_progress_service.dart';
 import '../../utils/course_lessons.dart';
 import '../course_media_preview.dart';
+import 'course_yt_palette.dart';
 
-const _kRed = Color(0xFFFF0000);
+const _kRed = CourseYt.red;
 const _kGreen = Color(0xFF22C55E);
 
 /// Resumo de um curso para a vitrine (aulas, progresso, selos).
@@ -32,8 +33,9 @@ class CourseShowcaseInfo {
           all = false;
         }
       }
-      durationLabel =
-          (all && secs > 0) ? CourseLessons.formatMinutes((secs / 60).ceil()) : null;
+      durationLabel = (all && secs > 0)
+          ? CourseLessons.formatMinutes((secs / 60).ceil())
+          : null;
     }
   }
 
@@ -72,144 +74,152 @@ class CourseShowcaseCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: const Color(0xFF181818),
-      borderRadius: BorderRadius.circular(16),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            AspectRatio(
-              aspectRatio: 16 / 9,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  CourseMediaThumbnail.fromData(
-                    info.data,
-                    fit: BoxFit.cover,
-                    showPlayButton: false,
-                    fallback: const _CoverFallback(),
-                  ),
-                  const DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Color(0x00000000), Color(0xB3000000)],
-                        stops: [0.45, 1],
+    return DecoratedBox(
+      decoration: CourseYt.cardDecoration(context, radius: 16),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    CourseMediaThumbnail.fromData(
+                      info.data,
+                      fit: BoxFit.cover,
+                      showPlayButton: false,
+                      fallback: const _CoverFallback(),
+                    ),
+                    const DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Color(0x00000000), Color(0xB3000000)],
+                          stops: [0.45, 1],
+                        ),
                       ),
                     ),
-                  ),
-                  Positioned(
-                    left: 8,
-                    top: 8,
-                    child: info.completed
-                        ? const _Seal(
-                            label: 'CONCLUÍDO',
-                            color: _kGreen,
-                            icon: Icons.verified_rounded,
-                          )
-                        : (info.isNew
-                            ? const _Seal(
-                                label: 'NOVO',
-                                color: _kRed,
-                                icon: Icons.fiber_new_rounded,
-                              )
-                            : const SizedBox.shrink()),
-                  ),
-                  if (info.liked)
-                    const Positioned(
-                      right: 8,
+                    Positioned(
+                      left: 8,
                       top: 8,
-                      child: Icon(Icons.favorite_rounded,
-                          color: Colors.white, size: 18,
-                          shadows: [Shadow(blurRadius: 6)]),
+                      child: info.completed
+                          ? const _Seal(
+                              label: 'CONCLUÍDO',
+                              color: _kGreen,
+                              icon: Icons.verified_rounded,
+                            )
+                          : (info.isNew
+                              ? const _Seal(
+                                  label: 'NOVO',
+                                  color: _kRed,
+                                  icon: Icons.fiber_new_rounded,
+                                )
+                              : const SizedBox.shrink()),
                     ),
-                  Positioned(
-                    left: 8,
-                    right: 8,
-                    bottom: 8,
-                    child: Row(
-                      children: [
-                        _Chip(icon: Icons.video_library_rounded, label: info.lessonsLabel),
-                        if (info.durationLabel != null) ...[
-                          const SizedBox(width: 6),
-                          _Chip(icon: Icons.schedule_rounded, label: info.durationLabel!),
-                        ],
-                        const Spacer(),
-                        Container(
-                          width: 34,
-                          height: 34,
-                          decoration: BoxDecoration(
-                            color: _kRed,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.4),
-                                blurRadius: 10,
-                              ),
-                            ],
-                          ),
-                          child: Icon(
-                            info.completed
-                                ? Icons.replay_rounded
-                                : Icons.play_arrow_rounded,
+                    if (info.liked)
+                      const Positioned(
+                        right: 8,
+                        top: 8,
+                        child: Icon(Icons.favorite_rounded,
                             color: Colors.white,
-                            size: 22,
+                            size: 18,
+                            shadows: [Shadow(blurRadius: 6)]),
+                      ),
+                    Positioned(
+                      left: 8,
+                      right: 8,
+                      bottom: 8,
+                      child: Row(
+                        children: [
+                          _Chip(
+                              icon: Icons.video_library_rounded,
+                              label: info.lessonsLabel),
+                          if (info.durationLabel != null) ...[
+                            const SizedBox(width: 6),
+                            _Chip(
+                                icon: Icons.schedule_rounded,
+                                label: info.durationLabel!),
+                          ],
+                          const Spacer(),
+                          Container(
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              color: _kRed,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.4),
+                                  blurRadius: 10,
+                                ),
+                              ],
+                            ),
+                            child: Icon(
+                              info.completed
+                                  ? Icons.replay_rounded
+                                  : Icons.play_arrow_rounded,
+                              color: Colors.white,
+                              size: 22,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            if (info.fraction > 0)
-              LinearProgressIndicator(
-                value: info.fraction,
-                minHeight: 3,
-                color: info.completed ? _kGreen : _kRed,
-                backgroundColor: Colors.white.withValues(alpha: 0.08),
-              ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    info.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 14,
-                      height: 1.25,
+              if (info.fraction > 0)
+                LinearProgressIndicator(
+                  value: info.fraction,
+                  minHeight: 3,
+                  color: info.completed ? _kGreen : _kRed,
+                  backgroundColor: CourseYt.track(context),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      info.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: CourseYt.text(context),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                        height: 1.25,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    info.completed
-                        ? 'Curso concluído'
-                        : (info.inProgress
-                            ? '${(info.fraction * 100).round()}% assistido · ${info.done}/${info.lessonKeys.length} aulas'
-                            : 'Toque para começar'),
-                    style: TextStyle(
-                      color: info.completed
-                          ? _kGreen
+                    const SizedBox(height: 6),
+                    Text(
+                      info.completed
+                          ? 'Curso concluído'
                           : (info.inProgress
-                              ? const Color(0xFFFCA5A5)
-                              : Colors.grey.shade500),
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w700,
+                              ? '${(info.fraction * 100).round()}% assistido · ${info.done}/${info.lessonKeys.length} aulas'
+                              : 'Toque para começar'),
+                      style: TextStyle(
+                        color: info.completed
+                            ? _kGreen
+                            : (info.inProgress
+                                ? CourseYt.progressText(context)
+                                : CourseYt.textSecondary(context)),
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -231,71 +241,74 @@ class CourseContinueCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: 260,
-      child: Material(
-        color: const Color(0xFF181818),
-        borderRadius: BorderRadius.circular(14),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              AspectRatio(
-                aspectRatio: 16 / 9,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    CourseMediaThumbnail.fromData(
-                      info.data,
-                      fit: BoxFit.cover,
-                      showPlayButton: false,
-                      fallback: const _CoverFallback(),
-                    ),
-                    const ColoredBox(color: Color(0x40000000)),
-                    const Center(
-                      child: Icon(Icons.play_circle_fill_rounded,
-                          color: Colors.white, size: 46),
-                    ),
-                    Align(
-                      alignment: Alignment.bottomCenter,
-                      child: LinearProgressIndicator(
-                        value: info.fraction,
-                        minHeight: 4,
-                        color: _kRed,
-                        backgroundColor: Colors.white.withValues(alpha: 0.2),
+      child: DecoratedBox(
+        decoration: CourseYt.cardDecoration(context, radius: 14),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      CourseMediaThumbnail.fromData(
+                        info.data,
+                        fit: BoxFit.cover,
+                        showPlayButton: false,
+                        fallback: const _CoverFallback(),
                       ),
-                    ),
-                  ],
+                      const ColoredBox(color: Color(0x40000000)),
+                      const Center(
+                        child: Icon(Icons.play_circle_fill_rounded,
+                            color: Colors.white, size: 46),
+                      ),
+                      Align(
+                        alignment: Alignment.bottomCenter,
+                        child: LinearProgressIndicator(
+                          value: info.fraction,
+                          minHeight: 4,
+                          color: _kRed,
+                          backgroundColor: Colors.white.withValues(alpha: 0.2),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      info.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        info.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: CourseYt.text(context),
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Continuar · ${(info.fraction * 100).round()}%',
-                      style: const TextStyle(
-                        color: Color(0xFFFCA5A5),
-                        fontWeight: FontWeight.w700,
-                        fontSize: 11.5,
+                      const SizedBox(height: 2),
+                      Text(
+                        'Continuar · ${(info.fraction * 100).round()}%',
+                        style: TextStyle(
+                          color: CourseYt.progressText(context),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 11.5,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -379,16 +392,17 @@ class _CoverFallback extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const DecoratedBox(
+    return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF1A1A2E), Color(0xFF7F1D1D)],
+          colors: CourseYt.coverFallbackGradient(context),
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
       ),
       child: Center(
-        child: Icon(Icons.school_rounded, color: Colors.white38, size: 40),
+        child: Icon(Icons.school_rounded,
+            color: CourseYt.coverFallbackIcon(context), size: 40),
       ),
     );
   }

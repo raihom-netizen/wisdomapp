@@ -6,6 +6,7 @@ import '../../services/course_progress_service.dart';
 import '../../utils/course_media_url_resolver.dart';
 import '../../utils/course_thumb_resolver.dart';
 import '../../utils/youtube_url_helper.dart';
+import '../course/course_yt_palette.dart';
 import '../course_media_preview.dart';
 import 'course_video_player_shell.dart';
 
@@ -17,8 +18,8 @@ class CourseYoutubeFeedCard extends StatefulWidget {
     required this.uid,
     required this.isActive,
     required this.onActivate,
-    this.accent = const Color(0xFFFF0000),
-    this.accent2 = const Color(0xFFCC0000),
+    this.accent = CourseYt.red,
+    this.accent2 = CourseYt.redDark,
   });
 
   final Map<String, dynamic> data;
@@ -65,8 +66,8 @@ class _CourseYoutubeFeedCardState extends State<CourseYoutubeFeedCard> {
       _resolvedMp4 != null ||
       CourseThumbResolver.isVideoContent(widget.data);
 
-  Color get _ctaColor =>
-      _isDica ? const Color(0xFFF59E0B) : const Color(0xFFFF0000);
+  /// Vermelho YouTube em cursos e dicas (detalhes ativos e ícone de play).
+  Color get _ctaColor => CourseYt.red;
 
   @override
   void initState() {
@@ -187,21 +188,14 @@ class _CourseYoutubeFeedCardState extends State<CourseYoutubeFeedCard> {
   Widget build(BuildContext context) {
     final borderAccent = widget.isActive
         ? _ctaColor.withValues(alpha: 0.5)
-        : Colors.white.withValues(alpha: 0.06);
+        : CourseYt.border(context);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 18),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0F0F0F),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderAccent),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.35),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
+      decoration: CourseYt.cardDecoration(
+        context,
+        radius: 16,
+        borderColor: borderAccent,
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -225,7 +219,7 @@ class _CourseYoutubeFeedCardState extends State<CourseYoutubeFeedCard> {
                   decoration: BoxDecoration(
                     color: (_isDica
                             ? const Color(0xFFF59E0B)
-                            : const Color(0xFFFF0000))
+                            : CourseYt.red)
                         .withValues(alpha: 0.92),
                     borderRadius: BorderRadius.circular(6),
                   ),
@@ -249,8 +243,8 @@ class _CourseYoutubeFeedCardState extends State<CourseYoutubeFeedCard> {
               children: [
                 Text(
                   _title,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: CourseYt.text(context),
                     fontWeight: FontWeight.w900,
                     fontSize: 17,
                     height: 1.25,
@@ -283,8 +277,8 @@ class _CourseYoutubeFeedCardState extends State<CourseYoutubeFeedCard> {
                         widget.isActive
                             ? (_hasVideo ? 'Assistindo' : 'Aberta')
                             : (_hasVideo ? 'Assistir' : 'Abrir'),
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: CourseYt.text(context),
                           fontWeight: FontWeight.w800,
                         ),
                       ),
@@ -299,10 +293,10 @@ class _CourseYoutubeFeedCardState extends State<CourseYoutubeFeedCard> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1A1A1A),
+                        color: CourseYt.surfaceAlt(context),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.07),
+                          color: CourseYt.border(context),
                         ),
                       ),
                       child: Column(
@@ -311,7 +305,7 @@ class _CourseYoutubeFeedCardState extends State<CourseYoutubeFeedCard> {
                           Text(
                             _isDica ? 'Texto da dica' : 'Descrição',
                             style: TextStyle(
-                              color: Colors.grey.shade400,
+                              color: CourseYt.text(context),
                               fontWeight: FontWeight.w800,
                               fontSize: 12,
                             ),
@@ -324,7 +318,7 @@ class _CourseYoutubeFeedCardState extends State<CourseYoutubeFeedCard> {
                                 ? TextOverflow.visible
                                 : TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: Colors.grey.shade300,
+                              color: CourseYt.textSecondary(context),
                               fontSize: 13.5,
                               height: 1.45,
                               fontWeight: FontWeight.w500,
@@ -336,8 +330,10 @@ class _CourseYoutubeFeedCardState extends State<CourseYoutubeFeedCard> {
                               _descExpanded
                                   ? 'Ver menos'
                                   : 'Ver descrição completa',
-                              style: const TextStyle(
-                                color: Color(0xFF3EA6FF),
+                              style: TextStyle(
+                                color: CourseYt.isDark(context)
+                                    ? const Color(0xFF3EA6FF)
+                                    : const Color(0xFF065FD4),
                                 fontWeight: FontWeight.w800,
                                 fontSize: 12.5,
                               ),
@@ -457,7 +453,9 @@ class _LikeButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: liked ? accent.withValues(alpha: 0.16) : const Color(0xFF272727),
+      color: liked
+          ? accent.withValues(alpha: 0.16)
+          : CourseYt.surfaceAlt(context),
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
         onTap: onTap,
@@ -472,13 +470,13 @@ class _LikeButton extends StatelessWidget {
                     ? Icons.thumb_up_alt_rounded
                     : Icons.thumb_up_off_alt_rounded,
                 size: 18,
-                color: liked ? accent : Colors.white70,
+                color: liked ? accent : CourseYt.text(context),
               ),
               const SizedBox(width: 6),
               Text(
                 'Gostei',
                 style: TextStyle(
-                  color: liked ? accent : Colors.white70,
+                  color: liked ? accent : CourseYt.text(context),
                   fontWeight: FontWeight.w800,
                   fontSize: 13,
                 ),

@@ -17,6 +17,7 @@ import '../widgets/course_media_preview.dart';
 import '../widgets/course_video/course_module_media_panel.dart';
 import '../widgets/course_video/course_youtube_feed_card.dart';
 import '../widgets/course/course_showcase_card.dart';
+import '../widgets/course/course_yt_palette.dart';
 import 'course_detail_screen.dart';
 
 /// Filtros da vitrine de cursos.
@@ -237,10 +238,11 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
 
     return RefreshIndicator(
       onRefresh: () => _cache.ensureLoaded(forceServer: true),
-      color: Colors.white,
+      color: CourseYt.red,
       child: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF0F0F0F),
+        // Claro: fundo cinza bem claro (estilo YouTube); escuro: #0F0F0F.
+        decoration: BoxDecoration(
+          color: CourseYt.background(context),
         ),
         child: ListView(
           controller: widget.shellScrollController,
@@ -289,8 +291,8 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
                         cfg: cfg,
                         docs: cursos,
                         syncing: syncing,
-                        accent: const Color(0xFF2563EB),
-                        accent2: const Color(0xFF1D4ED8),
+                        accent: CourseYt.red,
+                        accent2: CourseYt.redDark,
                         icon: Icons.school_rounded,
                         label: 'Cursos',
                       )
@@ -299,8 +301,8 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
                         cfg: cfg,
                         docs: dicas,
                         syncing: syncing,
-                        accent: const Color(0xFFF59E0B),
-                        accent2: const Color(0xFFD97706),
+                        accent: CourseYt.red,
+                        accent2: CourseYt.redDark,
                         icon: Icons.lightbulb_rounded,
                         label: 'Dicas',
                       ),
@@ -319,7 +321,7 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Row(
                   children: [
-                    Expanded(child: _sectionTitle(cfg.sectionTitle, Colors.white)),
+                    Expanded(child: _sectionTitle(cfg.sectionTitle)),
                     _viewToggle(),
                   ],
                 ),
@@ -347,8 +349,8 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
                             {...doc.data, 'id': doc.id},
                             isDica: false,
                           ),
-                          accent: const Color(0xFFFF0000),
-                          accent2: const Color(0xFFCC0000),
+                          accent: CourseYt.red,
+                          accent2: CourseYt.redDark,
                         ),
                     ],
                   ),
@@ -367,15 +369,16 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
       children: [
         _buildHero(cfg, false),
         const SizedBox(height: 24),
-        const Icon(Icons.cloud_off_rounded, size: 48, color: Colors.white54),
+        Icon(Icons.cloud_off_rounded,
+            size: 48, color: CourseYt.textMuted(context)),
         const SizedBox(height: 12),
-        const Text(
+        Text(
           'Não foi possível carregar os vídeos.',
           textAlign: TextAlign.center,
           style: TextStyle(
             fontWeight: FontWeight.w800,
             fontSize: 16,
-            color: Colors.white,
+            color: CourseYt.text(context),
           ),
         ),
         const SizedBox(height: 16),
@@ -384,7 +387,7 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
           icon: const Icon(Icons.refresh_rounded),
           label: const Text('Tentar novamente'),
           style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFFFF0000),
+            backgroundColor: CourseYt.red,
           ),
         ),
       ],
@@ -395,21 +398,7 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1A1A2E), Color(0xFF16213E), Color(0xFF0F3460)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.5),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+      decoration: CourseYt.cardDecoration(context, radius: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -418,18 +407,18 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFF0000).withValues(alpha: 0.15),
+                  color: CourseYt.red.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.play_circle_fill_rounded,
-                    color: Color(0xFFFF0000), size: 26),
+                    color: CourseYt.red, size: 26),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   cfg.heroTitle,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: CourseYt.text(context),
                     fontWeight: FontWeight.w800,
                     fontSize: 16,
                     height: 1.25,
@@ -443,7 +432,7 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
           Text(
             cfg.heroMessage,
             style: TextStyle(
-              color: Colors.grey.shade400,
+              color: CourseYt.textSecondary(context),
               height: 1.35,
               fontWeight: FontWeight.w500,
               fontSize: 13,
@@ -453,8 +442,8 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
             const SizedBox(height: 10),
             LinearProgressIndicator(
               minHeight: 2,
-              color: const Color(0xFFFF0000),
-              backgroundColor: Colors.white.withValues(alpha: 0.1),
+              color: CourseYt.red,
+              backgroundColor: CourseYt.track(context),
             ),
           ],
         ],
@@ -462,24 +451,24 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
     );
   }
 
-  Widget _sectionTitle(String title, Color color) {
+  Widget _sectionTitle(String title) {
     return Row(
       children: [
         Container(
           width: 3,
           height: 18,
           decoration: BoxDecoration(
-            color: const Color(0xFFFF0000),
+            color: CourseYt.red,
             borderRadius: BorderRadius.circular(4),
           ),
         ),
         const SizedBox(width: 8),
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w800,
-            color: Colors.white,
+            color: CourseYt.text(context),
           ),
         ),
       ],
@@ -524,7 +513,6 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
               Expanded(
                 child: _sectionTitle(
                   isDicas ? 'Todas as dicas' : 'Todos os cursos',
-                  accent,
                 ),
               ),
               if (!isDicas) _viewToggle(),
@@ -547,12 +535,8 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
                     {...doc.data, 'id': doc.id},
                     isDica: isDicas,
                   ),
-                  accent: isDicas
-                      ? const Color(0xFFF59E0B)
-                      : const Color(0xFFFF0000),
-                  accent2: isDicas
-                      ? const Color(0xFFD97706)
-                      : const Color(0xFFCC0000),
+                  accent: CourseYt.red,
+                  accent2: CourseYt.redDark,
                 ),
             ],
           ),
@@ -570,7 +554,7 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
         onPressed: () => setState(() => _feedMode = !_feedMode),
         icon: Icon(
           _feedMode ? Icons.grid_view_rounded : Icons.view_agenda_rounded,
-          color: Colors.white70,
+          color: CourseYt.textSecondary(context),
         ),
       ),
     );
@@ -670,22 +654,23 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
                       },
                     );
                   },
-                  style: const TextStyle(color: Colors.white),
-                  cursorColor: const Color(0xFFFF0000),
+                  style: TextStyle(color: CourseYt.text(context)),
+                  cursorColor: CourseYt.red,
                   textInputAction: TextInputAction.search,
                   decoration: InputDecoration(
                     isDense: true,
                     filled: true,
-                    fillColor: const Color(0xFF1A1A1A),
+                    fillColor: CourseYt.card(context),
                     hintText: 'Buscar curso…',
-                    hintStyle: TextStyle(color: Colors.grey.shade600),
-                    prefixIcon:
-                        const Icon(Icons.search_rounded, color: Colors.white54),
+                    hintStyle:
+                        TextStyle(color: CourseYt.textMuted(context)),
+                    prefixIcon: Icon(Icons.search_rounded,
+                        color: CourseYt.textSecondary(context)),
                     suffixIcon: _query.isEmpty
                         ? null
                         : IconButton(
-                            icon: const Icon(Icons.close_rounded,
-                                color: Colors.white54),
+                            icon: Icon(Icons.close_rounded,
+                                color: CourseYt.textSecondary(context)),
                             onPressed: () => setState(() {
                               _searchDebounce?.cancel();
                               _query = '';
@@ -693,8 +678,22 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
                             }),
                           ),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
+                      borderRadius: BorderRadius.circular(999),
+                      borderSide:
+                          BorderSide(color: CourseYt.border(context)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(999),
+                      borderSide: BorderSide(
+                        color: CourseYt.isDark(context)
+                            ? CourseYt.border(context)
+                            : const Color(0xFFD3D3D3),
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(999),
+                      borderSide:
+                          const BorderSide(color: CourseYt.red, width: 1.4),
                     ),
                   ),
                 ),
@@ -729,7 +728,7 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
           const SizedBox(height: 14),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: _sectionTitle('Continuar assistindo', Colors.white),
+            child: _sectionTitle('Continuar assistindo'),
           ),
           const SizedBox(height: 8),
           SizedBox(
@@ -753,7 +752,6 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
             _filter == _CourseFilter.todos && _query.trim().isEmpty
                 ? cfg.sectionTitle
                 : '${visible.length} ${visible.length == 1 ? 'curso' : 'cursos'}',
-            Colors.white,
           ),
         ),
         const SizedBox(height: 10),
@@ -963,28 +961,24 @@ class _CursosVideosScreenState extends State<CursosVideosScreen>
   }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
+      decoration: CourseYt.cardDecoration(context, radius: 16),
       child: Column(
         children: [
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: const Color(0xFFFF0000).withValues(alpha: 0.12),
+              color: CourseYt.red.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
             child: const Icon(Icons.ondemand_video_rounded,
-                size: 36, color: Color(0xFFFF0000)),
+                size: 36, color: CourseYt.red),
           ),
           const SizedBox(height: 14),
           Text(
             syncing ? 'A carregar conteúdo…' : (emptyHint ?? cfg.emptyMessage),
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: Colors.grey.shade500,
+              color: CourseYt.textSecondary(context),
               height: 1.45,
               fontWeight: FontWeight.w600,
               fontSize: 14,
@@ -1013,9 +1007,9 @@ class _FilterPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const accent = Color(0xFFFF0000);
+    const accent = CourseYt.red;
     return Material(
-      color: selected ? accent : const Color(0xFF1A1A1A),
+      color: selected ? accent : CourseYt.surfaceAlt(context),
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
         onTap: onTap,
@@ -1027,12 +1021,14 @@ class _FilterPill extends StatelessWidget {
             children: [
               Icon(icon,
                   size: 15,
-                  color: selected ? Colors.white : Colors.grey.shade500),
+                  color: selected
+                      ? Colors.white
+                      : CourseYt.textSecondary(context)),
               const SizedBox(width: 5),
               Text(
                 count > 0 ? '$label · $count' : label,
                 style: TextStyle(
-                  color: selected ? Colors.white : Colors.grey.shade400,
+                  color: selected ? Colors.white : CourseYt.text(context),
                   fontWeight: FontWeight.w800,
                   fontSize: 12.5,
                 ),
@@ -1063,9 +1059,10 @@ class _YouTubeTabSelector extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
+        color: CourseYt.card(context),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        border: Border.all(color: CourseYt.border(context)),
+        boxShadow: CourseYt.cardShadow(context),
       ),
       child: Row(
         children: [
@@ -1075,7 +1072,7 @@ class _YouTubeTabSelector extends StatelessWidget {
               icon: Icons.school_rounded,
               count: cursosCount,
               selected: index == 0,
-              accent: const Color(0xFFFF0000),
+              accent: CourseYt.red,
               onTap: () => onChanged(0),
             ),
           ),
@@ -1086,7 +1083,7 @@ class _YouTubeTabSelector extends StatelessWidget {
               icon: Icons.lightbulb_rounded,
               count: dicasCount,
               selected: index == 1,
-              accent: const Color(0xFFF59E0B),
+              accent: CourseYt.red,
               onTap: () => onChanged(1),
             ),
           ),
@@ -1103,7 +1100,7 @@ class _YTPill extends StatelessWidget {
     required this.count,
     required this.selected,
     required this.onTap,
-    this.accent = const Color(0xFFFF0000),
+    this.accent = CourseYt.red,
   });
 
   final String label;
@@ -1134,7 +1131,9 @@ class _YTPill extends StatelessWidget {
               Icon(
                 icon,
                 size: 18,
-                color: selected ? Colors.white : Colors.grey.shade600,
+                color: selected
+                    ? Colors.white
+                    : CourseYt.textSecondary(context),
               ),
               const SizedBox(width: 6),
               Text(
@@ -1142,7 +1141,7 @@ class _YTPill extends StatelessWidget {
                 style: TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 13,
-                  color: selected ? Colors.white : Colors.grey.shade500,
+                  color: selected ? Colors.white : CourseYt.text(context),
                 ),
               ),
               if (count > 0) ...[
@@ -1153,7 +1152,7 @@ class _YTPill extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: selected
                         ? Colors.white.withValues(alpha: 0.25)
-                        : Colors.white.withValues(alpha: 0.08),
+                        : CourseYt.surfaceAlt(context),
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
@@ -1161,7 +1160,9 @@ class _YTPill extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w800,
-                      color: selected ? Colors.white : Colors.grey.shade600,
+                      color: selected
+                          ? Colors.white
+                          : CourseYt.textSecondary(context),
                     ),
                   ),
                 ),
@@ -1208,10 +1209,7 @@ class _FeaturedVideoHighlight extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(14),
         child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            color: const Color(0xFF1A1A1A),
-          ),
+          decoration: CourseYt.cardDecoration(context, radius: 14),
           clipBehavior: Clip.antiAlias,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1224,7 +1222,7 @@ class _FeaturedVideoHighlight extends StatelessWidget {
                     CourseMediaThumbnail.fromData(
                       data,
                       fit: thumbFit,
-                      fallback: _coverPlaceholder(),
+                      fallback: _coverPlaceholder(context),
                       showPlayButton: isVideo,
                       playIconSize: 56,
                     ),
@@ -1235,7 +1233,7 @@ class _FeaturedVideoHighlight extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFFF0000).withValues(alpha: 0.9),
+                          color: CourseYt.red.withValues(alpha: 0.9),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
@@ -1281,8 +1279,8 @@ class _FeaturedVideoHighlight extends StatelessWidget {
                       title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: CourseYt.text(context),
                         fontWeight: FontWeight.w800,
                         fontSize: 16,
                         height: 1.25,
@@ -1295,7 +1293,7 @@ class _FeaturedVideoHighlight extends StatelessWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: Colors.grey.shade500,
+                          color: CourseYt.textSecondary(context),
                           height: 1.35,
                           fontWeight: FontWeight.w500,
                           fontSize: 13,
@@ -1312,12 +1310,12 @@ class _FeaturedVideoHighlight extends StatelessWidget {
     );
   }
 
-  Widget _coverPlaceholder() {
+  Widget _coverPlaceholder(BuildContext context) {
     return Container(
-      color: const Color(0xFF1A1A1A),
-      child: const Center(
-        child:
-            Icon(Icons.ondemand_video_rounded, color: Colors.white38, size: 48),
+      color: CourseYt.surfaceAlt(context),
+      child: Center(
+        child: Icon(Icons.ondemand_video_rounded,
+            color: CourseYt.coverFallbackIcon(context), size: 48),
       ),
     );
   }
@@ -1401,7 +1399,7 @@ class _ModernVideoCard extends StatelessWidget {
                           CourseMediaThumbnail.fromData(
                             data,
                             fit: thumbFit,
-                            fallback: _coverFallback(),
+                            fallback: _coverFallback(context),
                             showPlayButton: isVideo,
                             playIconSize: 36,
                           )
@@ -1409,12 +1407,12 @@ class _ModernVideoCard extends StatelessWidget {
                           CourseMediaThumbnail.fromData(
                             data,
                             fit: BoxFit.cover,
-                            fallback: _coverFallback(),
+                            fallback: _coverFallback(context),
                             showPlayButton: true,
                             playIconSize: 36,
                           )
                         else
-                          _coverFallback(),
+                          _coverFallback(context),
                         if (!hasThumb && !isVideo)
                           Center(
                             child: Icon(
@@ -1456,8 +1454,8 @@ class _ModernVideoCard extends StatelessWidget {
                         title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: CourseYt.text(context),
                           fontWeight: FontWeight.w700,
                           fontSize: 14,
                           height: 1.25,
@@ -1470,7 +1468,7 @@ class _ModernVideoCard extends StatelessWidget {
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: Colors.grey.shade500,
+                            color: CourseYt.textSecondary(context),
                             fontSize: 12,
                             height: 1.3,
                             fontWeight: FontWeight.w500,
@@ -1481,7 +1479,7 @@ class _ModernVideoCard extends StatelessWidget {
                       Text(
                         type == 'dica' ? 'Dica Wisdom' : 'Wisdom Cursos',
                         style: TextStyle(
-                          color: Colors.grey.shade600,
+                          color: CourseYt.textMuted(context),
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                         ),
@@ -1491,7 +1489,7 @@ class _ModernVideoCard extends StatelessWidget {
                 ),
                 Icon(
                   Icons.more_vert_rounded,
-                  color: Colors.grey.shade600,
+                  color: CourseYt.textMuted(context),
                   size: 20,
                 ),
               ],
@@ -1502,15 +1500,15 @@ class _ModernVideoCard extends StatelessWidget {
     );
   }
 
-  Widget _coverFallback() {
+  Widget _coverFallback(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF272727),
+      decoration: BoxDecoration(
+        color: CourseYt.surfaceAlt(context),
       ),
       child: Center(
         child: Icon(
           Icons.ondemand_video_rounded,
-          color: Colors.white.withValues(alpha: 0.4),
+          color: CourseYt.coverFallbackIcon(context),
           size: 32,
         ),
       ),
@@ -1563,12 +1561,11 @@ class _DicaGridCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.circular(12),
-            border: selected
-                ? Border.all(color: const Color(0xFFFF0000), width: 1.5)
-                : null,
+          decoration: CourseYt.cardDecoration(
+            context,
+            radius: 12,
+            borderColor: selected ? CourseYt.red : null,
+            borderWidth: selected ? 1.5 : 1,
           ),
           clipBehavior: Clip.antiAlias,
           child: Column(
@@ -1583,12 +1580,12 @@ class _DicaGridCard extends StatelessWidget {
                       CourseMediaThumbnail.fromData(
                         data,
                         fit: thumbFit,
-                        fallback: _fallback(),
+                        fallback: _fallback(context),
                         showPlayButton: isVideo,
                         playIconSize: 36,
                       )
                     else
-                      _fallback(),
+                      _fallback(context),
                     if (!hasThumb)
                       Center(
                         child: Icon(
@@ -1630,8 +1627,8 @@ class _DicaGridCard extends StatelessWidget {
                         title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: CourseYt.text(context),
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
                           height: 1.2,
@@ -1647,7 +1644,7 @@ class _DicaGridCard extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 11,
                               height: 1.3,
-                              color: Colors.grey.shade500,
+                              color: CourseYt.textSecondary(context),
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -1664,13 +1661,14 @@ class _DicaGridCard extends StatelessWidget {
     );
   }
 
-  Widget _fallback() {
+  Widget _fallback(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF272727),
+      decoration: BoxDecoration(
+        color: CourseYt.surfaceAlt(context),
       ),
-      child: const Center(
-        child: Icon(Icons.lightbulb_rounded, color: Colors.white38, size: 32),
+      child: Center(
+        child: Icon(Icons.lightbulb_rounded,
+            color: CourseYt.coverFallbackIcon(context), size: 32),
       ),
     );
   }

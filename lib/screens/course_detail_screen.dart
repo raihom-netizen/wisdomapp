@@ -8,11 +8,11 @@ import '../services/course_progress_service.dart';
 import '../utils/course_lessons.dart';
 import '../widgets/course_media_preview.dart';
 import '../widgets/course_video/course_video_player_shell.dart';
+import '../widgets/course/course_yt_palette.dart';
 
-const _kBg = Color(0xFF0F0F0F);
-const _kSurface = Color(0xFF1A1A1A);
-const _kSurface2 = Color(0xFF232323);
-const _kRed = Color(0xFFFF0000);
+// Fundo/superfícies seguem o tema (claro = branco estilo YouTube; escuro = #0F0F0F)
+// via [CourseYt]. Só o player e a tela cheia continuam pretos.
+const _kRed = CourseYt.red;
 const _kGreen = Color(0xFF22C55E);
 
 /// Abre a tela do curso (aulas, progresso, continuar de onde parou).
@@ -260,12 +260,16 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 1000;
+    final bg = CourseYt.background(context);
+    final fg = CourseYt.text(context);
     return Scaffold(
-      backgroundColor: _kBg,
+      backgroundColor: bg,
       appBar: AppBar(
-        backgroundColor: _kBg,
-        foregroundColor: Colors.white,
+        backgroundColor: CourseYt.isDark(context) ? bg : CourseYt.card(context),
+        surfaceTintColor: Colors.transparent,
+        foregroundColor: fg,
         elevation: 0,
+        scrolledUnderElevation: 0.5,
         title: Text(
           _title,
           maxLines: 1,
@@ -279,7 +283,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
               _progress.liked
                   ? Icons.thumb_up_alt_rounded
                   : Icons.thumb_up_off_alt_rounded,
-              color: _progress.liked ? _kRed : Colors.white,
+              color: _progress.liked ? _kRed : fg,
             ),
             onPressed: () => _svc.toggleLike(_courseId, title: _title, type: 'curso'),
           ),
@@ -289,7 +293,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
             onPressed: _openFullscreen,
           ),
           PopupMenuButton<String>(
-            iconColor: Colors.white,
+            iconColor: fg,
             onSelected: (v) {
               if (v == 'reset') _reset();
             },
@@ -389,7 +393,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         contentType: 'curso',
         onProgress: _onProgress,
         accent: _kRed,
-        accent2: const Color(0xFFCC0000),
+        accent2: CourseYt.redDark,
       );
     }
     return AspectRatio(aspectRatio: 16 / 9, child: child);
@@ -457,8 +461,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
           const SizedBox(height: 10),
           Text(
             _title,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: CourseYt.text(context),
               fontSize: 20,
               fontWeight: FontWeight.w900,
               height: 1.2,
@@ -475,7 +479,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                     value: frac,
                     minHeight: 7,
                     color: completed ? _kGreen : _kRed,
-                    backgroundColor: Colors.white.withValues(alpha: 0.1),
+                    backgroundColor: CourseYt.track(context),
                   ),
                 ),
               ),
@@ -483,7 +487,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
               Text(
                 '${(frac * 100).round()}% · $done/${keys.length}',
                 style: TextStyle(
-                  color: Colors.grey.shade400,
+                  color: CourseYt.textSecondary(context),
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
                 ),
@@ -516,8 +520,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                 tooltip: 'Tela cheia',
                 onPressed: _openFullscreen,
                 style: IconButton.styleFrom(
-                  backgroundColor: _kSurface2,
-                  foregroundColor: Colors.white,
+                  backgroundColor: CourseYt.surfaceAlt(context),
+                  foregroundColor: CourseYt.text(context),
                 ),
                 icon: const Icon(Icons.fullscreen_rounded),
               ),
@@ -532,11 +536,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
       padding: const EdgeInsets.fromLTRB(6, 12, 6, 6),
-      decoration: BoxDecoration(
-        color: _kSurface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-      ),
+      decoration: CourseYt.cardDecoration(context, radius: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -546,10 +546,10 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
               children: [
                 const Icon(Icons.playlist_play_rounded, color: _kRed),
                 const SizedBox(width: 6),
-                const Text(
+                Text(
                   'Aulas',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: CourseYt.text(context),
                     fontWeight: FontWeight.w900,
                     fontSize: 15,
                   ),
@@ -558,7 +558,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                 Text(
                   '${_progress.doneCount(_keys)} de ${_lessons.length} concluídas',
                   style: TextStyle(
-                    color: Colors.grey.shade500,
+                    color: CourseYt.textSecondary(context),
                     fontSize: 11.5,
                     fontWeight: FontWeight.w700,
                   ),
@@ -570,7 +570,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
             const Padding(
               padding: EdgeInsets.all(20),
               child: Center(
-                child: CircularProgressIndicator(color: Colors.white54, strokeWidth: 2),
+                child: CircularProgressIndicator(color: _kRed, strokeWidth: 2),
               ),
             )
           else if (_lessons.isEmpty)
@@ -578,7 +578,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
               padding: const EdgeInsets.all(16),
               child: Text(
                 'Este curso ainda não tem vídeo publicado.',
-                style: TextStyle(color: Colors.grey.shade500),
+                style: TextStyle(color: CourseYt.textSecondary(context)),
               ),
             )
           else
@@ -601,22 +601,19 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: _kSurface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-      ),
+      decoration: CourseYt.cardDecoration(context, radius: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.description_outlined, color: Colors.white70, size: 18),
+              Icon(Icons.description_outlined,
+                  color: CourseYt.textSecondary(context), size: 18),
               const SizedBox(width: 6),
-              const Text(
+              Text(
                 'Sobre o curso',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: CourseYt.text(context),
                   fontWeight: FontWeight.w900,
                   fontSize: 14,
                 ),
@@ -625,6 +622,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
               if (d.length > 220)
                 TextButton(
                   onPressed: () => setState(() => _descExpanded = !_descExpanded),
+                  style: TextButton.styleFrom(foregroundColor: _kRed),
                   child: Text(_descExpanded ? 'Ver menos' : 'Ver tudo'),
                 ),
             ],
@@ -634,7 +632,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
             d,
             maxLines: _descExpanded ? null : 5,
             style: TextStyle(
-              color: Colors.grey.shade300,
+              color: CourseYt.textSecondary(context),
               fontSize: 13.5,
               height: 1.5,
               fontWeight: FontWeight.w500,
@@ -688,7 +686,7 @@ class _LessonTile extends StatelessWidget {
                   shape: BoxShape.circle,
                   color: done
                       ? _kGreen
-                      : (selected ? _kRed : Colors.white.withValues(alpha: 0.08)),
+                      : (selected ? _kRed : CourseYt.surfaceAlt(context)),
                 ),
                 alignment: Alignment.center,
                 child: done
@@ -698,8 +696,8 @@ class _LessonTile extends StatelessWidget {
                             color: Colors.white, size: 20)
                         : Text(
                             '${lesson.index + 1}',
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: CourseYt.text(context),
                               fontWeight: FontWeight.w900,
                             ),
                           )),
@@ -714,7 +712,7 @@ class _LessonTile extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: Colors.white,
+                        color: CourseYt.text(context),
                         fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
                         fontSize: 13.5,
                       ),
@@ -723,7 +721,7 @@ class _LessonTile extends StatelessWidget {
                     Text(
                       subtitleParts.join(' · '),
                       style: TextStyle(
-                        color: Colors.grey.shade500,
+                        color: CourseYt.textSecondary(context),
                         fontSize: 11.5,
                         fontWeight: FontWeight.w600,
                       ),
@@ -736,7 +734,7 @@ class _LessonTile extends StatelessWidget {
                           value: progress.fraction,
                           minHeight: 3,
                           color: _kRed,
-                          backgroundColor: Colors.white.withValues(alpha: 0.1),
+                          backgroundColor: CourseYt.track(context),
                         ),
                       ),
                     ],
@@ -748,7 +746,7 @@ class _LessonTile extends StatelessWidget {
                 onPressed: onToggleDone,
                 icon: Icon(
                   done ? Icons.check_circle_rounded : Icons.radio_button_unchecked,
-                  color: done ? _kGreen : Colors.white38,
+                  color: done ? _kGreen : CourseYt.textMuted(context),
                 ),
               ),
             ],
@@ -868,7 +866,7 @@ class _CourseFullscreenPlayerState extends State<_CourseFullscreenPlayer> {
                 startAtSeconds: widget.startAt,
                 onProgress: widget.onProgress,
                 accent: _kRed,
-                accent2: const Color(0xFFCC0000),
+                accent2: CourseYt.redDark,
               ),
             ),
           ),
