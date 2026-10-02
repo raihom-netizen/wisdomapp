@@ -23,6 +23,13 @@ cd "$APP_DIR"
 APP_PATH="$(pwd)"
 echo "=== Build iOS IPA — projeto: $APP_PATH"
 
+# Widget desligado no preparo (App Group não configurável pela API Apple):
+# todos os scripts abaixo tratam WIDGET_BUNDLE_ID vazio como «app sem extensão».
+if [[ "${WISDOMAPP_WIDGET_ENABLED:-}" == "false" ]]; then
+  echo "Widget desligado nesta execução — IPA só com o app."
+  export WIDGET_BUNDLE_ID=""
+fi
+
 bash "$SCRIPTS_DIR/codemagic_ios_prebuild_check.sh" .
 python3 "$SCRIPTS_DIR/codemagic_ios_write_export_options.py" -o ios/ExportOptions.plist
 python3 "$SCRIPTS_DIR/codemagic_ios_validate_export_options.py"
