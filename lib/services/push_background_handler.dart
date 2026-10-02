@@ -1,7 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, kIsWeb, TargetPlatform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../firebase_options.dart';
 import 'fcm_local_notification_presenter.dart';
@@ -19,11 +18,12 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   if (kIsWeb) return;
 
   final hasSystemNotification = message.notification != null;
-  final isAndroid =
-      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
-  // Android já mostra notification+data quando o app está morto/em background.
-  if (hasSystemNotification && isAndroid) return;
+  // Android e iOS já mostram sozinhos o push com `notification` quando o app
+  // está fechado/em segundo plano — desenhar de novo aqui dava aviso em dobro
+  // (no iPhone acontecia quando o push vinha com content-available).
+  // Só push de dados (despertador/soneca) é desenhado pelo app.
+  if (hasSystemNotification) return;
 
   try {
     await FcmLocalNotificationPresenter.showRemoteMessage(message);

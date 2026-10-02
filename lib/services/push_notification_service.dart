@@ -434,8 +434,17 @@ class PushNotificationService {
     }
 
     if (_isNativeMobile()) {
-      await FcmLocalNotificationPresenter.showRemoteMessage(message);
-      unawaited(playAgendaReminderAudioIfPresent(message));
+      // iPhone em primeiro plano: com `notification` no push o próprio iOS já
+      // mostra o banner (setForegroundNotificationPresentationOptions
+      // alert:true) — desenhar o local também dava AVISO EM DOBRO. Push só de
+      // dados (despertador/soneca) continua sendo desenhado aqui.
+      final iosSistemaMostra = defaultTargetPlatform == TargetPlatform.iOS &&
+          message.notification != null;
+      if (!iosSistemaMostra) {
+        await FcmLocalNotificationPresenter.showRemoteMessage(message);
+      }
+      // O som do módulo já tocou no início deste método (tocar de novo aqui
+      // repetia o áudio).
       return;
     }
 
