@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fa;
 import '../models/finance_account.dart';
 import '../utils/firestore_user_doc_id.dart';
+import '../utils/finance_shared_stream.dart';
 import 'finance_advanced_settings_service.dart';
 import 'goal_deposit_service.dart';
 import '../utils/finance_transactions_hub.dart';
@@ -34,7 +35,21 @@ class FinanceAccountsService {
   /// listener com o servidor entregar a versão fresca. Em iOS/Android/Web
   /// isso deixa a abertura do bottom sheet **instantânea** quando o usuário
   /// já tem contas cadastradas.
-  Stream<List<FinanceAccount>> streamAccounts(String uid) async* {
+  ///
+  /// A escuta é **compartilhada** por uid ([FinanceSharedStream]): devolve
+  /// sempre o mesmo objeto, então `StreamBuilder(stream: streamAccounts(uid))`
+  /// dentro do `build` (Início, Bancos e cartões, metas…) não abre uma escuta
+  /// nova no Firestore a cada redesenho, e quem chega depois recebe a última
+  /// lista na hora.
+  Stream<List<FinanceAccount>> streamAccounts(String uid) {
+    final key = firestoreUserDocIdForAppShell(uid);
+    return _sharedStreams.obter(key, () => _streamAccountsRaw(uid)).stream;
+  }
+
+  static final FinanceSharedStreamCache<List<FinanceAccount>> _sharedStreams =
+      FinanceSharedStreamCache<List<FinanceAccount>>();
+
+  Stream<List<FinanceAccount>> _streamAccountsRaw(String uid) async* {
     final user = fa.FirebaseAuth.instance.currentUser;
     final key = firestoreUserDocIdForAppShell(uid);
     // Na Web o Firestore roda SEM cache em disco (persistenceEnabled: false +
@@ -48,8 +63,9 @@ class FinanceAccountsService {
     if (user != null && memo == null) {
       // Tentativa de seed instantâneo via cache local (IndexedDB / disk).
       try {
-        final cachedSnap =
-            await _col(uid).get(const GetOptions(source: Source.cache));
+        final cachedSnap = await _col(uid)
+            .get(const GetOptions(source: Source.cache))
+            .timeout(const Duration(seconds: 3));
         if (cachedSnap.docs.isNotEmpty) {
           final list = cachedSnap.docs.map(FinanceAccount.fromDoc).toList();
           sortFinanceAccounts(list);
@@ -86,20 +102,30 @@ class FinanceAccountsService {
     if (firestoreUserDocIdStrictFromSession().isEmpty) return const [];
     final key = firestoreUserDocIdForAppShell(uid);
     // Cache local primeiro — abertura do Financeiro/Agenda sem esperar rede.
+    // Web: sem cache em disco — a lista que a escuta já recebeu nesta sessão
+    // vale como «cache».
+    final memo = _lastKnownByUid[key];
+    if (memo != null) return List<FinanceAccount>.of(memo);
     try {
-      final cached = await _col(uid).get(const GetOptions(source: Source.cache));
+      final cached = await _col(uid)
+          .get(const GetOptions(source: Source.cache))
+          .timeout(const Duration(seconds: 3));
       if (cached.docs.isNotEmpty) {
         final list = cached.docs.map(FinanceAccount.fromDoc).toList();
         sortFinanceAccounts(list);
         // Atualiza persistence em background.
         // ignore: unawaited_futures
-        _col(uid).get(const GetOptions(source: Source.serverAndCache));
+        _col(uid)
+            .get(const GetOptions(source: Source.serverAndCache))
+            .then<void>((_) {}, onError: (_) {});
         return list;
       }
     } catch (_) {}
-    final snap = await _col(uid).get(
-      const GetOptions(source: Source.serverAndCache),
-    );
+    // Prazo: na Web sem rede o get() podia ficar pendurado e a tela que
+    // esperava a lista (Financeiro, Agenda, lançamento) girava para sempre.
+    final snap = await _col(uid)
+        .get(const GetOptions(source: Source.serverAndCache))
+        .timeout(const Duration(seconds: 20));
     final list = snap.docs.map(FinanceAccount.fromDoc).toList();
     sortFinanceAccounts(list);
     _lastKnownByUid[key] = list;

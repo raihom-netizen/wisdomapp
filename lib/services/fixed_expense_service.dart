@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../constants/app_business_rules.dart';
@@ -33,8 +34,12 @@ class FixedExpenseService {
 
   /// Lista todas as despesas fixas ativas do usuário.
   Future<List<Map<String, dynamic>>> list(String uid) async {
-    final snap =
-        await _fixedRef(uid).orderBy('createdAt', descending: true).get();
+    // Prazo: sem ele a tela das fixas (e os cards do Financeiro que somam as
+    // fixas) girava para sempre quando o servidor não respondia.
+    final snap = await _fixedRef(uid)
+        .orderBy('createdAt', descending: true)
+        .get()
+        .timeout(const Duration(seconds: 20));
     return snap.docs.map((d) {
       final m = Map<String, dynamic>.from(d.data());
       m['id'] = d.id;

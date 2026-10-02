@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+
+import '../widgets/finance_load_error_box.dart';
 import '../theme/theme_context.dart';
 import '../widgets/modern_module_ui.dart';
 
@@ -55,6 +57,9 @@ class _FinanceCategoriesFullscreenPageState
 
   Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>>? _docsFuture;
   Future<({double income, double expense})>? _totalsFuture;
+  /// Criado junto com os dois acima — antes o `Future.wait` era montado no
+  /// `build` e cada redesenho recomeçava o spinner.
+  Future<List<dynamic>>? _bothFuture;
 
   @override
   void initState() {
@@ -71,6 +76,8 @@ class _FinanceCategoriesFullscreenPageState
       statusFilter: widget.statusFilter,
       typeFilter: 'all',
     ).then((r) => (income: r.income, expense: r.expense));
+    _bothFuture = Future.wait([_docsFuture!, _totalsFuture!])
+        .timeout(const Duration(seconds: 60));
   }
 
   Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> _loadDocs() async {
@@ -220,7 +227,7 @@ class _FinanceCategoriesFullscreenPageState
             ),
             Expanded(
               child: FutureBuilder<List<dynamic>>(
-                future: Future.wait([_docsFuture!, _totalsFuture!]),
+                future: _bothFuture,
                 builder: (context, snap) {
                   if (snap.connectionState != ConnectionState.done &&
                       !snap.hasData) {
@@ -230,10 +237,9 @@ class _FinanceCategoriesFullscreenPageState
                     return Center(
                       child: Padding(
                         padding: const EdgeInsets.all(24),
-                        child: Text(
-                          'Erro ao carregar: ${snap.error}',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: context.appTextPrimary),
+                        child: FinanceLoadErrorBox(
+                          error: snap.error,
+                          onRetry: () => setState(_reload),
                         ),
                       ),
                     );
@@ -243,9 +249,12 @@ class _FinanceCategoriesFullscreenPageState
                   final totals =
                       snap.data![1] as ({double income, double expense});
                   final entriesFull = _expenseByCategory(docs);
-                  final totalExpense = totals.expense > 0
-                      ? totals.expense
-                      : entriesFull.fold<double>(0, (s, e) => s + e.value);
+                  // Base do % = soma das MESMAS fatias do gráfico (mesmo
+                  // filtro de conta/busca/status). O total do servidor é do
+                  // período inteiro, só pagos e sem filtro de conta: com conta
+                  // filtrada ou pendentes, as fatias somavam ≠ 100%.
+                  final totalExpense =
+                      entriesFull.fold<double>(0, (s, e) => s + e.value);
                   final pieEntries =
                       _collapseOthers(entriesFull, _kMaxPieSlices);
 

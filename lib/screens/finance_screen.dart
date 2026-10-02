@@ -25,6 +25,7 @@ import '../services/logs_service.dart';
 import '../services/functions_service.dart';
 import '../services/transaction_save_service.dart';
 import '../theme/app_colors.dart';
+import '../widgets/finance_load_error_box.dart';
 import '../widgets/skeleton_loader.dart';
 import '../utils/premium_upgrade.dart';
 import '../utils/firestore_query_batched_collect.dart';
@@ -196,6 +197,28 @@ class _FinanceScreenState extends State<FinanceScreen>
 
   /// Força nova subscrição ao `snapshots()` (ex.: após erro, ou mudança de plano/PRO).
   int _txStreamRetryKey = 0;
+
+  /// Leituras pedidas por blocos do `build` (top despesas, fixas, comparativo).
+  /// Antes cada redesenho do Financeiro disparava as MESMAS consultas de novo
+  /// (e o comparativo voltava à barrinha de progresso a cada setState).
+  /// Chave = parâmetros + revisão dos lançamentos: muda filtro/período ou
+  /// grava algo → nova leitura; redesenho comum → reaproveita.
+  final Map<String, Future<Object?>> _buildFutures = {};
+
+  Future<T> _futuroDoBuild<T>(String key, Future<T> Function() criar) {
+    final k = '$key|${FinanceTransactionsHub.revision.value}|$_txStreamRetryKey';
+    final hit = _buildFutures[k];
+    // O mesmo objeto (não um `.then`): o FutureBuilder não reinicia.
+    if (hit != null) return hit as Future<T>;
+    if (_buildFutures.length > 40) _buildFutures.clear();
+    final f = criar();
+    _buildFutures[k] = f;
+    // Falhou: sai do memo para o próximo redesenho (ou «Tentar de novo») ler de novo.
+    f.then<void>((_) {}, onError: (Object _) {
+      if (identical(_buildFutures[k], f)) _buildFutures.remove(k);
+    });
+    return f;
+  }
 
   /// Carregamento do período em páginas (lista principal — não bloqueia até ao último batch).
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _mainPeriodDocs = [];
@@ -6590,13 +6613,16 @@ class _FinanceScreenState extends State<FinanceScreen>
           ),
           const SizedBox(height: 10),
           FutureBuilder<List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
-            future: financePeriodMergedDocumentsCollect(
-              uid: firestoreUserDocIdForAppShell(widget.uid),
-              from: _from,
-              to: _to,
-              statusFilter: _statusFilter,
-              typeFilter: 'expense',
-              financeAccountId: _financeAccountFilterId,
+            future: _futuroDoBuild(
+              'topDespesas|${_from.millisecondsSinceEpoch}|${_to.millisecondsSinceEpoch}|$_statusFilter|${_financeAccountFilterId ?? ''}',
+              () => financePeriodMergedDocumentsCollect(
+                uid: firestoreUserDocIdForAppShell(widget.uid),
+                from: _from,
+                to: _to,
+                statusFilter: _statusFilter,
+                typeFilter: 'expense',
+                financeAccountId: _financeAccountFilterId,
+              ).timeout(const Duration(seconds: 45)),
             ),
             builder: (context, mergedSnap) {
               final mergedDocs = mergedSnap.data ?? docs;
@@ -6630,12 +6656,15 @@ class _FinanceScreenState extends State<FinanceScreen>
           const SizedBox(height: 18),
         ],
         FutureBuilder<List<List<Map<String, dynamic>>>>(
-          future: Future.wait([
-            FixedExpenseService()
-                .list(firestoreUserDocIdForAppShell(widget.uid)),
-            FixedIncomeService()
-                .list(firestoreUserDocIdForAppShell(widget.uid)),
-          ]),
+          future: _futuroDoBuild(
+            'fixasCadastro',
+            () => Future.wait([
+              FixedExpenseService()
+                  .list(firestoreUserDocIdForAppShell(widget.uid)),
+              FixedIncomeService()
+                  .list(firestoreUserDocIdForAppShell(widget.uid)),
+            ]),
+          ),
           builder: (context, snap) {
             if (!snap.hasData) return const SizedBox.shrink();
             final expList = snap.data![0];
@@ -6741,14 +6770,29 @@ class _FinanceScreenState extends State<FinanceScreen>
         ),
         FutureBuilder(
           key: ValueKey(compareKey),
-          future: FinancePeriodSummary.load(
-            uid: firestoreUserDocIdForAppShell(widget.uid),
-            from: pf,
-            to: pt,
-            statusFilter: _statusFilter,
-            typeFilter: _typeFilter,
+          future: _futuroDoBuild(
+            'comparativo|$compareKey',
+            () => FinancePeriodSummary.load(
+              uid: firestoreUserDocIdForAppShell(widget.uid),
+              from: pf,
+              to: pt,
+              statusFilter: _statusFilter,
+              typeFilter: _typeFilter,
+            ).timeout(const Duration(seconds: 60)),
           ),
           builder: (context, snap) {
+            // Erro/prazo: antes a barrinha de progresso ficava para sempre.
+            if (snap.hasError) {
+              return Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => setState(() {}),
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                  label: const Text(
+                      'Comparativo com o período anterior indisponível — Tentar de novo'),
+                ),
+              );
+            }
             if (snap.connectionState != ConnectionState.done || !snap.hasData) {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 10),
@@ -9552,6 +9596,25 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet>
     return rows;
   }
 
+  /// O comparativo era pedido de novo a cada redesenho da folha (FutureBuilder
+  /// com o Future criado no `build`): guarda um por período/escopo e só refaz
+  /// quando a revisão dos lançamentos muda.
+  String? _comparisonKey;
+  Future<double>? _comparisonFuture;
+
+  Future<double> _comparisonTotalMemo(
+      DateTime from, DateTime to, FinanceInsightScope scope) {
+    final key =
+        '${from.millisecondsSinceEpoch}|${to.millisecondsSinceEpoch}|${scope.name}|${FinanceTransactionsHub.revision.value}';
+    if (_comparisonKey == key && _comparisonFuture != null) {
+      return _comparisonFuture!;
+    }
+    _comparisonKey = key;
+    return _comparisonFuture = _loadComparisonTotal(from, to, scope)
+        .timeout(const Duration(seconds: 45))
+        .catchError((Object _) => 0.0);
+  }
+
   Future<double> _loadComparisonTotal(
       DateTime from, DateTime to, FinanceInsightScope scope) async {
     final days = to.difference(from).inDays + 1;
@@ -9826,7 +9889,7 @@ class FinanceInsightSheetState extends State<FinanceInsightSheet>
                                 summary.expense,
                           };
                     return FutureBuilder<double>(
-                      future: _loadComparisonTotal(_from, _to, _scope),
+                      future: _comparisonTotalMemo(_from, _to, _scope),
                       builder: (context, cmpSnap) {
                         final previousTotal = cmpSnap.data ?? 0.0;
                         final deltaPrev = authoritativeTotal - previousTotal;
@@ -10718,6 +10781,25 @@ class _FinanceReportsPremiumSheetState
         List<String> hiddenDefaultIncome,
         List<String> hiddenDefaultExpense,
       })> _catsFuture;
+  /// Resumo «antes de exportar»: um Future por combinação de filtros (antes
+  /// cada redesenho da folha chamava o servidor de novo).
+  String? _resumoKey;
+  Future<({double income, double expense, int docCount})>? _resumoFuture;
+
+  Future<({double income, double expense, int docCount})> _resumoPara(
+      String key, DateTime rf, DateTime rt) {
+    if (_resumoKey == key && _resumoFuture != null) return _resumoFuture!;
+    _resumoKey = key;
+    return _resumoFuture = FinancePeriodSummary.load(
+      uid: firestoreUserDocIdForAppShell(widget.uid),
+      from: rf,
+      to: rt,
+      statusFilter: widget.statusFilter,
+      categoryExact: _categoryChoice,
+      semCategoriaToken: widget.semCategoriaToken,
+    ).timeout(const Duration(seconds: 60));
+  }
+
   @override
   void initState() {
     super.initState();
@@ -11083,18 +11165,26 @@ class _FinanceReportsPremiumSheetState
                 key: ValueKey<String>(
                   '${rf.millisecondsSinceEpoch}|${rt.millisecondsSinceEpoch}|${_categoryChoice ?? ''}|${widget.statusFilter}',
                 ),
-                future: FinancePeriodSummary.load(
-                  uid: firestoreUserDocIdForAppShell(widget.uid),
-                  from: rf,
-                  to: rt,
-                  statusFilter: widget.statusFilter,
-                  categoryExact: _categoryChoice,
-                  semCategoriaToken: widget.semCategoriaToken,
+                future: _resumoPara(
+                  '${rf.millisecondsSinceEpoch}|${rt.millisecondsSinceEpoch}|${_categoryChoice ?? ''}|${widget.statusFilter}',
+                  rf,
+                  rt,
                 ),
                 builder: (context, snap) {
                   final loading =
                       snap.connectionState == ConnectionState.waiting &&
                           !snap.hasData;
+                  if (snap.hasError) {
+                    // Antes mostrava R$ 0,00 em tudo, como se o período
+                    // estivesse vazio.
+                    return FinanceLoadErrorBox(
+                      error: snap.error,
+                      onRetry: () => setState(() {
+                        _resumoKey = null;
+                        _resumoFuture = null;
+                      }),
+                    );
+                  }
                   final inc = snap.data?.income ?? 0.0;
                   final exp = snap.data?.expense ?? 0.0;
                   final saldo = inc - exp;

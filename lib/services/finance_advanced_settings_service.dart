@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/finance_shared_stream.dart';
 import '../utils/firestore_user_doc_id.dart';
 
 /// Preferências opcionais do painel Financeiro (ex.: faixa de contas).
@@ -33,7 +34,7 @@ class FinanceAdvancedSettingsService {
   Future<bool> getStripHideZeroBalancesOnce(String uid) async {
     if (firestoreUserDocIdStrictFromSession().isEmpty) return false;
     try {
-      final snap = await _doc(uid).get();
+      final snap = await _doc(uid).get().timeout(const Duration(seconds: 10));
       return snap.data()?[_keyStripHideZero] == true;
     } catch (_) {
       return false;
@@ -50,19 +51,36 @@ class FinanceAdvancedSettingsService {
 
   Future<String?> getDefaultFinanceAccountId(String uid) async {
     if (uid.isEmpty) return null;
-    final snap = await _doc(uid).get();
-    final v = snap.data()?[keyDefaultFinanceAccountId];
-    if (v is String && v.trim().isNotEmpty) return v.trim();
+    // Com prazo e sem derrubar quem chama (novo lançamento, Pix, metas): sem
+    // resposta do servidor, segue sem conta padrão em vez de ficar girando.
+    try {
+      final snap = await _doc(uid).get().timeout(const Duration(seconds: 10));
+      final v = snap.data()?[keyDefaultFinanceAccountId];
+      if (v is String && v.trim().isNotEmpty) return v.trim();
+    } catch (_) {
+      // Última conta padrão vista pela escuta nesta sessão (se houver).
+      return _defaultIdStreams.peek(firestoreUserDocIdForAppShell(uid));
+    }
     return null;
   }
 
+  static final FinanceSharedStreamCache<String?> _defaultIdStreams =
+      FinanceSharedStreamCache<String?>();
+
+  /// Escuta compartilhada por uid: cada card de «Bancos e cartões» chamava
+  /// isto no `build` e abria uma escuta nova por card a cada redesenho.
   Stream<String?> watchDefaultFinanceAccountId(String uid) {
     if (uid.isEmpty) return Stream.value(null);
-    return _doc(uid).snapshots().map((s) {
-      final v = s.data()?[keyDefaultFinanceAccountId];
-      if (v is String && v.trim().isNotEmpty) return v.trim();
-      return null;
-    });
+    return _defaultIdStreams
+        .obter(
+          firestoreUserDocIdForAppShell(uid),
+          () => _doc(uid).snapshots().map((s) {
+            final v = s.data()?[keyDefaultFinanceAccountId];
+            if (v is String && v.trim().isNotEmpty) return v.trim();
+            return null;
+          }),
+        )
+        .stream;
   }
 
   Future<void> setDefaultFinanceAccountId(String uid, String? accountId) async {

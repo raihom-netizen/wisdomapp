@@ -42,6 +42,7 @@ class FinanceServerTotals {
   static void invalidateForUser(String uid) {
     if (uid.isEmpty) return;
     _cache.removeWhere((k, _) => k.startsWith('$uid|'));
+    _inFlight.removeWhere((k, _) => k.startsWith('$uid|'));
   }
 
   static Future<FinanceServerTotalsResult> load({
@@ -73,6 +74,36 @@ class FinanceServerTotals {
     if (hit != null && DateTime.now().difference(hit.at) < cacheTtl) {
       return hit.result;
     }
+    // Mesma consulta já em andamento (vários FutureBuilders do Financeiro
+    // pedem os mesmos totais no mesmo redesenho): reaproveita a chamada em vez
+    // de disparar a função de novo — e com prazo, para nenhum card girar para
+    // sempre (quem chama cai no cálculo local ou mostra «Tentar de novo»).
+    final running = _inFlight[key];
+    if (running != null) return running;
+    final fut = _loadFromServer(
+      key: key,
+      from: from,
+      to: to,
+      statusFilter: statusFilter,
+      typeFilter: typeFilter,
+    ).timeout(const Duration(seconds: 45));
+    _inFlight[key] = fut;
+    try {
+      return await fut;
+    } finally {
+      if (identical(_inFlight[key], fut)) _inFlight.remove(key);
+    }
+  }
+
+  static final Map<String, Future<FinanceServerTotalsResult>> _inFlight = {};
+
+  static Future<FinanceServerTotalsResult> _loadFromServer({
+    required String key,
+    required DateTime from,
+    required DateTime to,
+    required String statusFilter,
+    required String typeFilter,
+  }) async {
     final raw = await FunctionsService().financePeriodTotals(
       from: from,
       to: to,

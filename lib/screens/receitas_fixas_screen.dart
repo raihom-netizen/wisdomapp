@@ -26,6 +26,7 @@ import '../utils/date_picker_a11y.dart';
 import '../utils/finance_transactions_hub.dart';
 import '../utils/firestore_user_doc_id.dart';
 import '../widgets/brl_amount_text_field.dart';
+import '../widgets/finance_load_error_box.dart';
 import '../widgets/fixas_totalizador_card.dart';
 import '../widgets/finance_calendar_color_picker.dart';
 import '../widgets/fixed_flow_finance_account_field.dart';
@@ -99,6 +100,7 @@ class _ReceitasFixasScreenState extends State<ReceitasFixasScreen> {
   List<String> _incomeCategories = List<String>.from(kDefaultIncomeCategories)
     ..sort(UserCategoriesService.compareNamesPt);
   Future<List<Map<String, dynamic>>>? _fixedIncomesFuture;
+  List<Map<String, dynamic>>? _ultimasFixas;
   StreamSubscription<fa.User?>? _authUidSub;
 
   String get _fsUid => firestoreUserDocIdForAppShell(widget.uid);
@@ -1248,12 +1250,29 @@ class _ReceitasFixasScreenState extends State<ReceitasFixasScreen> {
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: _fixedIncomesFuture,
         builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
+          // Recarga (depois de salvar/pagar) mantém a lista anterior na tela
+          // em vez de trocar tudo por um spinner; erro/prazo estourado mostra
+          // «Tentar de novo» — antes caía em «Nenhuma … fixa», como se as
+          // fixas tivessem sumido.
+          if (snap.hasData) _ultimasFixas = snap.data;
+          if (snap.connectionState == ConnectionState.waiting &&
+              _ultimasFixas == null) {
             return Center(
                 child: CircularProgressIndicator(
                     color: AppColors.primary.withValues(alpha: 0.9)));
           }
-          final items = snap.data ?? [];
+          if (snap.hasError && _ultimasFixas == null) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: FinanceLoadErrorBox(
+                  error: snap.error,
+                  onRetry: _refreshFixedIncomes,
+                ),
+              ),
+            );
+          }
+          final items = snap.data ?? _ultimasFixas ?? const <Map<String, dynamic>>[];
           if (items.isEmpty) {
             return Center(
               child: Padding(
