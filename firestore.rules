@@ -404,6 +404,24 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create, update, delete: if canEditPublicContent() || isContentEditor();
     }
+    // Promoções (Divulgação): não tinha regra — o card do Início, a página
+    // de escolha de plano (link ?promo=) e a aba de Promoções do admin davam
+    // permission-denied calado. Leitura pública (preço/condição divulgados);
+    // gravar = quem edita conteúdo público. quantitySold vem do servidor.
+    match /promotions/{promoId} {
+      allow read: if true;
+      allow create, update, delete: if canEditPublicContent();
+    }
+    // Consultas de GRUPO do painel admin (resumo «lançamentos 30 dias»,
+    // monitor Premium Pro, conexões extras): regra por caminho não vale para
+    // collectionGroup — precisa do curinga recursivo. Só leitura, só quem
+    // já lê os dados dos usuários (isAdminGerente).
+    match /{path=**}/transactions/{txId} {
+      allow read: if isAdminGerente();
+    }
+    match /{path=**}/bank_connection_entitlements/{entId} {
+      allow read: if isAdminGerente();
+    }
     match /admin_audit_log/{docId} {
       allow read, create: if isAdminOrMaster() || isSystemManager();
     }
