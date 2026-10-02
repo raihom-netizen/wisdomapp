@@ -2,7 +2,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../constants/app_business_rules.dart';
 import '../utils/finance_line_opening.dart';
+import '../utils/finance_transaction_status_resolver.dart';
+import '../utils/finance_transactions_hub.dart';
 import '../utils/firestore_user_doc_id.dart';
+import 'finance_month_cache.dart';
 
 /// Receitas fixas (aluguéis, comissões, juros, etc.): o sistema gera lançamentos **pendentes** por mês no período.
 /// Mesma lógica de [FixedExpenseService], com `type: income` e coleção `fixed_incomes`.
@@ -48,6 +51,10 @@ class FixedIncomeService {
     int? parcelaInicial,
     bool addToCalendar = false,
     String? calendarColorHex,
+    String? financeAccountId,
+    String? parceiroId,
+    String? parceiroNome,
+    String? parceiroTipo,
   }) async {
     final day = dayOfMonth.clamp(1, 31);
     DateTime end;
@@ -66,7 +73,16 @@ class FixedIncomeService {
       end = endDate ??
           DateTime(startDate.year + 10, startDate.month, startDate.day);
     }
+    final accId = (financeAccountId ?? '').trim();
+    // Cliente/fornecedor do cadastro de Vendas (opcional) — vai junto para
+    // cada lançamento gerado no mês já nascer com o vínculo.
+    final pid = (parceiroId ?? '').trim();
     final data = <String, dynamic>{
+      if (pid.isNotEmpty) ...{
+        'parceiroId': pid,
+        'parceiroNome': (parceiroNome ?? '').trim(),
+        'parceiroTipo': (parceiroTipo ?? '').trim(),
+      },
       'description': description,
       'category': category,
       'amount': amount,
@@ -76,6 +92,7 @@ class FixedIncomeService {
       'endDate': Timestamp.fromDate(DateTime(end.year, end.month, end.day)),
       'active': true,
       'addToCalendar': addToCalendar,
+      if (accId.isNotEmpty) 'financeAccountId': accId,
       if (addToCalendar &&
           calendarColorHex != null &&
           calendarColorHex.trim().isNotEmpty)
@@ -109,6 +126,11 @@ class FixedIncomeService {
     int? parcelaInicial,
     bool? addToCalendar,
     String? calendarColorHex,
+    String? financeAccountId,
+    bool clearFinanceAccount = false,
+    String? parceiroId,
+    String? parceiroNome,
+    String? parceiroTipo,
   }) async {
     final data = <String, dynamic>{
       'updatedAt': FieldValue.serverTimestamp(),
@@ -142,23 +164,74 @@ class FixedIncomeService {
           totalParcelas.clamp(1, AppBusinessRules.maxFixedFlowInstallments);
       data['parcelaInicial'] = parcelaInicial.clamp(1, cap);
     }
+    if (clearFinanceAccount) {
+      data['financeAccountId'] = FieldValue.delete();
+    } else if (financeAccountId != null) {
+      final accId = financeAccountId.trim();
+      if (accId.isEmpty) {
+        data['financeAccountId'] = FieldValue.delete();
+      } else {
+        data['financeAccountId'] = accId;
+      }
+    }
     if (addToCalendar != null) {
       data['addToCalendar'] = addToCalendar;
-      if (!addToCalendar) data['calendarColorHex'] = FieldValue.delete();
+      if (addToCalendar &&
+          calendarColorHex != null &&
+          calendarColorHex.trim().isNotEmpty) {
+        data['calendarColorHex'] = calendarColorHex.trim();
+      } else {
+        data['calendarColorHex'] = FieldValue.delete();
+      }
+    } else if (calendarColorHex != null) {
+      if (calendarColorHex.trim().isNotEmpty) {
+        data['calendarColorHex'] = calendarColorHex.trim();
+      } else {
+        data['calendarColorHex'] = FieldValue.delete();
+      }
     }
-    if (calendarColorHex != null) {
-      final hex = calendarColorHex.trim();
-      data['calendarColorHex'] = hex.isEmpty ? FieldValue.delete() : hex;
+    // Cliente/fornecedor: `''` limpa o vínculo, `null` não mexe.
+    if (parceiroId != null) {
+      final pid = parceiroId.trim();
+      if (pid.isEmpty) {
+        data['parceiroId'] = FieldValue.delete();
+        data['parceiroNome'] = FieldValue.delete();
+        data['parceiroTipo'] = FieldValue.delete();
+      } else {
+        data['parceiroId'] = pid;
+        data['parceiroNome'] = (parceiroNome ?? '').trim();
+        data['parceiroTipo'] = (parceiroTipo ?? '').trim();
+      }
     }
     await _fixedRef(uid).doc(id).update(data);
+    if (parceiroId != null) {
+      await _updatePendingParceiro(
+        uid,
+        id,
+        parceiroId.trim(),
+        (parceiroNome ?? '').trim(),
+        (parceiroTipo ?? '').trim(),
+      );
+    }
     if (addToCalendar != null || calendarColorHex != null) {
       // Só a cor mudou: respeita o opt-in gravado na fixa (ausente =
-      // desligado; regra 01/10/2026) — não liga sozinho.
+      // desligado; regra do dono 01/10/2026) — não liga sozinho.
       final ligado = addToCalendar ??
           ((await _fixedRef(uid).doc(id).get()).data()?['addToCalendar'] ==
               true);
       await _updateFuturePendingCalendarFlags(
-          uid, id, ligado, calendarColorHex);
+        uid,
+        id,
+        ligado,
+        calendarColorHex,
+      );
+    }
+    if (clearFinanceAccount || financeAccountId != null) {
+      await _updatePendingAccount(
+        uid,
+        id,
+        clearFinanceAccount ? null : financeAccountId,
+      );
     }
     if (dayOfMonth != null) {
       return updateFuturePendingEntries(uid, id, dayOfMonth.clamp(1, 31));
@@ -166,38 +239,126 @@ class FixedIncomeService {
     return 0;
   }
 
-  /// Propaga «mostrar no calendário» + cor para as parcelas futuras pendentes desta receita fixa.
-  Future<void> _updateFuturePendingCalendarFlags(
-      String uid,
-      String fixedIncomeId,
-      bool addToCalendar,
-      String? calendarColorHex) async {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final snap = await _txRef(uid)
-        .where('fixedIncomeId', isEqualTo: fixedIncomeId)
-        .where('status', isEqualTo: 'pending')
-        .get();
-    final toUpdate = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-    for (final doc in snap.docs) {
-      final dateTs = doc.data()['date'];
-      if (dateTs is! Timestamp) continue;
-      if (dateTs.toDate().isBefore(today)) continue;
-      toUpdate.add(doc);
-    }
-    for (var i = 0; i < toUpdate.length; i += batchLimit) {
-      final batch = _db.batch();
-      for (final doc in toUpdate.skip(i).take(batchLimit)) {
-        final hex = (calendarColorHex ?? '').trim();
-        batch.update(doc.reference, {
-          'addToCalendar': addToCalendar,
-          'calendarColorHex':
-              (addToCalendar && hex.isNotEmpty) ? hex : FieldValue.delete(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
+  /// Propaga banco/caixa para **todos** os lançamentos pendentes desta receita fixa.
+  /// Não altera pagos/recebidos (`status != pending`).
+  Future<int> _updatePendingAccount(
+    String uid,
+    String fixedIncomeId,
+    String? financeAccountId,
+  ) async {
+    try {
+      final snap = await _txRef(uid)
+          .where('fixedIncomeId', isEqualTo: fixedIncomeId)
+          .where('status', isEqualTo: 'pending')
+          .get();
+      if (snap.docs.isEmpty) return 0;
+      final accId = (financeAccountId ?? '').trim();
+      var updated = 0;
+      for (var i = 0; i < snap.docs.length; i += batchLimit) {
+        final batch = _db.batch();
+        for (final doc in snap.docs.skip(i).take(batchLimit)) {
+          batch.update(doc.reference, {
+            if (accId.isNotEmpty)
+              'financeAccountId': accId
+            else
+              'financeAccountId': FieldValue.delete(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+          updated++;
+        }
+        await batch.commit();
       }
-      await batch.commit();
+      return updated;
+    } catch (_) {
+      return 0;
     }
+  }
+
+  /// Propaga o cliente/fornecedor para os lançamentos ainda **pendentes**
+  /// desta receita fixa. Recebidos ficam como estão.
+  Future<int> _updatePendingParceiro(
+    String uid,
+    String fixedIncomeId,
+    String parceiroId,
+    String parceiroNome,
+    String parceiroTipo,
+  ) async {
+    try {
+      final snap = await _txRef(uid)
+          .where('fixedIncomeId', isEqualTo: fixedIncomeId)
+          .where('status', isEqualTo: 'pending')
+          .get();
+      if (snap.docs.isEmpty) return 0;
+      var updated = 0;
+      for (var i = 0; i < snap.docs.length; i += batchLimit) {
+        final batch = _db.batch();
+        for (final doc in snap.docs.skip(i).take(batchLimit)) {
+          batch.update(doc.reference, {
+            if (parceiroId.isNotEmpty) ...{
+              'parceiroId': parceiroId,
+              'parceiroNome': parceiroNome,
+              'parceiroTipo': parceiroTipo,
+            } else ...{
+              'parceiroId': FieldValue.delete(),
+              'parceiroNome': FieldValue.delete(),
+              'parceiroTipo': FieldValue.delete(),
+            },
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+          updated++;
+        }
+        await batch.commit();
+      }
+      return updated;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Future<void> _updateFuturePendingCalendarFlags(
+    String uid,
+    String fixedIncomeId,
+    bool addToCalendar,
+    String? calendarColorHex,
+  ) async {
+    try {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final snap = await _txRef(uid)
+          .where('fixedIncomeId', isEqualTo: fixedIncomeId)
+          .where('status', isEqualTo: 'pending')
+          .get();
+      final toUpdate = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+      for (final doc in snap.docs) {
+        final d = doc.data();
+        final dateTs = d['date'];
+        if (dateTs is! Timestamp) continue;
+        final date = dateTs.toDate();
+        if (date.isBefore(today)) continue;
+        toUpdate.add(doc);
+      }
+      if (toUpdate.isEmpty) return;
+      for (var i = 0; i < toUpdate.length; i += batchLimit) {
+        final batch = _db.batch();
+        for (final doc in toUpdate.skip(i).take(batchLimit)) {
+          batch.update(doc.reference, {
+            'addToCalendar': addToCalendar,
+            if (addToCalendar)
+              'hideFromCalendar': FieldValue.delete()
+            else
+              'hideFromCalendar': true,
+            if (addToCalendar &&
+                calendarColorHex != null &&
+                calendarColorHex.trim().isNotEmpty)
+              'calendarColorHex': calendarColorHex.trim()
+            else
+              'calendarColorHex': FieldValue.delete(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+        await batch.commit();
+      }
+    } catch (_) {}
   }
 
   Future<int> updateFuturePendingEntries(
@@ -249,8 +410,93 @@ class FixedIncomeService {
     return updated;
   }
 
-  Future<void> delete(String uid, String id) async {
+  /// Remove uma receita fixa e os lançamentos pendentes ligados a ela
+  /// (Agenda/calendário + Financeiro). Recebidos permanecem.
+  Future<int> delete(String uid, String id) async {
+    final removed = await _deletePendingEntriesForFixed(uid, id);
     await _fixedRef(uid).doc(id).delete();
+    FinanceMonthCache.clearUid(uid);
+    FinanceTransactionsHub.notifyMutated(uid: uid);
+    return removed;
+  }
+
+  /// Remove todos os lançamentos **pending** desta receita fixa (qualquer mês).
+  Future<int> _deletePendingEntriesForFixed(
+      String uid, String fixedIncomeId) async {
+    final snap = await _txRef(uid)
+        .where('fixedIncomeId', isEqualTo: fixedIncomeId)
+        .get();
+    final toDelete = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+    for (final doc in snap.docs) {
+      final status = (doc.data()['status'] ?? '').toString().toLowerCase();
+      if (status != 'pending') continue;
+      toDelete.add(doc);
+    }
+    if (toDelete.isEmpty) return 0;
+    for (var i = 0; i < toDelete.length; i += batchLimit) {
+      final batch = _db.batch();
+      for (final doc in toDelete.skip(i).take(batchLimit)) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+    }
+    return toDelete.length;
+  }
+
+  /// Migra lançamentos pendentes com data anterior a hoje para "paid".
+  /// Limpa dados legados e garante que parcelas passadas de receitas fixas
+  /// não fiquem eternamente como pendentes.
+  Future<void> _migratePastPendingEntries(
+    String uid,
+    List<QuerySnapshot<Map<String, dynamic>>> snaps,
+  ) async {
+    // Antes esta rotina marcava como PAGO todo pendente com data anterior a
+    // hoje. Dar baixa é decisão do usuário: uma conta vencida continua
+    // vencida até ele confirmar que pagou (ou receber, no caso da receita).
+    // Mantida como no-op para não mexer nas chamadas existentes.
+    return;
+    // ignore: dead_code
+    try {
+      final startOfToday = DateTime(
+        DateTime.now().year,
+        DateTime.now().month,
+        DateTime.now().day,
+      );
+      final toUpdate = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+      for (final snap in snaps) {
+        for (final doc in snap.docs) {
+          final d = doc.data();
+          if ((d['status'] ?? '').toString() != 'pending') continue;
+          final dateTs = d['date'];
+          if (dateTs is! Timestamp) continue;
+          final date = dateTs.toDate();
+          if (!date.isBefore(startOfToday)) continue;
+          toUpdate.add(doc);
+        }
+      }
+      if (toUpdate.isEmpty) return;
+      for (var i = 0; i < toUpdate.length; i += batchLimit) {
+        final batch = _db.batch();
+        for (final doc in toUpdate.skip(i).take(batchLimit)) {
+          final dateTs = doc.data()['date'];
+          final date = dateTs is Timestamp ? dateTs.toDate() : DateTime.now();
+          final paidAt =
+              FinanceTransactionStatusResolver.paidAtForAutoPaid(date);
+          batch.update(doc.reference, {
+            'status': 'paid',
+            'paidAt': paidAt,
+            'effectiveDate': FinanceLineOpening.effectiveTimestampForWrite(
+              date: date,
+              paidAt: paidAt,
+            ),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+        await batch.commit();
+      }
+    } catch (_) {
+      // Falha silenciosa: não impede a geração das parcelas futuras.
+    }
   }
 
   Future<int> deleteAllParcelas(String uid, String fixedIncomeId) async {
@@ -297,6 +543,11 @@ class FixedIncomeService {
             .get(),
     ]);
 
+    // Migra lançamentos pendentes com data no passado para "paid". Isso limpa
+    // dados antigos que não deveriam estar como pendentes e evita que voltem
+    // ao painel de pendentes após serem excluídos.
+    await _migratePastPendingEntries(uid, existingSnaps);
+
     final List<Map<String, dynamic>> toCreate = [];
     for (var i = 0; i < activeItems.length; i++) {
       final fe = activeItems[i];
@@ -309,11 +560,20 @@ class FixedIncomeService {
       final feId = fe['id'].toString();
       final amount = (fe['amount'] as num?)?.toDouble() ?? 0;
       // Só aparece na Agenda com opt-in explícito; legado sem campo =
-      // DESLIGADO (port Controle Total, regra 01/10/2026).
+      // DESLIGADO (regra do dono 01/10/2026).
       final addToCalendar = fe['addToCalendar'] == true;
       final calHex = (fe['calendarColorHex'] ?? '').toString().trim();
+      final financeAccountId =
+          (fe['financeAccountId'] ?? '').toString().trim();
+      final parceiroId = (fe['parceiroId'] ?? '').toString().trim();
+      final parceiroNome = (fe['parceiroNome'] ?? '').toString().trim();
+      final parceiroTipo = (fe['parceiroTipo'] ?? '').toString().trim();
 
-      final existingMonthKeys = <String>{};
+      // Meses explicitamente excluídos pelo usuário são tratados como "existentes"
+      // para não recriar parcelas removidas manualmente.
+      final existingMonthKeys = <String>{
+        ...List<String>.from(fe['excludedMonths'] ?? const []),
+      };
       for (final d in existingSnap.docs) {
         final data = d.data();
         final mk = data['fixedIncomeMonthKey'] as String?;
@@ -373,21 +633,35 @@ class FixedIncomeService {
                 ? '$description · $parcelIndex/$totalParcelas'
                 : description;
         final dateTs = Timestamp.fromDate(date);
+        // WISDOMAPP: o mês gerado nasce PENDENTE, mesmo com data passada —
+        // dar baixa é decisão do usuário (regra anterior ao port, mantida).
+        const status = 'pending';
+        const Timestamp? paidAt = null;
         toCreate.add({
           'type': 'income',
           'amount': amount,
           'category': category,
           'description': descOut,
-          'status': 'pending',
+          'status': status,
           'date': dateTs,
-          'effectiveDate':
-              FinanceLineOpening.effectiveTimestampForWrite(date: date),
+          if (paidAt != null) 'paidAt': paidAt,
+          'effectiveDate': FinanceLineOpening.effectiveTimestampForWrite(
+            date: date,
+            paidAt: paidAt,
+          ),
           'recurrence': 'fixed',
           'installmentCount': installmentCount,
           'installmentIndex': parcelIndex,
           'fixedIncomeId': feId,
           'fixedIncomeMonthKey': monthKey,
           'addToCalendar': addToCalendar,
+          if (!addToCalendar) 'hideFromCalendar': true,
+          if (financeAccountId.isNotEmpty) 'financeAccountId': financeAccountId,
+          if (parceiroId.isNotEmpty) ...{
+            'parceiroId': parceiroId,
+            'parceiroNome': parceiroNome,
+            'parceiroTipo': parceiroTipo,
+          },
           if (addToCalendar && calHex.isNotEmpty) 'calendarColorHex': calHex,
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),

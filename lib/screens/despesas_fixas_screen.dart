@@ -1,33 +1,41 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart' hide showDatePicker;
+import '../widgets/fixas_visao_geral.dart';
+import '../widgets/fixas_a_pagar_painel.dart';
+import '../widgets/fixas_mes_a_mes.dart';
+import '../theme/theme_context.dart';
 import '../widgets/fast_text_field.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fa;
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../theme/app_colors.dart';
+import '../widgets/modern_module_ui.dart';
 import '../constants/currency_formats.dart';
 import '../constants/finance_category_visuals.dart';
 import '../constants/app_business_rules.dart';
+import '../services/finance_accounts_service.dart';
+import '../services/finance_advanced_settings_service.dart';
 import '../services/fixed_expense_service.dart';
 import '../services/fixed_expense_preferences_service.dart';
+import '../services/finance_month_cache.dart';
 import '../services/user_categories_service.dart';
 import '../utils/date_picker_a11y.dart';
+import '../utils/finance_transactions_hub.dart';
 import '../utils/firestore_user_doc_id.dart';
 import '../widgets/brl_amount_text_field.dart';
-import '../widgets/finance_calendar_color_picker.dart';
-import '../widgets/fixed_pending_prefs_sheet.dart';
-import '../widgets/fixas_a_pagar_painel.dart';
-import '../widgets/fixas_mes_a_mes.dart';
 import '../widgets/fixas_totalizador_card.dart';
-import '../widgets/fixas_visao_geral.dart';
+import '../widgets/finance_calendar_color_picker.dart';
+import '../widgets/fixed_flow_finance_account_field.dart';
+import '../widgets/fixed_pending_prefs_sheet.dart';
 
 /// Espaço extra para o [Scrollable] rolar o campo acima do teclado no sheet.
 const EdgeInsets _kFixedFlowKeyboardScrollPad =
     EdgeInsets.fromLTRB(0, 0, 0, 260);
 
-InputDecoration _fixedFlowPremiumInputDeco({
+InputDecoration _fixedFlowPremiumInputDeco(
+  BuildContext context, {
   required String labelText,
   String? hintText,
   String? helperText,
@@ -40,7 +48,7 @@ InputDecoration _fixedFlowPremiumInputDeco({
     hintText: hintText,
     helperText: helperText,
     filled: true,
-    fillColor: const Color(0xFFF8FAFC),
+    fillColor: context.appInputFill,
     isDense: true,
     border: const OutlineInputBorder(borderRadius: radius, borderSide: side),
     enabledBorder:
@@ -52,12 +60,13 @@ InputDecoration _fixedFlowPremiumInputDeco({
   );
 }
 
-InputDecoration _fixedFlowPremiumDropdownDeco({required Widget prefixIcon}) {
+InputDecoration _fixedFlowPremiumDropdownDeco(BuildContext context,
+    {required Widget prefixIcon}) {
   const radius = BorderRadius.all(Radius.circular(14));
   const side = BorderSide(color: Color(0xFFE2E8F0));
   return InputDecoration(
     filled: true,
-    fillColor: const Color(0xFFF8FAFC),
+    fillColor: context.appInputFill,
     isDense: true,
     floatingLabelBehavior: FloatingLabelBehavior.never,
     border: const OutlineInputBorder(borderRadius: radius, borderSide: side),
@@ -147,6 +156,7 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
               ? expenseCategories.first
               : kIncluirNova),
       decoration: _fixedFlowPremiumDropdownDeco(
+        context,
         prefixIcon: Icon(Icons.category_outlined,
             color: AppColors.primary.withValues(alpha: 0.88)),
       ),
@@ -223,17 +233,34 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
         (existing?['mode'] ?? FixedExpenseService.modePeriod).toString();
     int totalParcelas = (existing?['totalParcelas'] as num?)?.toInt() ?? 12;
     int parcelaInicial = (existing?['parcelaInicial'] as num?)?.toInt() ?? 1;
-    // Mostrar no calendário Agenda/Escala + cor escolhida (novos começam desligados).
-    // Só ligado com opt-in explícito (ausente = desligado; regra 01/10/2026).
-    bool addToCalendar = existing != null && existing['addToCalendar'] == true;
-    String? calendarColorHex = existing?['calendarColorHex']?.toString();
     if (mode == FixedExpenseService.modeInstallments) {
       totalParcelas =
           totalParcelas.clamp(1, AppBusinessRules.maxFixedFlowInstallments);
       parcelaInicial = parcelaInicial.clamp(1, totalParcelas);
     }
+    // Só ligado com opt-in explícito (ausente = desligado; regra 01/10/2026).
+    bool addToCalendar = existing != null && existing['addToCalendar'] == true;
+    String? calendarColorHex = existing?['calendarColorHex']?.toString();
     final isEdit = existing != null;
     final id = existing?['id']?.toString();
+    String? financeAccountId =
+        (existing?['financeAccountId'] ?? '').toString().trim();
+    if (financeAccountId.isEmpty) {
+      financeAccountId = null;
+    }
+    // Nova despesa: pré-seleciona o banco/caixa padrão do cadastro.
+    if (!isEdit) {
+      try {
+        final accounts = await FinanceAccountsService().listOnce(_fsUid);
+        final defId = await FinanceAdvancedSettingsService()
+            .getDefaultFinanceAccountId(_fsUid);
+        if (defId != null && accounts.any((a) => a.id == defId)) {
+          financeAccountId = defId;
+        } else if (accounts.isNotEmpty) {
+          financeAccountId = accounts.first.id;
+        }
+      } catch (_) {}
+    }
     final totalParcelasCtrl = TextEditingController(text: '$totalParcelas');
     final parcelaIniCtrl = TextEditingController(text: '$parcelaInicial');
     final totalParcelasFocus = FocusNode();
@@ -249,6 +276,11 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
       parcelaIniCtrl.dispose();
       totalParcelasFocus.dispose();
       parcelaIniFocus.dispose();
+    }
+
+    if (!mounted) {
+      disposeFormCtrls();
+      return;
     }
 
     bool ok = false;
@@ -276,12 +308,12 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                   }
 
                   return Scaffold(
-                    backgroundColor: Colors.white,
+                    backgroundColor: context.appSurface,
                     appBar: AppBar(
                       elevation: 0,
                       leading: IconButton(
                         tooltip: 'Fechar',
-                        icon: const Icon(Icons.close_rounded),
+                        icon: Icon(Icons.close_rounded),
                         onPressed: () => Navigator.maybePop(ctx, false),
                         style: IconButton.styleFrom(
                             minimumSize: const Size(48, 48)),
@@ -290,16 +322,16 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                         children: [
                           Icon(Icons.repeat_rounded,
                               color: AppColors.primary, size: 22),
-                          const SizedBox(width: 8),
+                          SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               isEdit
                                   ? 'Editar despesa fixa'
                                   : 'Nova despesa fixa',
-                              style: const TextStyle(
+                              style: TextStyle(
                                   fontSize: 17,
                                   fontWeight: FontWeight.w900,
-                                  color: Color(0xFF1A237E)),
+                                  color: context.appDeepTitle),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
@@ -318,6 +350,7 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                               controller: descCtrl,
                               scrollPadding: _kFixedFlowKeyboardScrollPad,
                               decoration: _fixedFlowPremiumInputDeco(
+                                context,
                                 labelText: 'Descrição',
                                 hintText: 'Ex: Aluguel, Internet',
                                 prefixIcon: Icon(Icons.description_outlined,
@@ -329,7 +362,7 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                               autocorrect: false,
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          SizedBox(height: 16),
                           _buildCategoryDropdown(
                             context: context,
                             category: category,
@@ -342,8 +375,7 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                                 context: context,
                                 barrierDismissible: false,
                                 builder: (ctx) => AlertDialog(
-                                  title:
-                                      const Text('Nova categoria de despesa'),
+                                  title: Text('Nova categoria de despesa'),
                                   content: FastTextField(
                                     controller: nameCtrl,
                                     decoration: const InputDecoration(
@@ -358,7 +390,7 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                                     TextButton(
                                         onPressed: () =>
                                             Navigator.pop(ctx, false),
-                                        child: const Text('Cancelar')),
+                                        child: Text('Cancelar')),
                                     FilledButton(
                                       onPressed: () {
                                         if (nameCtrl.text.trim().isEmpty) {
@@ -366,7 +398,7 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                                         }
                                         Navigator.pop(ctx, true);
                                       },
-                                      child: const Text('Adicionar'),
+                                      child: Text('Adicionar'),
                                     ),
                                   ],
                                 ),
@@ -404,12 +436,13 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                               }
                             },
                           ),
-                          const SizedBox(height: 16),
+                          SizedBox(height: 16),
                           RepaintBoundary(
                             child: BrlAmountTextField(
                               controller: amountCtrl,
                               scrollPadding: _kFixedFlowKeyboardScrollPad,
                               decoration: _fixedFlowPremiumInputDeco(
+                                context,
                                 labelText: 'Valor (R\$)',
                                 hintText: '0,00',
                                 prefixIcon: Icon(Icons.attach_money_rounded,
@@ -418,10 +451,11 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                               ),
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          SizedBox(height: 16),
                           DropdownButtonFormField<int>(
                             initialValue: dayOfMonth.clamp(1, 31),
                             decoration: _fixedFlowPremiumInputDeco(
+                              context,
                               labelText: 'Dia do mês do lançamento',
                               prefixIcon: Icon(Icons.calendar_today_rounded,
                                   color: AppColors.primary
@@ -434,8 +468,19 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                             onChanged: (v) => setModalState(
                                 () => dayOfMonth = v ?? dayOfMonth),
                           ),
-                          const SizedBox(height: 14),
+                          SizedBox(height: 16),
+                          FixedFlowFinanceAccountField(
+                            uid: _fsUid,
+                            selectedAccountId: financeAccountId,
+                            decorationBuilder: (ctx, {required prefixIcon}) =>
+                                _fixedFlowPremiumDropdownDeco(ctx,
+                                    prefixIcon: prefixIcon),
+                            onChanged: (v) =>
+                                setModalState(() => financeAccountId = v),
+                          ),
+                          SizedBox(height: 18),
                           _buildAddToCalendarToggle(
+                            context: context,
                             isIncome: false,
                             value: addToCalendar,
                             onChanged: (v) async {
@@ -453,7 +498,7 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                             },
                           ),
                           if (addToCalendar) ...[
-                            const SizedBox(height: 10),
+                            SizedBox(height: 10),
                             _buildCalendarColorButton(
                               context: context,
                               isIncome: false,
@@ -462,7 +507,7 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                                   setModalState(() => calendarColorHex = v),
                             ),
                           ],
-                          const SizedBox(height: 20),
+                          SizedBox(height: 20),
                           Row(
                             children: [
                               Container(
@@ -477,21 +522,21 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                                   ),
                                   borderRadius: BorderRadius.circular(11),
                                 ),
-                                child: const Icon(Icons.tune_rounded,
+                                child: Icon(Icons.tune_rounded,
                                     color: Colors.white, size: 18),
                               ),
-                              const SizedBox(width: 10),
-                              const Text(
+                              SizedBox(width: 10),
+                              Text(
                                 'Tipo de controle',
                                 style: TextStyle(
                                     fontSize: 14.5,
                                     fontWeight: FontWeight.w900,
-                                    color: AppColors.textPrimary,
+                                    color: context.appTextPrimary,
                                     letterSpacing: 0.15),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 10),
+                          SizedBox(height: 10),
                           Container(
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(16),
@@ -551,7 +596,7 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                             ),
                           ),
                           if (mode == FixedExpenseService.modeInstallments) ...[
-                            const SizedBox(height: 16),
+                            SizedBox(height: 16),
                             FastTextField(
                               controller: totalParcelasCtrl,
                               focusNode: totalParcelasFocus,
@@ -561,6 +606,7 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                                 FilteringTextInputFormatter.digitsOnly
                               ],
                               decoration: _fixedFlowPremiumInputDeco(
+                                context,
                                 labelText: 'Total de parcelas',
                                 hintText: 'Ex.: 12 ou 360',
                                 helperText:
@@ -581,13 +627,14 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                                           .maxFixedFlowInstallments);
                                   parcelaInicial =
                                       parcelaInicial.clamp(1, totalParcelas);
-                                  if (parcelaIniCtrl.text != '$parcelaInicial') {
+                                  if (parcelaIniCtrl.text !=
+                                      '$parcelaInicial') {
                                     parcelaIniCtrl.text = '$parcelaInicial';
                                   }
                                 });
                               },
                             ),
-                            const SizedBox(height: 12),
+                            SizedBox(height: 12),
                             FastTextField(
                               controller: parcelaIniCtrl,
                               focusNode: parcelaIniFocus,
@@ -597,6 +644,7 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                                 FilteringTextInputFormatter.digitsOnly
                               ],
                               decoration: _fixedFlowPremiumInputDeco(
+                                context,
                                 labelText: 'Começar da parcela nº',
                                 helperText:
                                     'Ex.: já pagou 3 de 12 — comece da 4ª',
@@ -613,9 +661,9 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                               },
                             ),
                           ],
-                          const SizedBox(height: 16),
+                          SizedBox(height: 16),
                           ListTile(
-                            tileColor: const Color(0xFFF8FAFC),
+                            tileColor: context.appChipIdleBg,
                             title: Text(mode ==
                                     FixedExpenseService.modeInstallments
                                 ? 'Data da primeira parcela (que você controla)'
@@ -641,10 +689,10 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                             },
                           ),
                           if (mode == FixedExpenseService.modePeriod) ...[
-                            const SizedBox(height: 12),
+                            SizedBox(height: 12),
                             ListTile(
-                              tileColor: const Color(0xFFF8FAFC),
-                              title: const Text('Data fim (opcional)'),
+                              tileColor: context.appChipIdleBg,
+                              title: Text('Data fim (opcional)'),
                               subtitle: Text(endDate == null
                                   ? 'Sem data fim'
                                   : DateFormat('dd/MM/yyyy').format(endDate!)),
@@ -653,7 +701,7 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                                   children: [
                                     if (endDate != null)
                                       IconButton(
-                                        icon: const Icon(Icons.clear_rounded),
+                                        icon: Icon(Icons.clear_rounded),
                                         onPressed: () =>
                                             setModalState(() => endDate = null),
                                         tooltip: 'Remover data fim',
@@ -685,10 +733,11 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                               child: Text(
                                 'Serão geradas ${totalParcelas - parcelaInicial + 1} parcelas (da $parcelaInicialª à $totalParcelasª).',
                                 style: TextStyle(
-                                    fontSize: 13, color: Colors.grey.shade700),
+                                    fontSize: 13,
+                                    color: context.appTextSecondary),
                               ),
                             ),
-                          const SizedBox(height: 24),
+                          SizedBox(height: 24),
                           _buildSuperPremiumActionButton(
                             ctx: context,
                             isEdit: isEdit,
@@ -765,6 +814,9 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                                         : null,
                                     addToCalendar: addToCalendar,
                                     calendarColorHex: calendarColorHex,
+                                    financeAccountId: financeAccountId,
+                                    clearFinanceAccount:
+                                        (financeAccountId ?? '').isEmpty,
                                   );
                                   if (context.mounted) {
                                     if (updatedCount > 0) {
@@ -799,6 +851,7 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                                         : null,
                                     addToCalendar: addToCalendar,
                                     calendarColorHex: calendarColorHex,
+                                    financeAccountId: financeAccountId,
                                   );
                                   if (context.mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
@@ -833,6 +886,10 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                                     );
                                   }
                                 }
+                                // Banco/caixa e demais campos nos pendentes já propagados no update.
+                                FinanceMonthCache.clearUid(_fsUid);
+                                FinanceTransactionsHub.notifyMutated(
+                                    uid: _fsUid);
                                 if (context.mounted) {
                                   Navigator.pop(context, true);
                                 }
@@ -859,109 +916,6 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
       disposeFormCtrls();
     }
     if (ok == true && mounted) _refreshFixedExpenses();
-  }
-
-  /// Toggle «Mostrar no calendário» (Agenda/Escala) das parcelas pendentes geradas.
-  static Widget _buildAddToCalendarToggle({
-    required bool isIncome,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-  }) {
-    final accent = isIncome ? const Color(0xFF2E7D32) : const Color(0xFFE53935);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: accent.withValues(alpha: 0.28)),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            value ? Icons.event_available_rounded : Icons.event_busy_rounded,
-            size: 20,
-            color: accent,
-          ),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Mostrar no calendário',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13,
-                    color: Color(0xFF1A237E),
-                  ),
-                ),
-                Text(
-                  'Agenda/Escala',
-                  style: TextStyle(fontSize: 11.5, color: Colors.black54),
-                ),
-              ],
-            ),
-          ),
-          Switch.adaptive(
-            value: value,
-            activeThumbColor: accent,
-            activeTrackColor: accent.withValues(alpha: 0.5),
-            onChanged: onChanged,
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Botão «Cor no calendário» na cor atual; abre a paleta do módulo financeiro.
-  static Widget _buildCalendarColorButton({
-    required BuildContext context,
-    required bool isIncome,
-    required String? currentHex,
-    required ValueChanged<String> onChanged,
-  }) {
-    final hex =
-        currentHex ?? FinanceCalendarColorPicker.defaultHexFor(isIncome);
-    var clean = hex
-        .replaceFirst('#', '')
-        .replaceFirst(RegExp(r'^0x', caseSensitive: false), '')
-        .toUpperCase();
-    if (clean.length > 6) clean = clean.substring(clean.length - 6);
-    final color = Color(int.parse('FF$clean', radix: 16));
-    return Material(
-      color: color,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () async {
-          final picked = await FinanceCalendarColorPicker.show(
-            context,
-            isIncome: isIncome,
-            currentHex: currentHex,
-          );
-          if (picked != null) onChanged(picked);
-        },
-        child: const SizedBox(
-          width: double.infinity,
-          height: 44,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.palette_outlined, size: 18, color: Colors.white),
-              SizedBox(width: 8),
-              Text(
-                'Cor no calendário',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 13.5,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   Future<void> _openPreferencesSheet() async {
@@ -1021,7 +975,7 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
               ),
               borderRadius: BorderRadius.circular(20),
             ),
-            child: const Row(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(Icons.add_rounded, color: Colors.white, size: 26),
@@ -1079,8 +1033,8 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.check_rounded, color: Colors.white, size: 22),
-                const SizedBox(width: 10),
+                Icon(Icons.check_rounded, color: Colors.white, size: 22),
+                SizedBox(width: 10),
                 Text(
                   isEdit ? 'Salvar alterações' : 'Criar despesa fixa',
                   style: const TextStyle(
@@ -1098,7 +1052,10 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
   }
 
   Future<void> _delete(Map<String, dynamic> item) async {
-    final removeParcelas = await showDialog<bool?>(
+    // 'pendentes' = padrão Controle Total (pendentes saem da Agenda e do
+    // Financeiro; pagos ficam). 'todas' = opção que o WISDOMAPP já tinha:
+    // remover também os lançamentos pagos desta fixa.
+    final escolha = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Excluir despesa fixa?'),
@@ -1109,47 +1066,48 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
             Text('${item['description']} não gerará mais lançamentos.'),
             const SizedBox(height: 16),
             const Text(
-              'Deseja também remover todas as parcelas já criadas no Financeiro? (pendentes e pagas)',
-              style: TextStyle(fontSize: 13, color: Colors.black87),
+              'Todos os lançamentos pendentes serão removidos do Financeiro, da Agenda e do calendário. Lançamentos já pagos permanecem.',
+              style: TextStyle(fontSize: 13),
             ),
           ],
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, null),
+              onPressed: () => Navigator.pop(ctx),
               child: const Text('Cancelar')),
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Excluir só a despesa'),
+            onPressed: () => Navigator.pop(ctx, 'todas'),
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: const Text('Remover também os pagos'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
+            onPressed: () => Navigator.pop(ctx, 'pendentes'),
             style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('Excluir e remover parcelas'),
+            child: const Text('Excluir'),
           ),
         ],
       ),
     );
-    if (removeParcelas == null || !mounted) return;
+    final confirm = escolha != null;
+    if (confirm != true || !mounted) return;
     try {
       final id = item['id'].toString();
-      if (removeParcelas) {
-        final count = await _service.deleteAllParcelas(_fsUid, id);
-        await _service.delete(_fsUid, id);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content: Text(
-                    'Despesa fixa excluída e $count lançamento(s) removido(s) do Financeiro.')),
-          );
-        }
-      } else {
-        await _service.delete(_fsUid, id);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text(
-                  'Despesa fixa excluída. Os lançamentos já criados permanecem.')));
-        }
+      final todas = await (escolha == 'todas'
+          ? _service.deleteAllParcelas(_fsUid, id)
+          : Future<int>.value(0));
+      final removed = todas + await _service.delete(_fsUid, id);
+      FinanceMonthCache.clearUid(_fsUid);
+      FinanceTransactionsHub.notifyMutated(uid: _fsUid);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              removed > 0
+                  ? 'Despesa fixa excluída. $removed lançamento(s) pendente(s) removido(s) da Agenda e do Financeiro.'
+                  : 'Despesa fixa excluída. Nenhum pendente restante na Agenda.',
+            ),
+          ),
+        );
       }
       if (mounted) _refreshFixedExpenses();
     } catch (e) {
@@ -1162,38 +1120,37 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const scaffoldBg = Color(0xFFF4F7FA);
     return Scaffold(
-      backgroundColor: scaffoldBg,
+      backgroundColor: ModernModuleUI.scaffoldBgOf(context),
       appBar: AppBar(
         elevation: 0,
         scrolledUnderElevation: 0,
         backgroundColor: Colors.transparent,
         foregroundColor: Colors.white,
         iconTheme: const IconThemeData(color: Colors.white),
-        title: const Text(
+        title: Text(
           'Despesas fixas Premium',
           style: TextStyle(
               fontWeight: FontWeight.w900, fontSize: 19, letterSpacing: 0.2),
         ),
         leading: IconButton(
           tooltip: 'Voltar',
-          icon: const Icon(Icons.arrow_back_rounded),
+          icon: Icon(Icons.arrow_back_rounded),
           onPressed: () => Navigator.maybePop(context),
           style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
         ),
         actions: [
           IconButton(
             tooltip: 'Exibição nas contas pendentes',
-            icon: const Icon(Icons.tune_rounded),
+            icon: Icon(Icons.tune_rounded),
             onPressed: _openPreferencesSheet,
             style: IconButton.styleFrom(foregroundColor: Colors.white),
           ),
           TextButton(
             style: TextButton.styleFrom(foregroundColor: Colors.white),
             onPressed: () => Navigator.maybePop(context),
-            child: const Text('Cancelar',
-                style: TextStyle(fontWeight: FontWeight.w700)),
+            child:
+                Text('Cancelar', style: TextStyle(fontWeight: FontWeight.w700)),
           ),
         ],
         flexibleSpace: Container(
@@ -1232,7 +1189,7 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                       fontSize: 15,
-                      color: AppColors.textSecondary.withValues(alpha: 0.95),
+                      color: context.appTextSecondary.withValues(alpha: 0.95),
                       height: 1.4),
                 ),
               ),
@@ -1241,8 +1198,14 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
           return CustomScrollView(
             physics: const BouncingScrollPhysics(),
             slivers: [
-              // Ordem (port Controle Total, 01/10/2026): total com gráfico →
-              // fixas cadastradas → pesquisa por período → mês a mês → a pagar.
+              // Visão geral no topo: total do período, pago × a vencer,
+              // gráfico mês a mês e rateio por categoria. A lista das
+              // fixas cadastradas continua logo abaixo, para editar.
+              // «Suas despesas fixas por mês: R$ X» — abre o relatório
+              // mês a mês (pedido do dono, 30/09/2026).
+              // «O que tenho que pagar» do mês: vencidas, próximos 7
+              // dias e pagas, com o botão de quitar (pedido do dono, 01/10/2026).
+              // Totalizador das fixas cadastradas (pedido do dono, 30/09/2026).
               SliverToBoxAdapter(
                 child: FixasTotalizadorCard(items: items, receita: false, uid: _fsUid),
               ),
@@ -1251,10 +1214,10 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                   padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
                   child: Text(
                     'Suas despesas fixas (${items.length})',
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w900,
-                        color: AppColors.textPrimary),
+                        color: context.appTextPrimary),
                   ),
                 ),
               ),
@@ -1283,7 +1246,7 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                             onTap: () => _openForm(existing: e),
                             child: Container(
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: ModernModuleUI.cardBg(context),
                                 borderRadius: BorderRadius.circular(18),
                                 border: Border.all(
                                     color: vis.color.withValues(alpha: 0.22)),
@@ -1303,22 +1266,29 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                                     isIncome: false),
                                 title: Text(
                                   catName,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                       fontWeight: FontWeight.w800,
-                                      color: AppColors.textPrimary,
+                                      color: context.appTextPrimary,
                                       fontSize: 15),
                                 ),
                                 subtitle: Padding(
                                   padding: const EdgeInsets.only(top: 2),
-                                  child: Text(
-                                    '${(e['description'] ?? '').toString()} · ${_subtitleFixedExpense(e, day, start, end, includeCategory: false)}',
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                        fontSize: 12,
-                                        color: AppColors.textSecondary
-                                            .withValues(alpha: 0.95),
-                                        height: 1.35),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        '${(e['description'] ?? '').toString()} · ${_subtitleFixedExpense(e, day, start, end, includeCategory: false)}',
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            color: context.appTextSecondary
+                                                .withValues(alpha: 0.95),
+                                            height: 1.35),
+                                      ),
+                                    ],
                                   ),
                                 ),
                                 trailing: Row(
@@ -1331,7 +1301,7 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                                             fontSize: 15)),
                                     PopupMenuButton<String>(
                                       icon: Icon(Icons.more_vert_rounded,
-                                          color: AppColors.textMuted
+                                          color: context.appTextMuted
                                               .withValues(alpha: 0.9)),
                                       padding: EdgeInsets.zero,
                                       onSelected: (v) {
@@ -1369,6 +1339,9 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
                   ),
                 ),
               ),
+              // Depois da lista: pesquisa por mês/ano/período, relatório mês a
+              // mês e «o que tenho que pagar» (ordem pedida pelo dono, 01/10/2026:
+              // primeiro o total com gráfico, depois as fixas cadastradas).
               SliverToBoxAdapter(
                 child: FixasVisaoGeral(uid: _fsUid, receita: false),
               ),
@@ -1389,6 +1362,108 @@ class _DespesasFixasScreenState extends State<DespesasFixasScreen> {
         padding: EdgeInsets.only(
             bottom: MediaQuery.paddingOf(context).bottom > 0 ? 8 : 0),
         child: _buildSuperPremiumFab(context),
+      ),
+    );
+  }
+
+  Widget _buildAddToCalendarToggle({
+    required BuildContext context,
+    required bool isIncome,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    final accent = isIncome ? const Color(0xFF2E7D32) : const Color(0xFFE53935);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: accent.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            value ? Icons.event_available_rounded : Icons.event_busy_rounded,
+            size: 20,
+            color: accent,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Mostrar no calendário',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: context.appTextPrimary,
+                  ),
+                ),
+                Text(
+                  'Agenda/Escala',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: context.appTextSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch.adaptive(
+            value: value,
+            activeThumbColor: accent,
+            activeTrackColor: accent.withValues(alpha: 0.5),
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCalendarColorButton({
+    required BuildContext context,
+    required bool isIncome,
+    required String? currentHex,
+    required ValueChanged<String?> onChanged,
+  }) {
+    final defaultHex = FinanceCalendarColorPicker.defaultHexFor(isIncome);
+    final effectiveHex = currentHex ?? defaultHex;
+    var clean = effectiveHex
+        .replaceFirst('#', '')
+        .replaceFirst(RegExp(r'^0x', caseSensitive: false), '');
+    if (clean.length > 6) clean = clean.substring(clean.length - 6);
+    final color = Color(int.parse('FF$clean', radix: 16));
+    return Material(
+      color: color,
+      borderRadius: BorderRadius.circular(14),
+      elevation: 2,
+      shadowColor: color.withValues(alpha: 0.45),
+      child: InkWell(
+        onTap: () async {
+          final picked = await FinanceCalendarColorPicker.show(
+            context,
+            isIncome: isIncome,
+            currentHex: currentHex,
+          );
+          onChanged(picked);
+        },
+        borderRadius: BorderRadius.circular(14),
+        child: SizedBox(
+          height: 44,
+          width: double.infinity,
+          child: Center(
+            child: Text(
+              'Cor no calendário',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0.25,
+                fontSize: 13.5,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
