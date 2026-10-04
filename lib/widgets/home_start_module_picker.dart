@@ -21,16 +21,17 @@ const Map<int, String> kHomeDefaultStartModuleLabels = {
   1: 'Financeiro',
   2: 'Objetivos Financeiros',
   3: 'Agenda',
+  4: 'Investimentos',
   7: 'Cursos',
 };
 
-/// Índices legados (Início, Calculadora, Minhas Anotações) não são opção do
-/// seletor (rótulo cai em Financeiro). Calculadora (4) e Minhas Anotações (8)
-/// removidas em 02/10/2026: o [HomeShell] abre no Início quando a preferência
-/// gravada ainda é 4 ou 8.
+/// Índices legados (Início, Minhas Anotações) não são opção do seletor (rótulo
+/// cai em Financeiro). Minhas Anotações (8) removida em 02/10/2026: o
+/// [HomeShell] abre no Início quando a preferência gravada ainda é 8.
+/// Índice 4 agora é Investimentos (opção válida do seletor).
 int normalizeHomeStartModuleIndex(int idx) {
   if (kHomeDefaultStartModuleLabels.containsKey(idx)) return idx;
-  if (idx == 0 || idx == 4 || idx == 8) return 1;
+  if (idx == 0 || idx == 8) return 1;
   return 1;
 }
 
@@ -67,6 +68,12 @@ const List<_PickerEntry> _kPickerEntries = [
     icon: Icons.calendar_month_rounded,
     iconGradient: [Color(0xFF1E3A5F), Color(0xFF6366F1)],
     subtitle: 'Compromissos particulares no calendário',
+  ),
+  _PickerEntry(
+    index: 4,
+    icon: Icons.trending_up_rounded,
+    iconGradient: [Color(0xFF0E7490), Color(0xFF34D399)],
+    subtitle: 'Carteira: CDB, Tesouro, ações, FIIs e rendimentos',
   ),
   _PickerEntry(
     index: 7,

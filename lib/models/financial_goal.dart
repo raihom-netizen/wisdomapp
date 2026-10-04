@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 /// Tipos de metas financeiras (categorias).
@@ -159,3 +160,127 @@ double futureValueCompound(double pv, double monthlyRatePercent, int months) {
   final i = monthlyRatePercent / 100;
   return pv * math.pow(1 + i, months).toDouble();
 }
+
+// ---------------------------------------------------------------------------
+// Fontes externas do progresso das metas (ex.: Carteira de Investimentos).
+// Outros módulos podem SOMAR valores ao progresso sem gravar depósito: o
+// módulo registra um provedor e o valor líquido entra no progresso/«faltam»
+// do card da meta. Sem provedor registrado nada muda.
+// ---------------------------------------------------------------------------
+
+/// Um valor externo que conta no progresso de uma meta.
+class GoalProgressSource {
+  const GoalProgressSource({
+    required this.id,
+    required this.label,
+    required this.amount,
+    this.kind = 'externo',
+  });
+
+  /// Identificador estável (ex.: id da aplicação).
+  final String id;
+
+  /// Texto curto mostrado no card (ex.: «CDB Banco X»).
+  final String label;
+
+  /// Valor que soma no progresso (pode ser 0; negativo é ignorado).
+  final double amount;
+
+  /// Origem (ex.: `investimento`).
+  final String kind;
+}
+
+/// Provedor de fontes externas de uma meta. Recebe o id do documento do
+/// usuário (titular quando sub-login), o id da meta e os dados da meta.
+typedef GoalProgressSourcesProvider = Stream<List<GoalProgressSource>> Function(
+  String userDocId,
+  String goalId,
+  Map<String, dynamic> goalData,
+);
+
+/// Registro dos provedores de fontes externas do progresso das metas.
+class GoalProgressSources {
+  GoalProgressSources._();
+
+  static final Map<String, GoalProgressSourcesProvider> _providers = {};
+
+  /// Registra (ou troca) o provedor [key]. Chamar uma vez no boot do módulo.
+  static void register(String key, GoalProgressSourcesProvider provider) {
+    _providers[key] = provider;
+  }
+
+  static void unregister(String key) => _providers.remove(key);
+
+  static bool get hasProviders => _providers.isNotEmpty;
+
+  /// Chave estável para guardar a escuta (muda quando entra/sai provedor).
+  static String get providersKey => (_providers.keys.toList()..sort()).join(',');
+
+  /// Junta as fontes de todos os provedores registrados. Sem provedor,
+  /// emite uma lista vazia.
+  static Stream<List<GoalProgressSource>> watch(
+    String userDocId,
+    String goalId,
+    Map<String, dynamic> goalData,
+  ) {
+    if (_providers.isEmpty || userDocId.isEmpty) {
+      return Stream.value(const <GoalProgressSource>[]);
+    }
+    final streams = [
+      for (final p in _providers.values) p(userDocId, goalId, goalData),
+    ];
+    if (streams.length == 1) return streams.first;
+    return _combine(streams);
+  }
+
+  static Stream<List<GoalProgressSource>> _combine(
+    List<Stream<List<GoalProgressSource>>> streams,
+  ) {
+    late StreamController<List<GoalProgressSource>> ctrl;
+    final latest = List<List<GoalProgressSource>>.filled(
+        streams.length, const <GoalProgressSource>[]);
+    final subs = <StreamSubscription<List<GoalProgressSource>>>[];
+    ctrl = StreamController<List<GoalProgressSource>>(
+      onListen: () {
+        for (var i = 0; i < streams.length; i++) {
+          subs.add(streams[i].listen(
+            (v) {
+              latest[i] = v;
+              ctrl.add([for (final l in latest) ...l]);
+            },
+            // Fonte com erro não derruba a meta: conta como vazia.
+            onError: (_) {
+              latest[i] = const <GoalProgressSource>[];
+              ctrl.add([for (final l in latest) ...l]);
+            },
+          ));
+        }
+      },
+      onCancel: () async {
+        for (final s in subs) {
+          await s.cancel();
+        }
+        subs.clear();
+      },
+    );
+    return ctrl.stream;
+  }
+}
+
+/// Soma das fontes externas (valores negativos/NaN ignorados).
+double goalExternalSourcesTotal(Iterable<GoalProgressSource> sources) {
+  var t = 0.0;
+  for (final s in sources) {
+    final v = s.amount;
+    if (v.isFinite && v > 0) t += v;
+  }
+  return t;
+}
+
+/// Valor que conta no progresso: depósitos da meta + fontes externas.
+/// Sem fontes externas é exatamente a soma dos depósitos (regra antiga).
+double goalProgressAmount({
+  required double contributionsTotal,
+  Iterable<GoalProgressSource> externalSources = const [],
+}) =>
+    contributionsTotal + goalExternalSourcesTotal(externalSources);

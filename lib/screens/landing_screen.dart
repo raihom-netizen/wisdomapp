@@ -27,6 +27,7 @@ import '../widgets/oauth_login_buttons.dart';
 import '../widgets/official_social_top_buttons.dart';
 import '../widgets/wisdomapp_hero_brand.dart';
 import '../utils/keyboard_form_scaffold.dart';
+import '../theme/app_colors.dart';
 import '../theme/theme_context.dart';
 
 /// Página de divulgação do WISDOMAPP (hero, módulos, planos e rodapé).
@@ -255,7 +256,11 @@ class _LandingScreenState extends State<LandingScreen>
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
             gradient: const LinearGradient(
-              colors: [Color(0xFF061428), Color(0xFF0A1F56), Color(0xFF132D6B)],
+              colors: [
+                AppColors.deepBlueDark,
+                AppColors.deepBlue,
+                AppColors.accent,
+              ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -653,17 +658,17 @@ class _LandingScreenState extends State<LandingScreen>
   /// Cor de fundo garantida (Android: evita tela branca se tema atrasar).
   static const Color _scaffoldBg = Color(0xFFF4F6FB);
 
-  /// Paleta WISDOMAPP — azul marinho e dourado (identidade da marca).
-  static const Color _lpNavy = Color(0xFF0A1F56);
-  static const Color _lpNavyDark = Color(0xFF061428);
-  static const Color _lpNavyMid = Color(0xFF132D6B);
-  static const Color _lpGold = Color(0xFFD4AF37);
-  static const Color _lpGoldLight = Color(0xFFF0D878);
+  /// Paleta WISDOMAPP — alinhada à logo (azul profundo → teal, âmbar e laranja).
+  static const Color _lpNavy = AppColors.deepBlue; // #122B6B
+  static const Color _lpNavyDark = AppColors.deepBlueDark; // #0B1F4B
+  static const Color _lpNavyMid = Color(0xFF1A3A7A); // transição azul da logo
+  static const Color _lpGold = AppColors.amber; // #FFB648 (âmbar da logo)
+  static const Color _lpGoldLight = Color(0xFFFFD79A); // âmbar claro
   static const Color _lpDeep = _lpNavy;
   static const Color _lpSlate = Color(0xFF1E293B);
-  static const Color _lpViolet = Color(0xFF6366F1);
-  static const Color _lpCyan = Color(0xFF22D3EE);
-  static const Color _lpRose = Color(0xFFF43F5E);
+  static const Color _lpViolet = AppColors.primary; // #2D5BFF (azul da logo)
+  static const Color _lpCyan = AppColors.accent; // #12B5A5 (teal da logo)
+  static const Color _lpRose = AppColors.logoOrange; // #F97316 (laranja da logo)
 
   static const String _versionJsonUrl =
       'https://wisdomapp-b9e98.web.app/version.json';
@@ -1052,14 +1057,12 @@ class _LandingScreenState extends State<LandingScreen>
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            const Color(0xFF061428),
-            const Color(0xFF0A1F56),
-            const Color(0xFF132D6B),
-            context.isDarkMode
-                ? context.appScaffold
-                : const Color(0xFFF4F6FB),
+            AppColors.deepBlueDark,
+            AppColors.deepBlue,
+            AppColors.accent,
+            context.isDarkMode ? context.appScaffold : _scaffoldBg,
           ],
-          stops: [0.0, 0.35, 0.72, 1.0],
+          stops: const [0.0, 0.4, 0.78, 1.0],
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
         ),
@@ -1345,7 +1348,7 @@ class _LandingScreenState extends State<LandingScreen>
                                         borderSide: const BorderSide(
                                             color: _lpGold, width: 1.5)),
                                     filled: true,
-                                    fillColor: const Color(0xFF1e293b),
+                                    fillColor: _lpSlate,
                                   ),
                                 ),
                                 const SizedBox(height: 12),
@@ -1391,7 +1394,7 @@ class _LandingScreenState extends State<LandingScreen>
                                         borderSide: const BorderSide(
                                             color: _lpGold, width: 1.5)),
                                     filled: true,
-                                    fillColor: const Color(0xFF1e293b),
+                                    fillColor: _lpSlate,
                                   ),
                                 ),
                               ],

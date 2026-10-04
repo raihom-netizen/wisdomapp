@@ -404,6 +404,14 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create, update, delete: if canEditPublicContent() || isContentEditor();
     }
+    // Carteira de Investimentos: taxas oficiais do BCB (CDI/Selic/IPCA/TR/
+    // poupança/meta Selic). Gravado SÓ pelo servidor (function agendada, Admin
+    // SDK ignora regras); o app só lê para estimar rendimentos. Nunca escrever
+    // pelo cliente.
+    match /indices_bcb/{serie} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
     // Promoções (Divulgação): não tinha regra — o card do Início, a página
     // de escolha de plano (link ?promo=) e a aba de Promoções do admin davam
     // permission-denied calado. Leitura pública (preço/condição divulgados);

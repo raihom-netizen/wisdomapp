@@ -4,7 +4,7 @@ importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compa
 
 // Marcador de versao (scripts/sync_app_version.ps1): sobe a cada release. Muda o conteudo do SW
 // (o navegador reinstala) e fura o cache de 30 dias dos icones do push.
-const BANNER_CACHE_V = "35";
+const BANNER_CACHE_V = "36";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDLm_BNjBptj5ribo0YGHQ9Nqd4l_Inl-4",

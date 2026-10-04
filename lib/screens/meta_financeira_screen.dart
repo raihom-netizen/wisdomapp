@@ -711,13 +711,13 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
         gradient: const LinearGradient(
-          colors: [Color(0xFF4F46E5), Color(0xFF7C3AED), Color(0xFFEC4899)],
+          colors: [Color(0xFF2D5BFF), Color(0xFF122B6B), Color(0xFF12B5A5)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF7C3AED).withValues(alpha: 0.32),
+            color: const Color(0xFF122B6B).withValues(alpha: 0.32),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
@@ -827,7 +827,7 @@ class _MetaFinanceiraScreenState extends State<MetaFinanceiraScreen> {
   }
 
   static const Color _sortPrazo = Color(0xFF0D9488);
-  static const Color _sortTitulo = Color(0xFF4F46E5);
+  static const Color _sortTitulo = Color(0xFF2D5BFF);
   static const Color _sortValor = Color(0xFFF59E0B);
 
   Widget _buildSortChip({

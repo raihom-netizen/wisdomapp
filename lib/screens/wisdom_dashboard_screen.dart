@@ -13,6 +13,7 @@ import '../widgets/finance_tip_modern_card.dart';
 import '../widgets/home_finance_overview_panel.dart';
 import '../widgets/home_objective_finance_panel.dart';
 import '../widgets/home_pendentes_cards.dart';
+import '../features/investimentos/investimentos_atalho_card.dart';
 
 /// Último catálogo de dicas recebido — volta ao Início sem piscar.
 HomeTipsCatalogSnapshot? _ultimoCatalogo;
@@ -142,6 +143,10 @@ class _WisdomDashboardScreenState extends State<WisdomDashboardScreen> {
                 ),
               ],
             );
+            final investimentos = InvestimentosAtalhoCard(
+              uid: widget.uid,
+              profile: widget.profile,
+            );
 
             return ListView(
               controller: widget.shellScrollController,
@@ -163,6 +168,8 @@ class _WisdomDashboardScreenState extends State<WisdomDashboardScreen> {
                             dica,
                             const SizedBox(height: 24),
                             objetivos,
+                            const SizedBox(height: 24),
+                            investimentos,
                           ],
                         ),
                       ),
@@ -174,6 +181,8 @@ class _WisdomDashboardScreenState extends State<WisdomDashboardScreen> {
                   financeiro,
                   const SizedBox(height: 24),
                   objetivos,
+                  const SizedBox(height: 24),
+                  investimentos,
                 ],
               ],
             );

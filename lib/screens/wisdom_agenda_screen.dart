@@ -5408,6 +5408,230 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     );
   }
 
+  /// Cabeçalho premium da Agenda (padrão Controle Total): gradiente do app,
+  /// chip de ícone, título + subtítulo e contadores do mês focado. Apenas
+  /// aparência — os contadores reaproveitam dados já carregados (sem consultas
+  /// novas): os mesmos totais exibidos no «Resumo do mês».
+  Widget _buildAgendaHero(
+    BuildContext context, {
+    required List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    required Map<DateTime, List<AgendaFinancePendingItem>> financeByDay,
+    required bool isNarrow,
+  }) {
+    final particularCount =
+        _itemsForFocusedMonth(docs).length + _googleParticularForMonth(docs).length;
+    var financeCount = 0;
+    for (final entry in financeByDay.entries) {
+      final day = entry.key;
+      if (day.year == _focusedDay.year && day.month == _focusedDay.month) {
+        financeCount += entry.value.length;
+      }
+    }
+    final totalCount = particularCount + financeCount;
+    final radius = BorderRadius.circular(22);
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.accent.withValues(alpha: 0.30),
+            blurRadius: 18,
+            offset: const Offset(0, 7),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: AppColors.logoGradient,
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              right: -26,
+              top: -30,
+              child: _heroBolha(110, 0.10),
+            ),
+            Positioned(
+              right: 48,
+              bottom: -40,
+              child: _heroBolha(80, 0.07),
+            ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                isNarrow ? 14 : 16,
+                14,
+                isNarrow ? 14 : 16,
+                14,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 46,
+                        height: 46,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(15),
+                          border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.32)),
+                        ),
+                        child: const Icon(Icons.event_note_rounded,
+                            color: Colors.white, size: 25),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              'Agenda',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 18,
+                                height: 1.1,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Row(
+                              children: [
+                                Icon(Icons.date_range_rounded,
+                                    size: 13,
+                                    color:
+                                        Colors.white.withValues(alpha: 0.9)),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    _focusedMonthTitle(),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color:
+                                          Colors.white.withValues(alpha: 0.92),
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12.5,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _heroStat(
+                          icon: Icons.event_available_rounded,
+                          label: 'Particulares',
+                          value: particularCount,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _heroStat(
+                          icon: Icons.payments_outlined,
+                          label: 'Financeiro',
+                          value: financeCount,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _heroStat(
+                          icon: Icons.dashboard_rounded,
+                          label: 'Total',
+                          value: totalCount,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static Widget _heroBolha(double size, double alpha) => IgnorePointer(
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.white.withValues(alpha: alpha),
+          ),
+        ),
+      );
+
+  Widget _heroStat({
+    required IconData icon,
+    required String label,
+    required int value,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: Colors.white),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '$value',
+                  maxLines: 1,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    height: 1.1,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildAgendaBody(
     BuildContext context, {
     required AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snap,
@@ -5481,34 +5705,11 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 14,
-                    ),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: AppColors.logoGradient,
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                      ),
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.primary.withValues(alpha: 0.28),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: const Text(
-                      'Agenda — compromissos e financeiro pendente',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 17,
-                      ),
-                    ),
+                  _buildAgendaHero(
+                    context,
+                    docs: docs,
+                    financeByDay: financeByDay,
+                    isNarrow: isNarrow,
                   ),
                   const SizedBox(height: 10),
                   Container(

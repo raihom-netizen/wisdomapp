@@ -16,6 +16,7 @@ import 'utils/ensure_web_document_head_stub.dart'
 import 'theme/gemini_theme.dart';
 import 'widgets/wisdomapp_branded_loading.dart';
 import 'screens/landing_screen.dart';
+import 'features/investimentos/investimentos_meta_fonte.dart';
 import 'screens/tela_divulgacao_page.dart';
 import 'screens/assego_public_signup_screen.dart';
 import 'screens/login_screen.dart';
@@ -295,6 +296,8 @@ void main() async {
   ]);
   final reopenUid =
       FirebaseAuth.instance.currentUser?.uid ?? AppSessionCache.cachedUidSync();
+  // Carteira de Investimentos alimenta o progresso das metas (metaId ligado).
+  registrarCarteiraNasMetas();
   runApp(const ControleTotalApp());
   if (!kIsWeb) {
     // Cache de cursos (JSON do disco) fora do caminho do 1º frame também no

@@ -10487,3 +10487,8 @@ exports.ctAdminEmailsComProblema = require("./admin_emails_problema").ctAdminEma
 exports.ctAdminNotificacoesDiag = require("./admin_notificacoes_diag").ctAdminNotificacoesDiag;
 exports.ctAdminNotificacoesUsuarios = require("./admin_notificacoes_diag").ctAdminNotificacoesUsuarios;
 exports.ctAdminNotificacoesTeste = require("./admin_notificacoes_diag").ctAdminNotificacoesTeste;
+
+// Carteira de Investimentos: taxas oficiais do BCB (API pública SGS) gravadas em
+// `indices_bcb/{serie}` em dias úteis às 21h30 (Brasília). O app lê essa coleção
+// (nunca chama o BCB) para estimar o rendimento de CDB/Tesouro/poupança etc.
+exports.investimentosIndicesBcb = require("./investimentos_indices_bcb").investimentosIndicesBcb;

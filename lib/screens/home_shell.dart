@@ -48,6 +48,7 @@ import '../utils/admin_panel_launch.dart';
 import 'dashboard_screen.dart';
 import 'finance_screen.dart';
 import 'meta_financeira_screen.dart';
+import '../features/investimentos/investimentos_page.dart';
 import 'reports_screen.dart';
 import 'wisdom_agenda_screen.dart';
 import '../widgets/onboarding_tour.dart';
@@ -79,10 +80,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   String? _telemetryPingScheduledForUid;
   static const int _kShellModuleCount = 10;
 
-  /// Módulos removidos em 02/10/2026: Calculadora (4) e Minhas Anotações (8).
-  /// Os índices continuam reservados (não deslocam os outros módulos), mas
-  /// qualquer pedido (atalho, widget, preferência, link) cai no Início.
-  static const Set<int> _kRemovedModuleIndices = {4, 8};
+  /// Módulo removido em 02/10/2026: Minhas Anotações (8). O índice continua
+  /// reservado (não desloca os outros módulos), mas qualquer pedido (atalho,
+  /// widget, preferência, link) cai no Início.
+  /// Índice 4 (antiga Calculadora) foi reaproveitado por Investimentos.
+  static const Set<int> _kRemovedModuleIndices = {8};
 
   /// Mesmos módulos do rodapé de acesso rápido (menu abre fullscreen com os mesmos dados).
   static const Set<int> _footerQuickAccessModuleIndices = {0, 1, 2, 3, 7};
@@ -227,7 +229,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     'Financeiro',
     'Objetivos Financeiros',
     'Agenda',
-    'Início', // 4: Calculadora removida (índice reservado)
+    'Investimentos', // 4: reaproveitado (antiga Calculadora)
     'Dicas Financeiras',
     'Relatórios',
     'Cursos em Vídeo',
@@ -1046,7 +1048,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           shellScrollController: _shellModuleScrollControllers[3],
           onNavigateTo: onNav,
         );
-      case 4: // Calculadora removida (02/10/2026) — nunca materializa.
+      case 4:
+        return InvestimentosPage(
+          uid: _userDocId,
+          profile: profile,
+        );
       case 8: // Minhas Anotações removida (02/10/2026) — nunca materializa.
         return const SizedBox.shrink();
       case 5:

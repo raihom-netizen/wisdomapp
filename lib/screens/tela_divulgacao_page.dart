@@ -15,6 +15,7 @@ import '../services/login_preferences.dart';
 import '../services/mp_checkout_pricing_service.dart';
 import '../services/push_notification_service.dart';
 import '../services/version_check_service.dart';
+import '../theme/app_colors.dart';
 import '../theme/theme_context.dart';
 import '../utils/url_launcher_helper.dart';
 import '../widgets/divulgacao_public_promo_card.dart';
@@ -47,17 +48,15 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
   late final AnimationController _intro;
   late final Animation<double> _fade;
 
-  /// Paleta WISDOMAPP — azul marinho e dourado.
+  /// Paleta WISDOMAPP — alinhada à logo (azul profundo → teal, âmbar e laranja).
   static const Color _scaffoldBg = Color(0xFFF4F6FB);
-  static const Color _lpDeep = Color(0xFF0A1F56);
-  static const Color _lpNavyDark = Color(0xFF061428);
+  static const Color _lpDeep = AppColors.deepBlue; // #122B6B
   static const Color _lpSlate = Color(0xFF1E293B);
-  static const Color _lpViolet = Color(0xFF6366F1);
-  static const Color _lpCyan = Color(0xFF22D3EE);
-  static const Color _lpGold = Color(0xFFD4AF37);
-  static const Color _lpGoldLight = Color(0xFFF0D878);
-  static const Color _lpRose = Color(0xFFF43F5E);
-  static const Color _lpIndigoDeep = Color(0xFF312E81);
+  static const Color _lpViolet = AppColors.primary; // #2D5BFF (azul da logo)
+  static const Color _lpCyan = AppColors.accent; // #12B5A5 (teal da logo)
+  static const Color _lpGold = AppColors.amber; // #FFB648 (âmbar da logo)
+  static const Color _lpRose = AppColors.logoOrange; // #F97316 (laranja da logo)
+  static const Color _lpIndigoDeep = AppColors.deepBlueDark;
 
   /// Modo escuro: texto marinho/ardósia fixo vira texto do tema (claro idêntico).
   bool get _dk => context.isDarkMode;
@@ -316,7 +315,11 @@ class _TelaDivulgacaoPageState extends State<TelaDivulgacaoPage>
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
             gradient: const LinearGradient(
-              colors: [Color(0xFF111827), Color(0xFF1F2937), Color(0xFF0F766E)],
+              colors: [
+                AppColors.deepBlueDark,
+                AppColors.deepBlue,
+                AppColors.accent,
+              ],
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
             ),
