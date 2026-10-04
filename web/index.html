@@ -556,7 +556,7 @@
       if (isIOS || inApp) return;
       if ("serviceWorker" in navigator && "PushManager" in window) {
         // Marcador de versao (scripts/sync_app_version.ps1): muda a cada release e atualiza o SW/PWA instalado.
-        var swVersion = "v=36";
+        var swVersion = "v=37";
         navigator.serviceWorker.register("/firebase-messaging-sw.js?" + swVersion)
           .then(function (swReg) { console.log("FCM Service Worker registrado.", swReg.scope); })
           .catch(function (err) { console.warn("Registro FCM Service Worker falhou:", err); });
@@ -743,6 +743,6 @@
       });
     })();
   </script>
-  <script src="flutter_bootstrap.js?v=36" async></script>
+  <script src="flutter_bootstrap.js?v=37" async></script>
 </body>
 </html>

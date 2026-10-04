@@ -181,6 +181,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
   int _streamGeneration = 0;
   int _mesAbaIndex = 0;
   bool _bulkClearLoading = false;
+  // Barra «FUNÇÕES CALENDÁRIO» recolhível (padrão Controle Total). Só layout.
+  bool _funcoesExpanded = false;
   StartingDayOfWeek _calendarWeekStart =
       AgendaCalendarWeekStartPreferences.defaultValue;
 
@@ -5408,196 +5410,119 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
     );
   }
 
-  /// Cabeçalho premium da Agenda (padrão Controle Total): gradiente do app,
-  /// chip de ícone, título + subtítulo e contadores do mês focado. Apenas
-  /// aparência — os contadores reaproveitam dados já carregados (sem consultas
-  /// novas): os mesmos totais exibidos no «Resumo do mês».
-  Widget _buildAgendaHero(
-    BuildContext context, {
-    required List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
-    required Map<DateTime, List<AgendaFinancePendingItem>> financeByDay,
+  /// Barra «FUNÇÕES CALENDÁRIO» recolhível (padrão Controle Total): cabeçalho
+  /// azul arredondado com engrenagem e seta; expande para agrupar as funções do
+  /// calendário (contadores do mês + limpeza em lote). Só layout — nada lê ou
+  /// grava dados; agrupa widgets/handlers que já existiam.
+  Widget _buildFuncoesCalendarioBar({
     required bool isNarrow,
+    required Widget expandedChild,
   }) {
-    final particularCount =
-        _itemsForFocusedMonth(docs).length + _googleParticularForMonth(docs).length;
-    var financeCount = 0;
-    for (final entry in financeByDay.entries) {
-      final day = entry.key;
-      if (day.year == _focusedDay.year && day.month == _focusedDay.month) {
-        financeCount += entry.value.length;
-      }
-    }
-    final totalCount = particularCount + financeCount;
-    final radius = BorderRadius.circular(22);
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: radius,
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.accent.withValues(alpha: 0.30),
-            blurRadius: 18,
-            offset: const Offset(0, 7),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: radius,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: DecoratedBox(
-                decoration: const BoxDecoration(
+    final dark = context.isDarkMode;
+    final accent = dark ? AppColors.accent : AppColors.primary;
+    final header = Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => setState(() => _funcoesExpanded = !_funcoesExpanded),
+        borderRadius: BorderRadius.circular(14),
+        child: Ink(
+          decoration: dark
+              ? context.appNeonCardDecoration(
+                  radius: 14,
+                  borderAccent: accent,
+                  borderAlpha: 0.14,
+                )
+              : BoxDecoration(
                   gradient: LinearGradient(
-                    colors: AppColors.logoGradient,
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+                    colors: [
+                      AppColors.deepBlue.withValues(alpha: 0.92),
+                      AppColors.primary.withValues(alpha: 0.88),
+                    ],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.deepBlue.withValues(alpha: 0.22),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            children: [
+              Icon(Icons.settings_rounded,
+                  size: 18, color: dark ? accent : Colors.white),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'FUNÇÕES CALENDÁRIO',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: dark ? context.appTextPrimary : Colors.white,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.55,
                   ),
                 ),
               ),
-            ),
-            Positioned(
-              right: -26,
-              top: -30,
-              child: _heroBolha(110, 0.10),
-            ),
-            Positioned(
-              right: 48,
-              bottom: -40,
-              child: _heroBolha(80, 0.07),
-            ),
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                isNarrow ? 14 : 16,
-                14,
-                isNarrow ? 14 : 16,
-                14,
+              AnimatedRotation(
+                turns: _funcoesExpanded ? 0.5 : 0,
+                duration: const Duration(milliseconds: 200),
+                child: Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 22,
+                  color: dark
+                      ? context.appTextSecondary
+                      : Colors.white.withValues(alpha: 0.92),
+                ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 46,
-                        height: 46,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.18),
-                          borderRadius: BorderRadius.circular(15),
-                          border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.32)),
-                        ),
-                        child: const Icon(Icons.event_note_rounded,
-                            color: Colors.white, size: 25),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text(
-                              'Agenda',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w900,
-                                fontSize: 18,
-                                height: 1.1,
-                              ),
-                            ),
-                            const SizedBox(height: 3),
-                            Row(
-                              children: [
-                                Icon(Icons.date_range_rounded,
-                                    size: 13,
-                                    color:
-                                        Colors.white.withValues(alpha: 0.9)),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  child: Text(
-                                    _focusedMonthTitle(),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color:
-                                          Colors.white.withValues(alpha: 0.92),
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 12.5,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _heroStat(
-                          icon: Icons.event_available_rounded,
-                          label: 'Particulares',
-                          value: particularCount,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _heroStat(
-                          icon: Icons.payments_outlined,
-                          label: 'Financeiro',
-                          value: financeCount,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _heroStat(
-                          icon: Icons.dashboard_rounded,
-                          label: 'Total',
-                          value: totalCount,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        header,
+        AnimatedCrossFade(
+          firstChild: const SizedBox(width: double.infinity),
+          secondChild: Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: expandedChild,
+          ),
+          crossFadeState: _funcoesExpanded
+              ? CrossFadeState.showSecond
+              : CrossFadeState.showFirst,
+          duration: const Duration(milliseconds: 200),
+        ),
+      ],
+    );
   }
 
-  static Widget _heroBolha(double size, double alpha) => IgnorePointer(
-        child: Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: Colors.white.withValues(alpha: alpha),
-          ),
-        ),
-      );
-
-  Widget _heroStat({
+  /// Contador compacto do mês (padrão CT pequeno) — substitui o antigo hero
+  /// grande em gradiente. Só layout.
+  Widget _miniCountChip({
     required IconData icon,
     required String label,
     required int value,
+    required Color color,
   }) {
+    final dark = context.isDarkMode;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.16),
+        color: color.withValues(alpha: dark ? 0.18 : 0.10),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
+        border: Border.all(color: color.withValues(alpha: 0.30)),
       ),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: Colors.white),
+          Icon(icon, size: 16, color: color),
           const SizedBox(width: 6),
           Expanded(
             child: Column(
@@ -5607,8 +5532,8 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                 Text(
                   '$value',
                   maxLines: 1,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: context.appTextPrimary,
                     fontSize: 16,
                     height: 1.1,
                     fontWeight: FontWeight.w900,
@@ -5619,7 +5544,7 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.9),
+                    color: context.appTextSecondary,
                     fontSize: 10.5,
                     fontWeight: FontWeight.w700,
                   ),
@@ -5629,6 +5554,65 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  /// Legenda do calendário (padrão Controle Total): pontos coloridos + «hoje» +
+  /// fim de semana/feriado. Só aparência.
+  Widget _buildCalendarLegend(bool isNarrow) {
+    final dark = context.isDarkMode;
+    final muted = dark ? context.appTextSecondary : Colors.grey.shade700;
+    Widget dot(Color c) => Container(
+          width: 9,
+          height: 9,
+          decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+        );
+    Widget item(List<Widget> leading, String text) => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ...leading,
+            const SizedBox(width: 5),
+            Text(
+              text,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: muted,
+              ),
+            ),
+          ],
+        );
+    return Wrap(
+      spacing: 14,
+      runSpacing: 6,
+      children: [
+        item([dot(_corCompromisso)], 'Compromisso'),
+        item([
+          dot(const Color(0xFF34A853)),
+          const SizedBox(width: 2),
+          dot(const Color(0xFFF59E0B)),
+          const SizedBox(width: 2),
+          dot(AppColors.primary),
+        ], 'Itens do dia'),
+        item([
+          Container(
+            width: 12,
+            height: 12,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.primary, width: 1.6),
+            ),
+          ),
+        ], 'Hoje'),
+        item(
+          [Icon(Icons.cloud_rounded, size: 13, color: muted)],
+          'Google Calendar',
+        ),
+        item(
+          [const Icon(Icons.circle, size: 9, color: Color(0xFFE53935))],
+          'Sáb · Dom · Feriado',
+        ),
+      ],
     );
   }
 
@@ -5688,6 +5672,18 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
           )
         : <GoogleCalendarEventItem>[];
 
+    // Contadores do mês (padrão CT pequeno) — reaproveitam dados já carregados.
+    final particularCount =
+        _itemsForFocusedMonth(docs).length + _googleParticularForMonth(docs).length;
+    var financeCount = 0;
+    for (final entry in financeByDay.entries) {
+      final day = entry.key;
+      if (day.year == _focusedDay.year && day.month == _focusedDay.month) {
+        financeCount += entry.value.length;
+      }
+    }
+    final totalCount = particularCount + financeCount;
+
     final scroll = widget.shellScrollController ?? ScrollController();
 
     return ShellKeyboardBottomPad(
@@ -5705,11 +5701,55 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildAgendaHero(
-                    context,
-                    docs: docs,
-                    financeByDay: financeByDay,
+                  _buildFuncoesCalendarioBar(
                     isNarrow: isNarrow,
+                    expandedChild: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _miniCountChip(
+                                icon: Icons.event_available_rounded,
+                                label: 'Particulares',
+                                value: particularCount,
+                                color: _corCompromisso,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _miniCountChip(
+                                icon: Icons.payments_outlined,
+                                label: 'Financeiro',
+                                value: financeCount,
+                                color: const Color(0xFFF59E0B),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _miniCountChip(
+                                icon: Icons.dashboard_rounded,
+                                label: 'Total',
+                                value: totalCount,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        if (_bulkClearLoading)
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 6),
+                            child: LinearProgressIndicator(minHeight: 2),
+                          ),
+                        AgendaBulkClearToolbar(
+                          enabled: !_bulkClearLoading && _userDocId.isNotEmpty,
+                          onClearWeek: _onClearWeek,
+                          onClearMonth: _onClearMonth,
+                          onClearPeriod: _onClearPeriod,
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 10),
                   Container(
@@ -5752,21 +5792,23 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                         SizedBox(height: isNarrow ? 6 : 8),
                         _buildCalendar(
                             byDay, holidayKeys, isNarrow, financeByDay),
+                        const SizedBox(height: 10),
+                        _buildCalendarLegend(isNarrow),
                         const SizedBox(height: 8),
                         Row(
                           children: [
-                            Icon(Icons.info_outline_rounded,
-                                size: 14, color: Colors.grey.shade600),
+                            Icon(Icons.touch_app_rounded,
+                                size: 14, color: AppColors.primary),
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
-                                'Calendário com todos os compromissos: '
-                                'azul/laranja = financeiro · cores = particulares · '
-                                'nuvem = Google Calendar · vermelho = fim de semana/feriado.',
+                                'Toque novamente no mesmo dia para incluir ou editar compromisso.',
                                 style: TextStyle(
                                   fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: context.isDarkMode ? context.appTextSecondary : Colors.grey.shade700,
+                                  fontWeight: FontWeight.w700,
+                                  color: context.isDarkMode
+                                      ? context.appTextSecondary
+                                      : AppColors.deepBlue,
                                 ),
                               ),
                             ),
@@ -5774,18 +5816,6 @@ class _WisdomAgendaScreenState extends State<WisdomAgendaScreen> {
                         ),
                       ],
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  if (_bulkClearLoading)
-                    const Padding(
-                      padding: EdgeInsets.only(bottom: 6),
-                      child: LinearProgressIndicator(minHeight: 2),
-                    ),
-                  AgendaBulkClearToolbar(
-                    enabled: !_bulkClearLoading && _userDocId.isNotEmpty,
-                    onClearWeek: _onClearWeek,
-                    onClearMonth: _onClearMonth,
-                    onClearPeriod: _onClearPeriod,
                   ),
                   const SizedBox(height: 8),
                   _buildModernMesAbas(isNarrow: isNarrow),

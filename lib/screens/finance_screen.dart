@@ -79,6 +79,7 @@ import '../widgets/finance_transaction_sort_bar.dart';
 import '../services/finance_sort_preference.dart';
 import '../widgets/finance_graficos_modernos.dart';
 import '../widgets/finance_contas_hub_card.dart';
+import '../features/investimentos/investimentos_atalho_card.dart';
 import '../widgets/finance_pix_sheets.dart';
 import '../theme/theme_context.dart';
 import 'finance_transactions_fullscreen_page.dart';
@@ -4075,6 +4076,94 @@ class _FinanceScreenState extends State<FinanceScreen>
     return v == null ? 'Fecha ${dm(f)}' : 'Fecha ${dm(f)} · Vence ${dm(v)}';
   }
 
+  /// Último card da fileira de bancos: atalho em destaque para o cadastro de
+  /// bancos (port Controle Total — o grande «+ Cadastrar banco» dentro do
+  /// carrossel, ao lado de «Todas as contas» e dos cards de banco/cartão).
+  Widget _cadastrarBancoAtalhoCard(BuildContext context) {
+    final dark = context.isDarkMode;
+    void abrir() {
+      if (!widget.profile.hasActiveLicense) {
+        mostrarAvisoSeLicencaInativa(context, widget.profile);
+        return;
+      }
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => FinanceAccountsScreen(
+              uid: firestoreUserDocIdForAppShell(widget.uid),
+              profile: widget.profile),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 2, right: 10),
+      child: Tooltip(
+        message: 'Cadastrar banco ou cartão',
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: abrir,
+            borderRadius: BorderRadius.circular(18),
+            child: Container(
+              width: 164,
+              height: 144,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: dark
+                      ? [const Color(0xFF1E293B), const Color(0xFF0F172A)]
+                      : [const Color(0xFFEFF6FF), const Color(0xFFE0E7FF)],
+                ),
+                border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.45),
+                  width: 1.6,
+                ),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(colors: AppColors.logoGradient),
+                    ),
+                    child: const Icon(Icons.add_rounded,
+                        color: Colors.white, size: 30),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Cadastrar banco',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w800,
+                      color: dark ? Colors.white : AppColors.deepBlue,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'conta, cartão ou cofre',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: context.appTextMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _financeAccountMiniCard(
     BuildContext context, {
     required bool selected,
@@ -4723,6 +4812,10 @@ class _FinanceScreenState extends State<FinanceScreen>
                       },
                       footer: _sparklineFooterTodas(docs),
                     ),
+                    // Atalho em destaque no fim da fileira: grande «+ Cadastrar
+                    // banco» no próprio carrossel (port Controle Total), sem
+                    // depender só do botão do hub acima.
+                    footer: _cadastrarBancoAtalhoCard(context),
                     itemCount: accountsStrip.length,
                     onReorder: (oldIndex, newIndex) async {
                       if (newIndex > oldIndex) newIndex--;
@@ -7250,6 +7343,10 @@ class _FinanceScreenState extends State<FinanceScreen>
                       if (mounted) setState(() {});
                     },
                   ),
+                  // Carteira de Investimentos (patrimônio + rendeu no mês) —
+                  // mesmo ponto do Controle Total; widget auto-contido.
+                  InvestimentosAtalhoCard(
+                      uid: widget.uid, profile: widget.profile),
                   const SizedBox(height: 10),
                   Material(
                     color: Colors.transparent,
